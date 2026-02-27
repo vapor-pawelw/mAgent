@@ -6,6 +6,7 @@ import UserNotifications
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
 
     private var coordinator: AppCoordinator?
+    private var ipcServer: IPCSocketServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Enforce single instance — activate existing and terminate this one
@@ -29,6 +30,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         Task { await TmuxService.shared.applyGlobalSettings() }
         coordinator = AppCoordinator()
         coordinator?.start()
+
+        let server = IPCSocketServer()
+        self.ipcServer = server
+        Task { await server.start() }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        let server = ipcServer
+        Task { await server?.stop() }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
