@@ -93,7 +93,7 @@ final class ResizeHandleView: NSView {
 // MARK: - Settings Category
 
 enum SettingsCategory: Int, CaseIterable {
-    case general, agents, notifications, projects
+    case general, agents, notifications, projects, jira
 
     var title: String {
         switch self {
@@ -101,6 +101,7 @@ enum SettingsCategory: Int, CaseIterable {
         case .agents: return "Agents"
         case .notifications: return "Notifications"
         case .projects: return "Projects"
+        case .jira: return "Jira"
         }
     }
 
@@ -110,6 +111,7 @@ enum SettingsCategory: Int, CaseIterable {
         case .agents: return "cpu"
         case .notifications: return "bell"
         case .projects: return "folder"
+        case .jira: return "ticket"
         }
     }
 }
@@ -124,6 +126,7 @@ final class SettingsSplitViewController: NSSplitViewController {
     private let agentsVC = SettingsAgentsViewController()
     private let notificationsVC = SettingsNotificationsViewController()
     private let projectsVC = SettingsProjectsViewController()
+    private let jiraVC = SettingsJiraViewController()
     private var detailSplitItem: NSSplitViewItem!
     private var currentCategory: SettingsCategory = .general
 
@@ -162,7 +165,7 @@ final class SettingsSplitViewController: NSSplitViewController {
         detailContainerVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
         let container = detailContainerVC.view
 
-        let allVCs: [NSViewController] = [generalVC, agentsVC, notificationsVC, projectsVC]
+        let allVCs: [NSViewController] = [generalVC, agentsVC, notificationsVC, projectsVC, jiraVC]
         for vc in allVCs {
             detailContainerVC.addChild(vc)
             vc.view.translatesAutoresizingMaskIntoConstraints = false
@@ -181,6 +184,7 @@ final class SettingsSplitViewController: NSSplitViewController {
         agentsVC.view.isHidden = category != .agents
         notificationsVC.view.isHidden = category != .notifications
         projectsVC.view.isHidden = category != .projects
+        jiraVC.view.isHidden = category != .jira
     }
 
     fileprivate func showCategory(_ category: SettingsCategory) {

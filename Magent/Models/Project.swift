@@ -11,7 +11,16 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
     var agentContextInjection: String?
     var autoRenameSlugPrompt: String?
     var isPinned: Bool
+    var defaultSectionId: UUID?
     var threadSections: [ThreadSection]?
+    var jiraProjectKey: String?
+    var jiraBoardId: Int?
+    var jiraBoardName: String?
+    var jiraSyncEnabled: Bool
+    var jiraSiteURL: String?
+    var jiraExcludedTicketKeys: Set<String>
+    var jiraAssigneeAccountId: String?
+    var jiraAcknowledgedStatuses: Set<String>?
 
     init(
         id: UUID = UUID(),
@@ -24,7 +33,16 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         agentContextInjection: String? = nil,
         autoRenameSlugPrompt: String? = nil,
         isPinned: Bool = false,
-        threadSections: [ThreadSection]? = nil
+        defaultSectionId: UUID? = nil,
+        threadSections: [ThreadSection]? = nil,
+        jiraProjectKey: String? = nil,
+        jiraBoardId: Int? = nil,
+        jiraBoardName: String? = nil,
+        jiraSyncEnabled: Bool = false,
+        jiraSiteURL: String? = nil,
+        jiraExcludedTicketKeys: Set<String> = [],
+        jiraAssigneeAccountId: String? = nil,
+        jiraAcknowledgedStatuses: Set<String>? = nil
     ) {
         self.id = id
         self.name = name
@@ -36,7 +54,16 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.agentContextInjection = agentContextInjection
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.isPinned = isPinned
+        self.defaultSectionId = defaultSectionId
         self.threadSections = threadSections
+        self.jiraProjectKey = jiraProjectKey
+        self.jiraBoardId = jiraBoardId
+        self.jiraBoardName = jiraBoardName
+        self.jiraSyncEnabled = jiraSyncEnabled
+        self.jiraSiteURL = jiraSiteURL
+        self.jiraExcludedTicketKeys = jiraExcludedTicketKeys
+        self.jiraAssigneeAccountId = jiraAssigneeAccountId
+        self.jiraAcknowledgedStatuses = jiraAcknowledgedStatuses
     }
 
     init(from decoder: Decoder) throws {
@@ -51,7 +78,16 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection)
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt)
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        defaultSectionId = try container.decodeIfPresent(UUID.self, forKey: .defaultSectionId)
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections)
+        jiraProjectKey = try container.decodeIfPresent(String.self, forKey: .jiraProjectKey)
+        jiraBoardId = try container.decodeIfPresent(Int.self, forKey: .jiraBoardId)
+        jiraBoardName = try container.decodeIfPresent(String.self, forKey: .jiraBoardName)
+        jiraSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .jiraSyncEnabled) ?? false
+        jiraSiteURL = try container.decodeIfPresent(String.self, forKey: .jiraSiteURL)
+        jiraExcludedTicketKeys = try container.decodeIfPresent(Set<String>.self, forKey: .jiraExcludedTicketKeys) ?? []
+        jiraAssigneeAccountId = try container.decodeIfPresent(String.self, forKey: .jiraAssigneeAccountId)
+        jiraAcknowledgedStatuses = try container.decodeIfPresent(Set<String>.self, forKey: .jiraAcknowledgedStatuses)
     }
 
     /// Resolves template variables in `worktreesBasePath` (e.g. `$MAGENT_PROJECT_NAME`).

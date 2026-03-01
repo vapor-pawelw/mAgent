@@ -277,7 +277,7 @@ final class ThreadListViewController: NSViewController {
             // Section groups with regular threads (per-project or global fallback)
             let projectSections = settings.visibleSections(for: project.id)
             let projectKnownSectionIds = Set(settings.sections(for: project.id).map(\.id))
-            let projectDefaultSectionId = projectSections.first?.id
+            let projectDefaultSectionId = settings.defaultSection(for: project.id)?.id
 
             for section in projectSections {
                 let matchingThreads = regularThreads.filter { thread in

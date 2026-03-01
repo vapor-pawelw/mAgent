@@ -13,6 +13,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
 
     // Thread sections
     private var sectionsTableView: NSTableView!
+    private var defaultSectionPopup: NSPopUpButton!
     private var currentEditingSectionId: UUID?
 
     private var sortedSections: [ThreadSection] {
@@ -235,6 +236,28 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         addSectionButton.controlSize = .small
         stackView.addArrangedSubview(addSectionButton)
 
+        // Default Section popup
+        let defaultSectionStack = NSStackView()
+        defaultSectionStack.orientation = .vertical
+        defaultSectionStack.alignment = .leading
+        defaultSectionStack.spacing = 4
+
+        let defaultSectionLabel = NSTextField(labelWithString: "Default Section")
+        defaultSectionLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        defaultSectionStack.addArrangedSubview(defaultSectionLabel)
+
+        let defaultSectionDesc = NSTextField(wrappingLabelWithString: "New threads without an explicit section go here.")
+        defaultSectionDesc.font = .systemFont(ofSize: 11)
+        defaultSectionDesc.textColor = NSColor(resource: .textSecondary)
+        defaultSectionStack.addArrangedSubview(defaultSectionDesc)
+
+        defaultSectionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        defaultSectionPopup.target = self
+        defaultSectionPopup.action = #selector(defaultSectionChanged)
+        defaultSectionStack.addArrangedSubview(defaultSectionPopup)
+        stackView.addArrangedSubview(defaultSectionStack)
+        refreshDefaultSectionPopup()
+
         NSLayoutConstraint.activate([
             sectionsScrollView.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sectionsScrollView.heightAnchor.constraint(equalToConstant: 140),
@@ -355,6 +378,31 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         try? persistence.saveSettings(settings)
     }
 
+    // MARK: - Default Section
+
+    private func refreshDefaultSectionPopup() {
+        defaultSectionPopup.removeAllItems()
+        let visible = settings.visibleSections
+        for section in visible {
+            defaultSectionPopup.addItem(withTitle: section.name)
+        }
+        if let id = settings.defaultSectionId,
+           let idx = visible.firstIndex(where: { $0.id == id }) {
+            defaultSectionPopup.selectItem(at: idx)
+        } else {
+            defaultSectionPopup.selectItem(at: 0)
+        }
+    }
+
+    @objc private func defaultSectionChanged() {
+        let visible = settings.visibleSections
+        let selected = defaultSectionPopup.indexOfSelectedItem
+        guard selected >= 0, selected < visible.count else { return }
+        settings.defaultSectionId = visible[selected].id
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+    }
+
     // MARK: - Thread Section Actions
 
     @objc private func addSectionTapped() {
@@ -383,6 +431,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         settings.threadSections.append(section)
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
+        refreshDefaultSectionPopup()
 
         showColorPicker(for: section)
     }
@@ -422,6 +471,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         settings.threadSections[index].isVisible.toggle()
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
+        refreshDefaultSectionPopup()
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
@@ -458,6 +508,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         settings.threadSections.removeAll { $0.id == section.id }
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
+        refreshDefaultSectionPopup()
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
@@ -548,6 +599,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         }
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
+        refreshDefaultSectionPopup()
         return true
     }
 
