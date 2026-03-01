@@ -318,6 +318,7 @@ final class ThreadDetailViewController: NSViewController {
     let openInXcodeButton = NSButton()
     let openInFinderButton = NSButton()
     let archiveThreadButton = NSButton()
+    let reviewButton = NSButton()
     let exportContextButton = NSButton()
     let addTabButton = NSButton()
 
@@ -378,6 +379,7 @@ final class ThreadDetailViewController: NSViewController {
         refreshOpenPRButtonIcon()
         refreshJiraButton()
         refreshXcodeButton()
+        refreshReviewButtonVisibility()
         setupLoadingOverlay()
 
         // Observe dead session notifications for mid-use terminal replacement
@@ -478,6 +480,13 @@ final class ThreadDetailViewController: NSViewController {
         archiveThreadButton.action = #selector(archiveThreadTapped)
         archiveThreadButton.isHidden = thread.isMain
 
+        reviewButton.bezelStyle = .texturedRounded
+        reviewButton.image = NSImage(systemSymbolName: "eye", accessibilityDescription: "Review Changes")
+        reviewButton.target = self
+        reviewButton.action = #selector(reviewButtonTapped)
+        reviewButton.toolTip = "Open a new agent tab to review branch changes"
+        reviewButton.isHidden = true
+
         exportContextButton.bezelStyle = .texturedRounded
         exportContextButton.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Export Context")
         exportContextButton.target = self
@@ -496,7 +505,7 @@ final class ThreadDetailViewController: NSViewController {
         separator.setContentHuggingPriority(.required, for: .vertical)
         separator.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, exportContextButton, separator, archiveThreadButton, addTabButton])
+        let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, separator, archiveThreadButton, addTabButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
@@ -712,6 +721,7 @@ final class ThreadDetailViewController: NSViewController {
             tabItems[i].hasUnreadCompletion = unreadSessions.contains(sessionName)
         }
         refreshDiffViewerIfVisible()
+        syncTransientState()
     }
 
     @objc private func handleAgentWaitingNotification(_ notification: Notification) {
@@ -724,6 +734,7 @@ final class ThreadDetailViewController: NSViewController {
         for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
             tabItems[i].hasWaitingForInput = waitingSessions.contains(sessionName)
         }
+        syncTransientState()
     }
 
     @objc private func handleAgentBusyNotification(_ notification: Notification) {
@@ -736,6 +747,7 @@ final class ThreadDetailViewController: NSViewController {
         for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
             tabItems[i].hasBusy = busySessions.contains(sessionName)
         }
+        syncTransientState()
     }
 
     @objc private func handleAgentRateLimitNotification(_ notification: Notification) {
