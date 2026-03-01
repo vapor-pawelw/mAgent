@@ -391,7 +391,7 @@ extension ThreadDetailViewController {
         guard index < thread.tmuxSessionNames.count else { return }
         let sessionName = thread.tmuxSessionNames[index]
         let currentCustomName = thread.customTabNames[sessionName]
-        let defaultName = index == 0 ? "Main" : "Tab \(index)"
+        let defaultName = MagentThread.defaultDisplayName(at: index)
 
         let alert = NSAlert()
         alert.messageText = "Rename Tab"

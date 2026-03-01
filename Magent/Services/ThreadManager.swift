@@ -363,6 +363,9 @@ final class ThreadManager {
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
 
+        let firstTabDisplayName = useAgentCommand
+            ? baseTabDisplayName(for: selectedAgentType)
+            : "Terminal"
         let thread = MagentThread(
             projectId: project.id,
             name: name,
@@ -373,6 +376,7 @@ final class ThreadManager {
             sectionId: settings.defaultSection(for: project.id)?.id,
             selectedAgentType: selectedAgentType,
             lastSelectedTmuxSessionName: tmuxSessionName,
+            customTabNames: [tmuxSessionName: firstTabDisplayName],
             baseBranch: baseBranch
         )
 
@@ -454,7 +458,8 @@ final class ThreadManager {
             agentTmuxSessions: selectedAgentType != nil ? [tmuxSessionName] : [],
             isMain: true,
             selectedAgentType: selectedAgentType,
-            lastSelectedTmuxSessionName: tmuxSessionName
+            lastSelectedTmuxSessionName: tmuxSessionName,
+            customTabNames: [tmuxSessionName: baseTabDisplayName(for: selectedAgentType)]
         )
 
         // Insert main threads at front
