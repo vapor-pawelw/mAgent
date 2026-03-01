@@ -98,7 +98,7 @@ final class ThreadCell: NSTableCellView {
 
         let stack = NSStackView(views: [jiraIV, pinIV, archiveBtn, spinner, completionIV])
         stack.orientation = .horizontal
-        stack.spacing = 3
+        stack.spacing = 4
         stack.distribution = .fill
         stack.alignment = .centerY
         stack.translatesAutoresizingMaskIntoConstraints = false
