@@ -56,6 +56,9 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 
 - `docs/requirements.md` — full feature requirements
 - `docs/architecture.md` — architecture decisions and component design
+- `docs/cli.md` — complete CLI command reference (all `magent-cli` commands, options, `thread-info` status fields)
+- `docs/building.md` — build prerequisites and instructions
+- `docs/releasing.md` — release process (tag-driven)
 
 ## Self-Learning
 
