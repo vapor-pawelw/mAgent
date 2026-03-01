@@ -372,11 +372,17 @@ final class ThreadDetailViewController: NSViewController {
             object: nil
         )
 
-        // Observe diff viewer open requests from sidebar
+        // Observe diff viewer open/close requests from sidebar
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleShowDiffViewerNotification(_:)),
             name: .magentShowDiffViewer,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleHideDiffViewerNotification),
+            name: .magentHideDiffViewer,
             object: nil
         )
 
@@ -686,6 +692,10 @@ final class ThreadDetailViewController: NSViewController {
     @objc private func handleShowDiffViewerNotification(_ notification: Notification) {
         let filePath = notification.userInfo?["filePath"] as? String
         showDiffViewer(scrollToFile: filePath)
+    }
+
+    @objc private func handleHideDiffViewerNotification() {
+        hideDiffViewer()
     }
 
     // MARK: - Tab Bar Layout
@@ -1018,19 +1028,25 @@ final class ThreadDetailViewController: NSViewController {
     func showDiffViewer(scrollToFile: String? = nil) {
         if let existing = diffVC {
             if let file = scrollToFile {
-                existing.scrollToFile(file)
+                existing.expandFile(file, collapseOthers: true)
             }
             return
         }
 
         let baseBranch = threadManager.resolveBaseBranch(for: thread)
+        let worktreePath = thread.worktreePath
         Task {
-            guard let diffContent = await GitService.shared.diffContent(
-                worktreePath: thread.worktreePath,
+            async let diffContentTask = GitService.shared.diffContent(
+                worktreePath: worktreePath,
                 baseBranch: baseBranch
-            ) else {
-                return
-            }
+            )
+            async let mergeBaseTask = GitService.shared.mergeBase(
+                worktreePath: worktreePath,
+                baseBranch: baseBranch
+            )
+
+            guard let diffContent = await diffContentTask else { return }
+            let mergeBase = await mergeBaseTask
 
             let entries = await threadManager.refreshDiffStats(for: thread.id)
             let fileCount = entries.count
@@ -1069,14 +1085,15 @@ final class ThreadDetailViewController: NSViewController {
                     diffHeightConstraint!,
                 ])
 
-                vc.setDiffContent(diffContent, fileCount: fileCount)
+                vc.setDiffContent(diffContent, fileCount: fileCount, worktreePath: worktreePath, mergeBase: mergeBase)
                 diffVC = vc
 
                 if let file = scrollToFile {
-                    // Defer scroll to next layout pass so geometry is finalized
                     DispatchQueue.main.async {
-                        vc.scrollToFile(file)
+                        vc.expandFile(file, collapseOthers: true)
                     }
+                } else {
+                    vc.expandAll()
                 }
             }
         }
@@ -1100,16 +1117,24 @@ final class ThreadDetailViewController: NSViewController {
     func refreshDiffViewerIfVisible() {
         guard diffVC != nil else { return }
         let baseBranch = threadManager.resolveBaseBranch(for: thread)
+        let worktreePath = thread.worktreePath
         Task {
-            let diffContent = await GitService.shared.diffContent(
-                worktreePath: thread.worktreePath,
+            async let diffContentTask = GitService.shared.diffContent(
+                worktreePath: worktreePath,
                 baseBranch: baseBranch
             )
+            async let mergeBaseTask = GitService.shared.mergeBase(
+                worktreePath: worktreePath,
+                baseBranch: baseBranch
+            )
+
+            let diffContent = await diffContentTask
+            let mergeBase = await mergeBaseTask
             let entries = await threadManager.refreshDiffStats(for: thread.id)
 
             await MainActor.run {
                 if let content = diffContent {
-                    self.diffVC?.setDiffContent(content, fileCount: entries.count)
+                    self.diffVC?.setDiffContent(content, fileCount: entries.count, worktreePath: worktreePath, mergeBase: mergeBase)
                 } else {
                     // No more changes — auto-dismiss
                     self.hideDiffViewer()

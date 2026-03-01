@@ -18,7 +18,19 @@ private final class DiffPanelResizeHandle: NSView {
 
 private final class DiffFileRowView: NSView {
     let filePath: String
-    var onDoubleClick: ((String) -> Void)?
+    var onClick: ((String) -> Void)?
+
+    var isFileSelected: Bool = false {
+        didSet {
+            wantsLayer = true
+            if isFileSelected {
+                layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
+                layer?.cornerRadius = 4
+            } else {
+                layer?.backgroundColor = nil
+            }
+        }
+    }
 
     init(filePath: String) {
         self.filePath = filePath
@@ -29,11 +41,7 @@ private final class DiffFileRowView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override func mouseDown(with event: NSEvent) {
-        if event.clickCount == 2 {
-            onDoubleClick?(filePath)
-        } else {
-            super.mouseDown(with: event)
-        }
+        onClick?(filePath)
     }
 }
 
@@ -47,6 +55,7 @@ final class DiffPanelView: NSView {
     private let branchInfoLabel = NSTextField(labelWithString: "")
 
     private var entries: [FileDiffEntry] = []
+    private var selectedFilePath: String?
 
     private var heightConstraint: NSLayoutConstraint!
     private static let minHeight: CGFloat = 60
@@ -166,6 +175,23 @@ final class DiffPanelView: NSView {
             dragStartY = NSEvent.mouseLocation.y
             dragStartHeight = heightConstraint.constant
         } else {
+            // Check if click landed on a file row; if not, deselect
+            let windowPoint = event.locationInWindow
+            if let hitView = window?.contentView?.hitTest(windowPoint) {
+                var current: NSView? = hitView
+                var foundRow = false
+                while let v = current {
+                    if v is DiffFileRowView {
+                        foundRow = true
+                        break
+                    }
+                    if v === self { break }
+                    current = v.superview
+                }
+                if !foundRow {
+                    deselectFile()
+                }
+            }
             super.mouseDown(with: event)
         }
     }
@@ -187,8 +213,39 @@ final class DiffPanelView: NSView {
         }
     }
 
+    // MARK: - File Selection
+
+    private func selectFile(_ filePath: String) {
+        selectedFilePath = filePath
+        updateRowSelectionAppearance()
+        NotificationCenter.default.post(
+            name: .magentShowDiffViewer,
+            object: nil,
+            userInfo: ["filePath": filePath]
+        )
+    }
+
+    private func deselectFile() {
+        guard selectedFilePath != nil else { return }
+        selectedFilePath = nil
+        updateRowSelectionAppearance()
+        NotificationCenter.default.post(
+            name: .magentHideDiffViewer,
+            object: nil
+        )
+    }
+
+    private func updateRowSelectionAppearance() {
+        for case let row as DiffFileRowView in stackView.arrangedSubviews {
+            row.isFileSelected = (row.filePath == selectedFilePath)
+        }
+    }
+
+    // MARK: - Content Updates
+
     func update(with newEntries: [FileDiffEntry], branchName: String? = nil, baseBranch: String? = nil) {
         entries = newEntries
+        selectedFilePath = nil
 
         // Remove old rows
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -222,6 +279,7 @@ final class DiffPanelView: NSView {
 
     func clear() {
         entries = []
+        selectedFilePath = nil
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         headerButton.title = "CHANGES"
         branchInfoLabel.isHidden = true
@@ -240,13 +298,8 @@ final class DiffPanelView: NSView {
     private func makeEntryRow(_ entry: FileDiffEntry) -> NSView {
         let container = DiffFileRowView(filePath: entry.relativePath)
         container.translatesAutoresizingMaskIntoConstraints = false
-        container.onDoubleClick = { [weak self] path in
-            guard self != nil else { return }
-            NotificationCenter.default.post(
-                name: .magentShowDiffViewer,
-                object: nil,
-                userInfo: ["filePath": path]
-            )
+        container.onClick = { [weak self] path in
+            self?.selectFile(path)
         }
 
         // Filename — show just the last path component for brevity
