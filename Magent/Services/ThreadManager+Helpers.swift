@@ -545,6 +545,7 @@ enum ThreadManagerError: LocalizedError {
     case invalidTabIndex
     case cannotDeleteMainThread
     case nameGenerationFailed
+    case worktreePathConflict([String])
 
     var errorDescription: String? {
         switch self {
@@ -560,6 +561,9 @@ enum ThreadManagerError: LocalizedError {
             return "Main threads cannot be deleted."
         case .nameGenerationFailed:
             return "Could not generate a unique thread name. Try again or clean up unused worktrees/branches."
+        case .worktreePathConflict(let names):
+            let list = names.joined(separator: ", ")
+            return "Cannot move worktrees — the following directories already exist in the destination: \(list)"
         }
     }
 }
