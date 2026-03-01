@@ -1258,6 +1258,7 @@ final class ThreadManager {
         return true
     }
 
+<<<<<<< HEAD
     /// Removes stale entries from the worktree metadata cache for a project.
     private func pruneWorktreeCache(for project: Project) {
         let activeNames = Set(
@@ -1347,6 +1348,20 @@ final class ThreadManager {
             delegate?.threadManager(self, didUpdateThreads: threads)
         }
     }
+
+    /// Removes stale entries from the worktree metadata cache for a project.
+    private func pruneWorktreeCache(for project: Project) {
+        let activeNames = Set(
+            threads
+                .filter { $0.projectId == project.id && !$0.isArchived && !$0.isMain }
+                .map(\.name)
+        )
+        persistence.pruneWorktreeCache(
+            worktreesBasePath: project.resolvedWorktreesBasePath(),
+            activeNames: activeNames
+        )
+    }
+
     func refreshDiffStats(for threadId: UUID) async -> [FileDiffEntry] {
         guard let thread = threads.first(where: { $0.id == threadId }) else { return [] }
         let baseBranch = resolveBaseBranch(for: thread)

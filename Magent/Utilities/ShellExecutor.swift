@@ -22,6 +22,12 @@ enum ShellExecutor {
         let exitCode: Int32
     }
 
+    struct BinaryResult: Sendable {
+        let stdoutData: Data
+        let stderr: String
+        let exitCode: Int32
+    }
+
     /// Runs a command using /bin/sh -c and returns the result.
     nonisolated static func run(_ command: String, workingDirectory: String? = nil) async throws -> String {
         let result = await execute(command, workingDirectory: workingDirectory)
@@ -37,13 +43,28 @@ enum ShellExecutor {
     nonisolated static func execute(_ command: String, workingDirectory: String? = nil) async -> Result {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let result = synchronousExecute(command, workingDirectory: workingDirectory)
+                let bin = synchronousExecuteData(command, workingDirectory: workingDirectory)
+                let result = Result(
+                    stdout: String(data: bin.stdoutData, encoding: .utf8) ?? "",
+                    stderr: bin.stderr,
+                    exitCode: bin.exitCode
+                )
                 continuation.resume(returning: result)
             }
         }
     }
 
-    nonisolated private static func synchronousExecute(_ command: String, workingDirectory: String?) -> Result {
+    /// Runs a command and returns raw binary stdout data.
+    nonisolated static func executeData(_ command: String, workingDirectory: String? = nil) async -> BinaryResult {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = synchronousExecuteData(command, workingDirectory: workingDirectory)
+                continuation.resume(returning: result)
+            }
+        }
+    }
+
+    nonisolated private static func synchronousExecuteData(_ command: String, workingDirectory: String?) -> BinaryResult {
         // Create pipes for stdout and stderr
         var stdoutPipe: [Int32] = [0, 0]
         var stderrPipe: [Int32] = [0, 0]
@@ -92,7 +113,7 @@ enum ShellExecutor {
         guard spawnResult == 0 else {
             close(stdoutPipe[0])
             close(stderrPipe[0])
-            return Result(stdout: "", stderr: "posix_spawn failed: \(spawnResult)", exitCode: -1)
+            return BinaryResult(stdoutData: Data(), stderr: "posix_spawn failed: \(spawnResult)", exitCode: -1)
         }
 
         // Read stdout and stderr
@@ -114,8 +135,8 @@ enum ShellExecutor {
             exitCode = -1
         }
 
-        return Result(
-            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
+        return BinaryResult(
+            stdoutData: stdoutData,
             stderr: String(data: stderrData, encoding: .utf8) ?? "",
             exitCode: exitCode
         )

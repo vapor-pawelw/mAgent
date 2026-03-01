@@ -285,6 +285,29 @@ final class GitService {
         return mergeCheck.stdout.contains(head)
     }
 
+    // MARK: - Merge Base & File Data
+
+    /// Returns the merge-base commit hash between `baseBranch` and HEAD.
+    func mergeBase(worktreePath: String, baseBranch: String) async -> String? {
+        let result = await ShellExecutor.execute(
+            "git merge-base \(shellQuote(baseBranch)) HEAD",
+            workingDirectory: worktreePath
+        )
+        let hash = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard result.exitCode == 0, !hash.isEmpty else { return nil }
+        return hash
+    }
+
+    /// Returns the raw file contents at a given git ref (commit, branch, tag).
+    func fileData(atRef ref: String, relativePath: String, worktreePath: String) async -> Data? {
+        let result = await ShellExecutor.executeData(
+            "git show \(shellQuote(ref)):\(shellQuote(relativePath))",
+            workingDirectory: worktreePath
+        )
+        guard result.exitCode == 0, !result.stdoutData.isEmpty else { return nil }
+        return result.stdoutData
+    }
+
     // MARK: - Diff & Status
 
     /// Returns `true` when the worktree has any uncommitted changes or untracked files.
