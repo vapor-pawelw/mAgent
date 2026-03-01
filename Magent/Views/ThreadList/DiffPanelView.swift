@@ -199,7 +199,7 @@ final class DiffPanelView: NSView {
     override func mouseDragged(with event: NSEvent) {
         guard isDragging else { super.mouseDragged(with: event); return }
         let currentY = NSEvent.mouseLocation.y
-        let delta = currentY - dragStartY
+        let delta = dragStartY - currentY
         let newHeight = min(max(dragStartHeight + delta, Self.minHeight), Self.maxHeight)
         heightConstraint.constant = newHeight
     }
