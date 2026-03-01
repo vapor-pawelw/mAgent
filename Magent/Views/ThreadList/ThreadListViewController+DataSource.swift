@@ -63,6 +63,11 @@ extension ThreadListViewController {
             menu.addItem(prItem)
         }
 
+        // Open in Jira
+        if let jiraItem = buildJiraMenuItem(for: thread, settings: settings) {
+            menu.addItem(jiraItem)
+        }
+
         menu.addItem(NSMenuItem.separator())
 
         // Archive
@@ -112,6 +117,12 @@ extension ThreadListViewController {
             menu.addItem(prItem)
         }
 
+        // Open Jira Board
+        let settings = persistence.loadSettings()
+        if let jiraItem = buildJiraMenuItem(for: thread, settings: settings) {
+            menu.addItem(jiraItem)
+        }
+
         return menu
     }
 
@@ -143,6 +154,68 @@ extension ThreadListViewController {
         guard let thread = sender.representedObject as? MagentThread,
               let path = xcodeProjectPath(for: thread) else { return }
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    // MARK: - Jira Context Menu
+
+    private func buildJiraMenuItem(for thread: MagentThread, settings: AppSettings) -> NSMenuItem? {
+        guard let project = settings.projects.first(where: { $0.id == thread.projectId }),
+              let projectKey = project.jiraProjectKey, !projectKey.isEmpty else {
+            return nil
+        }
+
+        let siteURL = project.jiraSiteURL ?? settings.jiraSiteURL
+        guard !siteURL.isEmpty else { return nil }
+
+        let title: String
+        if thread.jiraTicketKey != nil {
+            title = "Open Ticket in Jira"
+        } else if thread.isMain {
+            title = "Open Jira Board"
+        } else {
+            title = "Open in Jira"
+        }
+
+        let item = NSMenuItem(title: title, action: #selector(openThreadInJira(_:)), keyEquivalent: "")
+        item.target = self
+        item.image = jiraMenuIcon()
+        item.representedObject = thread
+        return item
+    }
+
+    private func jiraMenuIcon() -> NSImage? {
+        if let image = NSImage(named: NSImage.Name("JiraIcon")) {
+            let sized = (image.copy() as? NSImage) ?? image
+            sized.size = NSSize(width: 16, height: 16)
+            sized.isTemplate = false
+            return sized
+        }
+        return NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira")
+    }
+
+    @objc private func openThreadInJira(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread else { return }
+
+        let settings = persistence.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == thread.projectId }),
+              let projectKey = project.jiraProjectKey else { return }
+
+        let siteURL = project.jiraSiteURL ?? settings.jiraSiteURL
+        guard !siteURL.isEmpty else { return }
+        let jira = JiraService.shared
+
+        let url: URL?
+        if let ticketKey = thread.jiraTicketKey {
+            url = jira.ticketURL(siteURL: siteURL, ticketKey: ticketKey)
+        } else if thread.isMain, let boardId = project.jiraBoardId {
+            url = jira.boardURL(siteURL: siteURL, projectKey: projectKey, boardId: boardId)
+        } else {
+            url = jira.projectURL(siteURL: siteURL, projectKey: projectKey)
+        }
+
+        if let url {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func buildProjectContextMenu(for project: SidebarProject) -> NSMenu {

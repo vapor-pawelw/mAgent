@@ -2,6 +2,7 @@ import Cocoa
 
 final class ThreadCell: NSTableCellView {
 
+    private var jiraImageView: NSImageView?
     private var dirtyImageView: NSImageView?
     private var pinImageView: NSImageView?
     private var archiveButton: NSButton?
@@ -14,6 +15,11 @@ final class ThreadCell: NSTableCellView {
 
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
+
+        let jiraIV = NSImageView()
+        jiraIV.translatesAutoresizingMaskIntoConstraints = false
+        jiraIV.setContentHuggingPriority(.required, for: .horizontal)
+        jiraIV.isHidden = true
 
         let dirtyIV = NSImageView()
         dirtyIV.translatesAutoresizingMaskIntoConstraints = false
@@ -47,7 +53,7 @@ final class ThreadCell: NSTableCellView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
 
-        let stack = NSStackView(views: [dirtyIV, pinIV, archiveBtn, spinner, completionIV])
+        let stack = NSStackView(views: [jiraIV, dirtyIV, pinIV, archiveBtn, spinner, completionIV])
         stack.orientation = .horizontal
         stack.spacing = 3
         stack.alignment = .centerY
@@ -57,6 +63,8 @@ final class ThreadCell: NSTableCellView {
         NSLayoutConstraint.activate([
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
             stack.centerXAnchor.constraint(equalTo: trailingAnchor, constant: -(ThreadListViewController.projectDisclosureTrailingInset + ThreadListViewController.disclosureButtonSize / 2)),
+            jiraIV.widthAnchor.constraint(equalToConstant: 10),
+            jiraIV.heightAnchor.constraint(equalToConstant: 10),
             dirtyIV.widthAnchor.constraint(equalToConstant: 7),
             dirtyIV.heightAnchor.constraint(equalToConstant: 7),
             pinIV.widthAnchor.constraint(equalToConstant: 12),
@@ -69,6 +77,7 @@ final class ThreadCell: NSTableCellView {
             spinner.heightAnchor.constraint(equalToConstant: 14),
         ])
         trailingStackView = stack
+        jiraImageView = jiraIV
         dirtyImageView = dirtyIV
         pinImageView = pinIV
         archiveButton = archiveBtn
@@ -90,12 +99,30 @@ final class ThreadCell: NSTableCellView {
             ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
             : .preferredFont(forTextStyle: .body)
 
+        // Gray out threads whose Jira ticket is no longer assigned to the user
+        if thread.jiraUnassigned {
+            textField?.textColor = .tertiaryLabelColor
+        } else {
+            textField?.textColor = .labelColor
+        }
+
         imageView?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
         imageView?.contentTintColor = thread.hasUnreadAgentCompletion
             ? NSColor.controlAccentColor
             : (sectionColor ?? NSColor(resource: .primaryBrand))
 
         ensureTrailingStack()
+
+        if thread.jiraTicketKey != nil {
+            jiraImageView?.image = NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira ticket")
+            jiraImageView?.contentTintColor = .tertiaryLabelColor
+            jiraImageView?.toolTip = thread.jiraTicketKey
+            jiraImageView?.isHidden = false
+        } else {
+            jiraImageView?.image = nil
+            jiraImageView?.toolTip = nil
+            jiraImageView?.isHidden = true
+        }
 
         if thread.isDirty {
             dirtyImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")

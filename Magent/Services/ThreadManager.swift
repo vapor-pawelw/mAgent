@@ -39,6 +39,8 @@ final class ThreadManager {
         return [shellName, "-\(shellName)"]
     }()
     var dirtyCheckTickCounter: Int = 0
+    var _jiraSyncTickCounter: Int = 0
+    var _mismatchBannerShownProjectIds: Set<UUID> = []
 
     // MARK: - Lifecycle
 
@@ -315,7 +317,7 @@ final class ThreadManager {
             branchName: branchName,
             tmuxSessionNames: [tmuxSessionName],
             agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
-            sectionId: settings.defaultSection?.id,
+            sectionId: settings.defaultSection(for: project.id)?.id,
             selectedAgentType: selectedAgentType,
             lastSelectedTmuxSessionName: tmuxSessionName,
             baseBranch: baseBranch
@@ -730,6 +732,10 @@ final class ThreadManager {
             throw ThreadManagerError.cannotDeleteMainThread
         }
 
+        if let ticketKey = thread.jiraTicketKey {
+            excludeJiraTicket(key: ticketKey, projectId: thread.projectId)
+        }
+
         // Remove from active list
         threads.removeAll { $0.id == thread.id }
 
@@ -768,6 +774,10 @@ final class ThreadManager {
 
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
             throw ThreadManagerError.threadNotFound
+        }
+
+        if let ticketKey = thread.jiraTicketKey {
+            excludeJiraTicket(key: ticketKey, projectId: thread.projectId)
         }
 
         // Remove from active list

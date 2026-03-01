@@ -277,6 +277,7 @@ final class ThreadDetailViewController: NSViewController {
     let tabBarStack = NSStackView()
     let terminalContainer = NSView()
     let openPRButton = NSButton()
+    let openInJiraButton = NSButton()
     let openInXcodeButton = NSButton()
     let openInFinderButton = NSButton()
     let archiveThreadButton = NSButton()
@@ -338,6 +339,7 @@ final class ThreadDetailViewController: NSViewController {
 
         setupUI()
         refreshOpenPRButtonIcon()
+        refreshJiraButton()
         refreshXcodeButton()
         setupLoadingOverlay()
 
@@ -404,6 +406,14 @@ final class ThreadDetailViewController: NSViewController {
         openPRButton.action = #selector(openPRTapped(_:))
         openPRButton.toolTip = "Open Pull Request in Browser"
 
+        openInJiraButton.bezelStyle = .texturedRounded
+        openInJiraButton.image = jiraButtonImage()
+        openInJiraButton.imageScaling = .scaleProportionallyDown
+        openInJiraButton.target = self
+        openInJiraButton.action = #selector(openInJiraTapped)
+        openInJiraButton.toolTip = "Open in Jira"
+        openInJiraButton.isHidden = true
+
         openInXcodeButton.bezelStyle = .texturedRounded
         openInXcodeButton.image = xcodeButtonImage()
         openInXcodeButton.imageScaling = .scaleProportionallyDown
@@ -443,7 +453,7 @@ final class ThreadDetailViewController: NSViewController {
         separator.setContentHuggingPriority(.required, for: .vertical)
         separator.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, exportContextButton, separator, archiveThreadButton, addTabButton])
+        let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, exportContextButton, separator, archiveThreadButton, addTabButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY

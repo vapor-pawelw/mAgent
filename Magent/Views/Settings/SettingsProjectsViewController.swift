@@ -22,6 +22,17 @@ final class SettingsProjectsViewController: NSViewController {
     private var slugPromptTextView: NSTextView!
     private var slugPromptContainer: NSView!
 
+    // Default section
+    private var defaultSectionPopup: NSPopUpButton!
+
+    // Jira fields
+    private var jiraProjectKeyField: NSTextField!
+    private var jiraBoardPopup: NSPopUpButton!
+    private var jiraAssigneeField: NSTextField!
+    private var jiraSyncButton: NSButton!
+    private var jiraAutoSyncCheckbox: NSButton!
+    private var jiraBoards: [JiraBoard] = []
+
     private var selectedProjectIndex: Int? {
         let row = projectTableView.selectedRow
         return row >= 0 ? row : nil
@@ -273,6 +284,112 @@ final class SettingsProjectsViewController: NSViewController {
         defaultBranchField.action = #selector(defaultBranchFieldChanged)
         stack.addArrangedSubview(defaultBranchField)
 
+        // Separator: Jira Integration
+        let jiraSep = NSBox()
+        jiraSep.boxType = .separator
+        jiraSep.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(jiraSep)
+
+        let jiraHeader = NSTextField(labelWithString: "Jira Integration")
+        jiraHeader.font = .systemFont(ofSize: 13, weight: .semibold)
+        stack.addArrangedSubview(jiraHeader)
+
+        // Project Key
+        let projectKeyLabel = NSTextField(labelWithString: "Project Key")
+        projectKeyLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        stack.addArrangedSubview(projectKeyLabel)
+
+        jiraProjectKeyField = NSTextField(string: project.jiraProjectKey ?? "")
+        jiraProjectKeyField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        jiraProjectKeyField.placeholderString = "e.g. IP, PROJ"
+        jiraProjectKeyField.translatesAutoresizingMaskIntoConstraints = false
+        jiraProjectKeyField.target = self
+        jiraProjectKeyField.action = #selector(jiraProjectKeyChanged)
+        stack.addArrangedSubview(jiraProjectKeyField)
+
+        // Board
+        let boardLabel = NSTextField(labelWithString: "Board")
+        boardLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        stack.addArrangedSubview(boardLabel)
+
+        let boardRow = NSStackView()
+        boardRow.orientation = .horizontal
+        boardRow.spacing = 8
+
+        jiraBoardPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        jiraBoardPopup.target = self
+        jiraBoardPopup.action = #selector(jiraBoardChanged)
+        if let boardName = project.jiraBoardName {
+            jiraBoardPopup.addItem(withTitle: boardName)
+        } else {
+            jiraBoardPopup.addItem(withTitle: "Select board")
+        }
+        boardRow.addArrangedSubview(jiraBoardPopup)
+
+        let refreshBoardsBtn = NSButton(title: "Refresh", target: self, action: #selector(refreshBoardsTapped))
+        refreshBoardsBtn.bezelStyle = .rounded
+        refreshBoardsBtn.controlSize = .small
+        boardRow.addArrangedSubview(refreshBoardsBtn)
+        stack.addArrangedSubview(boardRow)
+
+        // Assignee Account ID
+        let assigneeLabel = NSTextField(labelWithString: "Assignee Account ID")
+        assigneeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        stack.addArrangedSubview(assigneeLabel)
+
+        let assigneeDesc = NSTextField(wrappingLabelWithString: "Your Jira account ID for filtering tickets.")
+        assigneeDesc.font = .systemFont(ofSize: 11)
+        assigneeDesc.textColor = NSColor(resource: .textSecondary)
+        stack.addArrangedSubview(assigneeDesc)
+
+        jiraAssigneeField = NSTextField(string: project.jiraAssigneeAccountId ?? "")
+        jiraAssigneeField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        jiraAssigneeField.placeholderString = "e.g. 5e0dd2629a4b780d990e8760"
+        jiraAssigneeField.translatesAutoresizingMaskIntoConstraints = false
+        jiraAssigneeField.target = self
+        jiraAssigneeField.action = #selector(jiraAssigneeChanged)
+        stack.addArrangedSubview(jiraAssigneeField)
+
+        // Sync Sections button
+        jiraSyncButton = NSButton(title: "Sync Sections from Jira", target: self, action: #selector(syncSectionsFromJiraTapped))
+        jiraSyncButton.bezelStyle = .rounded
+        stack.addArrangedSubview(jiraSyncButton)
+
+        let syncDesc = NSTextField(wrappingLabelWithString: "Fetches statuses from project tickets and replaces this project's sections to match.")
+        syncDesc.font = .systemFont(ofSize: 11)
+        syncDesc.textColor = NSColor(resource: .textSecondary)
+        stack.addArrangedSubview(syncDesc)
+
+        // Auto-sync checkbox
+        jiraAutoSyncCheckbox = NSButton(
+            checkboxWithTitle: "Enable auto-sync",
+            target: self,
+            action: #selector(jiraAutoSyncToggled)
+        )
+        jiraAutoSyncCheckbox.state = project.jiraSyncEnabled ? .on : .off
+        stack.addArrangedSubview(jiraAutoSyncCheckbox)
+
+        let autoSyncDesc = NSTextField(wrappingLabelWithString: "Polls Jira and moves threads to matching sections. Creates threads for new tickets.")
+        autoSyncDesc.font = .systemFont(ofSize: 11)
+        autoSyncDesc.textColor = NSColor(resource: .textSecondary)
+        stack.addArrangedSubview(autoSyncDesc)
+
+        // Default Section popup
+        let defaultSectionHeader = NSTextField(labelWithString: "Default Section")
+        defaultSectionHeader.font = .systemFont(ofSize: 12, weight: .semibold)
+        stack.addArrangedSubview(defaultSectionHeader)
+
+        let defaultSectionDesc = NSTextField(wrappingLabelWithString: "Section for new threads without an explicit section. \"Inherit global\" uses the global default.")
+        defaultSectionDesc.font = .systemFont(ofSize: 11)
+        defaultSectionDesc.textColor = NSColor(resource: .textSecondary)
+        stack.addArrangedSubview(defaultSectionDesc)
+
+        defaultSectionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        defaultSectionPopup.target = self
+        defaultSectionPopup.action = #selector(defaultSectionChanged)
+        refreshDefaultSectionPopup(for: project)
+        stack.addArrangedSubview(defaultSectionPopup)
+
         // Separator: Project Overrides
         let overrideSep = NSBox()
         overrideSep.boxType = .separator
@@ -419,6 +536,12 @@ final class SettingsProjectsViewController: NSViewController {
             repoRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             wtRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             defaultBranchField.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            jiraSep.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            jiraProjectKeyField.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            boardRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            jiraAssigneeField.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            syncDesc.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            autoSyncDesc.widthAnchor.constraint(equalTo: stack.widthAnchor),
             overrideSep.widthAnchor.constraint(equalTo: stack.widthAnchor),
             overrideDesc.widthAnchor.constraint(equalTo: stack.widthAnchor),
             slugPromptWrapper.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -599,6 +722,39 @@ final class SettingsProjectsViewController: NSViewController {
         try? persistence.saveSettings(settings)
     }
 
+    // MARK: - Default Section
+
+    private func refreshDefaultSectionPopup(for project: Project) {
+        defaultSectionPopup.removeAllItems()
+        defaultSectionPopup.addItem(withTitle: "Inherit global")
+        let visible = settings.visibleSections(for: project.id)
+        for section in visible {
+            defaultSectionPopup.addItem(withTitle: section.name)
+        }
+        if let id = project.defaultSectionId,
+           let idx = visible.firstIndex(where: { $0.id == id }) {
+            defaultSectionPopup.selectItem(at: idx + 1) // +1 for "Inherit global"
+        } else {
+            defaultSectionPopup.selectItem(at: 0)
+        }
+    }
+
+    @objc private func defaultSectionChanged() {
+        guard let index = selectedProjectIndex else { return }
+        let selected = defaultSectionPopup.indexOfSelectedItem
+        if selected == 0 {
+            settings.projects[index].defaultSectionId = nil
+        } else {
+            let visible = settings.visibleSections(for: settings.projects[index].id)
+            let sectionIndex = selected - 1
+            if sectionIndex >= 0, sectionIndex < visible.count {
+                settings.projects[index].defaultSectionId = visible[sectionIndex].id
+            }
+        }
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+    }
+
     @objc private func browseRepoPath() {
         guard let index = selectedProjectIndex else { return }
         let panel = NSOpenPanel()
@@ -650,6 +806,142 @@ final class SettingsProjectsViewController: NSViewController {
             self.showDetailForProject(self.settings.projects[index])
             Task { await ThreadManager.shared.syncThreadsWithWorktrees(for: self.settings.projects[index]) }
         }
+    }
+
+    // MARK: - Jira Actions
+
+    @objc private func jiraProjectKeyChanged() {
+        guard let index = selectedProjectIndex else { return }
+        let value = jiraProjectKeyField.stringValue.trimmingCharacters(in: .whitespaces).uppercased()
+        settings.projects[index].jiraProjectKey = value.isEmpty ? nil : value
+        jiraProjectKeyField.stringValue = value
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func jiraBoardChanged() {
+        guard let index = selectedProjectIndex else { return }
+        let selected = jiraBoardPopup.indexOfSelectedItem
+        if selected >= 0, selected < jiraBoards.count {
+            let board = jiraBoards[selected]
+            settings.projects[index].jiraBoardId = board.id
+            settings.projects[index].jiraBoardName = board.name
+        } else {
+            settings.projects[index].jiraBoardId = nil
+            settings.projects[index].jiraBoardName = nil
+        }
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func refreshBoardsTapped() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            jiraBoardPopup.removeAllItems()
+            jiraBoardPopup.addItem(withTitle: "Loading...")
+
+            do {
+                let boards = try await JiraService.shared.listBoards()
+                self.jiraBoards = boards
+
+                jiraBoardPopup.removeAllItems()
+                if boards.isEmpty {
+                    jiraBoardPopup.addItem(withTitle: "No boards found")
+                } else {
+                    for board in boards {
+                        jiraBoardPopup.addItem(withTitle: "\(board.name) (#\(board.id))")
+                    }
+                    // Select current board if set
+                    if let index = selectedProjectIndex,
+                       let currentId = settings.projects[index].jiraBoardId,
+                       let boardIndex = boards.firstIndex(where: { $0.id == currentId }) {
+                        jiraBoardPopup.selectItem(at: boardIndex)
+                    }
+                }
+            } catch {
+                jiraBoardPopup.removeAllItems()
+                jiraBoardPopup.addItem(withTitle: "Error: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    @objc private func jiraAssigneeChanged() {
+        guard let index = selectedProjectIndex else { return }
+        let value = jiraAssigneeField.stringValue.trimmingCharacters(in: .whitespaces)
+        settings.projects[index].jiraAssigneeAccountId = value.isEmpty ? nil : value
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func syncSectionsFromJiraTapped() {
+        guard let index = selectedProjectIndex else { return }
+        let project = settings.projects[index]
+
+        guard project.jiraProjectKey?.isEmpty == false else {
+            BannerManager.shared.show(message: "Set a Jira project key first", style: .warning, duration: 3.0)
+            return
+        }
+
+        jiraSyncButton.isEnabled = false
+        jiraSyncButton.title = "Syncing..."
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                jiraSyncButton.isEnabled = true
+                jiraSyncButton.title = "Sync Sections from Jira"
+            }
+
+            do {
+                let sections = try await ThreadManager.shared.syncSectionsFromJira(project: project)
+                guard !sections.isEmpty else {
+                    BannerManager.shared.show(message: "No statuses found for \(project.jiraProjectKey ?? "")", style: .warning, duration: 3.0)
+                    return
+                }
+
+                settings.projects[index].threadSections = sections
+                settings.projects[index].jiraAcknowledgedStatuses = nil
+                try? persistence.saveSettings(settings)
+                NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+
+                BannerManager.shared.show(
+                    message: "Created \(sections.count) sections from Jira statuses",
+                    style: .info,
+                    duration: 3.0
+                )
+            } catch {
+                BannerManager.shared.show(
+                    message: "Failed to sync: \(error.localizedDescription)",
+                    style: .error,
+                    duration: 5.0
+                )
+            }
+        }
+    }
+
+    @objc private func jiraAutoSyncToggled() {
+        guard let index = selectedProjectIndex else { return }
+        let enabling = jiraAutoSyncCheckbox.state == .on
+
+        if enabling {
+            let project = settings.projects[index]
+            var missing: [String] = []
+            if project.jiraProjectKey?.isEmpty != false { missing.append("Project Key") }
+            if project.jiraAssigneeAccountId?.isEmpty != false { missing.append("Assignee Account ID") }
+            let siteURL = project.jiraSiteURL ?? settings.jiraSiteURL
+            if siteURL.isEmpty { missing.append("Jira Site URL (set in Settings > Jira)") }
+
+            if !missing.isEmpty {
+                jiraAutoSyncCheckbox.state = .off
+                BannerManager.shared.show(
+                    message: "Cannot enable sync — missing: \(missing.joined(separator: ", "))",
+                    style: .warning,
+                    duration: 5.0
+                )
+                return
+            }
+        }
+
+        settings.projects[index].jiraSyncEnabled = enabling
+        try? persistence.saveSettings(settings)
     }
 }
 

@@ -129,6 +129,14 @@ final class SplitViewController: NSSplitViewController {
         }
         let contentItem = NSSplitViewItem(contentListWithViewController: detailVC)
         addSplitViewItem(contentItem)
+
+        if thread.jiraUnassigned {
+            BannerManager.shared.show(
+                message: "This ticket is no longer assigned to you",
+                style: .info,
+                duration: 5.0
+            )
+        }
     }
 
     private func recoverAndShowThread(_ thread: MagentThread) {

@@ -14,11 +14,13 @@ nonisolated struct AppSettings: Codable, Sendable {
     var autoRenameSlugPrompt: String
     var isConfigured: Bool
     var threadSections: [ThreadSection]
+    var defaultSectionId: UUID?
     var terminalInjectionCommand: String
     var agentContextInjection: String
     var agentSandboxEnabled: Bool
     var agentSkipPermissions: Bool
     var ipcPromptInjectionEnabled: Bool
+    var jiraSiteURL: String
 
     init(
         projects: [Project] = [],
@@ -32,11 +34,13 @@ nonisolated struct AppSettings: Codable, Sendable {
         autoRenameSlugPrompt: String = AppSettings.defaultSlugPrompt,
         isConfigured: Bool = false,
         threadSections: [ThreadSection] = ThreadSection.defaults(),
+        defaultSectionId: UUID? = nil,
         terminalInjectionCommand: String = "",
         agentContextInjection: String = "",
         agentSandboxEnabled: Bool = false,
         agentSkipPermissions: Bool = true,
-        ipcPromptInjectionEnabled: Bool = true
+        ipcPromptInjectionEnabled: Bool = true,
+        jiraSiteURL: String = ""
     ) {
         self.projects = projects
         self.activeAgents = activeAgents
@@ -49,11 +53,13 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.isConfigured = isConfigured
         self.threadSections = threadSections
+        self.defaultSectionId = defaultSectionId
         self.terminalInjectionCommand = terminalInjectionCommand
         self.agentContextInjection = agentContextInjection
         self.agentSandboxEnabled = agentSandboxEnabled
         self.agentSkipPermissions = agentSkipPermissions
         self.ipcPromptInjectionEnabled = ipcPromptInjectionEnabled
+        self.jiraSiteURL = jiraSiteURL
     }
 
     init(from decoder: Decoder) throws {
@@ -71,11 +77,13 @@ nonisolated struct AppSettings: Codable, Sendable {
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt) ?? Self.defaultSlugPrompt
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections) ?? ThreadSection.defaults()
+        defaultSectionId = try container.decodeIfPresent(UUID.self, forKey: .defaultSectionId)
         terminalInjectionCommand = try container.decodeIfPresent(String.self, forKey: .terminalInjectionCommand) ?? ""
         agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection) ?? ""
         agentSandboxEnabled = try container.decodeIfPresent(Bool.self, forKey: .agentSandboxEnabled) ?? false
         agentSkipPermissions = try container.decodeIfPresent(Bool.self, forKey: .agentSkipPermissions) ?? true
         ipcPromptInjectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .ipcPromptInjectionEnabled) ?? true
+        jiraSiteURL = try container.decodeIfPresent(String.self, forKey: .jiraSiteURL) ?? ""
     }
 
     func encode(to encoder: Encoder) throws {
@@ -91,11 +99,13 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoRenameSlugPrompt, forKey: .autoRenameSlugPrompt)
         try container.encode(isConfigured, forKey: .isConfigured)
         try container.encode(threadSections, forKey: .threadSections)
+        try container.encodeIfPresent(defaultSectionId, forKey: .defaultSectionId)
         try container.encode(terminalInjectionCommand, forKey: .terminalInjectionCommand)
         try container.encode(agentContextInjection, forKey: .agentContextInjection)
         try container.encode(agentSandboxEnabled, forKey: .agentSandboxEnabled)
         try container.encode(agentSkipPermissions, forKey: .agentSkipPermissions)
         try container.encode(ipcPromptInjectionEnabled, forKey: .ipcPromptInjectionEnabled)
+        try container.encode(jiraSiteURL, forKey: .jiraSiteURL)
     }
 
     var visibleSections: [ThreadSection] {
@@ -103,7 +113,24 @@ nonisolated struct AppSettings: Codable, Sendable {
     }
 
     var defaultSection: ThreadSection? {
-        visibleSections.first
+        let visible = visibleSections
+        if let id = defaultSectionId, let match = visible.first(where: { $0.id == id }) {
+            return match
+        }
+        return visible.first
+    }
+
+    func defaultSection(for projectId: UUID) -> ThreadSection? {
+        if let project = projects.first(where: { $0.id == projectId }) {
+            let sections = visibleSections(for: projectId)
+            if let id = project.defaultSectionId, let match = sections.first(where: { $0.id == id }) {
+                return match
+            }
+            if project.threadSections != nil {
+                return sections.first
+            }
+        }
+        return defaultSection
     }
 
     /// Returns sections for a specific project — project override if set, otherwise global.
@@ -167,11 +194,13 @@ nonisolated struct AppSettings: Codable, Sendable {
         case autoRenameSlugPrompt
         case isConfigured
         case threadSections
+        case defaultSectionId
         case terminalInjectionCommand
         case agentContextInjection
         case agentSandboxEnabled
         case agentSkipPermissions
         case ipcPromptInjectionEnabled
+        case jiraSiteURL
 
         // Legacy keys kept for migration.
         case agentCommand

@@ -22,6 +22,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var didAutoRenameFromFirstPrompt: Bool
     var customTabNames: [String: String]
     var baseBranch: String?
+    var jiraTicketKey: String?
 
     // Transient (not persisted) — tracks which agent sessions are currently working
     var busySessions: Set<String> = []
@@ -31,6 +32,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var isDirty: Bool = false
     // Transient (not persisted) — tracks whether all commits are in the base branch
     var isFullyDelivered: Bool = false
+    // Transient (not persisted) — tracks whether Jira ticket is no longer assigned to user
+    var jiraUnassigned: Bool = false
 
     var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
@@ -70,6 +73,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case didAutoRenameFromFirstPrompt
         case customTabNames
         case baseBranch
+        case jiraTicketKey
     }
 
     init(
@@ -93,7 +97,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         unreadCompletionSessions: Set<String> = [],
         didAutoRenameFromFirstPrompt: Bool = false,
         customTabNames: [String: String] = [:],
-        baseBranch: String? = nil
+        baseBranch: String? = nil,
+        jiraTicketKey: String? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -116,6 +121,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
         self.customTabNames = customTabNames
         self.baseBranch = baseBranch
+        self.jiraTicketKey = jiraTicketKey
     }
 
     init(from decoder: Decoder) throws {
@@ -140,6 +146,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
         customTabNames = try container.decodeIfPresent([String: String].self, forKey: .customTabNames) ?? [:]
         baseBranch = try container.decodeIfPresent(String.self, forKey: .baseBranch)
+        jiraTicketKey = try container.decodeIfPresent(String.self, forKey: .jiraTicketKey)
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -175,6 +182,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             try container.encode(customTabNames, forKey: .customTabNames)
         }
         try container.encodeIfPresent(baseBranch, forKey: .baseBranch)
+        try container.encodeIfPresent(jiraTicketKey, forKey: .jiraTicketKey)
     }
 }
 
