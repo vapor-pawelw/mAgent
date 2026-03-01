@@ -66,7 +66,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     }
 
     static func defaultDisplayName(at index: Int) -> String {
-        index == 0 ? "Main" : "Tab \(index)"
+        "Tab \(index)"
     }
 
     enum CodingKeys: String, CodingKey {
