@@ -31,6 +31,12 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var isDirty: Bool = false
     // Transient (not persisted) — tracks whether all commits are in the base branch
     var isFullyDelivered: Bool = false
+    // Transient (not persisted) — current HEAD branch from git
+    var actualBranch: String? = nil
+    // Transient (not persisted) — expected branch (detected or from branchName)
+    var expectedBranch: String? = nil
+    // Transient (not persisted) — whether actual branch != expected branch
+    var hasBranchMismatch: Bool = false
 
     var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty

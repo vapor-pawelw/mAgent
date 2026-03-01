@@ -548,6 +548,7 @@ enum ThreadManagerError: LocalizedError {
     case invalidTabIndex
     case cannotDeleteMainThread
     case nameGenerationFailed
+    case noExpectedBranch
 
     var errorDescription: String? {
         switch self {
@@ -563,6 +564,8 @@ enum ThreadManagerError: LocalizedError {
             return "Main threads cannot be deleted."
         case .nameGenerationFailed:
             return "Could not generate a unique thread name. Try again or clean up unused worktrees/branches."
+        case .noExpectedBranch:
+            return "No expected branch configured. Set the default branch in project settings."
         }
     }
 }
