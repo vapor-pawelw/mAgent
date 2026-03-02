@@ -257,15 +257,15 @@ final class ThreadDetailViewController: NSViewController {
         if sessions.isEmpty {
             // Thread has no sessions — create a fallback and register it in the manager
             // so that recreateSessionIfNeeded sees it as an agent session and close-tab works.
-            let slug = ThreadManager.repoSlug(from:
+            let slug = TmuxSessionNaming.repoSlug(from:
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
             )
-            let firstTabSlug = ThreadManager.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+            let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
             let fallbackName: String
             if thread.isMain {
-                fallbackName = ThreadManager.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
+                fallbackName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
             } else {
-                fallbackName = ThreadManager.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
+                fallbackName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
             }
             sessions = [fallbackName]
             threadManager.registerFallbackSession(fallbackName, for: thread.id, agentType: selectedAgentType)

@@ -225,10 +225,10 @@ extension ThreadManager {
         guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else {
             throw ThreadManagerError.threadNotFound
         }
-        let slug = Self.repoSlug(from: project.name)
+        let slug = TmuxSessionNaming.repoSlug(from: project.name)
 
         let sessionRenameMap = Dictionary(uniqueKeysWithValues: currentThread.tmuxSessionNames.map { sessionName in
-            (sessionName, renamedSessionName(sessionName, fromThreadName: oldName, toThreadName: trimmed, repoSlug: slug))
+            (sessionName, TmuxSessionNaming.renamedSessionName(sessionName, fromThreadName: oldName, toThreadName: trimmed, repoSlug: slug))
         })
         let oldSessionNames = Set(currentThread.tmuxSessionNames)
         let newSessionNames = currentThread.tmuxSessionNames.map { sessionRenameMap[$0] ?? $0 }
@@ -262,7 +262,7 @@ extension ThreadManager {
         // 2. Create a symlink from the new name to the actual worktree directory.
         // The worktree itself is NOT moved — running agents keep their cwd intact.
         if symlinkPath != worktreePath {
-            createCompatibilitySymlink(from: symlinkPath, to: worktreePath)
+            SymlinkManager.createCompatibilitySymlink(from: symlinkPath, to: worktreePath)
         }
 
         // 3. Rename each tmux session
@@ -382,16 +382,16 @@ extension ThreadManager {
         }
 
         // Compute new tmux session name
-        let sanitizedTabName = Self.sanitizeForTmux(trimmed)
+        let sanitizedTabName = TmuxSessionNaming.sanitizeForTmux(trimmed)
         let settings = persistence.loadSettings()
-        let slug = Self.repoSlug(from:
+        let slug = TmuxSessionNaming.repoSlug(from:
             settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
         )
         let newSessionName: String
         if currentThread.isMain {
-            newSessionName = Self.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: sanitizedTabName)
+            newSessionName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: sanitizedTabName)
         } else {
-            newSessionName = Self.buildSessionName(repoSlug: slug, threadName: currentThread.name, tabSlug: sanitizedTabName)
+            newSessionName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: currentThread.name, tabSlug: sanitizedTabName)
         }
 
         // Check uniqueness

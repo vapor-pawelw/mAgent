@@ -564,18 +564,18 @@ extension ThreadDetailViewController {
         let sessionName: String
         if thread.isMain {
             let settings = PersistenceService.shared.loadSettings()
-            let slug = ThreadManager.repoSlug(from:
+            let slug = TmuxSessionNaming.repoSlug(from:
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
             )
-            let firstTabSlug = ThreadManager.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
-            sessionName = thread.tmuxSessionNames.first ?? ThreadManager.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
+            let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+            sessionName = thread.tmuxSessionNames.first ?? TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
         } else {
             let settings = PersistenceService.shared.loadSettings()
-            let slug = ThreadManager.repoSlug(from:
+            let slug = TmuxSessionNaming.repoSlug(from:
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
             )
-            let firstTabSlug = ThreadManager.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
-            sessionName = thread.tmuxSessionNames.first ?? ThreadManager.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
+            let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+            sessionName = thread.tmuxSessionNames.first ?? TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
         }
         let startTime = Date()
         let maxWait: TimeInterval = 15
