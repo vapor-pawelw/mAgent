@@ -56,6 +56,7 @@ jobs:
             CODE_SIGN_IDENTITY="-"
 
       - name: Upload dSYMs to Sentry
+        continue-on-error: true
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
