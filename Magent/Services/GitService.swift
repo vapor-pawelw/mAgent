@@ -316,13 +316,7 @@ final class GitService {
 
     /// Returns per-file diff stats comparing the worktree to its base branch.
     func diffStats(worktreePath: String, baseBranch: String) async -> [FileDiffEntry] {
-        // Find the merge-base (common ancestor)
-        let mergeBaseResult = await ShellExecutor.execute(
-            "git merge-base \(shellQuote(baseBranch)) HEAD",
-            workingDirectory: worktreePath
-        )
-        let mergeBase = mergeBaseResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard mergeBaseResult.exitCode == 0, !mergeBase.isEmpty else { return [] }
+        guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return [] }
 
         // Get numstat for all changes from merge-base to working tree (includes uncommitted)
         let numstatResult = await ShellExecutor.execute(
@@ -393,12 +387,7 @@ final class GitService {
 
     /// Returns the full unified diff output comparing the worktree to its base branch.
     func diffContent(worktreePath: String, baseBranch: String) async -> String? {
-        let mergeBaseResult = await ShellExecutor.execute(
-            "git merge-base \(shellQuote(baseBranch)) HEAD",
-            workingDirectory: worktreePath
-        )
-        let mergeBase = mergeBaseResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard mergeBaseResult.exitCode == 0, !mergeBase.isEmpty else { return nil }
+        guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return nil }
 
         let diffResult = await ShellExecutor.execute(
             "git diff --no-color \(shellQuote(mergeBase))",
@@ -436,12 +425,7 @@ final class GitService {
 
     /// Returns the unified diff for a single file comparing the worktree to its base branch.
     func diffContentForFile(worktreePath: String, baseBranch: String, relativePath: String) async -> String? {
-        let mergeBaseResult = await ShellExecutor.execute(
-            "git merge-base \(shellQuote(baseBranch)) HEAD",
-            workingDirectory: worktreePath
-        )
-        let mergeBase = mergeBaseResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard mergeBaseResult.exitCode == 0, !mergeBase.isEmpty else { return nil }
+        guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return nil }
 
         let diffResult = await ShellExecutor.execute(
             "git diff --no-color \(shellQuote(mergeBase)) -- \(shellQuote(relativePath))",

@@ -50,6 +50,15 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     // Transient (not persisted) — tracks agent rate limit status per session.
     var rateLimitedSessions: [String: AgentRateLimitInfo] = [:]
 
+    /// Resolves the effective section ID for this thread given a set of known section IDs.
+    /// If the thread's sectionId is recognized, returns it; otherwise returns the fallback.
+    func resolvedSectionId(knownSectionIds: Set<UUID>, fallback: UUID?) -> UUID? {
+        if let sid = sectionId, knownSectionIds.contains(sid) {
+            return sid
+        }
+        return fallback
+    }
+
     var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
     }

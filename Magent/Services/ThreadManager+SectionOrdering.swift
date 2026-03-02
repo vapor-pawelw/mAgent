@@ -123,12 +123,9 @@ extension ThreadManager {
     /// for the thread's project when the thread has no section or an unrecognized one.
     func effectiveSectionId(for thread: MagentThread) -> UUID? {
         let settings = persistence.loadSettings()
-        let projectSections = settings.sections(for: thread.projectId)
-        let knownIds = Set(projectSections.map(\.id))
-        if let sid = thread.sectionId, knownIds.contains(sid) {
-            return sid
-        }
-        return settings.visibleSections(for: thread.projectId).first?.id
+        let knownIds = Set(settings.sections(for: thread.projectId).map(\.id))
+        let fallback = settings.visibleSections(for: thread.projectId).first?.id
+        return thread.resolvedSectionId(knownSectionIds: knownIds, fallback: fallback)
     }
 
     @MainActor
