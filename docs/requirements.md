@@ -1,8 +1,8 @@
-# Magent — Requirements
+# mAgent — Requirements
 
 ## Overview
 
-Magent is a native macOS app (AppKit) for managing multiple git worktrees as "threads," each backed by an embedded terminal (libghostty) running tmux.
+mAgent is a native macOS app (AppKit) for managing multiple git worktrees as "threads," each backed by an embedded terminal (libghostty) running tmux.
 
 **Primary goal**: Work on multiple features in the same repo simultaneously via worktrees, with easy SSH + tmux attachment from iPhone (e.g. via Terminus).
 

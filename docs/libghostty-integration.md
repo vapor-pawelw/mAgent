@@ -86,7 +86,7 @@ libghostty manages Metal rendering internally. The host app only:
 
 ## Platform Selection
 
-Magent is macOS-only, so use the native macOS path:
+mAgent is macOS-only, so use the native macOS path:
 - Use `GHOSTTY_PLATFORM_MACOS` with `NSView`.
 
 ## Reference Implementation

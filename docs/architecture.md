@@ -1,4 +1,4 @@
-# Magent — Architecture
+# mAgent — Architecture
 
 ## Technology Stack
 
@@ -51,7 +51,7 @@ magent/
 
 ### 1. Native AppKit
 
-Magent is now macOS-only and uses AppKit directly. This gives us:
+mAgent is now macOS-only and uses AppKit directly. This gives us:
 - Native platform behavior without Catalyst bridging layers
 - Reliable layout and interaction handling (vs SwiftUI quirks on Mac)
 - Full access to AppKit APIs without conditional compilation

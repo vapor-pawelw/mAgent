@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/icon.png" alt="Magent" width="128" height="128">
+  <img src="docs/icon.png" alt="mAgent" width="128" height="128">
 </p>
 
-<h1 align="center">Magent</h1>
+<h1 align="center">mAgent</h1>
 
 <p align="center">
   A native macOS app for managing coding agents as parallel work sessions.<br>

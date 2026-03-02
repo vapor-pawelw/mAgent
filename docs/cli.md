@@ -1,6 +1,6 @@
 # CLI Reference
 
-Magent installs a `magent-cli` script at `/tmp/magent-cli` on launch. It communicates with the running app over a Unix domain socket (`/tmp/magent.sock`).
+mAgent installs a `magent-cli` script at `/tmp/magent-cli` on launch. It communicates with the running app over a Unix domain socket (`/tmp/magent.sock`).
 
 The CLI is auto-updated when the app version changes — no manual installation needed.
 
@@ -77,7 +77,7 @@ Identify the current thread from inside a tmux session.
 magent-cli current-thread
 ```
 
-Must be run from within a Magent-managed tmux session.
+Must be run from within a mAgent-managed tmux session.
 
 ### send-prompt
 
@@ -203,7 +203,7 @@ magent-cli show-section --name <name> [--project <name>]
 
 ## Environment Variables
 
-These are injected into every Magent-managed tmux session:
+These are injected into every mAgent-managed tmux session:
 
 | Variable | Description |
 |----------|-------------|

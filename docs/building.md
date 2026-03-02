@@ -22,7 +22,7 @@ xcodebuild build -workspace Magent.xcworkspace -scheme Magent -configuration Rel
 
 ## First Run
 
-1. Launch Magent
+1. Launch mAgent
 2. Add your repositories in Settings
 3. Choose your default agent (Claude, Codex, or custom)
 4. Create your first thread

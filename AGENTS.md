@@ -1,4 +1,4 @@
-# Magent
+# mAgent
 
 Multi-worktree agent terminal manager for macOS (with future iPadOS/iOS support).
 
