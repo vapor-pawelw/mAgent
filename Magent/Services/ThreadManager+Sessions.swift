@@ -666,16 +666,27 @@ extension ThreadManager {
                     // Title doesn't indicate busy — check if the shell has child processes
                     // (agent running inside the shell wrapper, e.g. zsh -c 'claude ...')
                     if paneState.pid > 0, !(childrenByPid[paneState.pid]?.isEmpty ?? true) {
-                        // Shell has children → agent still running inside wrapper
-                        if !threads[i].busySessions.contains(session) {
-                            threads[i].busySessions.insert(session)
-                            changed = true
-                            busyChangedThreadIds.insert(threads[i].id)
-                        }
-                        let recoveredIds = clearRateLimitAfterRecovery(threadIndex: i, sessionName: session)
-                        if !recoveredIds.isEmpty {
-                            rateLimitChangedThreadIds.formUnion(recoveredIds)
-                            changed = true
+                        // Shell has children — but the agent could be idle at its prompt
+                        // (e.g. Claude Code waiting for user input while still running as
+                        // a child process of the wrapper shell).
+                        if let content = await tmux.capturePane(sessionName: session),
+                           isAgentIdleAtPrompt(content) {
+                            if threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                        } else {
+                            if !threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.insert(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                            let recoveredIds = clearRateLimitAfterRecovery(threadIndex: i, sessionName: session)
+                            if !recoveredIds.isEmpty {
+                                rateLimitChangedThreadIds.formUnion(recoveredIds)
+                                changed = true
+                            }
                         }
                         continue
                     }
@@ -692,7 +703,8 @@ extension ThreadManager {
                         busyChangedThreadIds.insert(threads[i].id)
                     }
                 } else {
-                    // Non-shell process running — mark busy only if not in waiting state.
+                    // Non-shell process running (e.g. node, claude, or a version string
+                    // like "2.1.63" that Claude Code sets as its process title).
                     // Skip if a completion bell was recently received for this session;
                     // the bell fires just before the process exits, so pane_current_command
                     // can still show the agent binary for a brief window after completion.
@@ -701,15 +713,27 @@ extension ThreadManager {
                         return Date().timeIntervalSince(bellDate) < 5.0
                     }()
                     if !recentlyCompleted && !threads[i].waitingForInputSessions.contains(session) {
-                        if !threads[i].busySessions.contains(session) {
-                            threads[i].busySessions.insert(session)
-                            changed = true
-                            busyChangedThreadIds.insert(threads[i].id)
-                        }
-                        let recoveredIds = clearRateLimitAfterRecovery(threadIndex: i, sessionName: session)
-                        if !recoveredIds.isEmpty {
-                            rateLimitChangedThreadIds.formUnion(recoveredIds)
-                            changed = true
+                        // The agent process can still be the foreground command even when
+                        // idle at its prompt (e.g. Claude Code showing ❯). Verify via
+                        // pane content that the agent is actually working.
+                        if let content = await tmux.capturePane(sessionName: session),
+                           isAgentIdleAtPrompt(content) {
+                            if threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                        } else {
+                            if !threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.insert(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                            let recoveredIds = clearRateLimitAfterRecovery(threadIndex: i, sessionName: session)
+                            if !recoveredIds.isEmpty {
+                                rateLimitChangedThreadIds.formUnion(recoveredIds)
+                                changed = true
+                            }
                         }
                     }
                 }
@@ -748,32 +772,26 @@ extension ThreadManager {
     }
 
     /// Checks whether the agent appears to be idle at its input prompt by looking
-    /// at the pane content. Returns true when the last prompt line (❯) has no
-    /// command text after it AND the agent is not actively processing (no
-    /// "esc to interrupt" indicator below the prompt).
+    /// at the pane content. The definitive busy signal is the "esc to interrupt"
+    /// status bar text that Claude Code shows while processing. If that text is
+    /// present, the agent is busy. If a ❯ prompt is visible without
+    /// "esc to interrupt", the agent is idle (even if the user has typed text
+    /// at the prompt but hasn't submitted it yet).
     private func isAgentIdleAtPrompt(_ paneContent: String) -> Bool {
         let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        let nonEmpty = lines.suffix(10)
+        let nonEmpty = lines.suffix(15)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        // Find the last line starting with the ❯ prompt character (U+276F)
-        guard let promptLine = nonEmpty.last(where: { $0.hasPrefix("\u{276F}") }) else {
+
+        // "esc to interrupt" is shown in the status bar while Claude processes
+        // → definitely busy, regardless of prompt visibility
+        if nonEmpty.contains(where: { $0.contains("esc to interrupt") }) {
             return false
         }
-        // If everything after the ❯ is whitespace, check further:
-        // Claude Code shows an empty ❯ prompt WHILE processing — the status bar
-        // below the prompt contains "esc to interrupt" when the agent is working.
-        let afterPrompt = String(promptLine.dropFirst()).trimmingCharacters(in: .whitespaces)
-        guard afterPrompt.isEmpty else { return false }
 
-        // Check lines after the ❯ prompt for activity indicators
-        if let promptIndex = nonEmpty.lastIndex(where: { $0.hasPrefix("\u{276F}") }) {
-            let linesAfterPrompt = nonEmpty.suffix(from: nonEmpty.index(after: promptIndex))
-            for line in linesAfterPrompt {
-                if line.contains("esc to interrupt") { return false }
-            }
-        }
-        return true
+        // ❯ prompt visible without the busy status bar → agent is idle
+        let hasPrompt = nonEmpty.contains(where: { $0.hasPrefix("\u{276F}") })
+        return hasPrompt
     }
 
 
