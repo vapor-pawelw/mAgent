@@ -46,6 +46,8 @@ final class ThreadManager {
     }()
     var dirtyCheckTickCounter: Int = 0
     var _jiraSyncTickCounter: Int = 0
+    var _prSyncTickCounter: Int = 0
+    var _cachedRemoteByProjectId: [UUID: GitRemote] = [:]
     var _mismatchBannerShownProjectIds: Set<UUID> = []
 
     // MARK: - Lifecycle

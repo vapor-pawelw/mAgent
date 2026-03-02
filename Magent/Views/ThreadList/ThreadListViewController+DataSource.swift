@@ -56,7 +56,8 @@ extension ThreadListViewController {
 
         // Show Pull Request (only for projects with a recognized hosting provider)
         if projectsWithValidRemotes.contains(thread.projectId) {
-            let prItem = NSMenuItem(title: "Show Pull Request", action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
+            let prTitle = thread.pullRequestInfo.map { "Open \($0.displayLabel)" } ?? "Show Pull Request"
+            let prItem = NSMenuItem(title: prTitle, action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
             prItem.target = self
             prItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
             prItem.representedObject = thread
@@ -116,7 +117,8 @@ extension ThreadListViewController {
 
         // Show open pull requests (only for projects with a recognized hosting provider)
         if projectsWithValidRemotes.contains(thread.projectId) {
-            let prItem = NSMenuItem(title: "Show Open Pull Requests", action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
+            let mainPrTitle = thread.pullRequestInfo.map { "Open \($0.displayLabel)" } ?? "Show Open Pull Requests"
+            let prItem = NSMenuItem(title: mainPrTitle, action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
             prItem.target = self
             prItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
             prItem.representedObject = thread
@@ -323,6 +325,12 @@ extension ThreadListViewController {
 
     @objc private func openThreadPullRequest(_ sender: NSMenuItem) {
         guard let thread = sender.representedObject as? MagentThread else { return }
+
+        // If we have a detected PR, open it directly
+        if let pr = thread.pullRequestInfo {
+            NSWorkspace.shared.open(pr.url)
+            return
+        }
 
         let settings = persistence.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { return }

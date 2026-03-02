@@ -5,6 +5,19 @@ nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
     var resetDescription: String?
 }
 
+nonisolated struct PullRequestInfo: Sendable, Equatable {
+    let number: Int
+    let url: URL
+    let provider: GitHostingProvider
+
+    var displayLabel: String {
+        provider == .gitlab ? "MR !\(number)" : "PR #\(number)"
+    }
+    var shortLabel: String {
+        provider == .gitlab ? "!\(number)" : "#\(number)"
+    }
+}
+
 nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     let id: UUID
     let projectId: UUID
@@ -49,6 +62,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var hasBranchMismatch: Bool = false
     // Transient (not persisted) — tracks agent rate limit status per session.
     var rateLimitedSessions: [String: AgentRateLimitInfo] = [:]
+    // Transient (not persisted) — detected open PR/MR for this branch.
+    var pullRequestInfo: PullRequestInfo? = nil
 
     var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
