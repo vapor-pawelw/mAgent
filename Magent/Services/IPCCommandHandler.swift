@@ -597,6 +597,9 @@ final class IPCCommandHandler {
             guard sections.count > 1 else {
                 return .failure("Cannot remove section '\(sectionName)': at least one section is required.", id: request.id)
             }
+            if settings.projects[projectIndex].defaultSectionId == section.id {
+                settings.projects[projectIndex].defaultSectionId = nil
+            }
             sections.remove(at: sectionIndex)
             settings.projects[projectIndex].threadSections = sections
             try? persistence.saveSettings(settings)
@@ -614,6 +617,9 @@ final class IPCCommandHandler {
             }
             guard settings.threadSections.count > 1 else {
                 return .failure("Cannot remove global section '\(sectionName)': at least one section is required.", id: request.id)
+            }
+            if settings.defaultSectionId == section.id {
+                settings.defaultSectionId = nil
             }
             settings.threadSections.remove(at: sectionIndex)
             try? persistence.saveSettings(settings)

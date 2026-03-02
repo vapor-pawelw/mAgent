@@ -528,6 +528,9 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             return
         }
 
+        if settings.defaultSectionId == section.id {
+            settings.defaultSectionId = nil
+        }
         settings.threadSections.removeAll { $0.id == section.id }
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()

@@ -1133,6 +1133,9 @@ final class SettingsProjectsViewController: NSViewController {
             return
         }
 
+        if settings.projects[index].defaultSectionId == section.id {
+            settings.projects[index].defaultSectionId = nil
+        }
         sections.removeAll { $0.id == section.id }
         settings.projects[index].threadSections = sections
         try? persistence.saveSettings(settings)
