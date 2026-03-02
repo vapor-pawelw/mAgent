@@ -44,7 +44,8 @@ extension ThreadManager {
         let siteURL = project.jiraSiteURL ?? settings.jiraSiteURL
         guard !siteURL.isEmpty else { return }
 
-        // Auto-create project sections from Jira if none exist
+        // Auto-create project sections from Jira if none exist.
+        // Return after creating — the next sync tick will match tickets using the persisted sections.
         if project.threadSections == nil {
             do {
                 let sections = try await syncSectionsFromJira(project: project)
@@ -59,8 +60,8 @@ extension ThreadManager {
                 }
             } catch {
                 // Can't sync without sections — skip this project
-                return
             }
+            return
         }
 
         let jql = "project = \(projectKey) AND assignee = \"\(assigneeId)\" AND statusCategory != Done ORDER BY updated DESC"
