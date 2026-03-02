@@ -1221,7 +1221,8 @@ final class ThreadManager {
         var changed = false
         for i in threads.indices where !threads[i].isArchived && !threads[i].isMain {
             let baseBranch = resolveBaseBranch(for: threads[i])
-            let forkPoint = cacheByProjectId[threads[i].projectId]?.worktrees[threads[i].name]?.forkPointCommit
+            let worktreeKey = (threads[i].worktreePath as NSString).lastPathComponent
+            let forkPoint = cacheByProjectId[threads[i].projectId]?.worktrees[worktreeKey]?.forkPointCommit
             let delivered = await git.isFullyDelivered(
                 worktreePath: threads[i].worktreePath,
                 baseBranch: baseBranch,
@@ -1248,7 +1249,7 @@ final class ThreadManager {
         let settings = persistence.loadSettings()
         let forkPoint: String? = settings.projects
             .first(where: { $0.id == threads[i].projectId })
-            .flatMap { persistence.loadWorktreeCache(worktreesBasePath: $0.resolvedWorktreesBasePath()).worktrees[threads[i].name]?.forkPointCommit }
+            .flatMap { persistence.loadWorktreeCache(worktreesBasePath: $0.resolvedWorktreesBasePath()).worktrees[(threads[i].worktreePath as NSString).lastPathComponent]?.forkPointCommit }
         let delivered = await git.isFullyDelivered(
             worktreePath: threads[i].worktreePath,
             baseBranch: baseBranch,
@@ -1264,7 +1265,7 @@ final class ThreadManager {
         let activeNames = Set(
             threads
                 .filter { $0.projectId == project.id && !$0.isArchived && !$0.isMain }
-                .map(\.name)
+                .map { ($0.worktreePath as NSString).lastPathComponent }
         )
         persistence.pruneWorktreeCache(
             worktreesBasePath: project.resolvedWorktreesBasePath(),
