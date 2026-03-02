@@ -1042,8 +1042,26 @@ final class SettingsProjectsViewController: NSViewController {
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
         refreshDefaultSectionPopup(for: settings.projects[index])
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
 
         showProjectColorPicker(for: section)
+    }
+
+    private func threadsInProjectSection(_ section: ThreadSection, projectIndex: Int) -> [MagentThread] {
+        let project = settings.projects[projectIndex]
+        let sections = project.threadSections ?? []
+        let knownIds = Set(sections.map(\.id))
+        let defaultId = project.defaultSectionId ?? sections.first?.id
+        return ThreadManager.shared.threads.filter { thread in
+            guard !thread.isMain, thread.projectId == project.id else { return false }
+            let effectiveId: UUID?
+            if let sid = thread.sectionId, knownIds.contains(sid) {
+                effectiveId = sid
+            } else {
+                effectiveId = defaultId
+            }
+            return effectiveId == section.id
+        }
     }
 
     @objc private func projectSectionVisibilityToggled(_ sender: NSButton) {
@@ -1057,20 +1075,7 @@ final class SettingsProjectsViewController: NSViewController {
               let sectionIndex = sections.firstIndex(where: { $0.id == section.id }) else { return }
 
         if section.isVisible {
-            // Check for threads in this section
-            let projectId = settings.projects[index].id
-            let knownIds = Set(sections.map(\.id))
-            let defaultId = settings.projects[index].defaultSectionId ?? sections.first?.id
-            let threadsHere = ThreadManager.shared.threads.filter { thread in
-                guard !thread.isMain, thread.projectId == projectId else { return false }
-                let effectiveId: UUID?
-                if let sid = thread.sectionId, knownIds.contains(sid) {
-                    effectiveId = sid
-                } else {
-                    effectiveId = defaultId
-                }
-                return effectiveId == section.id
-            }
+            let threadsHere = threadsInProjectSection(section, projectIndex: index)
             if !threadsHere.isEmpty {
                 let alert = NSAlert()
                 alert.messageText = "Cannot Hide Section"
@@ -1109,20 +1114,7 @@ final class SettingsProjectsViewController: NSViewController {
             return
         }
 
-        // Check for threads in this section
-        let projectId = settings.projects[index].id
-        let knownIds = Set(sections.map(\.id))
-        let defaultSectionId = settings.projects[index].defaultSectionId ?? sections.first?.id
-        let threadsInSection = ThreadManager.shared.threads.filter { thread in
-            guard !thread.isMain, thread.projectId == projectId else { return false }
-            let effectiveId: UUID?
-            if let sid = thread.sectionId, knownIds.contains(sid) {
-                effectiveId = sid
-            } else {
-                effectiveId = defaultSectionId
-            }
-            return effectiveId == section.id
-        }
+        let threadsInSection = threadsInProjectSection(section, projectIndex: index)
         if !threadsInSection.isEmpty {
             let alert = NSAlert()
             alert.messageText = "Cannot Delete Section"
