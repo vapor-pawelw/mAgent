@@ -29,15 +29,7 @@ extension ThreadDetailViewController {
 
                     let response = alert.runModal()
                     guard response == .alertFirstButtonReturn else { return }
-
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await self.threadManager.archiveThread(threadToArchive)
-                    }
-                } else if clean && merged {
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await self.threadManager.archiveThread(threadToArchive)
-                    }
-                } else {
+                } else if !clean || !merged {
                     let alert = NSAlert()
                     alert.messageText = "Archive Thread"
                     var reasons: [String] = []
@@ -50,9 +42,21 @@ extension ThreadDetailViewController {
 
                     let response = alert.runModal()
                     guard response == .alertFirstButtonReturn else { return }
+                }
 
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
+                // Archive directly without a spinner sheet. The delegate-driven
+                // reloadData()/showEmptyState() modifies split view items, which
+                // crashes if a sheet is being presented on the same window.
+                Task {
+                    do {
                         try await self.threadManager.archiveThread(threadToArchive)
+                    } catch {
+                        await MainActor.run {
+                            BannerManager.shared.show(
+                                message: "Archive failed: \(error.localizedDescription)",
+                                style: .error
+                            )
+                        }
                     }
                 }
             }
