@@ -24,9 +24,10 @@ To update: `brew upgrade magent`
 
 Download the latest `.zip` from [Releases](https://github.com/vapor-pawelw/magent/releases), unzip, and move `Magent.app` to `/Applications`.
 
-Since the app is unsigned, strip the quarantine attribute before launching:
+Since the app is unsigned, remove the quarantine and provenance attributes before launching:
 
 ```bash
+sudo xattr -rd com.apple.provenance /Applications/Magent.app
 xattr -cr /Applications/Magent.app
 ```
 
