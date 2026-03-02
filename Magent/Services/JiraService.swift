@@ -104,7 +104,7 @@ final class JiraService {
     }
 
     func openLoginPage() async {
-        _ = await ShellExecutor.execute("acli jira auth login")
+        _ = await ShellExecutor.execute("acli jira auth login --web")
     }
 
     // MARK: - Boards
