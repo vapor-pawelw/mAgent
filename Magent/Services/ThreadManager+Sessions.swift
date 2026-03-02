@@ -612,15 +612,15 @@ extension ThreadManager {
         let paneStates = await tmux.activePaneStates(forSessions: allAgentSessions)
         guard !paneStates.isEmpty else { return }
 
-        // Collect pane PIDs for shell sessions where the title doesn't indicate busy.
-        // These need a child-process check to detect agents running inside the shell wrapper.
+        // Collect pane PIDs for all shell sessions (both title-busy and non-busy).
+        // Child-process checks detect agents inside shell wrappers AND verify
+        // that a stale spinner title isn't a false busy signal.
         var shellPidsToCheck = Set<pid_t>()
         for thread in threads where !thread.isArchived {
             for session in thread.agentTmuxSessions {
                 guard let paneState = paneStates[session] else { continue }
                 let isShell = Self.idleShellCommands.contains(paneState.command)
-                let titleIndicatesBusy = paneTitleIndicatesBusy(paneState.title)
-                if isShell && !titleIndicatesBusy && paneState.pid > 0 {
+                if isShell && paneState.pid > 0 {
                     shellPidsToCheck.insert(paneState.pid)
                 }
             }
@@ -645,6 +645,21 @@ extension ThreadManager {
                         if let content = await tmux.capturePane(sessionName: session),
                            isAgentIdleAtPrompt(content) {
                             // Agent is idle — clear any stale busy state
+                            if threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                            continue
+                        }
+                        // Pane content didn't show a ❯ prompt — but if the agent has
+                        // fully exited (shell has no child processes), the spinner title
+                        // is stale. This handles the case where the agent exits and we
+                        // land at a plain shell prompt (%, $) that isAgentIdleAtPrompt
+                        // doesn't recognize.
+                        let hasChildren = paneState.pid > 0
+                            && !(childrenByPid[paneState.pid]?.isEmpty ?? true)
+                        if !hasChildren {
                             if threads[i].busySessions.contains(session) {
                                 threads[i].busySessions.remove(session)
                                 changed = true
