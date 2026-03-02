@@ -634,6 +634,32 @@ extension ThreadManager {
             guard !threads[i].isArchived else { continue }
             for session in threads[i].agentTmuxSessions {
                 guard let paneState = paneStates[session] else { continue }
+                let sessionAgent = agentType(for: threads[i], sessionName: session)
+                    ?? threads[i].selectedAgentType
+                    ?? effectiveAgentType(for: threads[i].projectId)
+
+                // Codex busy semantics: only "esc to interrupt" means busy.
+                if sessionAgent == .codex {
+                    let hasInterruptBusySignal = await paneShowsEscToInterrupt(sessionName: session)
+                    if hasInterruptBusySignal && !threads[i].waitingForInputSessions.contains(session) {
+                        if !threads[i].busySessions.contains(session) {
+                            threads[i].busySessions.insert(session)
+                            changed = true
+                            busyChangedThreadIds.insert(threads[i].id)
+                        }
+                        let recoveredIds = clearRateLimitAfterRecovery(threadIndex: i, sessionName: session)
+                        if !recoveredIds.isEmpty {
+                            rateLimitChangedThreadIds.formUnion(recoveredIds)
+                            changed = true
+                        }
+                    } else if threads[i].busySessions.contains(session) {
+                        threads[i].busySessions.remove(session)
+                        changed = true
+                        busyChangedThreadIds.insert(threads[i].id)
+                    }
+                    continue
+                }
+
                 let command = paneState.command
                 let isShell = Self.idleShellCommands.contains(command)
                 let titleIndicatesBusy = paneTitleIndicatesBusy(paneState.title)
@@ -815,6 +841,18 @@ extension ThreadManager {
         // ❯ prompt visible without the busy status bar → agent is idle
         let hasPrompt = nonEmpty.contains(where: { $0.hasPrefix("\u{276F}") })
         return hasPrompt
+    }
+
+    private func paneShowsEscToInterrupt(sessionName: String) async -> Bool {
+        guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 40) else {
+            return false
+        }
+
+        return paneContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .contains { line in
+                String(line).localizedCaseInsensitiveContains("esc to interrupt")
+            }
     }
 
 
