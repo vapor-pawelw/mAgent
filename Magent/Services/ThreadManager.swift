@@ -1212,9 +1212,11 @@ final class ThreadManager {
     }
 
     func refreshDirtyStates() async {
+        let snapshot = threads.filter { !$0.isArchived && !$0.isMain }
         var changed = false
-        for i in threads.indices where !threads[i].isArchived && !threads[i].isMain {
-            let dirty = await git.isDirty(worktreePath: threads[i].worktreePath)
+        for thread in snapshot {
+            let dirty = await git.isDirty(worktreePath: thread.worktreePath)
+            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
             if threads[i].isDirty != dirty {
                 threads[i].isDirty = dirty
                 changed = true
@@ -1237,16 +1239,18 @@ final class ThreadManager {
             )
         }
 
+        let snapshot = threads.filter { !$0.isArchived && !$0.isMain }
         var changed = false
-        for i in threads.indices where !threads[i].isArchived && !threads[i].isMain {
-            let baseBranch = resolveBaseBranch(for: threads[i])
-            let worktreeKey = (threads[i].worktreePath as NSString).lastPathComponent
-            let forkPoint = cacheByProjectId[threads[i].projectId]?.worktrees[worktreeKey]?.forkPointCommit
+        for thread in snapshot {
+            let baseBranch = resolveBaseBranch(for: thread)
+            let worktreeKey = (thread.worktreePath as NSString).lastPathComponent
+            let forkPoint = cacheByProjectId[thread.projectId]?.worktrees[worktreeKey]?.forkPointCommit
             let delivered = await git.isFullyDelivered(
-                worktreePath: threads[i].worktreePath,
+                worktreePath: thread.worktreePath,
                 baseBranch: baseBranch,
                 forkPointCommit: forkPoint
             )
+            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
             if threads[i].isFullyDelivered != delivered {
                 threads[i].isFullyDelivered = delivered
                 changed = true
@@ -1262,18 +1266,21 @@ final class ThreadManager {
     /// Refreshes the delivered state for a single thread. Returns true if the value changed.
     @discardableResult
     func refreshDeliveredState(for threadId: UUID) async -> Bool {
-        guard let i = threads.firstIndex(where: { $0.id == threadId }),
-              !threads[i].isArchived, !threads[i].isMain else { return false }
-        let baseBranch = resolveBaseBranch(for: threads[i])
+        guard let idx = threads.firstIndex(where: { $0.id == threadId }),
+              !threads[idx].isArchived, !threads[idx].isMain else { return false }
+        let thread = threads[idx]
+        let baseBranch = resolveBaseBranch(for: thread)
         let settings = persistence.loadSettings()
         let forkPoint: String? = settings.projects
-            .first(where: { $0.id == threads[i].projectId })
-            .flatMap { persistence.loadWorktreeCache(worktreesBasePath: $0.resolvedWorktreesBasePath()).worktrees[(threads[i].worktreePath as NSString).lastPathComponent]?.forkPointCommit }
+            .first(where: { $0.id == thread.projectId })
+            .flatMap { persistence.loadWorktreeCache(worktreesBasePath: $0.resolvedWorktreesBasePath()).worktrees[(thread.worktreePath as NSString).lastPathComponent]?.forkPointCommit }
         let delivered = await git.isFullyDelivered(
-            worktreePath: threads[i].worktreePath,
+            worktreePath: thread.worktreePath,
             baseBranch: baseBranch,
             forkPointCommit: forkPoint
         )
+        // Re-lookup after await — the thread may have been archived/removed
+        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { return false }
         guard threads[i].isFullyDelivered != delivered else { return false }
         threads[i].isFullyDelivered = delivered
         return true
@@ -1293,16 +1300,17 @@ final class ThreadManager {
     }
     func refreshBranchStates() async {
         let settings = persistence.loadSettings()
+        let snapshot = threads.filter { !$0.isArchived }
         var changed = false
-        for i in threads.indices where !threads[i].isArchived {
-            let worktreePath = threads[i].worktreePath
+        for thread in snapshot {
+            let worktreePath = thread.worktreePath
             guard FileManager.default.fileExists(atPath: worktreePath) else { continue }
 
             let actual = await git.getCurrentBranch(workingDirectory: worktreePath)
 
             let expected: String?
-            if threads[i].isMain {
-                if let project = settings.projects.first(where: { $0.id == threads[i].projectId }),
+            if thread.isMain {
+                if let project = settings.projects.first(where: { $0.id == thread.projectId }),
                    let defaultBranch = project.defaultBranch, !defaultBranch.isEmpty {
                     expected = defaultBranch
                 } else if let detected = await git.detectDefaultBranch(repoPath: worktreePath) {
@@ -1311,7 +1319,7 @@ final class ThreadManager {
                     expected = nil
                 }
             } else {
-                expected = threads[i].branchName
+                expected = thread.branchName
             }
 
             let mismatch: Bool
@@ -1320,6 +1328,8 @@ final class ThreadManager {
             } else {
                 mismatch = false
             }
+            // Re-lookup after await — the thread may have been removed
+            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
             if threads[i].actualBranch != actual || threads[i].expectedBranch != expected || threads[i].hasBranchMismatch != mismatch {
                 threads[i].actualBranch = actual
                 threads[i].expectedBranch = expected

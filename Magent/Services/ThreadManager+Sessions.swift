@@ -637,24 +637,31 @@ extension ThreadManager {
         var changed = false
         var busyChangedThreadIds = Set<UUID>()
         var rateLimitChangedThreadIds = Set<UUID>()
-        for i in threads.indices {
-            guard !threads[i].isArchived else { continue }
-            for session in threads[i].agentTmuxSessions {
+        // Snapshot thread IDs and their sessions before iterating. The `threads`
+        // array can shrink during `await` suspension points (e.g. archive), which
+        // would invalidate raw indices and cause an out-of-bounds crash.
+        let threadSnapshot: [(id: UUID, sessions: [String])] = threads
+            .filter { !$0.isArchived }
+            .map { ($0.id, $0.agentTmuxSessions) }
+        for (threadId, sessions) in threadSnapshot {
+            for session in sessions {
                 guard let paneState = paneStates[session] else { continue }
-                let sessionAgent = agentType(for: threads[i], sessionName: session)
-                    ?? threads[i].selectedAgentType
-                    ?? effectiveAgentType(for: threads[i].projectId)
+                guard let ti = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                let sessionAgent = agentType(for: threads[ti], sessionName: session)
+                    ?? threads[ti].selectedAgentType
+                    ?? effectiveAgentType(for: threads[ti].projectId)
 
                 // Codex busy semantics: only "esc to interrupt" means busy.
                 if sessionAgent == .codex {
                     let hasInterruptBusySignal = await paneShowsEscToInterrupt(sessionName: session)
+                    guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                     if hasInterruptBusySignal && !threads[i].waitingForInputSessions.contains(session) {
                         if !threads[i].busySessions.contains(session) {
                             threads[i].busySessions.insert(session)
                             changed = true
                             busyChangedThreadIds.insert(threads[i].id)
                         }
-                        let recoveredIds = clearRateLimitAfterRecovery(threadIndex: i, sessionName: session)
+                        let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
                         if !recoveredIds.isEmpty {
                             rateLimitChangedThreadIds.formUnion(recoveredIds)
                             changed = true
@@ -671,12 +678,13 @@ extension ThreadManager {
                 let isShell = Self.idleShellCommands.contains(command)
                 let titleIndicatesBusy = paneTitleIndicatesBusy(paneState.title)
                 if isShell {
-                    if titleIndicatesBusy && !threads[i].waitingForInputSessions.contains(session) {
+                    if titleIndicatesBusy && !threads[ti].waitingForInputSessions.contains(session) {
                         // Both ✳ and braille spinner characters can persist in the pane
                         // title after the agent finishes. Always verify via pane content
                         // that the agent isn't just sitting at an empty prompt.
                         if let content = await tmux.capturePane(sessionName: session),
                            isAgentIdleAtPrompt(content) {
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                             // Agent is idle — clear any stale busy state
                             if threads[i].busySessions.contains(session) {
                                 threads[i].busySessions.remove(session)
@@ -685,6 +693,7 @@ extension ThreadManager {
                             }
                             continue
                         }
+                        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                         // Pane content didn't show a ❯ prompt — but if the agent has
                         // fully exited (shell has no child processes), the spinner title
                         // is stale. This handles the case where the agent exits and we
@@ -705,7 +714,7 @@ extension ThreadManager {
                             changed = true
                             busyChangedThreadIds.insert(threads[i].id)
                         }
-                        let recoveredIds = clearRateLimitAfterRecovery(threadIndex: i, sessionName: session)
+                        let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
                         if !recoveredIds.isEmpty {
                             rateLimitChangedThreadIds.formUnion(recoveredIds)
                             changed = true
@@ -720,18 +729,20 @@ extension ThreadManager {
                         // a child process of the wrapper shell).
                         if let content = await tmux.capturePane(sessionName: session),
                            isAgentIdleAtPrompt(content) {
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                             if threads[i].busySessions.contains(session) {
                                 threads[i].busySessions.remove(session)
                                 changed = true
                                 busyChangedThreadIds.insert(threads[i].id)
                             }
                         } else {
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                             if !threads[i].busySessions.contains(session) {
                                 threads[i].busySessions.insert(session)
                                 changed = true
                                 busyChangedThreadIds.insert(threads[i].id)
                             }
-                            let recoveredIds = clearRateLimitAfterRecovery(threadIndex: i, sessionName: session)
+                            let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
                             if !recoveredIds.isEmpty {
                                 rateLimitChangedThreadIds.formUnion(recoveredIds)
                                 changed = true
@@ -739,6 +750,7 @@ extension ThreadManager {
                         }
                         continue
                     }
+                    guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                     // Agent not running — clear busy and waiting if set
                     if threads[i].busySessions.contains(session) {
                         threads[i].busySessions.remove(session)
@@ -761,24 +773,26 @@ extension ThreadManager {
                         guard let bellDate = recentBellBySession[session] else { return false }
                         return Date().timeIntervalSince(bellDate) < 5.0
                     }()
-                    if !recentlyCompleted && !threads[i].waitingForInputSessions.contains(session) {
+                    if !recentlyCompleted && !threads[ti].waitingForInputSessions.contains(session) {
                         // The agent process can still be the foreground command even when
                         // idle at its prompt (e.g. Claude Code showing ❯). Verify via
                         // pane content that the agent is actually working.
                         if let content = await tmux.capturePane(sessionName: session),
                            isAgentIdleAtPrompt(content) {
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                             if threads[i].busySessions.contains(session) {
                                 threads[i].busySessions.remove(session)
                                 changed = true
                                 busyChangedThreadIds.insert(threads[i].id)
                             }
                         } else {
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                             if !threads[i].busySessions.contains(session) {
                                 threads[i].busySessions.insert(session)
                                 changed = true
                                 busyChangedThreadIds.insert(threads[i].id)
                             }
-                            let recoveredIds = clearRateLimitAfterRecovery(threadIndex: i, sessionName: session)
+                            let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
                             if !recoveredIds.isEmpty {
                                 rateLimitChangedThreadIds.formUnion(recoveredIds)
                                 changed = true
@@ -897,9 +911,9 @@ extension ThreadManager {
         var changedThreadIds = Set<UUID>()
         var didChangeGlobalCache = pruneExpiredGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds)
 
-        for i in threads.indices {
-            guard !threads[i].isArchived else { continue }
-            let thread = threads[i]
+        let rateLimitSnapshot = threads.filter { !$0.isArchived }
+        for thread in rateLimitSnapshot {
+            let threadId = thread.id
             var updatedRateLimits = thread.rateLimitedSessions
             let validSessions = Set(thread.tmuxSessionNames)
 
@@ -907,7 +921,7 @@ extension ThreadManager {
                 guard thread.agentTmuxSessions.contains(sessionName) else {
                     suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                     if updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                        changedThreadIds.insert(thread.id)
+                        changedThreadIds.insert(threadId)
                     }
                     continue
                 }
@@ -916,7 +930,7 @@ extension ThreadManager {
                       isRateLimitTrackable(agent: sessionAgent) else {
                     suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                     if updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                        changedThreadIds.insert(thread.id)
+                        changedThreadIds.insert(threadId)
                     }
                     continue
                 }
@@ -924,14 +938,14 @@ extension ThreadManager {
                 let cachedGlobalInfo = activeGlobalRateLimit(for: sessionAgent, now: now)
                 if let cachedGlobalInfo, updatedRateLimits[sessionName] != cachedGlobalInfo {
                     updatedRateLimits[sessionName] = cachedGlobalInfo
-                    changedThreadIds.insert(thread.id)
+                    changedThreadIds.insert(threadId)
                 }
 
                 guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
                       let detection = rateLimitDetection(from: paneContent, now: now) else {
                     suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                     if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                        changedThreadIds.insert(thread.id)
+                        changedThreadIds.insert(threadId)
                     }
                     continue
                 }
@@ -939,7 +953,7 @@ extension ThreadManager {
                 if let suppressedFingerprint = suppressedExpiredRateLimitFingerprints[sessionName] {
                     if suppressedFingerprint == detection.fingerprint {
                         if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                            changedThreadIds.insert(thread.id)
+                            changedThreadIds.insert(threadId)
                         }
                         continue
                     }
@@ -960,7 +974,7 @@ extension ThreadManager {
                         // Suppress re-detecting the same stale message until pane content changes.
                         suppressedExpiredRateLimitFingerprints[sessionName] = detection.fingerprint
                         if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                            changedThreadIds.insert(thread.id)
+                            changedThreadIds.insert(threadId)
                         }
                         continue
                     }
@@ -969,14 +983,14 @@ extension ThreadManager {
                 if info.resetAt.map({ $0 <= now }) ?? false {
                     suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                     if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                        changedThreadIds.insert(thread.id)
+                        changedThreadIds.insert(threadId)
                     }
                     continue
                 }
 
                 if updatedRateLimits[sessionName] != info {
                     updatedRateLimits[sessionName] = info
-                    changedThreadIds.insert(thread.id)
+                    changedThreadIds.insert(threadId)
                 }
                 if globalAgentRateLimits[sessionAgent] != info {
                     globalAgentRateLimits[sessionAgent] = info
@@ -987,12 +1001,14 @@ extension ThreadManager {
             for sessionName in Array(updatedRateLimits.keys) where !validSessions.contains(sessionName) {
                 updatedRateLimits.removeValue(forKey: sessionName)
                 suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
-                changedThreadIds.insert(thread.id)
+                changedThreadIds.insert(threadId)
             }
 
-            if updatedRateLimits != thread.rateLimitedSessions {
-                threads[i].rateLimitedSessions = updatedRateLimits
-                changedThreadIds.insert(thread.id)
+            // Re-lookup after await — the thread may have been archived/removed
+            if let j = threads.firstIndex(where: { $0.id == threadId }),
+               updatedRateLimits != threads[j].rateLimitedSessions {
+                threads[j].rateLimitedSessions = updatedRateLimits
+                changedThreadIds.insert(threadId)
             }
         }
 
@@ -1106,9 +1122,8 @@ extension ThreadManager {
     /// If an agent starts processing work after being rate-limited, clear the rate-limit
     /// cache for that agent globally and remove markers from all tabs using it.
     @discardableResult
-    private func clearRateLimitAfterRecovery(threadIndex: Int, sessionName: String) -> Set<UUID> {
-        guard threads.indices.contains(threadIndex) else { return [] }
-        let thread = threads[threadIndex]
+    private func clearRateLimitAfterRecovery(threadId: UUID, sessionName: String) -> Set<UUID> {
+        guard let thread = threads.first(where: { $0.id == threadId }) else { return [] }
         guard let agent = agentType(for: thread, sessionName: sessionName),
               isRateLimitTrackable(agent: agent) else {
             return []
@@ -1472,18 +1487,22 @@ extension ThreadManager {
         let playSound = settings.playSoundForAgentCompletion
         var changed = false
         var changedThreadIds = Set<UUID>()
-        var notifyPairs: [(threadIndex: Int, sessionName: String)] = []
+        var notifyPairs: [(threadId: UUID, sessionName: String)] = []
 
-        for i in threads.indices {
-            guard !threads[i].isArchived else { continue }
-            for session in threads[i].agentTmuxSessions {
-                let wasWaiting = threads[i].waitingForInputSessions.contains(session)
-                let isBusy = threads[i].busySessions.contains(session)
+        let waitingSnapshot: [(id: UUID, sessions: [String])] = threads
+            .filter { !$0.isArchived }
+            .map { ($0.id, $0.agentTmuxSessions) }
+        for (threadId, sessions) in waitingSnapshot {
+            for session in sessions {
+                guard let ti = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                let wasWaiting = threads[ti].waitingForInputSessions.contains(session)
+                let isBusy = threads[ti].busySessions.contains(session)
 
                 // Only check busy sessions (or already-waiting sessions to detect resolution)
                 guard isBusy || wasWaiting else { continue }
 
                 guard let paneContent = await tmux.capturePane(sessionName: session) else { continue }
+                guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                 let isWaiting = matchesWaitingForInputPattern(paneContent)
 
                 if isWaiting && !wasWaiting {
@@ -1497,7 +1516,7 @@ extension ThreadManager {
                     let isActiveTab = isActiveThread && threads[i].lastSelectedTmuxSessionName == session
                     if !isActiveTab && !notifiedWaitingSessions.contains(session) {
                         notifiedWaitingSessions.insert(session)
-                        notifyPairs.append((i, session))
+                        notifyPairs.append((threadId, session))
                     }
                 } else if !isWaiting && wasWaiting {
                     // Transition: waiting → cleared (user provided input)
@@ -1511,9 +1530,10 @@ extension ThreadManager {
         }
 
         guard changed else { return }
-        for (threadIndex, sessionName) in notifyPairs {
-            let projectName = settings.projects.first(where: { $0.id == threads[threadIndex].projectId })?.name ?? "Project"
-            sendAgentWaitingNotification(for: threads[threadIndex], projectName: projectName, playSound: playSound, sessionName: sessionName)
+        for (threadId, sessionName) in notifyPairs {
+            guard let thread = threads.first(where: { $0.id == threadId }) else { continue }
+            let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "Project"
+            sendAgentWaitingNotification(for: thread, projectName: projectName, playSound: playSound, sessionName: sessionName)
         }
 
         await MainActor.run {

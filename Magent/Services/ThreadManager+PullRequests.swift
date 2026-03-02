@@ -12,14 +12,19 @@ extension ThreadManager {
             if let chosen { _cachedRemoteByProjectId[project.id] = chosen }
         }
 
+        let snapshot = threads.filter { !$0.isArchived && !$0.isMain }
         var changed = false
-        for i in threads.indices where !threads[i].isArchived && !threads[i].isMain {
-            guard let remote = _cachedRemoteByProjectId[threads[i].projectId] else {
-                if threads[i].pullRequestInfo != nil { threads[i].pullRequestInfo = nil; changed = true }
+        for thread in snapshot {
+            guard let remote = _cachedRemoteByProjectId[thread.projectId] else {
+                if let i = threads.firstIndex(where: { $0.id == thread.id }),
+                   threads[i].pullRequestInfo != nil {
+                    threads[i].pullRequestInfo = nil; changed = true
+                }
                 continue
             }
-            let branch = threads[i].actualBranch ?? threads[i].branchName
+            let branch = thread.actualBranch ?? thread.branchName
             let info = await git.fetchPullRequest(remote: remote, branch: branch)
+            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
             if threads[i].pullRequestInfo != info { threads[i].pullRequestInfo = info; changed = true }
         }
 
