@@ -5,6 +5,12 @@ extension ThreadDetailViewController {
     // MARK: - Open PR/MR
 
     @objc func openPRTapped(_ sender: NSButton) {
+        // If we have a detected PR, open it directly
+        if let pr = thread.pullRequestInfo {
+            NSWorkspace.shared.open(pr.url)
+            return
+        }
+
         Task {
             let settings = PersistenceService.shared.loadSettings()
             guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { return }
@@ -61,8 +67,21 @@ extension ThreadDetailViewController {
             } else {
                 self.openPRButton.isHidden = false
                 self.openPRButton.image = self.openPRButtonImage(for: provider)
-                self.openPRButton.toolTip = self.openPRTooltip(for: provider)
+                self.applyPRButtonTitle()
             }
+        }
+    }
+
+    private func applyPRButtonTitle() {
+        if let pr = thread.pullRequestInfo {
+            openPRButton.title = pr.shortLabel
+            openPRButton.imagePosition = .imageLeading
+            openPRButton.toolTip = "\(pr.displayLabel) — Click to open"
+        } else {
+            openPRButton.title = ""
+            openPRButton.imagePosition = .imageOnly
+            let provider = threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown
+            openPRButton.toolTip = openPRTooltip(for: provider)
         }
     }
 
@@ -250,6 +269,11 @@ extension ThreadDetailViewController {
         guard let latest = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
         thread.isFullyDelivered = latest.isFullyDelivered
         thread.isDirty = latest.isDirty
+        let prChanged = thread.pullRequestInfo != latest.pullRequestInfo
+        thread.pullRequestInfo = latest.pullRequestInfo
         refreshReviewButtonVisibility()
+        if prChanged {
+            applyPRButtonTitle()
+        }
     }
 }

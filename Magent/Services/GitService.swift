@@ -198,6 +198,63 @@ final class GitService {
         return remotes
     }
 
+    // MARK: - Pull Request Detection
+
+    private var _ghAvailable: Bool?
+    private var _glabAvailable: Bool?
+
+    func fetchPullRequest(remote: GitRemote, branch: String) async -> PullRequestInfo? {
+        switch remote.provider {
+        case .github:   return await fetchGitHubPR(remote: remote, branch: branch)
+        case .gitlab:   return await fetchGitLabMR(remote: remote, branch: branch)
+        case .bitbucket, .unknown: return nil
+        }
+    }
+
+    private func fetchGitHubPR(remote: GitRemote, branch: String) async -> PullRequestInfo? {
+        if _ghAvailable == nil {
+            let check = await ShellExecutor.execute("which gh")
+            _ghAvailable = check.exitCode == 0
+        }
+        guard _ghAvailable == true else { return nil }
+
+        let repo = "\(remote.host)/\(remote.repoPath)"
+        let cmd = "gh pr list --repo \(ShellExecutor.shellQuote(repo)) --head \(ShellExecutor.shellQuote(branch)) --json number,url --state open --limit 1"
+        let result = await ShellExecutor.execute(cmd)
+        guard result.exitCode == 0 else { return nil }
+
+        let data = Data(result.stdout.utf8)
+        guard let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              let first = array.first,
+              let number = first["number"] as? Int,
+              let urlString = first["url"] as? String,
+              let url = URL(string: urlString) else { return nil }
+
+        return PullRequestInfo(number: number, url: url, provider: remote.provider)
+    }
+
+    private func fetchGitLabMR(remote: GitRemote, branch: String) async -> PullRequestInfo? {
+        if _glabAvailable == nil {
+            let check = await ShellExecutor.execute("which glab")
+            _glabAvailable = check.exitCode == 0
+        }
+        guard _glabAvailable == true else { return nil }
+
+        let repo = "\(remote.host)/\(remote.repoPath)"
+        let cmd = "glab mr list --repo \(ShellExecutor.shellQuote(repo)) --source-branch \(ShellExecutor.shellQuote(branch)) --output json --per-page 1"
+        let result = await ShellExecutor.execute(cmd)
+        guard result.exitCode == 0 else { return nil }
+
+        let data = Data(result.stdout.utf8)
+        guard let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              let first = array.first,
+              let number = first["iid"] as? Int else { return nil }
+
+        let url = remote.directPullRequestURL(number: number)
+            ?? URL(string: "https://\(remote.host)/\(remote.repoPath)/-/merge_requests/\(number)")!
+        return PullRequestInfo(number: number, url: url, provider: remote.provider)
+    }
+
     func getCurrentBranch(workingDirectory: String) async -> String? {
         let result = await ShellExecutor.execute(
             "git rev-parse --abbrev-ref HEAD",

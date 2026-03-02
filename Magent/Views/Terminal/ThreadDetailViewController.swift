@@ -119,6 +119,14 @@ final class ThreadDetailViewController: NSViewController {
             object: nil
         )
 
+        // Observe PR info changes for button title updates
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePullRequestInfoChanged),
+            name: .magentPullRequestInfoChanged,
+            object: nil
+        )
+
         // Observe diff viewer open/close requests from sidebar
         NotificationCenter.default.addObserver(
             self,
@@ -476,6 +484,10 @@ final class ThreadDetailViewController: NSViewController {
             tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
             tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
         }
+    }
+
+    @objc private func handlePullRequestInfoChanged() {
+        syncTransientState()
     }
 
     @objc private func handleShowDiffViewerNotification(_ notification: Notification) {

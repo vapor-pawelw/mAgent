@@ -618,6 +618,7 @@ extension Notification.Name {
     static let magentShowDiffViewer = Notification.Name("magentShowDiffViewer")
     static let magentHideDiffViewer = Notification.Name("magentHideDiffViewer")
     static let magentNavigateToThread = Notification.Name("magentNavigateToThread")
+    static let magentPullRequestInfoChanged = Notification.Name("magentPullRequestInfoChanged")
 }
 
 enum ThreadManagerError: LocalizedError {

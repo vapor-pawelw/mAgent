@@ -8,6 +8,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
     var agentContextTextView: NSTextView!
+    var reviewPromptTextView: NSTextView!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
 
@@ -152,6 +153,23 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             font: .systemFont(ofSize: 13),
             delegate: self
         )
+
+        addSectionSeparator(to: stackView)
+
+        // Review Prompt
+        reviewPromptTextView = createSettingsSection(
+            in: stackView,
+            title: "Review Prompt",
+            description: "Prompt sent to the agent when clicking the review button. Use {baseBranch} as a placeholder for the target branch.",
+            value: settings.reviewPrompt,
+            font: .systemFont(ofSize: 13),
+            delegate: self
+        )
+
+        let resetReviewButton = NSButton(title: "Reset to Default", target: self, action: #selector(resetReviewPromptToDefault))
+        resetReviewButton.bezelStyle = .rounded
+        resetReviewButton.controlSize = .small
+        stackView.addArrangedSubview(resetReviewButton)
 
         addSectionSeparator(to: stackView)
 
@@ -333,6 +351,12 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     @objc private func resetSlugPromptToDefault() {
         slugPromptTextView.string = AppSettings.defaultSlugPrompt
         settings.autoRenameSlugPrompt = AppSettings.defaultSlugPrompt
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func resetReviewPromptToDefault() {
+        reviewPromptTextView.string = AppSettings.defaultReviewPrompt
+        settings.reviewPrompt = AppSettings.defaultReviewPrompt
         try? persistence.saveSettings(settings)
     }
 

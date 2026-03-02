@@ -68,6 +68,15 @@ nonisolated struct GitRemote: Sendable {
         }
     }
 
+    func directPullRequestURL(number: Int) -> URL? {
+        switch provider {
+        case .github:    URL(string: "https://\(host)/\(repoPath)/pull/\(number)")
+        case .gitlab:    URL(string: "https://\(host)/\(repoPath)/-/merge_requests/\(number)")
+        case .bitbucket: URL(string: "https://\(host)/\(repoPath)/pull-requests/\(number)")
+        case .unknown:   nil
+        }
+    }
+
     static func parse(name: String, rawURL: String) -> GitRemote? {
         let (host, repoPath) = parseRemoteURL(rawURL)
         guard let host, let repoPath else { return nil }

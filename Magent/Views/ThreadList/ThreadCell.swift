@@ -2,6 +2,7 @@ import Cocoa
 
 final class ThreadCell: NSTableCellView {
 
+    private var prLabel: NSTextField?
     private var jiraImageView: NSImageView?
     private(set) var inlineDirtyDot: NSImageView?
     private var pinImageView: NSImageView?
@@ -73,6 +74,14 @@ final class ThreadCell: NSTableCellView {
         guard trailingStackView == nil else { return }
         let completionIndicatorSize: CGFloat = 10
 
+        let prTF = NSTextField(labelWithString: "")
+        prTF.translatesAutoresizingMaskIntoConstraints = false
+        prTF.font = .monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+        prTF.textColor = .secondaryLabelColor
+        prTF.setContentHuggingPriority(.required, for: .horizontal)
+        prTF.setContentCompressionResistancePriority(.required, for: .horizontal)
+        prTF.isHidden = true
+
         let jiraIV = NSImageView()
         jiraIV.translatesAutoresizingMaskIntoConstraints = false
         jiraIV.setContentHuggingPriority(.required, for: .horizontal)
@@ -110,7 +119,7 @@ final class ThreadCell: NSTableCellView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
 
-        let stack = NSStackView(views: [jiraIV, pinIV, archiveBtn, spinner, rateLimitIV, completionIV])
+        let stack = NSStackView(views: [prTF, jiraIV, pinIV, archiveBtn, spinner, rateLimitIV, completionIV])
         stack.orientation = .horizontal
         stack.spacing = 4
         stack.distribution = .fill
@@ -143,6 +152,7 @@ final class ThreadCell: NSTableCellView {
             spinner.heightAnchor.constraint(equalToConstant: 14),
         ])
         trailingStackView = stack
+        prLabel = prTF
         jiraImageView = jiraIV
         pinImageView = pinIV
         archiveButton = archiveBtn
@@ -202,6 +212,16 @@ final class ThreadCell: NSTableCellView {
 
         ensureTrailingStack()
         ensureLeadingStack()
+
+        if let pr = thread.pullRequestInfo {
+            prLabel?.stringValue = pr.displayLabel
+            prLabel?.toolTip = pr.displayLabel
+            prLabel?.isHidden = false
+        } else {
+            prLabel?.stringValue = ""
+            prLabel?.toolTip = nil
+            prLabel?.isHidden = true
+        }
 
         if thread.jiraTicketKey != nil {
             jiraImageView?.image = NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira ticket")

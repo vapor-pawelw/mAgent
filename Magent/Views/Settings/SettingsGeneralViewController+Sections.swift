@@ -117,6 +117,8 @@ extension SettingsGeneralViewController {
             settings.agentContextInjection = textView.string
         } else if textView === slugPromptTextView {
             settings.autoRenameSlugPrompt = textView.string
+        } else if textView === reviewPromptTextView {
+            settings.reviewPrompt = textView.string
         }
 
         try? persistence.saveSettings(settings)
