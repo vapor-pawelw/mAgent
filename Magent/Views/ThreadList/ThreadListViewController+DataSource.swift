@@ -391,15 +391,7 @@ extension ThreadListViewController {
 
                     let response = alert.runModal()
                     guard response == .alertFirstButtonReturn else { return }
-
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await self.threadManager.archiveThread(thread)
-                    }
-                } else if clean && merged {
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await self.threadManager.archiveThread(thread)
-                    }
-                } else {
+                } else if !clean || !merged {
                     let alert = NSAlert()
                     alert.messageText = "Archive Thread"
                     var reasons: [String] = []
@@ -412,9 +404,21 @@ extension ThreadListViewController {
 
                     let response = alert.runModal()
                     guard response == .alertFirstButtonReturn else { return }
+                }
 
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
+                // Archive directly without a spinner sheet. The delegate-driven
+                // reloadData()/showEmptyState() modifies split view items, which
+                // crashes if a sheet is being presented on the same window.
+                Task {
+                    do {
                         try await self.threadManager.archiveThread(thread)
+                    } catch {
+                        await MainActor.run {
+                            BannerManager.shared.show(
+                                message: "Archive failed: \(error.localizedDescription)",
+                                style: .error
+                            )
+                        }
                     }
                 }
             }
@@ -435,8 +439,17 @@ extension ThreadListViewController {
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
 
-        performWithSpinner(message: "Deleting thread...", errorTitle: "Delete Failed") {
-            try await self.threadManager.deleteThread(thread)
+        Task {
+            do {
+                try await self.threadManager.deleteThread(thread)
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "Delete failed: \(error.localizedDescription)",
+                        style: .error
+                    )
+                }
+            }
         }
     }
 
