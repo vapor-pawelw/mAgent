@@ -234,22 +234,23 @@ final class DependencyCheckView: NSView {
         titleLabel.font = .preferredFont(forTextStyle: .headline)
 
         stack.orientation = .vertical
+        stack.alignment = .leading
         stack.spacing = 12
-        stack.translatesAutoresizingMaskIntoConstraints = false
 
-        addSubview(titleLabel)
-        addSubview(stack)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        let container = NSStackView(views: [titleLabel, stack])
+        container.orientation = .vertical
+        container.alignment = .leading
+        container.spacing = 16
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(container)
 
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: topAnchor),
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
-            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
-
-            stack.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 16),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            container.centerYAnchor.constraint(equalTo: centerYAnchor),
+            container.leadingAnchor.constraint(equalTo: leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: trailingAnchor),
+            container.topAnchor.constraint(greaterThanOrEqualTo: topAnchor),
+            container.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
         ])
     }
 
