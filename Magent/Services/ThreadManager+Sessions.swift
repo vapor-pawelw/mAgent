@@ -784,8 +784,15 @@ extension ThreadManager {
             .filter { !$0.isEmpty }
 
         // "esc to interrupt" is shown in the status bar while Claude processes
-        // → definitely busy, regardless of prompt visibility
-        if nonEmpty.contains(where: { $0.contains("esc to interrupt") }) {
+        // → definitely busy, regardless of prompt visibility.
+        // However, in permission bypass mode the status bar reads
+        // "⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt"
+        // even when the agent is idle. Exclude those lines so the bypass-mode
+        // status text doesn't cause a false busy detection.
+        let hasBusyIndicator = nonEmpty.contains(where: {
+            $0.contains("esc to interrupt") && !$0.contains("bypass")
+        })
+        if hasBusyIndicator {
             return false
         }
 
