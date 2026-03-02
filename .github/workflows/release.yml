@@ -39,6 +39,9 @@ jobs:
           echo "Project.swift after version injection:"
           grep -A1 CFBundle Project.swift
 
+      - name: Install dependencies
+        run: tuist install
+
       - name: Generate Xcode project
         run: tuist generate --no-open
 
