@@ -129,7 +129,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             slugPromptScrollView.widthAnchor.constraint(equalTo: slugPromptWrapper.widthAnchor),
         ])
 
-        stackView.addArrangedSubview(makeSectionSeparator(in: stackView))
+        addSectionSeparator(to: stackView)
 
         // Terminal Injection Command
         terminalInjectionTextView = createSection(
@@ -140,7 +140,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
 
-        stackView.addArrangedSubview(makeSectionSeparator(in: stackView))
+        addSectionSeparator(to: stackView)
 
         // Agent Context Injection
         agentContextTextView = createSection(
@@ -151,7 +151,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             font: .systemFont(ofSize: 13)
         )
 
-        stackView.addArrangedSubview(makeSectionSeparator(in: stackView))
+        addSectionSeparator(to: stackView)
 
         // Environment Variables reference
         let envHeader = NSTextField(labelWithString: "Environment Variables")
@@ -314,12 +314,12 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         contentScrollView.reflectScrolledClipView(clipView)
     }
 
-    private func makeSectionSeparator(in stackView: NSStackView) -> NSBox {
+    private func addSectionSeparator(to stackView: NSStackView) {
         let sep = NSBox()
         sep.boxType = .separator
         sep.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(sep)
         sep.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40).isActive = true
-        return sep
     }
 
     private func createSection(
