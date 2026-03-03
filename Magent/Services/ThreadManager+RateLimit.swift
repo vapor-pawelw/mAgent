@@ -104,6 +104,7 @@ extension ThreadManager {
         var changedThreadIds = Set<UUID>()
         var didChangeGlobalCache = pruneExpiredGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds)
         var newlyDetectedAgents = Set<AgentType>()
+        var activelyDetectedAgents = Set<AgentType>()
 
         // Lazy-load persisted rate-limit caches on first use.
         ensureRateLimitCachesLoaded()
@@ -128,14 +129,6 @@ extension ThreadManager {
                         changedThreadIds.insert(threadId)
                     }
                     continue
-                }
-
-                if detectionEnabled {
-                    let cachedGlobalInfo = activeGlobalRateLimit(for: sessionAgent, now: now)
-                    if let cachedGlobalInfo, updatedRateLimits[sessionName] != cachedGlobalInfo {
-                        updatedRateLimits[sessionName] = cachedGlobalInfo
-                        changedThreadIds.insert(threadId)
-                    }
                 }
 
                 guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
@@ -182,11 +175,6 @@ extension ThreadManager {
                     var info = detection.info
                     info.resetAt = cachedResetAt
 
-                    // Preserve original detectedAt from in-memory state if available.
-                    if let existing = updatedRateLimits[sessionName] {
-                        info.detectedAt = existing.detectedAt
-                    }
-
                     if updatedRateLimits[sessionName] != info {
                         updatedRateLimits[sessionName] = info
                         changedThreadIds.insert(threadId)
@@ -195,6 +183,7 @@ extension ThreadManager {
                         globalAgentRateLimits[sessionAgent] = info
                         didChangeGlobalCache = true
                     }
+                    activelyDetectedAgents.insert(sessionAgent)
                     continue
                 }
 
@@ -229,6 +218,7 @@ extension ThreadManager {
                 if !hadActiveGlobalRateLimit {
                     newlyDetectedAgents.insert(sessionAgent)
                 }
+                activelyDetectedAgents.insert(sessionAgent)
             }
 
             for sessionName in Array(updatedRateLimits.keys) where !validSessions.contains(sessionName) {
@@ -241,6 +231,18 @@ extension ThreadManager {
                updatedRateLimits != threads[j].rateLimitedSessions {
                 threads[j].rateLimitedSessions = updatedRateLimits
                 changedThreadIds.insert(threadId)
+            }
+        }
+
+        if detectionEnabled {
+            let staleGlobalAgents = globalAgentRateLimits.keys.filter { agent in
+                isRateLimitTrackable(agent: agent) && !activelyDetectedAgents.contains(agent)
+            }
+            if !staleGlobalAgents.isEmpty {
+                for agent in staleGlobalAgents {
+                    globalAgentRateLimits.removeValue(forKey: agent)
+                }
+                didChangeGlobalCache = true
             }
         }
 
@@ -493,43 +495,17 @@ extension ThreadManager {
 
     // MARK: - Rate-Limit Parsing
 
+    private static let rateLimitTailLineCount = 80
+    private static let rateLimitIndicatorWindowLineCount = 10
+    private static let rateLimitFocusContextBeforeLines = 2
+    private static let rateLimitFocusContextAfterLines = 8
+    private static let maxRateLimitFingerprintLength = 512
+
     private func rateLimitDetection(from paneContent: String, now: Date) -> RateLimitDetection? {
-        let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        let tail = lines.suffix(80).map(String.init)
-        let normalizedRecentTail = tail.suffix(20).joined(separator: "\n").lowercased()
+        let tail = rateLimitTail(from: paneContent)
+        guard let indicatorAnchor = latestRateLimitIndicatorAnchor(in: tail) else { return nil }
 
-        // Strong indicators — unambiguously mean the agent is blocked.
-        let hasStrongIndicator = normalizedRecentTail.contains("too many requests")
-            || normalizedRecentTail.contains("quota exceeded")
-            || normalizedRecentTail.contains("retry after")
-            || normalizedRecentTail.contains("try again in")
-            || normalizedRecentTail.contains("limit reached")
-            || normalizedRecentTail.contains("limit exceeded")
-            || normalizedRecentTail.contains("rate limited")
-            || normalizedRecentTail.contains("hit your usage limit")
-            || normalizedRecentTail.contains("hit your rate limit")
-            || normalizedRecentTail.contains("you've hit your limit")
-            || normalizedRecentTail.contains("you've hit your limit")
-            || (normalizedRecentTail.contains("hit your limit") && normalizedRecentTail.contains("reset"))
-            || normalizedRecentTail.contains("you've been rate")
-
-        // Weak indicators — "rate limit" / "usage limit" can appear in informational
-        // displays (e.g. Claude Code status line, or agent output discussing rate limits).
-        // Require additional blocking context to avoid false positives.
-        if !hasStrongIndicator {
-            let hasWeakKeyword = normalizedRecentTail.contains("rate limit")
-                || normalizedRecentTail.contains("usage limit")
-            let hasBlockingContext = normalizedRecentTail.contains("exceeded")
-                || normalizedRecentTail.contains("reached")
-                || normalizedRecentTail.contains("throttl")
-                || normalizedRecentTail.contains("blocked")
-                || normalizedRecentTail.contains("paused")
-                || normalizedRecentTail.contains("wait")
-                    && normalizedRecentTail.contains("until")
-            guard hasWeakKeyword && hasBlockingContext else { return nil }
-        }
-
-        let focusText = rateLimitFocusText(from: tail)
+        let focusText = rateLimitFocusText(from: tail, anchorIndex: indicatorAnchor)
         let relativeResetAt = parseRelativeResetDate(from: focusText, now: now)
         let explicitResult = parseExplicitResetDate(from: focusText, now: now)
         let fullDateResetAt = parseFullDateResetDate(from: focusText)
@@ -571,8 +547,83 @@ extension ThreadManager {
         )
     }
 
-    private func rateLimitFocusText(from tail: [String]) -> String {
-        let focusLines = tail.filter { line in
+    private func rateLimitTail(from paneContent: String) -> [String] {
+        let lines = paneContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map(String.init)
+        let tail = Array(lines.suffix(Self.rateLimitTailLineCount))
+        guard let scopeSeparatorIndex = tail.lastIndex(where: { isRateLimitScopeSeparator($0) }) else {
+            return tail
+        }
+
+        let scopedStart = tail.index(after: scopeSeparatorIndex)
+        guard scopedStart < tail.endIndex else { return tail }
+        return Array(tail[scopedStart...])
+    }
+
+    private func isRateLimitScopeSeparator(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 20 else { return false }
+        return trimmed.allSatisfy { $0 == "─" || $0 == "-" }
+    }
+
+    private func latestRateLimitIndicatorAnchor(in tail: [String]) -> Int? {
+        let indexedRecentLines: [(index: Int, text: String)] = tail.enumerated().compactMap { index, line in
+            let normalized = line
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            guard !normalized.isEmpty else { return nil }
+            return (index, normalized)
+        }
+        guard !indexedRecentLines.isEmpty else { return nil }
+
+        let recentWindow = Array(indexedRecentLines.suffix(Self.rateLimitIndicatorWindowLineCount))
+        guard !recentWindow.isEmpty else { return nil }
+
+        if let strongHit = recentWindow.last(where: { isStrongRateLimitIndicator($0.text) }) {
+            return strongHit.index
+        }
+
+        let normalizedRecentWindow = recentWindow.map(\.text).joined(separator: "\n")
+        guard hasWeakRateLimitSignal(in: normalizedRecentWindow) else { return nil }
+        return recentWindow.last?.index
+    }
+
+    private func isStrongRateLimitIndicator(_ normalizedText: String) -> Bool {
+        normalizedText.contains("too many requests")
+            || normalizedText.contains("quota exceeded")
+            || normalizedText.contains("retry after")
+            || normalizedText.contains("try again in")
+            || normalizedText.contains("limit reached")
+            || normalizedText.contains("limit exceeded")
+            || normalizedText.contains("rate limited")
+            || normalizedText.contains("hit your usage limit")
+            || normalizedText.contains("hit your rate limit")
+            || normalizedText.contains("you've hit your limit")
+            || (normalizedText.contains("hit your limit") && normalizedText.contains("reset"))
+            || normalizedText.contains("you've been rate")
+    }
+
+    private func hasWeakRateLimitSignal(in normalizedText: String) -> Bool {
+        let hasWeakKeyword = normalizedText.contains("rate limit")
+            || normalizedText.contains("usage limit")
+        let hasBlockingContext = normalizedText.contains("exceeded")
+            || normalizedText.contains("reached")
+            || normalizedText.contains("throttl")
+            || normalizedText.contains("blocked")
+            || normalizedText.contains("paused")
+            || (normalizedText.contains("wait") && normalizedText.contains("until"))
+        return hasWeakKeyword && hasBlockingContext
+    }
+
+    private func rateLimitFocusText(from tail: [String], anchorIndex: Int) -> String {
+        guard !tail.isEmpty else { return "" }
+
+        let start = max(tail.startIndex, anchorIndex - Self.rateLimitFocusContextBeforeLines)
+        let end = min(tail.endIndex - 1, anchorIndex + Self.rateLimitFocusContextAfterLines)
+        let context = Array(tail[start...end])
+
+        let focusLines = context.filter { line in
             let normalized = line.lowercased()
             return normalized.contains("rate")
                 || normalized.contains("limit")
@@ -583,7 +634,7 @@ extension ThreadManager {
                 || normalized.contains("available")
                 || normalized.contains("until")
         }
-        return (focusLines.isEmpty ? tail.suffix(20) : focusLines.suffix(12))
+        return (focusLines.isEmpty ? context.suffix(12) : focusLines.suffix(12))
             .joined(separator: "\n")
     }
 
@@ -593,14 +644,14 @@ extension ThreadManager {
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedFocus.isEmpty {
-            return normalizedFocus
+            return String(normalizedFocus.prefix(Self.maxRateLimitFingerprintLength))
         }
         let normalizedFallback = fallback?
             .lowercased()
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let normalizedFallback, !normalizedFallback.isEmpty {
-            return normalizedFallback
+            return String(normalizedFallback.prefix(Self.maxRateLimitFingerprintLength))
         }
         return "__empty_rate_limit_fingerprint__"
     }
