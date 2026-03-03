@@ -22,8 +22,11 @@ magent-cli create-thread --project <name> [options]
 | `--name <slug>` | Exact thread name (must be unique). |
 | `--description <text>` | Natural-language description — AI generates a slug from it. |
 | `--section <name>` | Place the thread in this section. |
+| `--base-thread <name>` | Use an existing thread's branch as the base for the new thread. |
+| `--base-branch <name>` | Use an explicit branch as the base for the new thread. |
 
 If neither `--name` nor `--description` is given, a random name is generated.
+`--base-thread` and `--base-branch` are mutually exclusive.
 
 ### list-projects
 

@@ -9,7 +9,8 @@ extension ThreadManager {
         requestedAgentType: AgentType? = nil,
         useAgentCommand: Bool = true,
         initialPrompt: String? = nil,
-        requestedName: String? = nil
+        requestedName: String? = nil,
+        requestedBaseBranch: String? = nil
     ) async throws -> MagentThread {
         var name = ""
         var foundUnique = false
@@ -71,8 +72,20 @@ extension ThreadManager {
         let worktreePath = "\(project.resolvedWorktreesBasePath())/\(name)"
         let repoSlug = Self.repoSlug(from: project.name)
 
-        // Create git worktree branching off the project's default branch
-        let baseBranch = project.defaultBranch?.isEmpty == false ? project.defaultBranch : nil
+        // Create git worktree branching off the requested base branch, or the
+        // project's default branch when no explicit base is provided.
+        let explicitBaseBranch = requestedBaseBranch?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseBranch: String?
+        if let explicitBaseBranch, !explicitBaseBranch.isEmpty {
+            baseBranch = explicitBaseBranch
+        } else if let projectDefault = project.defaultBranch?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+                  !projectDefault.isEmpty {
+            baseBranch = projectDefault
+        } else {
+            baseBranch = nil
+        }
         _ = try await git.createWorktree(
             repoPath: project.repoPath,
             branchName: branchName,
@@ -418,7 +431,18 @@ extension ThreadManager {
                     worktreePath: thread.worktreePath
                 )
             } else {
-                let baseBranch = project.defaultBranch?.isEmpty == false ? project.defaultBranch : nil
+                let persistedBaseBranch = threads[index].baseBranch?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let baseBranch: String?
+                if let persistedBaseBranch, !persistedBaseBranch.isEmpty {
+                    baseBranch = persistedBaseBranch
+                } else if let projectDefault = project.defaultBranch?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                          !projectDefault.isEmpty {
+                    baseBranch = projectDefault
+                } else {
+                    baseBranch = nil
+                }
                 _ = try await git.createWorktree(
                     repoPath: project.repoPath,
                     branchName: thread.branchName,

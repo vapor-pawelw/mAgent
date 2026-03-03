@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v11"
+    private static let cliVersion = "magent-cli-v12"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -187,7 +187,7 @@ actor IPCSocketServer {
 
         case "$cmd" in
         create-thread)
-            project=""; agent=""; prompt=""; name=""; desc=""; section=""
+            project=""; agent=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --project)     project="$2"; shift 2 ;;
@@ -196,16 +196,21 @@ actor IPCSocketServer {
                     --name)        name="$2"; shift 2 ;;
                     --description) desc="$2"; shift 2 ;;
                     --section)     section="$2"; shift 2 ;;
+                    --base-thread) base_thread="$2"; shift 2 ;;
+                    --base-branch) base_branch="$2"; shift 2 ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>]"
+            [ -z "$base_thread" ] || [ -z "$base_branch" ] || die "Use either --base-thread or --base-branch, not both"
             json="{$(json_kv command create-thread),$(json_kv project "$project")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
             [ -n "$prompt" ] && json="$json,$(json_kv prompt "$prompt")"
             [ -n "$name" ] && json="$json,$(json_kv newName "$name")"
             [ -n "$desc" ] && json="$json,$(json_kv description "$desc")"
             [ -n "$section" ] && json="$json,$(json_kv sectionName "$section")"
+            [ -n "$base_thread" ] && json="$json,$(json_kv baseThreadName "$base_thread")"
+            [ -n "$base_branch" ] && json="$json,$(json_kv baseBranch "$base_branch")"
             json="$json}"
             send_request "$json"
             ;;
@@ -493,7 +498,7 @@ actor IPCSocketServer {
             echo "Usage: magent-cli <command> [options]"
             echo ""
             echo "Thread commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>]"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>]"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
             echo "  send-prompt          --thread <name> --prompt <text>"

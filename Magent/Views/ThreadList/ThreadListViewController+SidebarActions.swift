@@ -203,13 +203,16 @@ extension ThreadListViewController {
     }
 
     private func presentProjectAgentMenu(project: Project, anchorView: NSView) {
-        let settings = persistence.loadSettings()
-        let activeAgents = settings.availableActiveAgents
-        let menu = buildAgentSubmenu(for: project, activeAgents: activeAgents)
+        let menu = buildAgentSubmenu(for: project)
         menu.popUp(positioning: nil, at: NSPoint(x: anchorView.bounds.minX, y: anchorView.bounds.minY), in: anchorView)
     }
 
-    private func buildAgentSubmenu(for project: Project, activeAgents: [AgentType]) -> NSMenu {
+    func buildAgentSubmenu(for project: Project, extraData: [String: String] = [:]) -> NSMenu {
+        let settings = persistence.loadSettings()
+        let activeAgents = settings.availableActiveAgents
+        var representedData = extraData
+        representedData["projectId"] = project.id.uuidString
+
         let submenu = NSMenu()
         AgentMenuBuilder.populate(
             menu: submenu,
@@ -217,7 +220,7 @@ extension ThreadListViewController {
             activeAgents: activeAgents,
             target: self,
             action: #selector(projectAgentMenuItemSelected(_:)),
-            extraData: ["projectId": project.id.uuidString]
+            extraData: representedData
         )
         return submenu
     }
@@ -230,13 +233,16 @@ extension ThreadListViewController {
         let settings = persistence.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == projectId }) else { return }
 
+        let baseBranch = selection.data["baseBranch"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
         switch selection.mode {
         case .terminal:
-            createThread(for: project, requestedAgentType: nil, useAgentCommand: false)
+            createThread(for: project, requestedAgentType: nil, useAgentCommand: false, baseBranch: baseBranch)
         case .agent(let agentType):
-            createThread(for: project, requestedAgentType: agentType, useAgentCommand: true)
+            createThread(for: project, requestedAgentType: agentType, useAgentCommand: true, baseBranch: baseBranch)
         case .projectDefault:
-            createThread(for: project, requestedAgentType: nil, useAgentCommand: true)
+            createThread(for: project, requestedAgentType: nil, useAgentCommand: true, baseBranch: baseBranch)
         }
     }
 
@@ -255,10 +261,11 @@ extension ThreadListViewController {
         presentProjectAgentMenu(project: project, anchorView: outlineView)
     }
 
-    private func createThread(
+    func createThread(
         for project: Project,
         requestedAgentType: AgentType? = nil,
-        useAgentCommand: Bool = true
+        useAgentCommand: Bool = true,
+        baseBranch: String? = nil
     ) {
         isCreatingThread = true
         reloadData()
@@ -268,7 +275,8 @@ extension ThreadListViewController {
                 let thread = try await self.threadManager.createThread(
                     project: project,
                     requestedAgentType: requestedAgentType,
-                    useAgentCommand: useAgentCommand
+                    useAgentCommand: useAgentCommand,
+                    requestedBaseBranch: baseBranch
                 )
                 await MainActor.run {
                     self.isCreatingThread = false

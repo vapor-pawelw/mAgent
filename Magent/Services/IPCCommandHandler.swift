@@ -128,6 +128,55 @@ final class IPCCommandHandler {
             requestedName = nil
         }
 
+        // Resolve optional base branch (explicit branch or from an existing thread)
+        let normalizedBaseThreadName = request.baseThreadName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBaseBranch = request.baseBranch?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalizedBaseThreadName, !normalizedBaseThreadName.isEmpty,
+           let normalizedBaseBranch, !normalizedBaseBranch.isEmpty {
+            return .failure("Use either baseThreadName or baseBranch, not both", id: request.id)
+        }
+
+        let requestedBaseBranch: String?
+        if let normalizedBaseBranch, !normalizedBaseBranch.isEmpty {
+            requestedBaseBranch = normalizedBaseBranch
+        } else if let normalizedBaseThreadName, !normalizedBaseThreadName.isEmpty {
+            guard let baseThread = threadManager.threads.first(where: {
+                $0.name.caseInsensitiveCompare(normalizedBaseThreadName) == .orderedSame
+            }) else {
+                return .failure("Base thread not found: \(normalizedBaseThreadName)", id: request.id)
+            }
+            guard baseThread.projectId == project.id else {
+                return .failure("Base thread '\(normalizedBaseThreadName)' belongs to a different project", id: request.id)
+            }
+
+            if let actualBranch = baseThread.actualBranch?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                      !actualBranch.isEmpty,
+                      actualBranch != "HEAD" {
+                requestedBaseBranch = actualBranch
+            } else {
+                let explicitThreadBranch = baseThread.branchName
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !explicitThreadBranch.isEmpty {
+                    requestedBaseBranch = explicitThreadBranch
+                } else if let expectedBranch = threadManager.resolveExpectedBranch(for: baseThread)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                          !expectedBranch.isEmpty {
+                    requestedBaseBranch = expectedBranch
+                } else if let projectDefault = project.defaultBranch?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                          !projectDefault.isEmpty {
+                    requestedBaseBranch = projectDefault
+                } else {
+                    return .failure("Could not determine base branch from thread: \(normalizedBaseThreadName)", id: request.id)
+                }
+            }
+        } else {
+            requestedBaseBranch = nil
+        }
+
         // Resolve requested section
         let requestedSectionId: UUID?
         if let sectionName = request.sectionName, !sectionName.isEmpty {
@@ -146,7 +195,8 @@ final class IPCCommandHandler {
                 project: project,
                 requestedAgentType: requestedAgent,
                 initialPrompt: request.prompt,
-                requestedName: requestedName
+                requestedName: requestedName,
+                requestedBaseBranch: requestedBaseBranch
             )
         } catch {
             return .failure("Failed to create thread: \(error.localizedDescription)", id: request.id)
@@ -154,7 +204,7 @@ final class IPCCommandHandler {
 
         // Move to requested section after creation (if specified)
         if let sectionId = requestedSectionId {
-            await threadManager.moveThread(thread, toSection: sectionId)
+            threadManager.moveThread(thread, toSection: sectionId)
         }
 
         let projectNameResolved = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? projectName
