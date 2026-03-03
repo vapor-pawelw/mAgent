@@ -12,6 +12,7 @@ public final class GhosttyAppManager {
     private var isInitialized = false
     private var displayLink: CVDisplayLink?
     private var surfaceCount = 0
+    private var pendingSyntheticPasteText: String?
 
     // MARK: - Initialization
 
@@ -104,6 +105,27 @@ public final class GhosttyAppManager {
         }
     }
 
+    /// Routes explicit text through Ghostty's clipboard paste action
+    /// so bracketed-paste behavior matches normal Cmd+V.
+    public func pasteText(_ text: String, on surface: ghostty_surface_t?) -> Bool {
+        guard let surface, !text.isEmpty else { return false }
+        pendingSyntheticPasteText = text
+        let action = "paste_from_clipboard"
+        let handled = action.withCString { ptr in
+            ghostty_surface_binding_action(surface, ptr, UInt(action.utf8.count))
+        }
+        if !handled {
+            pendingSyntheticPasteText = nil
+        }
+        return handled
+    }
+
+    func consumeSyntheticPasteText() -> String? {
+        let text = pendingSyntheticPasteText
+        pendingSyntheticPasteText = nil
+        return text
+    }
+
     private func startDisplayLinkIfNeeded() {
         guard displayLink == nil else { return }
         CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
@@ -167,7 +189,9 @@ private func ghosttyReadClipboardCallback(
     let wrappedState = SendableRawPointer(pointer: state)
     Task { @MainActor in
         guard let surface = GhosttyAppManager.shared.focusedSurface else { return }
-        let string = NSPasteboard.general.string(forType: .string) ?? ""
+        let string = GhosttyAppManager.shared.consumeSyntheticPasteText()
+            ?? NSPasteboard.general.string(forType: .string)
+            ?? ""
         string.withCString { ptr in
             ghostty_surface_complete_clipboard_request(surface, ptr, wrappedState.pointer, true)
         }
