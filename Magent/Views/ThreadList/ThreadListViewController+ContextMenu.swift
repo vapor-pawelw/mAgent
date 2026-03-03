@@ -19,11 +19,26 @@ extension ThreadListViewController {
         pinItem.image = NSImage(systemSymbolName: thread.isPinned ? "pin.slash" : "pin", accessibilityDescription: nil)
         pinItem.representedObject = thread.id
         menu.addItem(pinItem)
+        menu.addItem(NSMenuItem.separator())
+
+        let descriptionItem = NSMenuItem(title: "Set description...", action: #selector(setThreadDescription(_:)), keyEquivalent: "")
+        descriptionItem.target = self
+        descriptionItem.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
+        descriptionItem.representedObject = thread
+        menu.addItem(descriptionItem)
+
+        let settings = persistence.loadSettings()
+
+        // Rename branch
+        let renameItem = NSMenuItem(title: "Rename branch...", action: #selector(renameThread(_:)), keyEquivalent: "")
+        renameItem.target = self
+        renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
+        renameItem.representedObject = thread
+        menu.addItem(renameItem)
+        menu.addItem(NSMenuItem.separator())
 
         // Move to... submenu
-        let settings = persistence.loadSettings()
         let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
-
         let moveSubmenu = NSMenu()
         for section in visibleSections {
             let item = NSMenuItem(title: section.name, action: #selector(moveThreadToSection(_:)), keyEquivalent: "")
@@ -37,19 +52,6 @@ extension ThreadListViewController {
         moveItem.submenu = moveSubmenu
         moveItem.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
         menu.addItem(moveItem)
-
-        // Rename branch
-        let renameItem = NSMenuItem(title: "Rename branch...", action: #selector(renameThread(_:)), keyEquivalent: "")
-        renameItem.target = self
-        renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
-        renameItem.representedObject = thread
-        menu.addItem(renameItem)
-
-        let descriptionItem = NSMenuItem(title: "Set description...", action: #selector(setThreadDescription(_:)), keyEquivalent: "")
-        descriptionItem.target = self
-        descriptionItem.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
-        descriptionItem.representedObject = thread
-        menu.addItem(descriptionItem)
 
         if let createFromBranchItem = createThreadFromBaseMenuItem(for: thread, settings: settings) {
             menu.addItem(createFromBranchItem)
