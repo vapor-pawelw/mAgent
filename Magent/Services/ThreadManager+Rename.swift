@@ -60,8 +60,13 @@ extension ThreadManager {
             trackable.insert(preferred, at: 0)
         }
 
-        let now = Date()
-        let available = trackable.filter { !isAgentCurrentlyRateLimited($0, now: now) }
+        let available: [AgentType]
+        if settings.enableRateLimitDetection {
+            let now = Date()
+            available = trackable.filter { !isAgentCurrentlyRateLimited($0, now: now) }
+        } else {
+            available = trackable
+        }
         return (allTrackable: trackable, available: available)
     }
 
@@ -110,7 +115,22 @@ extension ThreadManager {
     /// the prompt is a plain question rather than an actionable task.
     private static let slugQuestionSentinel = ""
 
-    private func generateSlugViaAgent(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> String? {
+    private enum SlugGenerationAttemptResult {
+        case slug(String)
+        case question
+        case failed
+    }
+
+    private func codexBackgroundExecCommand(escapedPrompt: String) -> String {
+        // ShellExecutor uses a minimal PATH; include common user-local install
+        // locations so background rename/description jobs can resolve Codex.
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        let localBin = ShellExecutor.shellQuote("\(homeDir)/.local/bin")
+        let miseShims = ShellExecutor.shellQuote("\(homeDir)/.local/share/mise/shims")
+        return "PATH=\(localBin):\(miseShims):$PATH codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none"
+    }
+
+    private func generateSlugViaAgent(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> SlugGenerationAttemptResult {
         let truncated = String(prompt.prefix(500))
         let settings = persistence.loadSettings()
         let projectSlug = projectId.flatMap { pid in
@@ -136,9 +156,7 @@ extension ThreadManager {
         let command: String
         switch agentType {
         case .codex:
-            // Use the account-configured default model so ChatGPT-authenticated
-            // Codex users are not blocked by hard-coded model restrictions.
-            command = "codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none"
+            command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
         default:
             // Use claude for .claude, .custom, and nil (claude is a prerequisite for this app)
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
@@ -161,8 +179,12 @@ extension ThreadManager {
             return first
         }
 
-        guard let raw = result, !raw.isEmpty else { return nil }
-        return sanitizeSlug(raw)
+        guard let raw = result, !raw.isEmpty else { return .failed }
+        guard let slug = sanitizeSlug(raw) else { return .failed }
+        if slug == Self.slugQuestionSentinel {
+            return .question
+        }
+        return .slug(slug)
     }
 
     enum AutoRenameResult {
@@ -187,18 +209,27 @@ extension ThreadManager {
             return .rateLimited
         }
 
+        var sawQuestionClassification = false
         for candidateAgent in agentOrder.available {
-            if let slug = await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId) {
-                // Agent signalled "question, not a task" → skip rename entirely
-                guard slug != Self.slugQuestionSentinel else { return .question }
+            switch await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId) {
+            case .slug(let slug):
                 var candidates = [slug]
                 for i in 2...9 {
                     candidates.append("\(slug)-\(i)")
                 }
                 return .candidates(candidates)
+            case .question:
+                // Keep trying remaining agents. Only treat this as a question
+                // if all non-rate-limited agents agree.
+                sawQuestionClassification = true
+            case .failed:
+                continue
             }
         }
 
+        if sawQuestionClassification {
+            return .question
+        }
         return .failed
     }
 
@@ -321,10 +352,6 @@ extension ThreadManager {
             threads[index].didAutoRenameFromFirstPrompt = true
         }
 
-        // Once any rename succeeds, allow auto-rename skip banners to surface again.
-        // This resets per-thread dedup after a successful retry (same or different thread).
-        autoRenameSkipBannerShownThreadIds.removeAll()
-
         try persistence.saveThreads(threads)
 
         await MainActor.run {
@@ -388,22 +415,14 @@ extension ThreadManager {
         case .question:
             return
         case .rateLimited:
-            guard markAutoRenameSkipBannerShownIfNeeded(threadId: thread.id) else { return }
-            await MainActor.run {
-                BannerManager.shared.show(
-                    message: "Auto-rename skipped — all agents are rate-limited",
-                    style: .warning
-                )
-            }
+            // With rate-limit tracking enabled, treat known-limited agents as
+            // unavailable and skip first-prompt auto-rename quietly.
+            markFirstPromptAutoRenameHandled(threadId: thread.id)
             return
         case .failed:
-            guard markAutoRenameSkipBannerShownIfNeeded(threadId: thread.id) else { return }
-            await MainActor.run {
-                BannerManager.shared.show(
-                    message: "Auto-rename skipped — could not generate a name from the prompt",
-                    style: .warning
-                )
-            }
+            // Keep first-prompt auto-rename one-time and avoid noisy warnings when
+            // optional background slug generation fails for environment/model reasons.
+            markFirstPromptAutoRenameHandled(threadId: thread.id)
             return
         }
 
@@ -427,12 +446,6 @@ extension ThreadManager {
         guard !threads[index].didAutoRenameFromFirstPrompt else { return }
         threads[index].didAutoRenameFromFirstPrompt = true
         try? persistence.saveThreads(threads)
-    }
-
-    private func markAutoRenameSkipBannerShownIfNeeded(threadId: UUID) -> Bool {
-        guard !autoRenameSkipBannerShownThreadIds.contains(threadId) else { return false }
-        autoRenameSkipBannerShownThreadIds.insert(threadId)
-        return true
     }
 
     // MARK: - Task Description
@@ -489,9 +502,7 @@ extension ThreadManager {
         let command: String
         switch agentType {
         case .codex:
-            // Keep behavior consistent with slug generation and avoid unsupported
-            // hard-coded models for ChatGPT-authenticated Codex users.
-            command = "codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none"
+            command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
         default:
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
             command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence"
