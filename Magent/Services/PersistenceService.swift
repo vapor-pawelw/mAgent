@@ -109,8 +109,17 @@ final class PersistenceService {
         guard let data = try? Data(contentsOf: url) else { return [:] }
         let cache = (try? decoder.decode([String: Date].self, from: data)) ?? [:]
         let now = Date()
-        let pruned = cache.filter { $0.value > now }
-        if pruned.count != cache.count {
+        let maxFingerprintLength = 512
+        let pruned = cache.reduce(into: [String: Date]()) { result, entry in
+            let normalizedKey = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedKey.isEmpty,
+                  normalizedKey.count <= maxFingerprintLength,
+                  entry.value > now else {
+                return
+            }
+            result[normalizedKey] = entry.value
+        }
+        if pruned != cache {
             saveRateLimitCache(pruned)
         }
         return pruned
