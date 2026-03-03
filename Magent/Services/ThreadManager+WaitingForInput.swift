@@ -88,6 +88,13 @@ extension ThreadManager {
         guard !trimmedLines.isEmpty else { return false }
         let lastChunk = trimmedLines.suffix(15).joined(separator: "\n")
 
+        // The Claude Code rate-limit prompt uses ❯ + numbered list and would
+        // otherwise match the interactive selector pattern below. Exclude it
+        // so it's handled as a rate-limit marker by syncBusySessionsFromProcessState.
+        if lastChunk.localizedCaseInsensitiveContains("stop and wait for limit to reset") {
+            return false
+        }
+
         // Claude Code plan mode
         if lastChunk.contains("Would you like to proceed?") { return true }
 

@@ -50,12 +50,16 @@ extension ThreadManager {
     func checkForRateLimitedSessions() async {
         let detectionEnabled = persistence.loadSettings().enableRateLimitDetection
         if !detectionEnabled {
-            // Clear any existing rate-limit state so sidebar indicators disappear,
-            // but continue scanning panes below to keep the fingerprint cache warm.
+            // Clear text-based rate-limit state so sidebar indicators disappear,
+            // but preserve prompt-based markers (managed by syncBusySessionsFromProcessState).
+            // Continue scanning panes below to keep the fingerprint cache warm.
             var changed = false
-            for i in threads.indices where !threads[i].rateLimitedSessions.isEmpty {
-                threads[i].rateLimitedSessions.removeAll()
-                changed = true
+            for i in threads.indices {
+                let promptOnly = threads[i].rateLimitedSessions.filter { $0.value.isPromptBased }
+                if threads[i].rateLimitedSessions.count != promptOnly.count {
+                    threads[i].rateLimitedSessions = promptOnly
+                    changed = true
+                }
             }
             let hadGlobal = !globalAgentRateLimits.isEmpty
             globalAgentRateLimits.removeAll()
@@ -110,8 +114,14 @@ extension ThreadManager {
 
                 guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
                       let detection = rateLimitDetection(from: paneContent, now: now) else {
-                    if detectionEnabled, updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                        changedThreadIds.insert(threadId)
+                    if detectionEnabled {
+                        // Preserve prompt-based markers — they are managed by
+                        // syncBusySessionsFromProcessState, not by this function.
+                        if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                            // keep prompt-based marker
+                        } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                            changedThreadIds.insert(threadId)
+                        }
                     }
                     continue
                 }
@@ -121,8 +131,12 @@ extension ThreadManager {
                 if let cachedResetAt = rateLimitFingerprintCache[detection.fingerprint] {
                     if cachedResetAt <= now {
                         // Already expired — skip detection entirely.
-                        if detectionEnabled, updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                            changedThreadIds.insert(threadId)
+                        if detectionEnabled {
+                            if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                                // keep prompt-based marker
+                            } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                                changedThreadIds.insert(threadId)
+                            }
                         }
                         continue
                     }
@@ -158,7 +172,9 @@ extension ThreadManager {
 
                 // Discard if reset time is already in the past (already cached above).
                 if info.resetAt <= now {
-                    if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                    if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                        // keep prompt-based marker
+                    } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
                         changedThreadIds.insert(threadId)
                     }
                     continue
