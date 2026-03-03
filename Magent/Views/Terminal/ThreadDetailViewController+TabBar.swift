@@ -106,6 +106,7 @@ extension ThreadDetailViewController {
 
     func rateLimitTooltip(for sessionName: String) -> String? {
         guard let info = thread.rateLimitedSessions[sessionName] else { return nil }
+        if info.isPromptBased { return "Rate limit reached" }
         return "Rate limit reached. Resets \(info.resetAt.formatted(date: .abbreviated, time: .shortened))"
     }
 

@@ -4,6 +4,10 @@ nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
     var resetAt: Date
     var resetDescription: String?
     var detectedAt: Date
+    /// True for markers set from the interactive rate-limit prompt (e.g. "Stop and
+    /// wait for limit to reset"). These are managed by syncBusySessionsFromProcessState
+    /// and should not be cleared by checkForRateLimitedSessions.
+    var isPromptBased: Bool = false
 }
 
 nonisolated struct PullRequestInfo: Sendable, Equatable {
@@ -99,9 +103,13 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     }
 
     /// When all tabs are rate-limited, the thread is effectively unblocked at the latest reset time.
+    /// Prompt-based markers (no concrete reset time) are excluded from the computation.
     var rateLimitLiftAt: Date? {
         guard isBlockedByRateLimit else { return nil }
-        return agentTmuxSessions.compactMap { rateLimitedSessions[$0]?.resetAt }.max()
+        return agentTmuxSessions.compactMap { session -> Date? in
+            guard let info = rateLimitedSessions[session], !info.isPromptBased else { return nil }
+            return info.resetAt
+        }.max()
     }
 
     var rateLimitLiftDescription: String? {

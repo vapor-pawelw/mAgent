@@ -682,10 +682,29 @@ extension ThreadManager {
                         // Both ✳ and braille spinner characters can persist in the pane
                         // title after the agent finishes. Always verify via pane content
                         // that the agent isn't just sitting at an empty prompt.
-                        if let content = await tmux.capturePane(sessionName: session),
-                           isAgentIdleAtPrompt(content) {
+                        let capturedContent = await tmux.capturePane(sessionName: session)
+                        if let content = capturedContent, isAgentIdleAtPrompt(content) {
                             guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                             // Agent is idle — clear any stale busy state
+                            if threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
+                                changed = true
+                                rateLimitChangedThreadIds.insert(threadId)
+                            }
+                            continue
+                        }
+                        // Check for the interactive rate-limit prompt ("Stop and wait
+                        // for limit to reset"). Show rate-limit marker instead of spinner.
+                        if let content = capturedContent, isAtRateLimitPrompt(content) {
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                            if setPromptRateLimitMarker(threadId: threadId, session: session) {
+                                changed = true
+                                rateLimitChangedThreadIds.insert(threadId)
+                            }
                             if threads[i].busySessions.contains(session) {
                                 threads[i].busySessions.remove(session)
                                 changed = true
@@ -707,12 +726,20 @@ extension ThreadManager {
                                 changed = true
                                 busyChangedThreadIds.insert(threads[i].id)
                             }
+                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
+                                changed = true
+                                rateLimitChangedThreadIds.insert(threadId)
+                            }
                             continue
                         }
                         if !threads[i].busySessions.contains(session) {
                             threads[i].busySessions.insert(session)
                             changed = true
                             busyChangedThreadIds.insert(threads[i].id)
+                        }
+                        if clearPromptRateLimitMarker(threadId: threadId, session: session) {
+                            changed = true
+                            rateLimitChangedThreadIds.insert(threadId)
                         }
                         let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
                         if !recoveredIds.isEmpty {
@@ -727,9 +754,24 @@ extension ThreadManager {
                         // Shell has children — but the agent could be idle at its prompt
                         // (e.g. Claude Code waiting for user input while still running as
                         // a child process of the wrapper shell).
-                        if let content = await tmux.capturePane(sessionName: session),
-                           isAgentIdleAtPrompt(content) {
+                        let capturedContent2 = await tmux.capturePane(sessionName: session)
+                        if let content = capturedContent2, isAgentIdleAtPrompt(content) {
                             guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                            if threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
+                                changed = true
+                                rateLimitChangedThreadIds.insert(threadId)
+                            }
+                        } else if let content = capturedContent2, isAtRateLimitPrompt(content) {
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                            if setPromptRateLimitMarker(threadId: threadId, session: session) {
+                                changed = true
+                                rateLimitChangedThreadIds.insert(threadId)
+                            }
                             if threads[i].busySessions.contains(session) {
                                 threads[i].busySessions.remove(session)
                                 changed = true
@@ -742,6 +784,10 @@ extension ThreadManager {
                                 changed = true
                                 busyChangedThreadIds.insert(threads[i].id)
                             }
+                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
+                                changed = true
+                                rateLimitChangedThreadIds.insert(threadId)
+                            }
                             let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
                             if !recoveredIds.isEmpty {
                                 rateLimitChangedThreadIds.formUnion(recoveredIds)
@@ -751,7 +797,7 @@ extension ThreadManager {
                         continue
                     }
                     guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                    // Agent not running — clear busy and waiting if set
+                    // Agent not running — clear busy, waiting, and prompt-based rate limit if set
                     if threads[i].busySessions.contains(session) {
                         threads[i].busySessions.remove(session)
                         changed = true
@@ -762,6 +808,10 @@ extension ThreadManager {
                         notifiedWaitingSessions.remove(session)
                         changed = true
                         busyChangedThreadIds.insert(threads[i].id)
+                    }
+                    if clearPromptRateLimitMarker(threadId: threadId, session: session) {
+                        changed = true
+                        rateLimitChangedThreadIds.insert(threadId)
                     }
                 } else {
                     // Non-shell process running (e.g. node, claude, or a version string
@@ -777,9 +827,24 @@ extension ThreadManager {
                         // The agent process can still be the foreground command even when
                         // idle at its prompt (e.g. Claude Code showing ❯). Verify via
                         // pane content that the agent is actually working.
-                        if let content = await tmux.capturePane(sessionName: session),
-                           isAgentIdleAtPrompt(content) {
+                        let capturedContent3 = await tmux.capturePane(sessionName: session)
+                        if let content = capturedContent3, isAgentIdleAtPrompt(content) {
                             guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                            if threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
+                                changed = true
+                                rateLimitChangedThreadIds.insert(threadId)
+                            }
+                        } else if let content = capturedContent3, isAtRateLimitPrompt(content) {
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                            if setPromptRateLimitMarker(threadId: threadId, session: session) {
+                                changed = true
+                                rateLimitChangedThreadIds.insert(threadId)
+                            }
                             if threads[i].busySessions.contains(session) {
                                 threads[i].busySessions.remove(session)
                                 changed = true
@@ -791,6 +856,10 @@ extension ThreadManager {
                                 threads[i].busySessions.insert(session)
                                 changed = true
                                 busyChangedThreadIds.insert(threads[i].id)
+                            }
+                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
+                                changed = true
+                                rateLimitChangedThreadIds.insert(threadId)
                             }
                             let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
                             if !recoveredIds.isEmpty {
@@ -864,6 +933,54 @@ extension ThreadManager {
         return hasPrompt
     }
 
+    /// Detects the Claude Code interactive rate-limit prompt, which shows options
+    /// like "Stop and wait for limit to reset" / "Switch to extra usage".
+    /// When this prompt is visible, the agent is blocked but not actively processing,
+    /// so we should show a rate-limit marker instead of a busy spinner.
+    private func isAtRateLimitPrompt(_ paneContent: String) -> Bool {
+        let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        let recentLines = lines.suffix(20)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return recentLines.contains(where: {
+            $0.localizedCaseInsensitiveContains("stop and wait for limit to reset")
+        })
+    }
+
+    /// Sets a prompt-based rate-limit marker for the session. Returns true if
+    /// the rate-limit state changed (for notification tracking).
+    /// Does not overwrite text-based markers from checkForRateLimitedSessions.
+    @discardableResult
+    private func setPromptRateLimitMarker(threadId: UUID, session: String) -> Bool {
+        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { return false }
+        if let existing = threads[i].rateLimitedSessions[session], !existing.isPromptBased {
+            return false // don't overwrite text-based marker
+        }
+        let marker = AgentRateLimitInfo(
+            resetAt: Date.distantFuture,
+            resetDescription: nil,
+            detectedAt: Date(),
+            isPromptBased: true
+        )
+        if threads[i].rateLimitedSessions[session] != marker {
+            threads[i].rateLimitedSessions[session] = marker
+            return true
+        }
+        return false
+    }
+
+    /// Clears a prompt-based rate-limit marker for the session. Returns true if
+    /// a prompt-based marker was actually removed.
+    @discardableResult
+    private func clearPromptRateLimitMarker(threadId: UUID, session: String) -> Bool {
+        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { return false }
+        if let existing = threads[i].rateLimitedSessions[session], existing.isPromptBased {
+            threads[i].rateLimitedSessions.removeValue(forKey: session)
+            return true
+        }
+        return false
+    }
+
     private func paneShowsEscToInterrupt(sessionName: String) async -> Bool {
         guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 40) else {
             return false
@@ -895,12 +1012,16 @@ extension ThreadManager {
     private func checkForRateLimitedSessions() async {
         let detectionEnabled = persistence.loadSettings().enableRateLimitDetection
         if !detectionEnabled {
-            // Clear any existing rate-limit state so sidebar indicators disappear,
-            // but continue scanning panes below to keep the fingerprint cache warm.
+            // Clear text-based rate-limit state so sidebar indicators disappear,
+            // but preserve prompt-based markers (managed by syncBusySessionsFromProcessState).
+            // Continue scanning panes below to keep the fingerprint cache warm.
             var changed = false
-            for i in threads.indices where !threads[i].rateLimitedSessions.isEmpty {
-                threads[i].rateLimitedSessions.removeAll()
-                changed = true
+            for i in threads.indices {
+                let promptOnly = threads[i].rateLimitedSessions.filter { $0.value.isPromptBased }
+                if threads[i].rateLimitedSessions.count != promptOnly.count {
+                    threads[i].rateLimitedSessions = promptOnly
+                    changed = true
+                }
             }
             let hadGlobal = !globalAgentRateLimits.isEmpty
             globalAgentRateLimits.removeAll()
@@ -955,8 +1076,14 @@ extension ThreadManager {
 
                 guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
                       let detection = rateLimitDetection(from: paneContent, now: now) else {
-                    if detectionEnabled, updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                        changedThreadIds.insert(threadId)
+                    if detectionEnabled {
+                        // Preserve prompt-based markers — they are managed by
+                        // syncBusySessionsFromProcessState, not by this function.
+                        if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                            // keep prompt-based marker
+                        } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                            changedThreadIds.insert(threadId)
+                        }
                     }
                     continue
                 }
@@ -966,8 +1093,12 @@ extension ThreadManager {
                 if let cachedResetAt = rateLimitFingerprintCache[detection.fingerprint] {
                     if cachedResetAt <= now {
                         // Already expired — skip detection entirely.
-                        if detectionEnabled, updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                            changedThreadIds.insert(threadId)
+                        if detectionEnabled {
+                            if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                                // keep prompt-based marker
+                            } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                                changedThreadIds.insert(threadId)
+                            }
                         }
                         continue
                     }
@@ -1003,7 +1134,9 @@ extension ThreadManager {
 
                 // Discard if reset time is already in the past (already cached above).
                 if info.resetAt <= now {
-                    if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                    if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                        // keep prompt-based marker
+                    } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
                         changedThreadIds.insert(threadId)
                     }
                     continue
@@ -1622,6 +1755,13 @@ extension ThreadManager {
         let trimmedLines = lines.suffix(20).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         guard !trimmedLines.isEmpty else { return false }
         let lastChunk = trimmedLines.suffix(15).joined(separator: "\n")
+
+        // The Claude Code rate-limit prompt uses ❯ + numbered list and would
+        // otherwise match the interactive selector pattern below. Exclude it
+        // so it's handled as a rate-limit marker by syncBusySessionsFromProcessState.
+        if lastChunk.localizedCaseInsensitiveContains("stop and wait for limit to reset") {
+            return false
+        }
 
         // Claude Code plan mode
         if lastChunk.contains("Would you like to proceed?") { return true }
