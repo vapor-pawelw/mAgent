@@ -112,4 +112,4 @@ See [docs/building.md](docs/building.md) for prerequisites and build instruction
 
 ## 📄 License
 
-[PolyForm Shield 1.0.0](./LICENSE)
+[Apache License 2.0](./LICENSE)
