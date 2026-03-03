@@ -233,11 +233,10 @@ final class ThreadCell: NSTableCellView {
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
         let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
-        let branchDisplay = resolvedBranchName == worktreeName
-            ? resolvedBranchName
-            : "\(resolvedBranchName) (\(worktreeName))"
-
-        var branchLineParts = [branchDisplay]
+        var branchLineParts = [resolvedBranchName]
+        if worktreeName != resolvedBranchName {
+            branchLineParts.append(worktreeName)
+        }
         if let pr = thread.pullRequestInfo {
             branchLineParts.append(pr.displayLabel)
         }
