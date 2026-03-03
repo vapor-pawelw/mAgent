@@ -51,6 +51,10 @@ extension ThreadListViewController {
         descriptionItem.representedObject = thread
         menu.addItem(descriptionItem)
 
+        if let createFromBranchItem = createThreadFromBaseMenuItem(for: thread, settings: settings) {
+            menu.addItem(createFromBranchItem)
+        }
+
         menu.addItem(NSMenuItem.separator())
 
         // Open in Finder
@@ -110,6 +114,11 @@ extension ThreadListViewController {
         finderItem.representedObject = thread
         menu.addItem(finderItem)
 
+        let settings = persistence.loadSettings()
+        if let createFromBranchItem = createThreadFromBaseMenuItem(for: thread, settings: settings) {
+            menu.addItem(createFromBranchItem)
+        }
+
         // Open in Xcode (if Xcode is installed and project has xcworkspace/xcodeproj)
         if xcodeProjectPath(for: thread) != nil {
             let xcodeItem = NSMenuItem(title: "Open in Xcode", action: #selector(openThreadInXcode(_:)), keyEquivalent: "")
@@ -132,12 +141,47 @@ extension ThreadListViewController {
         }
 
         // Open Jira Board
-        let settings = persistence.loadSettings()
         if let jiraItem = buildJiraMenuItem(for: thread, settings: settings) {
             menu.addItem(jiraItem)
         }
 
         return menu
+    }
+
+    private func createThreadFromBaseMenuItem(for thread: MagentThread, settings: AppSettings) -> NSMenuItem? {
+        guard let project = settings.projects.first(where: { $0.id == thread.projectId }),
+              let baseBranch = baseBranchForNewThread(from: thread, project: project) else {
+            return nil
+        }
+
+        let item = NSMenuItem(title: "Create Thread from This Branch", action: nil, keyEquivalent: "")
+        item.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)
+        item.submenu = buildAgentSubmenu(for: project, extraData: ["baseBranch": baseBranch])
+        return item
+    }
+
+    private func baseBranchForNewThread(from thread: MagentThread, project: Project) -> String? {
+        let actualBranch = thread.actualBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !actualBranch.isEmpty, actualBranch != "HEAD" {
+            return actualBranch
+        }
+
+        let storedBranch = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !storedBranch.isEmpty {
+            return storedBranch
+        }
+
+        let expectedBranch = thread.expectedBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !expectedBranch.isEmpty {
+            return expectedBranch
+        }
+
+        let projectDefault = project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !projectDefault.isEmpty {
+            return projectDefault
+        }
+
+        return nil
     }
 
     private func projectRootPath(for thread: MagentThread) -> String {

@@ -5,7 +5,7 @@ enum IPCAgentDocs {
 
     /// CLI commands available through magent-cli.
     private static let cliCommands = """
-    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>]
+    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>]
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
     /tmp/magent-cli send-prompt --thread <name> --prompt <text>
@@ -33,6 +33,7 @@ enum IPCAgentDocs {
     private static let usageNotes = """
     Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
     When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
+    To branch from an existing thread, pass --base-thread <name>. Use --base-branch <name> only when you need an exact branch literal.
     Use auto-rename-thread (or its rename-thread alias) by default; it generates both branch name and description from one prompt.
     Use rename-branch ONLY when the user gives a literal branch name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about, use auto-rename-thread instead.
     Use set-description to manually set or clear the thread description without renaming the branch.
@@ -50,7 +51,7 @@ enum IPCAgentDocs {
 
     static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    static let codexIPCVersion = "<!-- magent-ipc-v7 -->"
+    static let codexIPCVersion = "<!-- magent-ipc-v8 -->"
 
     /// Markdown format used for Codex's `AGENTS.md` file.
     static let codexAgentsMdBlock: String = """
