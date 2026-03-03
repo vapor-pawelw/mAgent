@@ -1,23 +1,5 @@
 import Cocoa
 
-private enum ThreadRowSizing {
-    static let cell: ThreadCell = {
-        let cell = ThreadCell()
-
-        let imageView = NSImageView()
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        cell.addSubview(imageView)
-        cell.imageView = imageView
-
-        let textField = NSTextField(labelWithString: "")
-        textField.translatesAutoresizingMaskIntoConstraints = false
-        cell.addSubview(textField)
-        cell.textField = textField
-
-        return cell
-    }()
-}
-
 // MARK: - NSOutlineViewDataSource
 
 extension ThreadListViewController: NSOutlineViewDataSource {
@@ -156,7 +138,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         in outlineView: NSOutlineView
     ) -> Int {
         let availableWidth = availableDescriptionWidth(for: thread, in: outlineView)
-        guard availableWidth > 0 else { return 2 }
+        guard availableWidth > 0 else { return 1 }
 
         let font: NSFont = thread.hasUnreadAgentCompletion
             ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
@@ -203,13 +185,36 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             baseWidth = outlineView.bounds.width
         }
         guard baseWidth > 0 else { return 0 }
+        let leadingContentWidth: CGFloat = 16 + 6 // terminal icon + icon/text spacing
+        let trailingInset = ThreadListViewController.projectDisclosureTrailingInset
+            + (ThreadListViewController.disclosureButtonSize / 2)
+            - 5 // completion indicator radius used by ThreadCell.trailingAlignmentInset
+            + 6 // gap between leading and trailing stacks
+        let trailingMarkerWidth = threadTrailingMarkerWidth(for: thread)
+        return max(0, baseWidth - leadingContentWidth - trailingInset - trailingMarkerWidth)
+    }
 
-        let sizingCell = ThreadRowSizing.cell
-        sizingCell.frame = NSRect(x: 0, y: 0, width: baseWidth, height: 120)
-        sizingCell.configure(with: thread, sectionColor: nil)
-        sizingCell.layoutSubtreeIfNeeded()
+    private func threadTrailingMarkerWidth(for thread: MagentThread) -> CGFloat {
+        var markerWidths: [CGFloat] = []
 
-        return sizingCell.textField?.bounds.width ?? 0
+        if thread.jiraTicketKey != nil {
+            markerWidths.append(10)
+        }
+        if thread.showArchiveSuggestion {
+            markerWidths.append(12)
+        }
+        if thread.isBlockedByRateLimit {
+            markerWidths.append(10)
+        } else if thread.hasWaitingForInput || thread.hasUnreadAgentCompletion {
+            markerWidths.append(10)
+        } else if thread.hasAgentBusy {
+            markerWidths.append(14)
+        }
+
+        guard !markerWidths.isEmpty else { return 0 }
+        let widthsTotal = markerWidths.reduce(0, +)
+        let spacingTotal = CGFloat(max(0, markerWidths.count - 1) * 4)
+        return widthsTotal + spacingTotal
     }
 
     private func availableDescriptionWidth(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
