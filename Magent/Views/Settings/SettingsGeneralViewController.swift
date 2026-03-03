@@ -39,19 +39,12 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         let stackView = NSStackView()
         stackView.orientation = .vertical
         stackView.alignment = .leading
-        stackView.spacing = 20
+        stackView.spacing = 16
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
-        // Worktree Behavior
-        let worktreeSection = NSStackView()
-        worktreeSection.orientation = .vertical
-        worktreeSection.alignment = .leading
-        worktreeSection.spacing = 6
-
-        let worktreeLabel = NSTextField(labelWithString: "Worktree Behavior")
-        worktreeLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        worktreeSection.addArrangedSubview(worktreeLabel)
+        let (worktreeCard, worktreeSection) = createSectionCard(title: "Worktree Behavior")
+        stackView.addArrangedSubview(worktreeCard)
 
         autoRenameCheckbox = NSButton(
             checkboxWithTitle: "Auto-rename worktrees from the first agent prompt",
@@ -67,120 +60,58 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         autoRenameDesc.font = .systemFont(ofSize: 11)
         autoRenameDesc.textColor = NSColor(resource: .textSecondary)
         worktreeSection.addArrangedSubview(autoRenameDesc)
+        worktreeSection.setCustomSpacing(10, after: autoRenameDesc)
 
-        // Slug prompt customization (always visible)
-        let slugPromptWrapper = NSStackView()
-        slugPromptWrapper.orientation = .vertical
-        slugPromptWrapper.alignment = .leading
-        slugPromptWrapper.spacing = 4
-
-        let slugPromptLabel = NSTextField(labelWithString: "Slug Prompt")
-        slugPromptLabel.font = .systemFont(ofSize: 12, weight: .medium)
-        slugPromptWrapper.addArrangedSubview(slugPromptLabel)
-
-        let slugPromptDesc = NSTextField(
-            wrappingLabelWithString: "Instruction used to generate branch slugs — for auto-rename on first prompt, rename via agent, or CLI auto-rename-thread command."
+        slugPromptTextView = createTextEditorSection(
+            in: worktreeSection,
+            title: "Slug Prompt",
+            description: "Instruction used to generate branch slugs for auto-rename on first prompt, rename via agent, or CLI auto-rename-thread command.",
+            value: settings.autoRenameSlugPrompt,
+            font: .systemFont(ofSize: 13)
         )
-        slugPromptDesc.font = .systemFont(ofSize: 11)
-        slugPromptDesc.textColor = NSColor(resource: .textSecondary)
-        slugPromptWrapper.addArrangedSubview(slugPromptDesc)
-
-        slugPromptTextView = NSTextView()
-        slugPromptTextView.font = .systemFont(ofSize: 13)
-        slugPromptTextView.string = settings.autoRenameSlugPrompt
-        slugPromptTextView.isRichText = false
-        slugPromptTextView.isAutomaticQuoteSubstitutionEnabled = false
-        slugPromptTextView.isAutomaticDashSubstitutionEnabled = false
-        slugPromptTextView.isAutomaticTextReplacementEnabled = false
-        slugPromptTextView.delegate = self
-        slugPromptTextView.isVerticallyResizable = true
-        slugPromptTextView.isHorizontallyResizable = false
-        slugPromptTextView.textContainerInset = NSSize(width: 4, height: 4)
-
-        let slugPromptScrollView = NonCapturingScrollView()
-        slugPromptScrollView.documentView = slugPromptTextView
-        slugPromptScrollView.hasVerticalScroller = true
-        slugPromptScrollView.autohidesScrollers = true
-        slugPromptScrollView.borderType = .bezelBorder
-        slugPromptScrollView.translatesAutoresizingMaskIntoConstraints = false
-
-        let slugLineHeight = NSFont.systemFont(ofSize: 13).ascender + abs(NSFont.systemFont(ofSize: 13).descender) + NSFont.systemFont(ofSize: 13).leading
-        let slugHeight = max(slugLineHeight * 3 + 12, 56)
-
-        NSLayoutConstraint.activate([
-            slugPromptScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: slugHeight),
-        ])
-
-        slugPromptWrapper.addArrangedSubview(slugPromptScrollView)
 
         let resetSlugButton = NSButton(title: "Reset to Default", target: self, action: #selector(resetSlugPromptToDefault))
         resetSlugButton.bezelStyle = .rounded
         resetSlugButton.controlSize = .small
-        slugPromptWrapper.addArrangedSubview(resetSlugButton)
+        worktreeSection.addArrangedSubview(resetSlugButton)
 
-        slugPromptWrapper.translatesAutoresizingMaskIntoConstraints = false
-        worktreeSection.addArrangedSubview(slugPromptWrapper)
+        let (injectionCard, injectionSection) = createSectionCard(
+            title: "Startup Injection",
+            description: "Values in this section are applied to every new terminal/agent tab at startup."
+        )
+        stackView.addArrangedSubview(injectionCard)
 
-        slugPromptTextView.autoresizingMask = [.width]
-        slugPromptTextView.textContainer?.widthTracksTextView = true
-
-        worktreeSection.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(worktreeSection)
-        NSLayoutConstraint.activate([
-            worktreeSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-            slugPromptScrollView.widthAnchor.constraint(equalTo: slugPromptWrapper.widthAnchor),
-        ])
-
-        addSectionSeparator(to: stackView)
-
-        // Terminal Injection Command
-        terminalInjectionTextView = createSettingsSection(
-            in: stackView,
+        terminalInjectionTextView = createTextEditorSection(
+            in: injectionSection,
             title: "Terminal Injection Command",
             description: "Shell command auto-sent to every new terminal tab after creation.",
             value: settings.terminalInjectionCommand,
-            font: .monospacedSystemFont(ofSize: 13, weight: .regular),
-            delegate: self
+            font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
 
-        addSectionSeparator(to: stackView)
-
-        // Agent Context Injection
-        agentContextTextView = createSettingsSection(
-            in: stackView,
+        agentContextTextView = createTextEditorSection(
+            in: injectionSection,
             title: "Agent Context Injection",
             description: "Text auto-typed into every new agent prompt after startup.",
             value: settings.agentContextInjection,
-            font: .systemFont(ofSize: 13),
-            delegate: self
+            font: .systemFont(ofSize: 13)
         )
 
-        addSectionSeparator(to: stackView)
+        let (reviewCard, reviewSection) = createSectionCard(title: "Review")
+        stackView.addArrangedSubview(reviewCard)
 
-        // Review Prompt
-        reviewPromptTextView = createSettingsSection(
-            in: stackView,
+        reviewPromptTextView = createTextEditorSection(
+            in: reviewSection,
             title: "Review Prompt",
             description: "Prompt sent to the agent when clicking the review button. Use {baseBranch} as a placeholder for the target branch.",
             value: settings.reviewPrompt,
-            font: .systemFont(ofSize: 13),
-            delegate: self
+            font: .systemFont(ofSize: 13)
         )
 
         let resetReviewButton = NSButton(title: "Reset to Default", target: self, action: #selector(resetReviewPromptToDefault))
         resetReviewButton.bezelStyle = .rounded
         resetReviewButton.controlSize = .small
-        stackView.addArrangedSubview(resetReviewButton)
-
-        addSectionSeparator(to: stackView)
-
-        // Environment Variables reference
-        let envHeader = NSTextField(labelWithString: "Environment Variables")
-        envHeader.font = .systemFont(ofSize: 14, weight: .semibold)
-
-        let envDesc = NSTextField(wrappingLabelWithString: "Available in injection commands:")
-        envDesc.font = .systemFont(ofSize: 11)
-        envDesc.textColor = NSColor(resource: .textSecondary)
+        reviewSection.addArrangedSubview(resetReviewButton)
 
         let envVars: [(String, String)] = [
             ("$MAGENT_WORKTREE_PATH", "Absolute path to the thread's git worktree directory"),
@@ -189,54 +120,42 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             ("$MAGENT_PROJECT_NAME", "Name of the project (also usable in Worktrees Path)"),
         ]
 
-        let envStack = NSStackView()
-        envStack.orientation = .vertical
-        envStack.alignment = .leading
-        envStack.spacing = 4
-
-        envStack.addArrangedSubview(envHeader)
-        envStack.addArrangedSubview(envDesc)
+        let (envCard, envStack) = createSectionCard(
+            title: "Environment Variables",
+            description: "Available in injection commands:"
+        )
+        stackView.addArrangedSubview(envCard)
 
         for (name, desc) in envVars {
             let row = NSStackView()
-            row.orientation = .horizontal
-            row.spacing = 8
+            row.orientation = .vertical
+            row.alignment = .leading
+            row.spacing = 2
+            row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 0)
+            row.translatesAutoresizingMaskIntoConstraints = false
 
             let nameLabel = NSTextField(labelWithString: name)
             nameLabel.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
             nameLabel.textColor = .systemGreen
 
-            let descLabel = NSTextField(labelWithString: desc)
+            let descLabel = NSTextField(wrappingLabelWithString: desc)
             descLabel.font = .systemFont(ofSize: 11)
             descLabel.textColor = NSColor(resource: .textSecondary)
 
             row.addArrangedSubview(nameLabel)
             row.addArrangedSubview(descLabel)
             envStack.addArrangedSubview(row)
+            NSLayoutConstraint.activate([
+                row.widthAnchor.constraint(equalTo: envStack.widthAnchor),
+                descLabel.widthAnchor.constraint(equalTo: row.widthAnchor, constant: -8),
+            ])
         }
 
-        stackView.addArrangedSubview(envStack)
-
-        // Separator before Thread Sections
-        let separator = NSBox()
-        separator.boxType = .separator
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(separator)
-        NSLayoutConstraint.activate([
-            separator.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
-
-        // Thread Sections
-        let sectionsHeader = NSTextField(labelWithString: "Thread Sections")
-        sectionsHeader.font = .systemFont(ofSize: 14, weight: .semibold)
-        sectionsHeader.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(sectionsHeader)
-
-        let sectionsDesc = NSTextField(wrappingLabelWithString: "Organize threads into sections in the sidebar. Click a color dot to change it. Drag to reorder.")
-        sectionsDesc.font = .systemFont(ofSize: 11)
-        sectionsDesc.textColor = NSColor(resource: .textSecondary)
-        sectionsDesc.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(sectionsDesc)
+        let (sectionsCard, sectionsSection) = createSectionCard(
+            title: "Thread Sections",
+            description: "Organize threads in the sidebar. Click a color dot to edit it and drag rows to reorder."
+        )
+        stackView.addArrangedSubview(sectionsCard)
 
         useSectionsCheckbox = NSButton(
             checkboxWithTitle: "Group threads by sections in the sidebar",
@@ -244,7 +163,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             action: #selector(useSectionsToggled)
         )
         useSectionsCheckbox.state = settings.useThreadSections ? .on : .off
-        stackView.addArrangedSubview(useSectionsCheckbox)
+        sectionsSection.addArrangedSubview(useSectionsCheckbox)
 
         sectionsTableView = NSTableView()
         sectionsTableView.headerView = nil
@@ -264,18 +183,19 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         sectionsScrollView.hasVerticalScroller = true
         sectionsScrollView.autohidesScrollers = true
         sectionsScrollView.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(sectionsScrollView)
+        sectionsSection.addArrangedSubview(sectionsScrollView)
 
         let addSectionButton = NSButton(title: "Add Section...", target: self, action: #selector(addSectionTapped))
         addSectionButton.bezelStyle = .rounded
         addSectionButton.controlSize = .small
-        stackView.addArrangedSubview(addSectionButton)
+        sectionsSection.addArrangedSubview(addSectionButton)
 
         // Default Section popup
         let defaultSectionStack = NSStackView()
         defaultSectionStack.orientation = .vertical
         defaultSectionStack.alignment = .leading
         defaultSectionStack.spacing = 4
+        defaultSectionStack.translatesAutoresizingMaskIntoConstraints = false
 
         let defaultSectionLabel = NSTextField(labelWithString: "Default Section")
         defaultSectionLabel.font = .systemFont(ofSize: 12, weight: .semibold)
@@ -290,12 +210,14 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         defaultSectionPopup.target = self
         defaultSectionPopup.action = #selector(defaultSectionChanged)
         defaultSectionStack.addArrangedSubview(defaultSectionPopup)
-        stackView.addArrangedSubview(defaultSectionStack)
+        sectionsSection.addArrangedSubview(defaultSectionStack)
         refreshDefaultSectionPopup()
 
         NSLayoutConstraint.activate([
-            sectionsScrollView.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            sectionsScrollView.widthAnchor.constraint(equalTo: sectionsSection.widthAnchor),
             sectionsScrollView.heightAnchor.constraint(equalToConstant: 140),
+            defaultSectionStack.widthAnchor.constraint(equalTo: sectionsSection.widthAnchor),
+            defaultSectionPopup.widthAnchor.constraint(equalTo: defaultSectionStack.widthAnchor),
         ])
 
         // Document view wrapper
@@ -318,6 +240,11 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             stackView.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
 
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
+            worktreeCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            injectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            reviewCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            envCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            sectionsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
     }
 
@@ -343,12 +270,99 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         contentScrollView.reflectScrolledClipView(clipView)
     }
 
-    private func addSectionSeparator(to stackView: NSStackView) {
-        let sep = NSBox()
-        sep.boxType = .separator
-        sep.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(sep)
-        sep.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40).isActive = true
+    private func createSectionCard(title: String, description: String? = nil) -> (container: NSView, content: NSStackView) {
+        let container = SettingsSectionCardView()
+
+        let content = NSStackView()
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 8
+        content.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(content)
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        content.addArrangedSubview(titleLabel)
+
+        if let description, !description.isEmpty {
+            let descriptionLabel = NSTextField(wrappingLabelWithString: description)
+            descriptionLabel.font = .systemFont(ofSize: 11)
+            descriptionLabel.textColor = NSColor(resource: .textSecondary)
+            content.addArrangedSubview(descriptionLabel)
+            content.setCustomSpacing(12, after: descriptionLabel)
+            NSLayoutConstraint.activate([
+                descriptionLabel.widthAnchor.constraint(equalTo: content.widthAnchor),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+        ])
+
+        return (container, content)
+    }
+
+    private func createTextEditorSection(
+        in stackView: NSStackView,
+        title: String,
+        description: String,
+        value: String,
+        font: NSFont
+    ) -> NSTextView {
+        let sectionStack = NSStackView()
+        sectionStack.orientation = .vertical
+        sectionStack.alignment = .leading
+        sectionStack.spacing = 4
+        sectionStack.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(sectionStack)
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        sectionStack.addArrangedSubview(titleLabel)
+
+        let descLabel = NSTextField(wrappingLabelWithString: description)
+        descLabel.font = .systemFont(ofSize: 11)
+        descLabel.textColor = NSColor(resource: .textSecondary)
+        sectionStack.addArrangedSubview(descLabel)
+        sectionStack.setCustomSpacing(8, after: descLabel)
+
+        let textView = NSTextView()
+        textView.font = font
+        textView.string = value
+        textView.isRichText = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.delegate = self
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainerInset = NSSize(width: 4, height: 4)
+
+        let textScrollView = NonCapturingScrollView()
+        textScrollView.documentView = textView
+        textScrollView.hasVerticalScroller = true
+        textScrollView.autohidesScrollers = true
+        textScrollView.borderType = .bezelBorder
+        textScrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        let lineHeight = font.ascender + abs(font.descender) + font.leading
+        let height = max(lineHeight * 3 + 12, 56)
+        let container = ResizableTextContainer(scrollView: textScrollView, minHeight: height)
+        sectionStack.addArrangedSubview(container)
+
+        NSLayoutConstraint.activate([
+            sectionStack.widthAnchor.constraint(equalTo: stackView.widthAnchor),
+            descLabel.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
+            container.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
+        ])
+
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+
+        return textView
     }
 
 
