@@ -422,11 +422,12 @@ extension ThreadManager {
     private func generateTaskDescription(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> String? {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
-            Generate a very short human-readable task description (2-8 words, Title Case) for this task. \
+            Generate a very short human-readable task description (2-8 words) for this task. \
+            Use natural casing. Do not force every word to start with a capital letter; only capitalize where it makes sense (e.g. proper nouns, acronyms). \
             Output ONLY the prefix DESC: followed by the description. No quotes, no explanation. \
             Output DESC: EMPTY for pure knowledge questions with no implied action. \
-            Example: "Fix auth bug in login" → DESC: Fix Auth Login Bug \
-            Example: "Add dark mode support" → DESC: Add Dark Mode Support \
+            Example: "Fix auth bug in login" → DESC: Fix auth login bug \
+            Example: "Add dark mode support" → DESC: Add dark mode support \
             Example: "How does the auth system work?" → DESC: EMPTY
             Task: \(truncated)
             """

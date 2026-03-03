@@ -484,7 +484,9 @@ final class ThreadCell: NSTableCellView {
 
     private func statusDescriptions(for thread: MagentThread) -> [String] {
         var statuses: [String] = []
-        statuses.append(thread.isDirty ? "Dirty" : "Clean")
+        if thread.isDirty {
+            statuses.append("Dirty")
+        }
 
         if thread.isBlockedByRateLimit {
             if let detail = thread.rateLimitLiftDescription, !detail.isEmpty {
@@ -513,21 +515,38 @@ final class ThreadCell: NSTableCellView {
         worktreeName: String,
         prLabel: String?,
         statuses: [String]
-    ) -> String {
-        let resolvedPR = prLabel ?? "None"
-        let resolvedStatuses = statuses.isEmpty ? "None" : statuses.joined(separator: ", ")
+    ) -> String? {
+        let trimmedDescription = description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBranch = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedWorktree = worktreeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPR = prLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        var lines: [String] = []
-        if let description, !description.isEmpty {
-            lines.append(description)
-            lines.append("")
+        var sections: [String] = []
+
+        if let trimmedDescription, !trimmedDescription.isEmpty {
+            sections.append(trimmedDescription)
         }
-        lines.append("Branch: \(branchName)")
-        lines.append("Worktree: \(worktreeName)")
-        lines.append("PR: \(resolvedPR)")
-        lines.append("")
-        lines.append("Status: \(resolvedStatuses)")
-        return lines.joined(separator: "\n")
+
+        var detailLines: [String] = []
+        if !trimmedBranch.isEmpty {
+            detailLines.append("Branch: \(trimmedBranch)")
+        }
+        if !trimmedWorktree.isEmpty {
+            detailLines.append("Worktree: \(trimmedWorktree)")
+        }
+        if let trimmedPR, !trimmedPR.isEmpty {
+            detailLines.append("PR: \(trimmedPR)")
+        }
+        if !detailLines.isEmpty {
+            sections.append(detailLines.joined(separator: "\n"))
+        }
+
+        if !statuses.isEmpty {
+            sections.append("Status: \(statuses.joined(separator: ", "))")
+        }
+
+        guard !sections.isEmpty else { return nil }
+        return sections.joined(separator: "\n\n")
     }
 
     private func rateLimitTooltip(for thread: MagentThread) -> String {

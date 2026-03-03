@@ -90,6 +90,35 @@ Before the app is usable, the user must complete a configuration step:
 - **Main pane**: Terminal display with tab bar for multiple terminals per thread
 - **Settings**: Accessible from sidebar or menu bar
 
+## Thread Row Display Rules
+
+For non-main threads, naming and labels in the sidebar follow these rules:
+
+- `thread.name` is the branch-facing thread identifier.
+- Worktree directory name is derived from `worktreePath` basename.
+- `taskDescription` is optional; it can be generated from the first agent prompt or set manually.
+- Generated description should be short (2-8 words) and naturally cased (not forced Title Case).
+
+### Line 1 / Line 2 Layout
+
+- If `taskDescription` exists:
+  - Line 1: description (up to 2 lines)
+  - Line 2: `branch · worktree · PR` (PR segment shown only when present)
+- If no `taskDescription` and branch differs from worktree:
+  - Line 1: `branch`
+  - Line 2: `worktree · PR` (PR segment optional)
+- If no `taskDescription` and branch equals worktree:
+  - Single line: `branch · PR` (PR segment optional)
+
+### Dirty Dot and Hover Details
+
+- Dirty dot is attached to the branch/worktree line (never the description line).
+- Hover tooltip should:
+  - Show description as plain text (no "Description:" prefix) only when present
+  - Show branch/worktree lines when values are present
+  - Show PR line only when PR exists
+  - Show status section only when at least one status is active
+
 ## Settings
 
 - **Projects**: Add/remove git repositories

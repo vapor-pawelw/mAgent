@@ -66,6 +66,7 @@ The response includes a `status` object with all UI-visible indicators:
 | `jiraTicketKey` | string? | Associated Jira ticket (e.g. `IP-1234`) |
 | `jiraUnassigned` | bool | Jira ticket no longer assigned to user |
 | `branchName` | string | Git branch name |
+| `taskDescription` | string? | Optional short description shown in the thread row |
 | `baseBranch` | string? | Target branch for delivery tracking |
 | `rateLimitDescription` | string? | Human-readable reset info (only when rate-limited) |
 
