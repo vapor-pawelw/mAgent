@@ -132,6 +132,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarSection {
             return 28
         }
+        if let thread = item as? MagentThread {
+            return thread.isMain ? 26 : 38
+        }
         return 26
     }
 

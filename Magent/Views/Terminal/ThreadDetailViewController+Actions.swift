@@ -200,6 +200,12 @@ extension ThreadDetailViewController {
         if updated.name != previousThread.name || updated.worktreePath != previousThread.worktreePath {
             handleRename(updated)
         }
+
+        // Generate task description independently (fire-and-forget)
+        let threadId = thread.id
+        Task {
+            await threadManager.generateTaskDescriptionIfNeeded(threadId: threadId, prompt: trimmed)
+        }
     }
 
     // MARK: - Review

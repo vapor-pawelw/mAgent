@@ -70,6 +70,7 @@ nonisolated struct IPCThreadInfo: Encodable, Sendable {
     let tmuxSession: String
     let agentType: String?
     let isMain: Bool
+    let taskDescription: String?
     var sectionName: String?
     var sectionId: String?
     var tabs: [IPCTabInfo]?
@@ -83,6 +84,7 @@ nonisolated struct IPCThreadInfo: Encodable, Sendable {
         self.tmuxSession = thread.tmuxSessionNames.first ?? ""
         self.agentType = thread.selectedAgentType?.rawValue
         self.isMain = thread.isMain
+        self.taskDescription = thread.taskDescription
     }
 
     init(thread: MagentThread, projectName: String, sectionName: String?, tabs: [IPCTabInfo], status: IPCThreadStatus? = nil) {
@@ -93,6 +95,7 @@ nonisolated struct IPCThreadInfo: Encodable, Sendable {
         self.tmuxSession = thread.tmuxSessionNames.first ?? ""
         self.agentType = thread.selectedAgentType?.rawValue
         self.isMain = thread.isMain
+        self.taskDescription = thread.taskDescription
         self.sectionName = sectionName
         self.sectionId = thread.sectionId?.uuidString
         self.tabs = tabs

@@ -382,6 +382,104 @@ extension ThreadManager {
         }
     }
 
+    // MARK: - Task Description
+
+    private static let descPrefix = "DESC:"
+
+    private func sanitizeDescription(_ raw: String) -> String? {
+        guard let prefixRange = raw.range(of: Self.descPrefix) else { return nil }
+        let afterPrefix = raw[prefixRange.upperBound...]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !afterPrefix.isEmpty, afterPrefix.uppercased() != "EMPTY" else { return nil }
+
+        // Take first line only
+        let line = afterPrefix.components(separatedBy: .newlines).first ?? afterPrefix
+
+        // Strip quotes and backticks
+        var desc = line
+            .replacingOccurrences(of: "`", with: "")
+            .replacingOccurrences(of: "\"", with: "")
+            .replacingOccurrences(of: "'", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Enforce max length
+        if desc.count > 50 {
+            desc = String(desc.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Validate: 2–50 chars, must contain at least one letter
+        guard desc.count >= 2 else { return nil }
+        guard desc.contains(where: { $0.isLetter }) else { return nil }
+
+        return desc
+    }
+
+    private func generateTaskDescription(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> String? {
+        let truncated = String(prompt.prefix(500))
+        let aiPrompt = """
+            Generate a very short human-readable task description (2-5 words, Title Case) for this task. \
+            Output ONLY the prefix DESC: followed by the description. No quotes, no explanation. \
+            Output DESC: EMPTY for pure knowledge questions with no implied action. \
+            Example: "Fix auth bug in login" → DESC: Fix Auth Login Bug \
+            Example: "Add dark mode support" → DESC: Add Dark Mode Support \
+            Example: "How does the auth system work?" → DESC: EMPTY
+            Task: \(truncated)
+            """
+
+        let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
+        let command: String
+        switch agentType {
+        case .codex:
+            command = "codex exec \(escapedPrompt) --model o4-mini --ephemeral"
+        default:
+            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence"
+        }
+
+        let result: String? = await withTaskGroup(of: String?.self) { group in
+            group.addTask {
+                let result = await ShellExecutor.execute(command)
+                guard result.exitCode == 0 else { return nil }
+                return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+
+        guard let raw = result, !raw.isEmpty else { return nil }
+        return sanitizeDescription(raw)
+    }
+
+    func generateTaskDescriptionIfNeeded(threadId: UUID, prompt: String) async {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        let thread = threads[index]
+
+        guard !thread.isMain else { return }
+        guard thread.taskDescription == nil else { return }
+
+        let agentOrder = slugGenerationAgentOrder(preferred: thread.selectedAgentType, projectId: thread.projectId)
+        guard !agentOrder.allTrackable.isEmpty, !agentOrder.available.isEmpty else { return }
+
+        for candidateAgent in agentOrder.available {
+            if let desc = await generateTaskDescription(from: prompt, agentType: candidateAgent, projectId: thread.projectId) {
+                // Re-check index — thread array may have changed during async work
+                guard let currentIndex = threads.firstIndex(where: { $0.id == threadId }) else { return }
+                threads[currentIndex].taskDescription = desc
+                try? persistence.saveThreads(threads)
+                await MainActor.run {
+                    delegate?.threadManager(self, didUpdateThreads: threads)
+                }
+                return
+            }
+        }
+    }
+
     // MARK: - Rename Tab
 
     func renameTab(threadId: UUID, sessionName: String, newDisplayName: String) async throws {

@@ -3,6 +3,7 @@ import Cocoa
 final class ThreadCell: NSTableCellView {
 
     private var prLabel: NSTextField?
+    private var subtitleLabel: NSTextField?
     private var jiraImageView: NSImageView?
     private(set) var inlineDirtyDot: NSImageView?
     private var pinImageView: NSImageView?
@@ -27,6 +28,7 @@ final class ThreadCell: NSTableCellView {
     }
 
     /// Reparents imageView and textField into a horizontal stack with a dirty dot in between.
+    /// Also creates a subtitle label below the text field for task description.
     /// Safe to call multiple times — only runs once.
     func ensureLeadingStack() {
         guard inlineDirtyDot == nil, let iv = imageView, let tf = textField else { return }
@@ -42,6 +44,18 @@ final class ThreadCell: NSTableCellView {
         ])
         inlineDirtyDot = dot
 
+        // Create subtitle label
+        let subtitle = NSTextField(labelWithString: "")
+        subtitle.translatesAutoresizingMaskIntoConstraints = false
+        subtitle.font = .systemFont(ofSize: 10)
+        subtitle.textColor = .secondaryLabelColor
+        subtitle.lineBreakMode = .byTruncatingTail
+        subtitle.maximumNumberOfLines = 1
+        subtitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        subtitle.setContentHuggingPriority(.defaultHigh, for: .vertical)
+        subtitle.isHidden = true
+        subtitleLabel = subtitle
+
         // Remove existing constraints and reparent into a stack
         iv.removeFromSuperview()
         tf.removeFromSuperview()
@@ -52,7 +66,14 @@ final class ThreadCell: NSTableCellView {
         ])
         tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let stack = NSStackView(views: [iv, dot, tf])
+        // Wrap textField and subtitleLabel in a vertical stack
+        let verticalStack = NSStackView(views: [tf, subtitle])
+        verticalStack.orientation = .vertical
+        verticalStack.alignment = .leading
+        verticalStack.spacing = 1
+        verticalStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: [iv, dot, verticalStack])
         stack.orientation = .horizontal
         stack.spacing = 4
         stack.alignment = .centerY
@@ -196,14 +217,7 @@ final class ThreadCell: NSTableCellView {
             textField?.textColor = .labelColor
         }
 
-        // Show worktree directory name on hover when it differs from thread name
-        let worktreeDirName = (thread.worktreePath as NSString).lastPathComponent
-        if !thread.isMain, worktreeDirName != thread.name {
-            toolTip = "Worktree: \(worktreeDirName)"
-        } else {
-            toolTip = nil
-        }
-
+        toolTip = nil
 
         imageView?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
         imageView?.contentTintColor = thread.hasUnreadAgentCompletion
@@ -213,14 +227,32 @@ final class ThreadCell: NSTableCellView {
         ensureTrailingStack()
         ensureLeadingStack()
 
-        if let pr = thread.pullRequestInfo {
-            prLabel?.stringValue = pr.displayLabel
-            prLabel?.toolTip = pr.displayLabel
-            prLabel?.isHidden = false
+        // PR info now shown in subtitle — hide trailing PR label
+        prLabel?.stringValue = ""
+        prLabel?.toolTip = nil
+        prLabel?.isHidden = true
+
+        // Build subtitle: taskDescription · worktreeDirName · PR #123
+        if !thread.isMain {
+            var parts: [String] = []
+            if let desc = thread.taskDescription, !desc.isEmpty {
+                parts.append(desc)
+            }
+            let worktreeDirName = (thread.worktreePath as NSString).lastPathComponent
+            if worktreeDirName != thread.name {
+                parts.append(worktreeDirName)
+            }
+            if let pr = thread.pullRequestInfo {
+                parts.append(pr.displayLabel)
+            }
+            if parts.isEmpty {
+                subtitleLabel?.isHidden = true
+            } else {
+                subtitleLabel?.stringValue = parts.joined(separator: "  ·  ")
+                subtitleLabel?.isHidden = false
+            }
         } else {
-            prLabel?.stringValue = ""
-            prLabel?.toolTip = nil
-            prLabel?.isHidden = true
+            subtitleLabel?.isHidden = true
         }
 
         if thread.jiraTicketKey != nil {
@@ -329,6 +361,7 @@ final class ThreadCell: NSTableCellView {
 
         ensureTrailingStack()
         ensureLeadingStack()
+        subtitleLabel?.isHidden = true
         pinImageView?.isHidden = true
         archiveButton?.isHidden = true
 

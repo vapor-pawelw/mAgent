@@ -48,6 +48,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var baseBranch: String?
     var displayOrder: Int
     var jiraTicketKey: String?
+    var taskDescription: String?
 
     // Transient (not persisted) — tracks which agent sessions are currently working
     var busySessions: Set<String> = []
@@ -141,6 +142,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case baseBranch
         case displayOrder
         case jiraTicketKey
+        case taskDescription
     }
 
     init(
@@ -167,7 +169,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         customTabNames: [String: String] = [:],
         baseBranch: String? = nil,
         displayOrder: Int = 0,
-        jiraTicketKey: String? = nil
+        jiraTicketKey: String? = nil,
+        taskDescription: String? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -193,6 +196,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.baseBranch = baseBranch
         self.displayOrder = displayOrder
         self.jiraTicketKey = jiraTicketKey
+        self.taskDescription = taskDescription
     }
 
     init(from decoder: Decoder) throws {
@@ -220,6 +224,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         baseBranch = try container.decodeIfPresent(String.self, forKey: .baseBranch)
         displayOrder = try container.decodeIfPresent(Int.self, forKey: .displayOrder) ?? 0
         jiraTicketKey = try container.decodeIfPresent(String.self, forKey: .jiraTicketKey)
+        taskDescription = try container.decodeIfPresent(String.self, forKey: .taskDescription)
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -260,6 +265,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encodeIfPresent(baseBranch, forKey: .baseBranch)
         try container.encode(displayOrder, forKey: .displayOrder)
         try container.encodeIfPresent(jiraTicketKey, forKey: .jiraTicketKey)
+        try container.encodeIfPresent(taskDescription, forKey: .taskDescription)
     }
 }
 
