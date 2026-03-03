@@ -21,6 +21,16 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     public var onSubmitLine: ((String) -> Void)?
 
     private var currentInputLine = ""
+    private static let supportedDropTypes: [NSPasteboard.PasteboardType] = [
+        .fileURL,
+        .URL,
+        .png,
+        .tiff,
+        .string,
+    ]
+    private static let shellPathUnescapedCharset = CharacterSet(
+        charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._/:"
+    )
 
     override public var acceptsFirstResponder: Bool { true }
 
@@ -29,6 +39,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         self.command = command
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         wantsLayer = true
+        registerForDraggedTypes(Self.supportedDropTypes)
     }
 
     @available(*, unavailable)
@@ -205,10 +216,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             // directly to the PTY, bypassing keyDown per-character events, so
             // currentInputLine would otherwise miss it.
             if let pasted = NSPasteboard.general.string(forType: .string) {
-                currentInputLine.append(pasted)
-                if currentInputLine.count > 600 {
-                    currentInputLine = String(currentInputLine.suffix(600))
-                }
+                appendToCurrentInputLine(pasted)
             }
             keyDown(with: event)
             return true
@@ -586,5 +594,132 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         scrollMods |= momentum << 1
 
         ghostty_surface_mouse_scroll(surface, x, y, ghostty_input_scroll_mods_t(scrollMods))
+    }
+
+    // MARK: - Drag and Drop
+
+    override public func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        canHandleDrop(sender.draggingPasteboard) ? .copy : []
+    }
+
+    override public func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        canHandleDrop(sender.draggingPasteboard) ? .copy : []
+    }
+
+    override public func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        canHandleDrop(sender.draggingPasteboard)
+    }
+
+    override public func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        window?.makeFirstResponder(self)
+        return handleDrop(sender.draggingPasteboard)
+    }
+
+    private func canHandleDrop(_ pasteboard: NSPasteboard) -> Bool {
+        !droppedFileURLs(from: pasteboard).isEmpty
+            || hasDroppedImagePayload(in: pasteboard)
+            || (pasteboard.string(forType: .string)?.isEmpty == false)
+    }
+
+    private func handleDrop(_ pasteboard: NSPasteboard) -> Bool {
+        let fileURLs = droppedFileURLs(from: pasteboard)
+        if !fileURLs.isEmpty {
+            let text = fileURLs
+                .map(\.path)
+                .map(Self.shellEscapePathForPaste)
+                .joined(separator: "\n") + "\n"
+            return pasteDroppedText(text)
+        }
+
+        if let imageURL = droppedImageTemporaryURL(from: pasteboard) {
+            return pasteDroppedText(Self.shellEscapePathForPaste(imageURL.path) + "\n")
+        }
+
+        if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            return pasteDroppedText(text)
+        }
+
+        return false
+    }
+
+    private func droppedFileURLs(from pasteboard: NSPasteboard) -> [URL] {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [
+            .urlReadingFileURLsOnly: true,
+        ]
+        let objects = pasteboard.readObjects(forClasses: [NSURL.self], options: options) ?? []
+        return objects
+            .compactMap { $0 as? NSURL }
+            .map { $0 as URL }
+            .filter(\.isFileURL)
+    }
+
+    private func hasDroppedImagePayload(in pasteboard: NSPasteboard) -> Bool {
+        if pasteboard.canReadObject(forClasses: [NSImage.self], options: nil) {
+            return true
+        }
+        return pasteboard.availableType(from: [.png, .tiff]) != nil
+    }
+
+    private func droppedImageTemporaryURL(from pasteboard: NSPasteboard) -> URL? {
+        guard let image = NSImage(pasteboard: pasteboard),
+              let tiffData = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmap.representation(using: .png, properties: [:]) else {
+            return nil
+        }
+
+        let fileManager = FileManager.default
+        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("magent-dropped-images", isDirectory: true)
+
+        do {
+            try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        } catch {
+            GhosttyAppManager.log("drop image: failed to create temp dir: \(error)")
+            return nil
+        }
+
+        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
+        let suffix = String(UUID().uuidString.prefix(8))
+        let url = tempDir.appendingPathComponent("dropped-image-\(timestamp)-\(suffix).png")
+
+        do {
+            try pngData.write(to: url, options: .atomic)
+            return url
+        } catch {
+            GhosttyAppManager.log("drop image: failed to write temp image: \(error)")
+            return nil
+        }
+    }
+
+    private func pasteDroppedText(_ text: String) -> Bool {
+        guard let surface, !text.isEmpty else { return false }
+
+        appendToCurrentInputLine(text)
+        if GhosttyAppManager.shared.pasteText(text, on: surface) {
+            return true
+        }
+
+        text.withCString { ptr in
+            ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
+        }
+        return true
+    }
+
+    private func appendToCurrentInputLine(_ text: String) {
+        currentInputLine.append(text)
+        if currentInputLine.count > 600 {
+            currentInputLine = String(currentInputLine.suffix(600))
+        }
+    }
+
+    private static func shellEscapePathForPaste(_ path: String) -> String {
+        guard !path.isEmpty else { return "''" }
+
+        if path.unicodeScalars.allSatisfy({ shellPathUnescapedCharset.contains($0) }) {
+            return path
+        }
+
+        return "'" + path.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
 }
