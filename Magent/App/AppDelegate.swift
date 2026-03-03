@@ -16,15 +16,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             NSLog("[CRASH] Stack: %@", exception.callStackSymbols.joined(separator: "\n"))
         }
 
-        // Enforce single instance — activate existing and terminate this one
+        // Enforce single instance — activate existing and terminate this one.
+        // This avoids "already running" modal interruptions when a notification
+        // tap triggers an app-open attempt while Magent is already running.
         let runningInstances = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier!)
         if let existing = runningInstances.first(where: { $0 != .current }) {
-            existing.activate()
-            let alert = NSAlert()
-            alert.messageText = "Magent is already running"
-            alert.informativeText = "Only one instance of Magent can run at a time. The existing window has been brought to front."
-            alert.alertStyle = .informational
-            alert.runModal()
+            _ = existing.activate(options: [.activateAllWindows])
             NSApp.terminate(nil)
             return
         }
@@ -131,7 +128,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         // Bring existing window to front
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.mainWindow?.makeKeyAndOrderFront(nil)
+        let window = NSApp.mainWindow
+            ?? NSApp.keyWindow
+            ?? NSApp.windows.first(where: { $0.canBecomeKey && !$0.isMiniaturized })
+            ?? NSApp.windows.first
+        window?.makeKeyAndOrderFront(nil)
 
         // Navigate to the thread/tab that triggered this notification
         if let threadIdString = userInfo["threadId"] as? String,
