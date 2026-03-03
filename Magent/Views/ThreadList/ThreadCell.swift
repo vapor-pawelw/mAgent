@@ -82,7 +82,7 @@ final class ThreadCell: NSTableCellView {
 
         let stack = NSStackView(views: [iv, verticalStack])
         stack.orientation = .horizontal
-        stack.spacing = 4
+        stack.spacing = 6
         stack.alignment = .centerY
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
@@ -257,6 +257,7 @@ final class ThreadCell: NSTableCellView {
         if hasDescription, let description = trimmedDescription {
             textField?.stringValue = description
             textField?.maximumNumberOfLines = 2
+            textField?.lineBreakMode = .byWordWrapping
             subtitleLabel?.stringValue = fullSecondaryLine
             subtitleLabel?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
             subtitleLabel?.isHidden = false
@@ -273,8 +274,8 @@ final class ThreadCell: NSTableCellView {
             subtitleLabel?.stringValue = secondaryLineParts.joined(separator: "  ·  ")
             subtitleLabel?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
             subtitleLabel?.isHidden = false
-            setDirtyDot(primaryDirtyDot, visible: thread.isDirty)
-            setDirtyDot(secondaryDirtyDot, visible: false)
+            setDirtyDot(primaryDirtyDot, visible: false)
+            setDirtyDot(secondaryDirtyDot, visible: thread.isDirty)
         } else {
             var singleLineParts = [resolvedBranchName]
             if let pr = thread.pullRequestInfo {
