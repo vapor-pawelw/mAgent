@@ -233,14 +233,16 @@ final class ThreadCell: NSTableCellView {
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
         let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
-        var branchLineParts = [resolvedBranchName]
-        if worktreeName != resolvedBranchName {
-            branchLineParts.append(worktreeName)
+        let hasBranchWorktreeMismatch = worktreeName != resolvedBranchName
+
+        var fullSecondaryLineParts = [resolvedBranchName]
+        if hasBranchWorktreeMismatch {
+            fullSecondaryLineParts.append(worktreeName)
         }
         if let pr = thread.pullRequestInfo {
-            branchLineParts.append(pr.displayLabel)
+            fullSecondaryLineParts.append(pr.displayLabel)
         }
-        let branchLine = branchLineParts.joined(separator: "  ·  ")
+        let fullSecondaryLine = fullSecondaryLineParts.joined(separator: "  ·  ")
 
         let trimmedDescription = thread.taskDescription?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -255,13 +257,30 @@ final class ThreadCell: NSTableCellView {
         if hasDescription, let description = trimmedDescription {
             textField?.stringValue = description
             textField?.maximumNumberOfLines = 2
-            subtitleLabel?.stringValue = branchLine
+            subtitleLabel?.stringValue = fullSecondaryLine
             subtitleLabel?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
             subtitleLabel?.isHidden = false
             setDirtyDot(primaryDirtyDot, visible: false)
             setDirtyDot(secondaryDirtyDot, visible: thread.isDirty)
+        } else if hasBranchWorktreeMismatch {
+            textField?.stringValue = resolvedBranchName
+            textField?.maximumNumberOfLines = 1
+
+            var secondaryLineParts = [worktreeName]
+            if let pr = thread.pullRequestInfo {
+                secondaryLineParts.append(pr.displayLabel)
+            }
+            subtitleLabel?.stringValue = secondaryLineParts.joined(separator: "  ·  ")
+            subtitleLabel?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
+            subtitleLabel?.isHidden = false
+            setDirtyDot(primaryDirtyDot, visible: thread.isDirty)
+            setDirtyDot(secondaryDirtyDot, visible: false)
         } else {
-            textField?.stringValue = branchLine
+            var singleLineParts = [resolvedBranchName]
+            if let pr = thread.pullRequestInfo {
+                singleLineParts.append(pr.displayLabel)
+            }
+            textField?.stringValue = singleLineParts.joined(separator: "  ·  ")
             textField?.maximumNumberOfLines = 1
             subtitleLabel?.isHidden = true
             setDirtyDot(primaryDirtyDot, visible: thread.isDirty)
@@ -495,16 +514,20 @@ final class ThreadCell: NSTableCellView {
         prLabel: String?,
         statuses: [String]
     ) -> String {
-        let resolvedDescription = description?.isEmpty == false ? description! : "None"
         let resolvedPR = prLabel ?? "None"
         let resolvedStatuses = statuses.isEmpty ? "None" : statuses.joined(separator: ", ")
-        return """
-        Description: \(resolvedDescription)
-        Branch: \(branchName)
-        Worktree: \(worktreeName)
-        PR: \(resolvedPR)
-        Status: \(resolvedStatuses)
-        """
+
+        var lines: [String] = []
+        if let description, !description.isEmpty {
+            lines.append(description)
+            lines.append("")
+        }
+        lines.append("Branch: \(branchName)")
+        lines.append("Worktree: \(worktreeName)")
+        lines.append("PR: \(resolvedPR)")
+        lines.append("")
+        lines.append("Status: \(resolvedStatuses)")
+        return lines.joined(separator: "\n")
     }
 
     private func rateLimitTooltip(for thread: MagentThread) -> String {

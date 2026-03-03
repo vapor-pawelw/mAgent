@@ -137,7 +137,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 return 26
             }
             let hasDescription = !(thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-            return hasDescription ? 46 : 26
+            let worktreeName = (thread.worktreePath as NSString).lastPathComponent
+            let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
+            let hasBranchWorktreeMismatch = worktreeName != resolvedBranchName
+            return (hasDescription || hasBranchWorktreeMismatch) ? 46 : 26
         }
         return 26
     }
