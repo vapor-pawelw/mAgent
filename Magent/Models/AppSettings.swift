@@ -25,6 +25,8 @@ nonisolated struct AppSettings: Codable, Sendable {
     var reviewPrompt: String
     var jiraSiteURL: String
     var enableRateLimitDetection: Bool
+    var playSoundOnRateLimitDetected: Bool
+    var rateLimitDetectedSoundName: String
     var notifyOnRateLimitLifted: Bool
     var rateLimitLiftedSoundName: String
 
@@ -50,6 +52,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         reviewPrompt: String = AppSettings.defaultReviewPrompt,
         jiraSiteURL: String = "",
         enableRateLimitDetection: Bool = true,
+        playSoundOnRateLimitDetected: Bool = true,
+        rateLimitDetectedSoundName: String = "Sosumi",
         notifyOnRateLimitLifted: Bool = true,
         rateLimitLiftedSoundName: String = "Glass"
     ) {
@@ -74,6 +78,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.reviewPrompt = reviewPrompt
         self.jiraSiteURL = jiraSiteURL
         self.enableRateLimitDetection = enableRateLimitDetection
+        self.playSoundOnRateLimitDetected = playSoundOnRateLimitDetected
+        self.rateLimitDetectedSoundName = rateLimitDetectedSoundName
         self.notifyOnRateLimitLifted = notifyOnRateLimitLifted
         self.rateLimitLiftedSoundName = rateLimitLiftedSoundName
     }
@@ -103,6 +109,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         reviewPrompt = try container.decodeIfPresent(String.self, forKey: .reviewPrompt) ?? Self.defaultReviewPrompt
         jiraSiteURL = try container.decodeIfPresent(String.self, forKey: .jiraSiteURL) ?? ""
         enableRateLimitDetection = try container.decodeIfPresent(Bool.self, forKey: .enableRateLimitDetection) ?? true
+        playSoundOnRateLimitDetected = try container.decodeIfPresent(Bool.self, forKey: .playSoundOnRateLimitDetected) ?? true
+        rateLimitDetectedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitDetectedSoundName) ?? "Sosumi"
         notifyOnRateLimitLifted = try container.decodeIfPresent(Bool.self, forKey: .notifyOnRateLimitLifted) ?? true
         rateLimitLiftedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitLiftedSoundName) ?? "Glass"
     }
@@ -130,6 +138,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(reviewPrompt, forKey: .reviewPrompt)
         try container.encode(jiraSiteURL, forKey: .jiraSiteURL)
         try container.encode(enableRateLimitDetection, forKey: .enableRateLimitDetection)
+        try container.encode(playSoundOnRateLimitDetected, forKey: .playSoundOnRateLimitDetected)
+        try container.encode(rateLimitDetectedSoundName, forKey: .rateLimitDetectedSoundName)
         try container.encode(notifyOnRateLimitLifted, forKey: .notifyOnRateLimitLifted)
         try container.encode(rateLimitLiftedSoundName, forKey: .rateLimitLiftedSoundName)
     }
@@ -230,6 +240,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         case reviewPrompt
         case jiraSiteURL
         case enableRateLimitDetection
+        case playSoundOnRateLimitDetected
+        case rateLimitDetectedSoundName
         case notifyOnRateLimitLifted
         case rateLimitLiftedSoundName
 

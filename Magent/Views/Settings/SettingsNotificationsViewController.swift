@@ -15,6 +15,9 @@ final class SettingsNotificationsViewController: NSViewController {
     private var rateLimitNotifyCheckbox: NSButton!
     private var rateLimitSoundPickerPopup: NSPopUpButton!
     private var rateLimitSoundPickerRow: NSStackView!
+    private var rateLimitDetectedSoundCheckbox: NSButton!
+    private var rateLimitDetectedSoundPickerPopup: NSPopUpButton!
+    private var rateLimitDetectedSoundPickerRow: NSStackView!
     private var appActiveObserver: NSObjectProtocol?
     private var soundPreviewPlayer: NSSound?
 
@@ -134,7 +137,7 @@ final class SettingsNotificationsViewController: NSViewController {
         // --- Rate Limits card ---
         let (rlCard, rlStack) = createSectionCard(
             title: "Rate Limits",
-            description: "When rate limit tracking is enabled, Magent can notify you when the countdown reaches zero and the agent is ready to use again."
+            description: "When rate limit tracking is enabled, Magent can notify you when the countdown reaches zero and the agent is ready to use again. Requires \"Track agent rate limits\" in Settings > Agents."
         )
         rateLimitCard = rlCard
 
@@ -166,6 +169,35 @@ final class SettingsNotificationsViewController: NSViewController {
         rateLimitSoundPickerRow.isHidden = !settings.notifyOnRateLimitLifted
         rateLimitSoundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
         rlStack.addArrangedSubview(rateLimitSoundPickerRow)
+
+        rateLimitDetectedSoundCheckbox = NSButton(
+            checkboxWithTitle: "Play sound when rate limit is detected",
+            target: self,
+            action: #selector(rateLimitDetectedSoundToggled)
+        )
+        rateLimitDetectedSoundCheckbox.state = settings.playSoundOnRateLimitDetected ? .on : .off
+        rlStack.addArrangedSubview(rateLimitDetectedSoundCheckbox)
+
+        rateLimitDetectedSoundPickerRow = NSStackView()
+        rateLimitDetectedSoundPickerRow.orientation = .horizontal
+        rateLimitDetectedSoundPickerRow.alignment = .centerY
+        rateLimitDetectedSoundPickerRow.spacing = 8
+
+        let rateLimitDetectedSoundLabel = NSTextField(labelWithString: "Sound:")
+        rateLimitDetectedSoundLabel.font = .systemFont(ofSize: 12)
+        rateLimitDetectedSoundPickerRow.addArrangedSubview(rateLimitDetectedSoundLabel)
+
+        rateLimitDetectedSoundPickerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        rateLimitDetectedSoundPickerPopup.controlSize = .small
+        rateLimitDetectedSoundPickerPopup.font = .systemFont(ofSize: 12)
+        rateLimitDetectedSoundPickerPopup.target = self
+        rateLimitDetectedSoundPickerPopup.action = #selector(rateLimitDetectedSoundPickerChanged)
+        populateRateLimitDetectedSoundPicker()
+        rateLimitDetectedSoundPickerRow.addArrangedSubview(rateLimitDetectedSoundPickerPopup)
+
+        rateLimitDetectedSoundPickerRow.isHidden = !settings.playSoundOnRateLimitDetected
+        rateLimitDetectedSoundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
+        rlStack.addArrangedSubview(rateLimitDetectedSoundPickerRow)
 
         stackView.addArrangedSubview(rlCard)
 
@@ -280,9 +312,32 @@ final class SettingsNotificationsViewController: NSViewController {
         }
     }
 
+    private func populateRateLimitDetectedSoundPicker() {
+        rateLimitDetectedSoundPickerPopup.removeAllItems()
+        let soundNames = Self.systemSoundNames()
+        for name in soundNames {
+            rateLimitDetectedSoundPickerPopup.addItem(withTitle: name)
+        }
+        if let index = soundNames.firstIndex(of: settings.rateLimitDetectedSoundName) {
+            rateLimitDetectedSoundPickerPopup.selectItem(at: index)
+        }
+    }
+
     @objc private func rateLimitSoundPickerChanged() {
         guard let selectedName = rateLimitSoundPickerPopup.selectedItem?.title else { return }
         settings.rateLimitLiftedSoundName = selectedName
+        try? persistence.saveSettings(settings)
+
+        soundPreviewPlayer?.stop()
+        if let sound = NSSound(named: NSSound.Name(selectedName)) {
+            soundPreviewPlayer = sound
+            sound.play()
+        }
+    }
+
+    @objc private func rateLimitDetectedSoundPickerChanged() {
+        guard let selectedName = rateLimitDetectedSoundPickerPopup.selectedItem?.title else { return }
+        settings.rateLimitDetectedSoundName = selectedName
         try? persistence.saveSettings(settings)
 
         soundPreviewPlayer?.stop()
@@ -296,6 +351,16 @@ final class SettingsNotificationsViewController: NSViewController {
         settings.notifyOnRateLimitLifted = rateLimitNotifyCheckbox.state == .on
         rateLimitSoundPickerRow.isHidden = !settings.notifyOnRateLimitLifted
         if !settings.notifyOnRateLimitLifted {
+            soundPreviewPlayer?.stop()
+            soundPreviewPlayer = nil
+        }
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func rateLimitDetectedSoundToggled() {
+        settings.playSoundOnRateLimitDetected = rateLimitDetectedSoundCheckbox.state == .on
+        rateLimitDetectedSoundPickerRow.isHidden = !settings.playSoundOnRateLimitDetected
+        if !settings.playSoundOnRateLimitDetected {
             soundPreviewPlayer?.stop()
             soundPreviewPlayer = nil
         }
@@ -354,6 +419,8 @@ final class SettingsNotificationsViewController: NSViewController {
                 self.autoReorderOnCompletionCheckbox.isEnabled = authorized
                 self.rateLimitNotifyCheckbox.isEnabled = authorized
                 self.rateLimitSoundPickerPopup.isEnabled = authorized
+                self.rateLimitDetectedSoundCheckbox.isEnabled = authorized && self.settings.enableRateLimitDetection
+                self.rateLimitDetectedSoundPickerPopup.isEnabled = authorized && self.settings.enableRateLimitDetection
             }
         }
     }

@@ -103,6 +103,7 @@ extension ThreadManager {
         let now = Date()
         var changedThreadIds = Set<UUID>()
         var didChangeGlobalCache = pruneExpiredGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds)
+        var newlyDetectedAgents = Set<AgentType>()
 
         // Lazy-load persisted rate-limit caches on first use.
         ensureRateLimitCachesLoaded()
@@ -220,9 +221,13 @@ extension ThreadManager {
                     updatedRateLimits[sessionName] = info
                     changedThreadIds.insert(threadId)
                 }
+                let hadActiveGlobalRateLimit = activeGlobalRateLimit(for: sessionAgent, now: now) != nil
                 if globalAgentRateLimits[sessionAgent] != info {
                     globalAgentRateLimits[sessionAgent] = info
                     didChangeGlobalCache = true
+                }
+                if !hadActiveGlobalRateLimit {
+                    newlyDetectedAgents.insert(sessionAgent)
                 }
             }
 
@@ -255,6 +260,7 @@ extension ThreadManager {
         if didChangeGlobalCache {
             lastPublishedRateLimitSummary = nil
         }
+        playRateLimitDetectedSound(for: newlyDetectedAgents)
         await publishRateLimitSummaryIfNeeded()
 
         // Persist fingerprint cache if it changed.
@@ -314,6 +320,23 @@ extension ThreadManager {
         }
 
         let soundName = settings.rateLimitLiftedSoundName
+        DispatchQueue.main.async {
+            if let sound = NSSound(named: NSSound.Name(soundName)) {
+                sound.play()
+            } else {
+                NSSound.beep()
+            }
+        }
+    }
+
+    private func playRateLimitDetectedSound(for agents: Set<AgentType>) {
+        guard !agents.isEmpty else { return }
+
+        let settings = persistence.loadSettings()
+        guard settings.enableRateLimitDetection else { return }
+        guard settings.playSoundOnRateLimitDetected else { return }
+
+        let soundName = settings.rateLimitDetectedSoundName
         DispatchQueue.main.async {
             if let sound = NSSound(named: NSSound.Name(soundName)) {
                 sound.play()
