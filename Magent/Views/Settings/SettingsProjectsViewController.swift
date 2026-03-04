@@ -17,6 +17,7 @@ final class SettingsProjectsViewController: NSViewController {
     var defaultBranchField: NSTextField!
     var agentTypePopup: NSPopUpButton!
     var terminalInjectionTextView: NSTextView!
+    var preAgentInjectionTextView: NSTextView!
     var agentContextTextView: NSTextView!
     var slugPromptCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
