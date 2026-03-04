@@ -10,15 +10,15 @@ nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
     var symbolName: String {
         switch self {
         case .feature:
-            return "sparkles"
+            return "star.fill"
         case .fix:
-            return "wrench.and.screwdriver"
+            return "ladybug.fill"
         case .refactor:
             return "arrow.triangle.branch"
         case .test:
-            return "checkmark.seal"
+            return "checkmark.seal.fill"
         case .other:
-            return "circle.grid.2x2"
+            return "square.grid.2x2.fill"
         }
     }
 
