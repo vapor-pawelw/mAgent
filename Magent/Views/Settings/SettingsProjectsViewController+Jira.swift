@@ -100,7 +100,7 @@ extension SettingsProjectsViewController {
 
                 // Update sections card UI
                 sectionsModePopup?.selectItem(at: 1)
-                sectionsContentStack?.isHidden = false
+                updateSectionsVisibilityControls(for: settings.projects[index])
                 sectionsTableView?.reloadData()
                 refreshDefaultSectionPopup(for: settings.projects[index])
 
@@ -159,7 +159,7 @@ extension SettingsProjectsViewController {
 
                     // Update sections card UI
                     sectionsModePopup?.selectItem(at: 1)
-                    sectionsContentStack?.isHidden = false
+                    updateSectionsVisibilityControls(for: settings.projects[index])
                     sectionsTableView?.reloadData()
                     refreshDefaultSectionPopup(for: settings.projects[index])
 

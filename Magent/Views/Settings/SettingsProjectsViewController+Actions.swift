@@ -122,6 +122,8 @@ extension SettingsProjectsViewController {
             settings.projects[index].useThreadSectionsOverride = nil
         }
         try? persistence.saveSettings(settings)
+        updateSectionsVisibilityControls(for: settings.projects[index])
+        refreshDefaultSectionPopup(for: settings.projects[index])
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
