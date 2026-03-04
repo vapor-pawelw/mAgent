@@ -3,10 +3,11 @@ import Cocoa
 final class AppCoordinator {
 
     private static let mainWindowAutosaveName = NSWindow.FrameAutosaveName("MagentMainWindow")
-    private static let minVisibleArea: CGFloat = 12_000
+    private static let offScreenRecoveryDelay: TimeInterval = 1.0
 
     private var window: NSWindow?
     private let persistence = PersistenceService.shared
+    private var pendingOffScreenRecovery: DispatchWorkItem?
 
     func start() {
         let settings = persistence.loadSettings()
@@ -104,9 +105,29 @@ final class AppCoordinator {
         guard !visibleFrames.isEmpty else { return }
 
         let currentFrame = window.frame
-        if hasEnoughVisibleArea(for: currentFrame, visibleFrames: visibleFrames) {
+        if !isCompletelyOffScreen(currentFrame, visibleFrames: visibleFrames) {
+            pendingOffScreenRecovery?.cancel()
+            pendingOffScreenRecovery = nil
             return
         }
+
+        // Display topology can still be settling right after launch/activation.
+        // Re-check after a short delay before moving the window.
+        pendingOffScreenRecovery?.cancel()
+        let recoveryWorkItem = DispatchWorkItem { [weak self, weak window] in
+            guard let self, let window else { return }
+            self.recoverOffScreenWindowIfNeeded(window)
+        }
+        pendingOffScreenRecovery = recoveryWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.offScreenRecoveryDelay, execute: recoveryWorkItem)
+    }
+
+    private func recoverOffScreenWindowIfNeeded(_ window: NSWindow) {
+        let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+        guard !visibleFrames.isEmpty else { return }
+
+        let currentFrame = window.frame
+        guard isCompletelyOffScreen(currentFrame, visibleFrames: visibleFrames) else { return }
 
         let targetVisibleFrame = preferredVisibleFrame(for: currentFrame, visibleFrames: visibleFrames)
         var adjustedFrame = currentFrame
@@ -126,10 +147,10 @@ final class AppCoordinator {
         window.setFrame(adjustedFrame, display: true)
     }
 
-    private func hasEnoughVisibleArea(for frame: NSRect, visibleFrames: [NSRect]) -> Bool {
-        visibleFrames.contains {
+    private func isCompletelyOffScreen(_ frame: NSRect, visibleFrames: [NSRect]) -> Bool {
+        !visibleFrames.contains {
             let intersection = frame.intersection($0)
-            return !intersection.isNull && intersection.width * intersection.height >= Self.minVisibleArea
+            return !intersection.isNull && intersection.area > 0
         }
     }
 
