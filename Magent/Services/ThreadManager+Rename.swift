@@ -497,6 +497,11 @@ extension ThreadManager {
         return normalized
     }
 
+    private func capitalizeFirstCharacter(_ value: String) -> String {
+        guard let first = value.first else { return value }
+        return String(first).uppercased() + value.dropFirst()
+    }
+
     private func valueAfterFirstPrefix(in raw: String, prefixes: [String]) -> String? {
         let matches = prefixes.compactMap { raw.range(of: $0, options: .caseInsensitive) }
         guard let firstMatch = matches.min(by: { $0.lowerBound < $1.lowerBound }) else { return nil }
@@ -619,19 +624,20 @@ extension ThreadManager {
         }
 
         guard let description = normalizeTaskDescription(normalizedLine) else { return nil }
+        let capitalizedDescription = capitalizeFirstCharacter(description)
         let suggestedType = valueAfterFirstPrefix(in: raw, prefixes: [Self.workTypePrefix, Self.iconPrefix])
         let suggestedIcon = confidentGeneratedIcon(
             suggestedIcon: normalizeGeneratedWorkType(suggestedType),
             prompt: prompt,
-            description: description
+            description: capitalizedDescription
         )
-        return GeneratedTaskDescription(description: description, suggestedIcon: suggestedIcon)
+        return GeneratedTaskDescription(description: capitalizedDescription, suggestedIcon: suggestedIcon)
     }
 
     private func generateTaskDescription(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> GeneratedTaskDescription? {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
-            Generate a short task description (2-8 words) in natural casing. \
+            Generate a short task description (2-8 words) in natural casing, with the first letter uppercase. \
             Also output one icon type: feature, fix, refactor, test, or other. \
             If not sure, return other. \
             Output exactly: \
