@@ -458,8 +458,34 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
                     let tf = NSTextField(labelWithString: "")
                     tf.translatesAutoresizingMaskIntoConstraints = false
-                    c.addSubview(tf)
                     c.textField = tf
+                    tf.lineBreakMode = .byTruncatingTail
+                    tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+                    let badgeContainer = NSView()
+                    badgeContainer.identifier = Self.sectionCountBadgeContainerIdentifier
+                    badgeContainer.translatesAutoresizingMaskIntoConstraints = false
+                    badgeContainer.wantsLayer = true
+                    badgeContainer.layer?.cornerRadius = 8
+                    badgeContainer.layer?.masksToBounds = true
+                    c.addSubview(badgeContainer)
+
+                    let badgeLabel = NSTextField(labelWithString: "")
+                    badgeLabel.identifier = Self.sectionCountBadgeLabelIdentifier
+                    badgeLabel.translatesAutoresizingMaskIntoConstraints = false
+                    badgeLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+                    badgeLabel.alignment = .center
+                    badgeLabel.lineBreakMode = .byClipping
+                    badgeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+                    badgeContainer.addSubview(badgeLabel)
+
+                    let nameStack = NSStackView(views: [tf, badgeContainer])
+                    nameStack.translatesAutoresizingMaskIntoConstraints = false
+                    nameStack.orientation = .horizontal
+                    nameStack.alignment = .centerY
+                    nameStack.spacing = 6
+                    nameStack.detachesHiddenViews = true
+                    c.addSubview(nameStack)
 
                     let disclosureButton = NSButton()
                     disclosureButton.identifier = Self.sectionDisclosureButtonIdentifier
@@ -481,9 +507,14 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         iv.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         iv.widthAnchor.constraint(equalToConstant: 8),
                         iv.heightAnchor.constraint(equalToConstant: 8),
-                        tf.leadingAnchor.constraint(equalTo: iv.trailingAnchor, constant: 6),
-                        tf.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
-                        tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        nameStack.leadingAnchor.constraint(equalTo: iv.trailingAnchor, constant: 6),
+                        nameStack.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
+                        nameStack.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        badgeContainer.heightAnchor.constraint(equalToConstant: 16),
+                        badgeContainer.widthAnchor.constraint(greaterThanOrEqualToConstant: 16),
+                        badgeLabel.leadingAnchor.constraint(equalTo: badgeContainer.leadingAnchor, constant: 5),
+                        badgeLabel.trailingAnchor.constraint(equalTo: badgeContainer.trailingAnchor, constant: -5),
+                        badgeLabel.centerYAnchor.constraint(equalTo: badgeContainer.centerYAnchor),
                         disclosureButton.trailingAnchor.constraint(
                             equalTo: c.trailingAnchor,
                             constant: -Self.projectDisclosureTrailingInset
@@ -499,6 +530,20 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.textField?.font = .systemFont(ofSize: 11, weight: .semibold)
             cell.textField?.textColor = NSColor(resource: .textSecondary)
             cell.imageView?.image = colorDotImage(color: section.color, size: 8)
+            let threadCount = section.threads.count
+            if let badgeContainer = cell.subviews.first(where: { $0.identifier == Self.sectionCountBadgeContainerIdentifier }) {
+                badgeContainer.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.18).cgColor
+                badgeContainer.isHidden = threadCount == 0
+                badgeContainer.toolTip = threadCount > 0 ? "\(threadCount) threads in \(section.name)" : nil
+            }
+            if let badgeLabel = cell
+                .subviews
+                .first(where: { $0.identifier == Self.sectionCountBadgeContainerIdentifier })?
+                .subviews
+                .first(where: { $0.identifier == Self.sectionCountBadgeLabelIdentifier }) as? NSTextField {
+                badgeLabel.stringValue = "\(threadCount)"
+                badgeLabel.textColor = NSColor.controlAccentColor
+            }
             if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.sectionDisclosureButtonIdentifier }) as? NSButton {
                 disclosureButton.objectValue = sectionCollapseStorageKey(section)
                 updateSectionDisclosureButton(disclosureButton, isExpanded: !isSectionCollapsed(section))
