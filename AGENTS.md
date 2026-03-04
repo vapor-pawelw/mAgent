@@ -60,6 +60,7 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 - **Session rename/migration must re-key transient session state**: When tmux session names change (rename, migration, external reconciliation), always re-key/prune transient per-session sets (`busySessions`, `waitingForInputSessions`, notification dedupe state) so thread-level busy/waiting indicators cannot get stuck on stale session names.
 - **Tuist**: Run `mise x -- tuist generate --no-open` after adding/removing Swift files.
 - **Build bootstrap (Codex)**: If `mise` trust/toolchain issues appear, run: `mise trust && mise install && mise x -- tuist install && mise x -- tuist generate --no-open && mise x -- tuist build Magent`.
+- **Changelog discipline for `main`**: Every user-facing addition merged to `main` must be evaluated for `CHANGELOG.md` inclusion. Follow `docs/releasing.md` changelog guidelines: include only features/fixes/performance items, write user-facing outcomes (no technical internals), and order by impact (largest/broadest first, niche/smaller last).
 
 ## Releasing
 

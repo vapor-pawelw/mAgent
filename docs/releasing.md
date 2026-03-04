@@ -34,3 +34,18 @@ This triggers a GitHub Actions workflow that:
 3. Auto-updates the Homebrew cask formula with the new version and SHA
 
 Commits on `main` without a tag do **not** produce a release.
+
+## Changelog Guidelines
+
+When updating `CHANGELOG.md` for a release or pre-release notes:
+
+1. Base notes on user-visible changes since the previous release tag.
+2. Include only:
+   - New features
+   - Bug fixes
+   - Performance improvements
+3. Omit implementation details, internal refactors, tooling-only changes, and infrastructure-only updates.
+4. Order entries by user impact:
+   - Put broad/high-impact features first and describe them at a higher level.
+   - Keep niche or smaller items shorter and place them near the end.
+5. Use user-facing wording focused on outcomes, not code internals.
