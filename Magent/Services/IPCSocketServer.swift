@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v14"
+    private static let cliVersion = "magent-cli-v15"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -225,7 +225,13 @@ actor IPCSocketServer {
 
             picker_choice=""
             if can_use_fzf; then
-                picker_selected=$(awk -F '\037' '{printf "%s\t%s\n", $2, $1}' "$picker_tmp" \
+                picker_selected=$(awk -F '\037' '{
+                    label = $2
+                    if (NF >= 3 && $3 != "") {
+                        label = label "  |  " $3
+                    }
+                    printf "%s\t%s\n", label, $1
+                }' "$picker_tmp" \
                     | env -u FZF_DEFAULT_OPTS -u FZF_DEFAULT_COMMAND fzf --prompt="$picker_prompt> " --height=40% --layout=reverse --border)
                 picker_status=$?
                 if [ "$picker_status" -eq 0 ]; then
@@ -234,7 +240,13 @@ actor IPCSocketServer {
             fi
 
             if [ -z "$picker_choice" ] && ! can_use_fzf; then
-                awk -F '\037' '{printf "%3d) %s\n", NR, $2}' "$picker_tmp" >/dev/tty
+                awk -F '\037' '{
+                    printf "%3d) %s\n", NR, $2
+                    if (NF >= 3 && $3 != "") {
+                        printf "     %s\n", $3
+                    }
+                    printf "\n"
+                }' "$picker_tmp" >/dev/tty
                 printf '%s> ' "$picker_prompt" >/dev/tty
                 IFS= read -r picker_idx </dev/tty || picker_idx=""
                 case "$picker_idx" in
@@ -263,7 +275,7 @@ actor IPCSocketServer {
 
         pick_project() {
             project_resp=$(send_checked_request "{$(json_kv command list-projects)}")
-            project_lines=$(printf '%s' "$project_resp" | jq -r '.projects | sort_by(.name)[] | "\(.name)\u001f\(.name)  \(.repoPath)"')
+            project_lines=$(printf '%s' "$project_resp" | jq -r '.projects | sort_by(.name)[] | "\(.name)\u001f\(.name)\u001f\(.repoPath)"')
             [ -n "$project_lines" ] || die "No projects configured."
             printf '%s\n' "$project_lines" | pick_value "Project"
         }
@@ -272,11 +284,26 @@ actor IPCSocketServer {
             project_name="$1"
             thread_req="{$(json_kv command list-threads),$(json_kv project "$project_name")}"
             thread_resp=$(send_checked_request "$thread_req")
-            thread_lines=$(printf '%s' "$thread_resp" | jq -r '.threads | sort_by((if .isMain then 0 else 1 end), .name)[] | "\(.id)\u001f\(.name)\(if (.taskDescription // "") != "" then " — " + .taskDescription else "" end)  [\(.agentType // "terminal")]  \(.tmuxSession)"')
+            thread_lines=$(printf '%s' "$thread_resp" | jq -r '
+                .threads
+                | sort_by((if .isMain then 0 else 1 end), .name)
+                | .[]
+                | . as $t
+                | (if $t.isMain then "main" else (if ($t.taskDescription // "") != "" then $t.taskDescription else $t.name end) end) as $title
+                | (($t.name) + " · " + (($t.worktreePath | split("/") | last)) + " · " + ($t.agentType // "terminal")) as $detail
+                | "\($t.id)\u001f\($title)\u001f\($detail)"
+            ')
             if [ -n "$thread_lines" ]; then
-                { printf '__create__%s+ Create thread\n' "$SEP"; printf '%s\n' "$thread_lines"; } | pick_value "Thread"
+                {
+                    printf '__back__%s← Back%sReturn to project list\n' "$SEP" "$SEP"
+                    printf '__create__%s+ Create thread%sPick agent/terminal and attach\n' "$SEP" "$SEP"
+                    printf '%s\n' "$thread_lines"
+                } | pick_value "Thread"
             else
-                printf '__create__%s+ Create thread\n' "$SEP" | pick_value "Thread"
+                {
+                    printf '__back__%s← Back%sReturn to project list\n' "$SEP" "$SEP"
+                    printf '__create__%s+ Create thread%sPick agent/terminal and attach\n' "$SEP" "$SEP"
+                } | pick_value "Thread"
             fi
         }
 
@@ -287,13 +314,11 @@ actor IPCSocketServer {
             tab_count=$(printf '%s' "$tab_resp" | jq -r '.tabs | length')
             [ "$tab_count" -gt 0 ] || die "Thread has no tabs."
 
-            if [ "$tab_count" -eq 1 ]; then
-                printf '%s' "$tab_resp" | jq -r '.tabs[0].sessionName'
-                return 0
-            fi
-
-            tab_lines=$(printf '%s' "$tab_resp" | jq -r '.tabs | sort_by(.index)[] | "\(.sessionName)\u001f#\(.index) · \((if .isAgent then (.agentType // "agent") else "terminal" end)) · \(.sessionName)"')
-            printf '%s\n' "$tab_lines" | pick_value "Tab"
+            tab_lines=$(printf '%s' "$tab_resp" | jq -r '.tabs | sort_by(.index)[] | "\(.sessionName)\u001fTab #\(.index)\u001f\((if .isAgent then (.agentType // "agent") else "terminal" end)) · \(.sessionName)"')
+            {
+                printf '__back__%s← Back%sReturn to thread list\n' "$SEP" "$SEP"
+                printf '%s\n' "$tab_lines"
+            } | pick_value "Tab"
         }
 
         interactive_create_thread() {
@@ -302,8 +327,10 @@ actor IPCSocketServer {
         claude${SEP}Claude
         codex${SEP}Codex
         custom${SEP}Custom
-        terminal${SEP}Terminal"
+        terminal${SEP}Terminal
+        __back__${SEP}← Back"
             create_mode=$(printf '%s\n' "$create_mode_lines" | pick_value "Thread Type") || return 1
+            [ "$create_mode" = "__back__" ] && return 2
 
             create_req="{$(json_kv command create-thread),$(json_kv project "$create_project")"
             if [ "$create_mode" != "default" ]; then
@@ -319,18 +346,42 @@ actor IPCSocketServer {
 
         run_interactive() {
             interactive_project="$1"
-            if [ -z "$interactive_project" ]; then
-                interactive_project=$(pick_project) || exit 1
-            fi
+            interactive_fixed_project=0
+            [ -n "$interactive_project" ] && interactive_fixed_project=1
 
-            interactive_pick=$(pick_thread_or_create "$interactive_project") || exit 1
-            if [ "$interactive_pick" = "__create__" ]; then
-                interactive_create_thread "$interactive_project"
-                return
-            fi
+            while :; do
+                if [ -z "$interactive_project" ]; then
+                    interactive_project=$(pick_project) || exit 1
+                fi
 
-            interactive_session=$(pick_tab_session "$interactive_pick") || exit 1
-            attach_tmux_session "$interactive_session"
+                interactive_pick=$(pick_thread_or_create "$interactive_project") || exit 1
+
+                if [ "$interactive_pick" = "__back__" ]; then
+                    if [ "$interactive_fixed_project" -eq 1 ]; then
+                        continue
+                    fi
+                    interactive_project=""
+                    continue
+                fi
+
+                if [ "$interactive_pick" = "__create__" ]; then
+                    interactive_create_thread "$interactive_project"
+                    create_status=$?
+                    if [ "$create_status" -eq 2 ]; then
+                        continue
+                    fi
+                    return "$create_status"
+                fi
+
+                while :; do
+                    interactive_session=$(pick_tab_session "$interactive_pick") || exit 1
+                    if [ "$interactive_session" = "__back__" ]; then
+                        break
+                    fi
+                    attach_tmux_session "$interactive_session"
+                    return
+                done
+            done
         }
 
         run_ls() {
