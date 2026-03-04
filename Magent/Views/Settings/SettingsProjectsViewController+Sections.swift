@@ -4,6 +4,14 @@ extension SettingsProjectsViewController {
 
     // MARK: - Sections Mode
 
+    func updateSectionsVisibilityControls(for project: Project) {
+        let sectionsEnabled = settings.shouldUseThreadSections(for: project.id)
+        defaultSectionContainer?.isHidden = !sectionsEnabled
+        sectionsOverridesStack?.isHidden = !sectionsEnabled
+        jiraSectionsSyncControlsStack?.isHidden = !sectionsEnabled
+        sectionsContentStack?.isHidden = !sectionsEnabled || project.threadSections == nil
+    }
+
     @objc func sectionsModeChanged() {
         guard let index = selectedProjectIndex else { return }
         let isCustom = sectionsModePopup.indexOfSelectedItem == 1
@@ -18,7 +26,7 @@ extension SettingsProjectsViewController {
         }
 
         try? persistence.saveSettings(settings)
-        sectionsContentStack.isHidden = !isCustom
+        updateSectionsVisibilityControls(for: settings.projects[index])
         sectionsTableView?.reloadData()
         refreshDefaultSectionPopup(for: settings.projects[index])
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)

@@ -119,12 +119,6 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         return rowView
     }
 
-    private func shouldShowTopSeparator(for project: SidebarProject) -> Bool {
-        guard sidebarProjects.count > 1 else { return false }
-        guard let index = sidebarProjects.firstIndex(where: { $0.projectId == project.projectId }) else { return false }
-        return index > 0
-    }
-
     private enum ProjectHeaderHitArea {
         case name
         case disclosure
@@ -199,6 +193,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if outlineView.parent(forItem: thread) is SidebarSection {
             return -Self.outlineIndentationPerLevel
         }
+        if outlineView.parent(forItem: thread) is SidebarProject {
+            return -Self.outlineIndentationPerLevel
+        }
         return 0
     }
 
@@ -263,8 +260,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
-        if let project = item as? SidebarProject {
-            return shouldShowTopSeparator(for: project) ? 60 : 34
+        if item is SidebarProject {
+            return 48
         }
         if item is SidebarSection {
             return 28
@@ -376,17 +373,14 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     tf.setContentCompressionResistancePriority(.required, for: .horizontal)
 
                     NSLayoutConstraint.activate([
-                        separator.topAnchor.constraint(equalTo: c.topAnchor, constant: 16),
-                        separator.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: -Self.outlineIndentationPerLevel + 12),
-                        separator.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
-                        separator.heightAnchor.constraint(equalToConstant: 1),
-                        tf.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -8),
-                        tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
+                        separator.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset + 2),
+                        separator.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        separator.widthAnchor.constraint(equalToConstant: 2),
+                        separator.heightAnchor.constraint(equalTo: tf.heightAnchor, constant: 4),
+                        tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        tf.leadingAnchor.constraint(equalTo: separator.trailingAnchor, constant: 8),
                         disclosureButton.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 4),
-                        disclosureButton.centerYAnchor.constraint(
-                            equalTo: tf.lastBaselineAnchor,
-                            constant: Self.projectHeaderDisclosureCenterToBaselineOffset
-                        ),
+                        disclosureButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor, constant: 1),
                         disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         disclosureButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         iv.leadingAnchor.constraint(equalTo: disclosureButton.trailingAnchor, constant: 6),
@@ -395,6 +389,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         iv.heightAnchor.constraint(equalToConstant: 10),
                         iv.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -6),
                         addButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
+                        addButton.topAnchor.constraint(greaterThanOrEqualTo: c.topAnchor, constant: 16),
+                        addButton.bottomAnchor.constraint(lessThanOrEqualTo: c.bottomAnchor, constant: -16),
                         addButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         addButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         addButton.trailingAnchor.constraint(
@@ -411,8 +407,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.textField?.invalidateIntrinsicContentSize()
             cell.textField?.textColor = NSColor(resource: .textSecondary)
             if let separator = cell.subviews.first(where: { $0.identifier == Self.projectSeparatorIdentifier }) {
-                separator.layer?.backgroundColor = NSColor.tertiaryLabelColor.cgColor
-                separator.isHidden = !shouldShowTopSeparator(for: project)
+                separator.layer?.backgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.45).cgColor
+                separator.isHidden = false
             }
             if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.projectDisclosureButtonIdentifier }) as? NSButton {
                 let hasChildren = !project.children.isEmpty

@@ -27,9 +27,11 @@ final class SettingsProjectsViewController: NSViewController {
     var threadListLayoutPopup: NSPopUpButton!
 
     // Default section
+    var defaultSectionContainer: NSStackView!
     var defaultSectionPopup: NSPopUpButton!
 
     // Sections management
+    var sectionsOverridesStack: NSStackView!
     var sectionsModePopup: NSPopUpButton!
     var sectionsContentStack: NSStackView!
     var sectionsTableView: NSTableView!
@@ -47,6 +49,7 @@ final class SettingsProjectsViewController: NSViewController {
     var jiraAssigneeField: NSTextField!
     var jiraSyncButton: NSButton!
     var jiraAutoSyncCheckbox: NSButton!
+    var jiraSectionsSyncControlsStack: NSStackView!
     var jiraBoards: [JiraBoard] = []
 
     var selectedProjectIndex: Int? {

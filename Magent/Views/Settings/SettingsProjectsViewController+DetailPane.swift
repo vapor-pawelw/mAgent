@@ -101,27 +101,61 @@ extension SettingsProjectsViewController {
         detailsStack.addArrangedSubview(defaultBranchField)
 
         // Default Section popup
+        defaultSectionContainer = NSStackView()
+        defaultSectionContainer.orientation = .vertical
+        defaultSectionContainer.alignment = .leading
+        defaultSectionContainer.spacing = 4
+        detailsStack.addArrangedSubview(defaultSectionContainer)
+
         let defaultSectionHeader = NSTextField(labelWithString: "Default Section")
         defaultSectionHeader.font = .systemFont(ofSize: 12, weight: .semibold)
-        detailsStack.addArrangedSubview(defaultSectionHeader)
+        defaultSectionContainer.addArrangedSubview(defaultSectionHeader)
 
         let defaultSectionDesc = NSTextField(wrappingLabelWithString: "Section for new threads without an explicit section. \"Inherit global\" uses the global default.")
         defaultSectionDesc.font = .systemFont(ofSize: 11)
         defaultSectionDesc.textColor = NSColor(resource: .textSecondary)
-        detailsStack.addArrangedSubview(defaultSectionDesc)
+        defaultSectionContainer.addArrangedSubview(defaultSectionDesc)
 
         defaultSectionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         defaultSectionPopup.target = self
         defaultSectionPopup.action = #selector(defaultSectionChanged)
         refreshDefaultSectionPopup(for: project)
-        detailsStack.addArrangedSubview(defaultSectionPopup)
+        defaultSectionContainer.addArrangedSubview(defaultSectionPopup)
 
         // Sections card
         let (sectionsCard, sectionsStack) = createSectionCard(title: "Sections")
 
-        let sectionsModeLabel = NSTextField(labelWithString: "Mode")
+        let sectionsVisibilityLabel = NSTextField(labelWithString: "Visibility")
+        sectionsVisibilityLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        sectionsStack.addArrangedSubview(sectionsVisibilityLabel)
+
+        threadListLayoutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        let globalLayoutName = settings.useThreadSections ? "Enabled" : "Disabled"
+        threadListLayoutPopup.addItem(withTitle: "Use App Default (\(globalLayoutName))")
+        threadListLayoutPopup.addItem(withTitle: "Always Enabled")
+        threadListLayoutPopup.addItem(withTitle: "Always Disabled")
+        switch project.useThreadSectionsOverride {
+        case .some(true):
+            threadListLayoutPopup.selectItem(at: 1)
+        case .some(false):
+            threadListLayoutPopup.selectItem(at: 2)
+        case .none:
+            threadListLayoutPopup.selectItem(at: 0)
+        }
+        threadListLayoutPopup.target = self
+        threadListLayoutPopup.action = #selector(threadListLayoutOverrideChanged)
+        sectionsStack.addArrangedSubview(threadListLayoutPopup)
+
+        sectionsOverridesStack = NSStackView()
+        sectionsOverridesStack.orientation = .vertical
+        sectionsOverridesStack.alignment = .leading
+        sectionsOverridesStack.spacing = 8
+        sectionsOverridesStack.translatesAutoresizingMaskIntoConstraints = false
+        sectionsStack.addArrangedSubview(sectionsOverridesStack)
+
+        let sectionsModeLabel = NSTextField(labelWithString: "Section Source")
         sectionsModeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        sectionsStack.addArrangedSubview(sectionsModeLabel)
+        sectionsOverridesStack.addArrangedSubview(sectionsModeLabel)
 
         sectionsModePopup = NSPopUpButton(frame: .zero, pullsDown: false)
         sectionsModePopup.addItem(withTitle: "Use Global Sections")
@@ -129,7 +163,7 @@ extension SettingsProjectsViewController {
         sectionsModePopup.selectItem(at: project.threadSections != nil ? 1 : 0)
         sectionsModePopup.target = self
         sectionsModePopup.action = #selector(sectionsModeChanged)
-        sectionsStack.addArrangedSubview(sectionsModePopup)
+        sectionsOverridesStack.addArrangedSubview(sectionsModePopup)
 
         sectionsContentStack = NSStackView()
         sectionsContentStack.orientation = .vertical
@@ -163,7 +197,7 @@ extension SettingsProjectsViewController {
         sectionsContentStack.addArrangedSubview(addSectionBtn)
 
         sectionsContentStack.translatesAutoresizingMaskIntoConstraints = false
-        sectionsStack.addArrangedSubview(sectionsContentStack)
+        sectionsOverridesStack.addArrangedSubview(sectionsContentStack)
 
         stack.addArrangedSubview(sectionsCard)
 
@@ -229,15 +263,22 @@ extension SettingsProjectsViewController {
         jiraAssigneeField.action = #selector(jiraAssigneeChanged)
         jiraStack.addArrangedSubview(jiraAssigneeField)
 
+        jiraSectionsSyncControlsStack = NSStackView()
+        jiraSectionsSyncControlsStack.orientation = .vertical
+        jiraSectionsSyncControlsStack.alignment = .leading
+        jiraSectionsSyncControlsStack.spacing = 4
+        jiraSectionsSyncControlsStack.translatesAutoresizingMaskIntoConstraints = false
+        jiraStack.addArrangedSubview(jiraSectionsSyncControlsStack)
+
         // Sync Sections button
         jiraSyncButton = NSButton(title: "Sync Sections from Jira", target: self, action: #selector(syncSectionsFromJiraTapped))
         jiraSyncButton.bezelStyle = .rounded
-        jiraStack.addArrangedSubview(jiraSyncButton)
+        jiraSectionsSyncControlsStack.addArrangedSubview(jiraSyncButton)
 
         let syncDesc = NSTextField(wrappingLabelWithString: "Fetches statuses from project tickets and replaces this project's sections to match.")
         syncDesc.font = .systemFont(ofSize: 11)
         syncDesc.textColor = NSColor(resource: .textSecondary)
-        jiraStack.addArrangedSubview(syncDesc)
+        jiraSectionsSyncControlsStack.addArrangedSubview(syncDesc)
 
         // Auto-sync checkbox
         jiraAutoSyncCheckbox = NSButton(
@@ -246,12 +287,13 @@ extension SettingsProjectsViewController {
             action: #selector(jiraAutoSyncToggled)
         )
         jiraAutoSyncCheckbox.state = project.jiraSyncEnabled ? .on : .off
-        jiraStack.addArrangedSubview(jiraAutoSyncCheckbox)
+        jiraSectionsSyncControlsStack.addArrangedSubview(jiraAutoSyncCheckbox)
 
         let autoSyncDesc = NSTextField(wrappingLabelWithString: "Polls Jira and moves threads to matching sections. Creates threads for new tickets.")
         autoSyncDesc.font = .systemFont(ofSize: 11)
         autoSyncDesc.textColor = NSColor(resource: .textSecondary)
-        jiraStack.addArrangedSubview(autoSyncDesc)
+        jiraSectionsSyncControlsStack.addArrangedSubview(autoSyncDesc)
+        updateSectionsVisibilityControls(for: project)
 
         let (overridesCard, overridesStack) = createSectionCard(title: "Project Overrides")
         stack.addArrangedSubview(overridesCard)
@@ -262,28 +304,6 @@ extension SettingsProjectsViewController {
         overrideDesc.font = .systemFont(ofSize: 11)
         overrideDesc.textColor = NSColor(resource: .textSecondary)
         overridesStack.addArrangedSubview(overrideDesc)
-
-        // Thread list layout override
-        let layoutHeader = NSTextField(labelWithString: "Thread List Layout")
-        layoutHeader.font = .systemFont(ofSize: 12, weight: .semibold)
-        overridesStack.addArrangedSubview(layoutHeader)
-
-        threadListLayoutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        let globalLayoutName = settings.useThreadSections ? "Sectioned" : "Flat"
-        threadListLayoutPopup.addItem(withTitle: "Use Default (\(globalLayoutName))")
-        threadListLayoutPopup.addItem(withTitle: "Sectioned")
-        threadListLayoutPopup.addItem(withTitle: "Flat")
-        switch project.useThreadSectionsOverride {
-        case .some(true):
-            threadListLayoutPopup.selectItem(at: 1)
-        case .some(false):
-            threadListLayoutPopup.selectItem(at: 2)
-        case .none:
-            threadListLayoutPopup.selectItem(at: 0)
-        }
-        threadListLayoutPopup.target = self
-        threadListLayoutPopup.action = #selector(threadListLayoutOverrideChanged)
-        overridesStack.addArrangedSubview(threadListLayoutPopup)
 
         // Agent type override
         let agentTypeHeader = NSTextField(labelWithString: "Default Agent")
@@ -422,21 +442,25 @@ extension SettingsProjectsViewController {
             sectionsCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
             sectionsScrollView.widthAnchor.constraint(equalTo: sectionsContentStack.widthAnchor),
             sectionsScrollView.heightAnchor.constraint(equalToConstant: 140),
-            sectionsContentStack.widthAnchor.constraint(equalTo: sectionsStack.widthAnchor),
+            sectionsContentStack.widthAnchor.constraint(equalTo: sectionsOverridesStack.widthAnchor),
             jiraCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
             overridesCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
             nameField.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
             repoRow.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
             wtRow.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
             defaultBranchField.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
-            defaultSectionDesc.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
-            defaultSectionPopup.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
+            defaultSectionContainer.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
+            defaultSectionDesc.widthAnchor.constraint(equalTo: defaultSectionContainer.widthAnchor),
+            defaultSectionPopup.widthAnchor.constraint(equalTo: defaultSectionContainer.widthAnchor),
+            threadListLayoutPopup.widthAnchor.constraint(equalTo: sectionsStack.widthAnchor),
             jiraProjectKeyField.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
             boardRow.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
             jiraAssigneeField.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
-            syncDesc.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
-            autoSyncDesc.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+            jiraSectionsSyncControlsStack.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+            syncDesc.widthAnchor.constraint(equalTo: jiraSectionsSyncControlsStack.widthAnchor),
+            autoSyncDesc.widthAnchor.constraint(equalTo: jiraSectionsSyncControlsStack.widthAnchor),
             overrideDesc.widthAnchor.constraint(equalTo: overridesStack.widthAnchor),
+            sectionsOverridesStack.widthAnchor.constraint(equalTo: sectionsStack.widthAnchor),
             slugPromptWrapper.widthAnchor.constraint(equalTo: overridesStack.widthAnchor),
             slugScrollView.widthAnchor.constraint(equalTo: slugPromptWrapper.widthAnchor),
         ])
