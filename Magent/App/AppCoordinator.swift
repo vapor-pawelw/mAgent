@@ -2,6 +2,9 @@ import Cocoa
 
 final class AppCoordinator {
 
+    private static let mainWindowAutosaveName = NSWindow.FrameAutosaveName("MagentMainWindow")
+    private static let minVisibleArea: CGFloat = 12_000
+
     private var window: NSWindow?
     private let persistence = PersistenceService.shared
 
@@ -30,8 +33,11 @@ final class AppCoordinator {
 
         // This saves/restores the window frame across launches.
         // On first launch (no saved frame), it uses the contentRect above.
-        window.setFrameAutosaveName("MagentMainWindow")
-        window.center()
+        let restoredFrame = window.setFrameAutosaveName(Self.mainWindowAutosaveName)
+        if !restoredFrame {
+            window.center()
+        }
+        ensureWindowIsVisibleOnCurrentScreens(window)
         window.makeKeyAndOrderFront(nil)
         self.window = window
 
@@ -75,6 +81,13 @@ final class AppCoordinator {
         }
     }
 
+    func showMainWindow() {
+        guard let window else { return }
+        ensureWindowIsVisibleOnCurrentScreens(window)
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
     func presentConfiguration(over viewController: NSViewController) {
         let configVC = ConfigurationViewController()
         configVC.onComplete = {
@@ -84,5 +97,70 @@ final class AppCoordinator {
             }
         }
         viewController.presentAsSheet(configVC)
+    }
+
+    private func ensureWindowIsVisibleOnCurrentScreens(_ window: NSWindow) {
+        let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+        guard !visibleFrames.isEmpty else { return }
+
+        let currentFrame = window.frame
+        if hasEnoughVisibleArea(for: currentFrame, visibleFrames: visibleFrames) {
+            return
+        }
+
+        let targetVisibleFrame = preferredVisibleFrame(for: currentFrame, visibleFrames: visibleFrames)
+        var adjustedFrame = currentFrame
+        adjustedFrame.size.width = min(max(adjustedFrame.size.width, window.minSize.width), targetVisibleFrame.width)
+        adjustedFrame.size.height = min(max(adjustedFrame.size.height, window.minSize.height), targetVisibleFrame.height)
+        adjustedFrame.origin.x = clamp(
+            adjustedFrame.origin.x,
+            min: targetVisibleFrame.minX,
+            max: targetVisibleFrame.maxX - adjustedFrame.width
+        )
+        adjustedFrame.origin.y = clamp(
+            adjustedFrame.origin.y,
+            min: targetVisibleFrame.minY,
+            max: targetVisibleFrame.maxY - adjustedFrame.height
+        )
+
+        window.setFrame(adjustedFrame, display: true)
+    }
+
+    private func hasEnoughVisibleArea(for frame: NSRect, visibleFrames: [NSRect]) -> Bool {
+        visibleFrames.contains {
+            let intersection = frame.intersection($0)
+            return !intersection.isNull && intersection.width * intersection.height >= Self.minVisibleArea
+        }
+    }
+
+    private func preferredVisibleFrame(for frame: NSRect, visibleFrames: [NSRect]) -> NSRect {
+        if let containingFrame = visibleFrames.first(where: { $0.contains(frame.center) }) {
+            return containingFrame
+        }
+
+        let bestIntersection = visibleFrames.max {
+            frame.intersection($0).area < frame.intersection($1).area
+        }
+        if let bestIntersection, frame.intersection(bestIntersection).area > 0 {
+            return bestIntersection
+        }
+
+        return NSScreen.main?.visibleFrame ?? visibleFrames[0]
+    }
+
+    private func clamp(_ value: CGFloat, min minValue: CGFloat, max maxValue: CGFloat) -> CGFloat {
+        guard minValue <= maxValue else { return minValue }
+        return Swift.max(minValue, Swift.min(value, maxValue))
+    }
+}
+
+private extension NSRect {
+    var center: NSPoint {
+        NSPoint(x: midX, y: midY)
+    }
+
+    var area: CGFloat {
+        guard !isNull else { return 0 }
+        return width * height
     }
 }

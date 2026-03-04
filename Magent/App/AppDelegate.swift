@@ -55,6 +55,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func applicationDidBecomeActive(_ notification: Notification) {
         ThreadManager.shared.startSessionMonitor()
+        coordinator?.showMainWindow()
+    }
+
+    func applicationDidChangeScreenParameters(_ notification: Notification) {
+        coordinator?.showMainWindow()
     }
 
     func applicationWillResignActive(_ notification: Notification) {
@@ -67,6 +72,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        coordinator?.showMainWindow()
+        return true
     }
 
     private func setupMainMenu() {
@@ -127,12 +137,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let userInfo = response.notification.request.content.userInfo
 
         // Bring existing window to front
-        NSApp.activate(ignoringOtherApps: true)
-        let window = NSApp.mainWindow
-            ?? NSApp.keyWindow
-            ?? NSApp.windows.first(where: { $0.canBecomeKey && !$0.isMiniaturized })
-            ?? NSApp.windows.first
-        window?.makeKeyAndOrderFront(nil)
+        coordinator?.showMainWindow()
+        if coordinator == nil {
+            NSApp.activate(ignoringOtherApps: true)
+            let window = NSApp.mainWindow
+                ?? NSApp.keyWindow
+                ?? NSApp.windows.first(where: { $0.canBecomeKey && !$0.isMiniaturized })
+                ?? NSApp.windows.first
+            window?.makeKeyAndOrderFront(nil)
+        }
 
         // Navigate to the thread/tab that triggered this notification
         if let threadIdString = userInfo["threadId"] as? String,
