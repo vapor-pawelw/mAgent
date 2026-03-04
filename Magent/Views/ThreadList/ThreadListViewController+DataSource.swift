@@ -421,7 +421,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 addButton.image = plusImage ?? NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Thread")
                 addButton.contentTintColor = .controlAccentColor
                 addButton.objectValue = project.projectId.uuidString
-                addButton.toolTip = "Add thread to \(project.name)"
+                addButton.toolTip = "Add thread to \(project.name). Option-click to use project default (or Terminal if no agent is active)."
                 addButton.isEnabled = !isCreatingThread
             }
             if project.isPinned {

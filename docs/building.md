@@ -20,6 +20,23 @@ open Magent.xcworkspace
 xcodebuild build -workspace Magent.xcworkspace -scheme Magent -configuration Release
 ```
 
+## Rebuild + Relaunch (Debug)
+
+Use the helper script for local iteration. It always:
+- kills running `Magent` processes first (single-instance safe)
+- rebuilds the app
+- relaunches the newly built Debug app
+
+```bash
+./scripts/rebuild-and-relaunch.sh
+```
+
+Optional overrides:
+
+```bash
+MAGENT_SCHEME=Magent MAGENT_CONFIGURATION=Debug MAGENT_APP_NAME=Magent ./scripts/rebuild-and-relaunch.sh
+```
+
 ## First Run
 
 1. Launch mAgent

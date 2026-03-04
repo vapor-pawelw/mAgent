@@ -9,6 +9,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     private var customCheckbox: NSButton!
     private var defaultAgentSection: NSStackView!
     private var defaultAgentPopup: NSPopUpButton!
+    private var customAgentCard: NSView!
     private var customAgentSection: NSStackView!
     private var customAgentCommandTextView: NSTextView!
     private var skipPermissionsCheckbox: NSButton!
@@ -40,26 +41,19 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         let stackView = NSStackView()
         stackView.orientation = .vertical
         stackView.alignment = .leading
-        stackView.spacing = 20
+        stackView.spacing = 16
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
-        // Active Agents
-        let agentsSection = NSStackView()
-        agentsSection.orientation = .vertical
-        agentsSection.alignment = .leading
-        agentsSection.spacing = 6
-
-        let agentsLabel = NSTextField(labelWithString: "Active Agents")
-        agentsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        agentsSection.addArrangedSubview(agentsLabel)
-
-        let agentsDesc = NSTextField(
-            wrappingLabelWithString: "Enable agents that can be launched in new chats. If multiple are enabled, a default can be chosen."
+        let (selectionCard, selectionStack) = createSectionCard(
+            title: "Agent Selection",
+            description: "Enable agents that can be launched in new chats. If multiple are enabled, choose a default."
         )
-        agentsDesc.font = .systemFont(ofSize: 11)
-        agentsDesc.textColor = NSColor(resource: .textSecondary)
-        agentsSection.addArrangedSubview(agentsDesc)
+        stackView.addArrangedSubview(selectionCard)
+
+        let activeLabel = NSTextField(labelWithString: "Active Agents")
+        activeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        selectionStack.addArrangedSubview(activeLabel)
 
         claudeCheckbox = NSButton(checkboxWithTitle: AgentType.claude.displayName, target: self, action: #selector(activeAgentsChanged))
         codexCheckbox = NSButton(checkboxWithTitle: AgentType.codex.displayName, target: self, action: #selector(activeAgentsChanged))
@@ -70,15 +64,10 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         codexCheckbox.state = active.contains(.codex) ? .on : .off
         customCheckbox.state = active.contains(.custom) ? .on : .off
 
-        agentsSection.addArrangedSubview(claudeCheckbox)
-        agentsSection.addArrangedSubview(codexCheckbox)
-        agentsSection.addArrangedSubview(customCheckbox)
-
-        agentsSection.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(agentsSection)
-        NSLayoutConstraint.activate([
-            agentsSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
+        selectionStack.addArrangedSubview(claudeCheckbox)
+        selectionStack.addArrangedSubview(codexCheckbox)
+        selectionStack.addArrangedSubview(customCheckbox)
+        selectionStack.setCustomSpacing(10, after: customCheckbox)
 
         // Default Agent
         defaultAgentSection = NSStackView()
@@ -101,28 +90,19 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         defaultAgentSection.addArrangedSubview(defaultAgentPopup)
 
         defaultAgentSection.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(defaultAgentSection)
+        selectionStack.addArrangedSubview(defaultAgentSection)
         NSLayoutConstraint.activate([
-            defaultAgentSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            defaultAgentSection.widthAnchor.constraint(equalTo: selectionStack.widthAnchor),
+            defaultAgentPopup.widthAnchor.constraint(equalTo: defaultAgentSection.widthAnchor),
         ])
         refreshDefaultAgentSection()
 
         // Agent Permissions
-        let permissionsSection = NSStackView()
-        permissionsSection.orientation = .vertical
-        permissionsSection.alignment = .leading
-        permissionsSection.spacing = 6
-
-        let permissionsLabel = NSTextField(labelWithString: "Agent Permissions")
-        permissionsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        permissionsSection.addArrangedSubview(permissionsLabel)
-
-        let permissionsDesc = NSTextField(
-            wrappingLabelWithString: "Control how agents handle permissions and sandboxing. Only applies to Claude and Codex."
+        let (permissionsCard, permissionsSection) = createSectionCard(
+            title: "Agent Permissions",
+            description: "Control how agents handle permissions and sandboxing. Only applies to Claude and Codex."
         )
-        permissionsDesc.font = .systemFont(ofSize: 11)
-        permissionsDesc.textColor = NSColor(resource: .textSecondary)
-        permissionsSection.addArrangedSubview(permissionsDesc)
+        stackView.addArrangedSubview(permissionsCard)
 
         skipPermissionsCheckbox = NSButton(
             checkboxWithTitle: "Skip permission prompts",
@@ -180,28 +160,12 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         permissionsSection.addArrangedSubview(rateLimitDetectionCheckbox)
         permissionsSection.addArrangedSubview(rateLimitDesc)
 
-        permissionsSection.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(permissionsSection)
-        NSLayoutConstraint.activate([
-            permissionsSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
-
         // Full Disk Access
-        let fdaSection = NSStackView()
-        fdaSection.orientation = .vertical
-        fdaSection.alignment = .leading
-        fdaSection.spacing = 6
-
-        let fdaLabel = NSTextField(labelWithString: "Full Disk Access")
-        fdaLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        fdaSection.addArrangedSubview(fdaLabel)
-
-        let fdaDesc = NSTextField(
-            wrappingLabelWithString: "Grant Full Disk Access to Magent so agents can read and modify files outside the workspace (e.g. ~/.zshrc, ~/Library). Useful when agents need to inspect shell configs, install tools, or access protected directories. Without it, macOS may silently block file access."
+        let (fdaCard, fdaSection) = createSectionCard(
+            title: "Full Disk Access",
+            description: "Grant Full Disk Access to Magent so agents can read and modify files outside the workspace (e.g. ~/.zshrc, ~/Library). Useful when agents need to inspect shell configs, install tools, or access protected directories. Without it, macOS may silently block file access."
         )
-        fdaDesc.font = .systemFont(ofSize: 11)
-        fdaDesc.textColor = NSColor(resource: .textSecondary)
-        fdaSection.addArrangedSubview(fdaDesc)
+        stackView.addArrangedSubview(fdaCard)
 
         let fdaStatusRow = NSStackView()
         fdaStatusRow.orientation = .horizontal
@@ -219,10 +183,12 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
 
         fdaSection.addArrangedSubview(fdaStatusRow)
 
-        fdaSection.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(fdaSection)
         NSLayoutConstraint.activate([
-            fdaSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            defaultDesc.widthAnchor.constraint(equalTo: defaultAgentSection.widthAnchor),
+            skipDesc.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
+            sandboxDesc.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
+            ipcDesc.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
+            rateLimitDesc.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
         ])
 
         refreshFDAStatus()
@@ -235,26 +201,22 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         )
 
         // Custom Agent Command (only shown when Custom is active)
-        customAgentSection = NSStackView()
-        customAgentSection.orientation = .vertical
-        customAgentSection.alignment = .leading
-        customAgentSection.spacing = 4
-        customAgentSection.translatesAutoresizingMaskIntoConstraints = false
+        let (customCard, customStack) = createSectionCard(
+            title: "Custom Agent",
+            description: "Command used when the active agent is set to Custom."
+        )
+        customAgentCard = customCard
+        customAgentSection = customStack
 
-        customAgentCommandTextView = createSettingsSection(
-            in: customAgentSection,
+        customAgentCommandTextView = createTextEditorSection(
+            in: customStack,
             title: "Custom Agent Command",
             description: "Command used when the active agent is set to Custom.",
             value: settings.customAgentCommand,
-            font: .monospacedSystemFont(ofSize: 13, weight: .regular),
-            titleFontSize: 13,
-            delegate: self
+            font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
-        stackView.addArrangedSubview(customAgentSection)
-        NSLayoutConstraint.activate([
-            customAgentSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
-        customAgentSection.isHidden = !active.contains(.custom)
+        stackView.addArrangedSubview(customCard)
+        customCard.isHidden = !active.contains(.custom)
 
         // Document view wrapper
         let documentView = FlippedDocumentView()
@@ -276,6 +238,10 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
             stackView.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
 
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
+            selectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            permissionsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            fdaCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            customCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
     }
 
@@ -301,6 +267,101 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         contentScrollView.reflectScrolledClipView(clipView)
     }
 
+    private func createSectionCard(title: String, description: String? = nil) -> (container: NSView, content: NSStackView) {
+        let container = SettingsSectionCardView()
+
+        let content = NSStackView()
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 8
+        content.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(content)
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        content.addArrangedSubview(titleLabel)
+
+        if let description, !description.isEmpty {
+            let descriptionLabel = NSTextField(wrappingLabelWithString: description)
+            descriptionLabel.font = .systemFont(ofSize: 11)
+            descriptionLabel.textColor = NSColor(resource: .textSecondary)
+            content.addArrangedSubview(descriptionLabel)
+            content.setCustomSpacing(12, after: descriptionLabel)
+            NSLayoutConstraint.activate([
+                descriptionLabel.widthAnchor.constraint(equalTo: content.widthAnchor),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+        ])
+
+        return (container, content)
+    }
+
+    private func createTextEditorSection(
+        in stackView: NSStackView,
+        title: String,
+        description: String,
+        value: String,
+        font: NSFont
+    ) -> NSTextView {
+        let sectionStack = NSStackView()
+        sectionStack.orientation = .vertical
+        sectionStack.alignment = .leading
+        sectionStack.spacing = 4
+        sectionStack.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(sectionStack)
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        sectionStack.addArrangedSubview(titleLabel)
+
+        let descLabel = NSTextField(wrappingLabelWithString: description)
+        descLabel.font = .systemFont(ofSize: 11)
+        descLabel.textColor = NSColor(resource: .textSecondary)
+        sectionStack.addArrangedSubview(descLabel)
+        sectionStack.setCustomSpacing(8, after: descLabel)
+
+        let textView = NSTextView()
+        textView.font = font
+        textView.string = value
+        textView.isRichText = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.delegate = self
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainerInset = NSSize(width: 4, height: 4)
+
+        let textScrollView = NonCapturingScrollView()
+        textScrollView.documentView = textView
+        textScrollView.hasVerticalScroller = true
+        textScrollView.autohidesScrollers = true
+        textScrollView.borderType = .bezelBorder
+        textScrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        let lineHeight = font.ascender + abs(font.descender) + font.leading
+        let height = max(lineHeight * 3 + 12, 56)
+        let container = ResizableTextContainer(scrollView: textScrollView, minHeight: height)
+        sectionStack.addArrangedSubview(container)
+
+        NSLayoutConstraint.activate([
+            sectionStack.widthAnchor.constraint(equalTo: stackView.widthAnchor),
+            descLabel.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
+            container.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
+        ])
+
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+
+        return textView
+    }
+
 
     // MARK: - Actions
 
@@ -320,7 +381,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         }
 
         refreshDefaultAgentSection()
-        customAgentSection.isHidden = !active.contains(.custom)
+        customAgentCard.isHidden = !active.contains(.custom)
         try? persistence.saveSettings(settings)
     }
 

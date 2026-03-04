@@ -15,6 +15,18 @@ extension ThreadListViewController {
         }
 
         guard let project = projectFromProjectHeaderButton(sender) else { return }
+
+        let isOptionClick = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        if isOptionClick {
+            let useAgentCommand = threadManager.effectiveAgentType(for: project.id) != nil
+            createThread(
+                for: project,
+                requestedAgentType: nil,
+                useAgentCommand: useAgentCommand
+            )
+            return
+        }
+
         presentProjectAgentMenu(project: project, anchorView: sender)
     }
 

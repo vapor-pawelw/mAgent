@@ -34,46 +34,40 @@ final class SettingsJiraViewController: NSViewController {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 12
+        stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
-        // Title
-        let title = NSTextField(labelWithString: "Jira Integration")
-        title.font = .systemFont(ofSize: 16, weight: .semibold)
-        stack.addArrangedSubview(title)
+        let (statusCard, statusStack) = createSectionCard(
+            title: "Connection & Authentication",
+            description: "Use acli for Jira auth and connectivity checks."
+        )
+        stack.addArrangedSubview(statusCard)
 
-        // acli CLI section
         let acliHeader = NSTextField(labelWithString: "acli CLI")
-        acliHeader.font = .systemFont(ofSize: 13, weight: .semibold)
-        stack.addArrangedSubview(acliHeader)
+        acliHeader.font = .systemFont(ofSize: 12, weight: .semibold)
+        statusStack.addArrangedSubview(acliHeader)
 
         acliStatusLabel = NSTextField(labelWithString: "Checking...")
         acliStatusLabel.font = .systemFont(ofSize: 12)
         acliStatusLabel.textColor = NSColor(resource: .textSecondary)
-        stack.addArrangedSubview(acliStatusLabel)
+        statusStack.addArrangedSubview(acliStatusLabel)
+        statusStack.setCustomSpacing(10, after: acliStatusLabel)
 
-        // Separator
-        let sep1 = NSBox()
-        sep1.boxType = .separator
-        sep1.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(sep1)
-
-        // Authentication section
         let authHeader = NSTextField(labelWithString: "Authentication")
-        authHeader.font = .systemFont(ofSize: 13, weight: .semibold)
-        stack.addArrangedSubview(authHeader)
+        authHeader.font = .systemFont(ofSize: 12, weight: .semibold)
+        statusStack.addArrangedSubview(authHeader)
 
         authStatusLabel = NSTextField(labelWithString: "Checking...")
         authStatusLabel.font = .systemFont(ofSize: 12)
         authStatusLabel.textColor = NSColor(resource: .textSecondary)
-        stack.addArrangedSubview(authStatusLabel)
+        statusStack.addArrangedSubview(authStatusLabel)
 
         authDetailLabel = NSTextField(labelWithString: "")
         authDetailLabel.font = .systemFont(ofSize: 11)
         authDetailLabel.textColor = NSColor(resource: .textSecondary)
         authDetailLabel.isHidden = true
-        stack.addArrangedSubview(authDetailLabel)
+        statusStack.addArrangedSubview(authDetailLabel)
 
         let buttonRow = NSStackView()
         buttonRow.orientation = .horizontal
@@ -89,23 +83,13 @@ final class SettingsJiraViewController: NSViewController {
         refreshButton.controlSize = .regular
         buttonRow.addArrangedSubview(refreshButton)
 
-        stack.addArrangedSubview(buttonRow)
+        statusStack.addArrangedSubview(buttonRow)
 
-        // Separator
-        let sep2 = NSBox()
-        sep2.boxType = .separator
-        sep2.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(sep2)
-
-        // Site URL
-        let siteHeader = NSTextField(labelWithString: "Jira Site URL")
-        siteHeader.font = .systemFont(ofSize: 13, weight: .semibold)
-        stack.addArrangedSubview(siteHeader)
-
-        let siteDesc = NSTextField(wrappingLabelWithString: "Auto-detected from auth. Override if needed.")
-        siteDesc.font = .systemFont(ofSize: 11)
-        siteDesc.textColor = NSColor(resource: .textSecondary)
-        stack.addArrangedSubview(siteDesc)
+        let (siteCard, siteStack) = createSectionCard(
+            title: "Jira Site URL",
+            description: "Auto-detected from auth. Override if needed."
+        )
+        stack.addArrangedSubview(siteCard)
 
         siteURLField = NSTextField(string: settings.jiraSiteURL)
         siteURLField.font = .systemFont(ofSize: 13)
@@ -113,7 +97,7 @@ final class SettingsJiraViewController: NSViewController {
         siteURLField.translatesAutoresizingMaskIntoConstraints = false
         siteURLField.target = self
         siteURLField.action = #selector(siteURLChanged)
-        stack.addArrangedSubview(siteURLField)
+        siteStack.addArrangedSubview(siteURLField)
 
         // Document view
         let documentView = FlippedDocumentView()
@@ -135,11 +119,46 @@ final class SettingsJiraViewController: NSViewController {
             stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
 
             documentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
-
-            sep1.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
-            sep2.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
-            siteURLField.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
+            statusCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
+            siteCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
+            siteURLField.widthAnchor.constraint(equalTo: siteStack.widthAnchor),
+            authDetailLabel.widthAnchor.constraint(equalTo: statusStack.widthAnchor),
         ])
+    }
+
+    private func createSectionCard(title: String, description: String? = nil) -> (container: NSView, content: NSStackView) {
+        let container = SettingsSectionCardView()
+
+        let content = NSStackView()
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 8
+        content.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(content)
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        content.addArrangedSubview(titleLabel)
+
+        if let description, !description.isEmpty {
+            let descriptionLabel = NSTextField(wrappingLabelWithString: description)
+            descriptionLabel.font = .systemFont(ofSize: 11)
+            descriptionLabel.textColor = NSColor(resource: .textSecondary)
+            content.addArrangedSubview(descriptionLabel)
+            content.setCustomSpacing(12, after: descriptionLabel)
+            NSLayoutConstraint.activate([
+                descriptionLabel.widthAnchor.constraint(equalTo: content.widthAnchor),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+        ])
+
+        return (container, content)
     }
 
     // MARK: - Status Refresh
@@ -152,6 +171,7 @@ final class SettingsJiraViewController: NSViewController {
             if installed {
                 acliStatusLabel.stringValue = "acli installed at /opt/homebrew/bin/acli"
                 acliStatusLabel.textColor = .systemGreen
+                loginButton.isEnabled = true
             } else {
                 acliStatusLabel.stringValue = "Not found. Install: brew install acli"
                 acliStatusLabel.textColor = .systemRed
