@@ -180,6 +180,14 @@ actor IPCSocketServer {
             have_cmd jq || die "jq is required for this command."
         }
 
+        can_use_fzf() {
+            have_cmd fzf || return 1
+            [ "${MAGENT_USE_PLAIN_MENU:-0}" != "1" ] || return 1
+            [ "${TERM:-}" != "dumb" ] || return 1
+            [ -z "${SSH_CONNECTION:-}" ] || [ "${MAGENT_USE_FZF_OVER_SSH:-0}" = "1" ] || return 1
+            return 0
+        }
+
         # Escape a value for JSON string embedding
         json_escape() {
             printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g'
@@ -216,14 +224,19 @@ actor IPCSocketServer {
             fi
 
             picker_choice=""
-            if have_cmd fzf; then
-                picker_choice=$(awk -F '\037' '{printf "%s\t%s\n", $2, $1}' "$picker_tmp" \
-                    | fzf --prompt="$picker_prompt> " --height=40% --layout=reverse --border 2>/dev/null \
-                    | awk -F '\t' '{print $NF}')
-            else
-                awk -F '\037' '{printf "%3d) %s\n", NR, $2}' "$picker_tmp" >&2
-                printf '%s> ' "$picker_prompt" >&2
-                IFS= read -r picker_idx || picker_idx=""
+            if can_use_fzf; then
+                picker_selected=$(awk -F '\037' '{printf "%s\t%s\n", $2, $1}' "$picker_tmp" \
+                    | env -u FZF_DEFAULT_OPTS -u FZF_DEFAULT_COMMAND fzf --prompt="$picker_prompt> " --height=40% --layout=reverse --border)
+                picker_status=$?
+                if [ "$picker_status" -eq 0 ]; then
+                    picker_choice=$(printf '%s' "$picker_selected" | awk -F '\t' '{print $NF}')
+                fi
+            fi
+
+            if [ -z "$picker_choice" ] && ! can_use_fzf; then
+                awk -F '\037' '{printf "%3d) %s\n", NR, $2}' "$picker_tmp" >/dev/tty
+                printf '%s> ' "$picker_prompt" >/dev/tty
+                IFS= read -r picker_idx </dev/tty || picker_idx=""
                 case "$picker_idx" in
                     ''|*[!0-9]*) picker_choice="" ;;
                     *) picker_choice=$(awk -F '\037' -v n="$picker_idx" 'NR == n { print $1 }' "$picker_tmp") ;;
