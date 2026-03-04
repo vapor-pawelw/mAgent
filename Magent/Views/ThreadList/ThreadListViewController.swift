@@ -150,7 +150,7 @@ final class ThreadListViewController: NSViewController {
         rebuildRateLimitStatusMenu()
 
         NSLayoutConstraint.activate([
-            rateLimitStatusContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: 11),
+            rateLimitStatusContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: 2),
             rateLimitStatusContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
             rateLimitStatusContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -8),
         ])
@@ -273,7 +273,7 @@ final class ThreadListViewController: NSViewController {
         scrollView.scrollerStyle = .overlay
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.drawsBackground = false
-        scrollView.contentInsets = NSEdgeInsets(top: 6, left: 0, bottom: 4, right: 0)
+        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)
 
         view.addSubview(scrollView)
 
@@ -286,7 +286,7 @@ final class ThreadListViewController: NSViewController {
         view.addSubview(branchMismatchView)
 
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.topAnchor, constant: 32),
+            scrollView.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: diffPanelView.topAnchor),
