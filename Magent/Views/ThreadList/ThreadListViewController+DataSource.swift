@@ -5,7 +5,7 @@ import Cocoa
 extension ThreadListViewController: NSOutlineViewDataSource {
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
-        if item == nil { return sidebarProjects.count }
+        if item == nil { return sidebarRootItems.count }
         if let project = item as? SidebarProject { return project.children.count }
         if let section = item as? SidebarSection {
             return isSectionCollapsed(section) ? 0 : section.threads.count
@@ -14,7 +14,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
     }
 
     func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-        if item == nil { return sidebarProjects[index] }
+        if item == nil { return sidebarRootItems[index] }
         if let project = item as? SidebarProject { return project.children[index] }
         if let section = item as? SidebarSection { return section.threads[index] }
         fatalError("Unexpected item")
@@ -110,19 +110,23 @@ extension ThreadListViewController: NSOutlineViewDataSource {
 extension ThreadListViewController: NSOutlineViewDelegate {
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
+        if item is SidebarSpacer {
+            return SidebarSpacerRowView()
+        }
+        if item is SidebarProject {
+            let rowView = ProjectHeaderRowView()
+            return rowView
+        }
+
         let rowView = AlwaysEmphasizedRowView()
         if let thread = item as? MagentThread {
             rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion
+            rowView.showsSubtleBottomSeparator = false
         } else {
             rowView.showsCompletionHighlight = false
+            rowView.showsSubtleBottomSeparator = false
         }
         return rowView
-    }
-
-    private func shouldShowTopSeparator(for project: SidebarProject) -> Bool {
-        guard sidebarProjects.count > 1 else { return false }
-        guard let index = sidebarProjects.firstIndex(where: { $0.projectId == project.projectId }) else { return false }
-        return index > 0
     }
 
     private enum ProjectHeaderHitArea {
@@ -263,15 +267,18 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
-        if let project = item as? SidebarProject {
-            return shouldShowTopSeparator(for: project) ? 60 : 34
+        if item is SidebarSpacer {
+            return Self.projectHeaderInterProjectGap
+        }
+        if item is SidebarProject {
+            return Self.projectHeaderRowHeight
         }
         if item is SidebarSection {
             return 28
         }
         if let thread = item as? MagentThread {
             if thread.isMain {
-                return 26
+                return 34
             }
             let trimmedDescription = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
             let hasDescription = !(trimmedDescription?.isEmpty ?? true)
@@ -301,6 +308,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
+        if item is SidebarSpacer {
+            return false
+        }
         if let project = item as? SidebarProject {
             if suppressNextProjectRowToggle {
                 return false
@@ -325,6 +335,17 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
+        if item is SidebarSpacer {
+            let identifier = NSUserInterfaceItemIdentifier("ProjectSpacerCell")
+            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? SidebarSpacerCellView
+                ?? {
+                    let c = SidebarSpacerCellView()
+                    c.identifier = identifier
+                    return c
+                }()
+            return cell
+        }
+
         // Level 0: Project header
         if let project = item as? SidebarProject {
             let identifier = NSUserInterfaceItemIdentifier("ProjectCellV2")
@@ -342,6 +363,12 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     tf.translatesAutoresizingMaskIntoConstraints = false
                     c.addSubview(tf)
                     c.textField = tf
+
+                    let accentBar = NSView()
+                    accentBar.identifier = Self.projectAccentBarIdentifier
+                    accentBar.translatesAutoresizingMaskIntoConstraints = false
+                    accentBar.wantsLayer = true
+                    c.addSubview(accentBar)
 
                     let disclosureButton = NSButton()
                     disclosureButton.identifier = Self.projectDisclosureButtonIdentifier
@@ -367,26 +394,20 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     addButton.action = #selector(addThreadForProjectTapped(_:))
                     c.addSubview(addButton)
 
-                    let separator = NSView()
-                    separator.identifier = Self.projectSeparatorIdentifier
-                    separator.translatesAutoresizingMaskIntoConstraints = false
-                    separator.wantsLayer = true
-                    c.addSubview(separator)
-
                     tf.setContentCompressionResistancePriority(.required, for: .horizontal)
 
                     NSLayoutConstraint.activate([
-                        separator.topAnchor.constraint(equalTo: c.topAnchor, constant: 16),
-                        separator.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: -Self.outlineIndentationPerLevel + 12),
-                        separator.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
-                        separator.heightAnchor.constraint(equalToConstant: 1),
-                        tf.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -8),
-                        tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
-                        disclosureButton.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 4),
-                        disclosureButton.centerYAnchor.constraint(
-                            equalTo: tf.lastBaselineAnchor,
-                            constant: Self.projectHeaderDisclosureCenterToBaselineOffset
+                        tf.centerYAnchor.constraint(equalTo: c.centerYAnchor, constant: -1),
+                        accentBar.leadingAnchor.constraint(
+                            equalTo: c.leadingAnchor,
+                            constant: Self.sidebarHorizontalInset - (Self.outlineIndentationPerLevel / 2)
                         ),
+                        accentBar.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
+                        accentBar.widthAnchor.constraint(equalToConstant: 3),
+                        accentBar.heightAnchor.constraint(equalTo: tf.heightAnchor),
+                        tf.leadingAnchor.constraint(equalTo: accentBar.trailingAnchor, constant: 8),
+                        disclosureButton.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 4),
+                        disclosureButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor, constant: 1),
                         disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         disclosureButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         iv.leadingAnchor.constraint(equalTo: disclosureButton.trailingAnchor, constant: 6),
@@ -406,13 +427,12 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 }()
 
             cell.textField?.font = NSFont(name: "Noteworthy-Bold", size: 16)
-                ?? NSFont.systemFont(ofSize: 16, weight: .medium)
+                ?? NSFont.systemFont(ofSize: 16, weight: .semibold)
             cell.textField?.stringValue = project.name
             cell.textField?.invalidateIntrinsicContentSize()
-            cell.textField?.textColor = NSColor(resource: .textSecondary)
-            if let separator = cell.subviews.first(where: { $0.identifier == Self.projectSeparatorIdentifier }) {
-                separator.layer?.backgroundColor = NSColor.tertiaryLabelColor.cgColor
-                separator.isHidden = !shouldShowTopSeparator(for: project)
+            cell.textField?.textColor = .labelColor
+            if let accentBar = cell.subviews.first(where: { $0.identifier == Self.projectAccentBarIdentifier }) {
+                accentBar.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.45).cgColor
             }
             if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.projectDisclosureButtonIdentifier }) as? NSButton {
                 let hasChildren = !project.children.isEmpty
