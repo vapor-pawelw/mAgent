@@ -328,6 +328,7 @@ extension ThreadListViewController {
             await MainActor.run {
                 self.diffPanelView.update(
                     with: entries,
+                    worktreePath: thread.worktreePath,
                     branchName: thread.isMain ? nil : thread.branchName,
                     baseBranch: thread.isMain ? nil : baseBranch
                 )

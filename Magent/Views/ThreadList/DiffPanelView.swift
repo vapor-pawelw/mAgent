@@ -19,6 +19,9 @@ private final class DiffPanelResizeHandle: NSView {
 private final class DiffFileRowView: NSView {
     let filePath: String
     var onClick: ((String) -> Void)?
+    var onSecondaryClick: ((String) -> Void)?
+    var onDoubleClick: ((String) -> Void)?
+    var onShowInFinder: ((String) -> Void)?
 
     var isFileSelected: Bool = false {
         didSet {
@@ -41,7 +44,25 @@ private final class DiffFileRowView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override func mouseDown(with event: NSEvent) {
+        if event.clickCount >= 2 {
+            onDoubleClick?(filePath)
+            return
+        }
         onClick?(filePath)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        onSecondaryClick?(filePath)
+
+        let menu = NSMenu()
+        let finderItem = NSMenuItem(title: "Show in Finder", action: #selector(showInFinderFromMenu(_:)), keyEquivalent: "")
+        finderItem.target = self
+        menu.addItem(finderItem)
+        return menu
+    }
+
+    @objc private func showInFinderFromMenu(_ sender: NSMenuItem) {
+        onShowInFinder?(filePath)
     }
 }
 
@@ -56,6 +77,7 @@ final class DiffPanelView: NSView {
 
     private var entries: [FileDiffEntry] = []
     private var selectedFilePath: String?
+    private var worktreePath: String?
 
     private var heightConstraint: NSLayoutConstraint!
     private var expandedHeight: CGFloat = DiffPanelView.defaultHeight
@@ -282,17 +304,59 @@ final class DiffPanelView: NSView {
         )
     }
 
+    private func selectFileForContextMenu(_ filePath: String) {
+        selectedFilePath = filePath
+        updateRowSelectionAppearance()
+    }
+
     private func updateRowSelectionAppearance() {
         for case let row as DiffFileRowView in stackView.arrangedSubviews {
             row.isFileSelected = (row.filePath == selectedFilePath)
         }
     }
 
+    private func fileURL(for relativePath: String) -> URL? {
+        guard let worktreePath, !worktreePath.isEmpty else { return nil }
+        return URL(fileURLWithPath: worktreePath, isDirectory: true)
+            .appendingPathComponent(relativePath)
+            .standardizedFileURL
+    }
+
+    private func openFileInDefaultApp(_ relativePath: String) {
+        guard let url = fileURL(for: relativePath) else { return }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            BannerManager.shared.show(
+                message: "Could not open \(relativePath) because the file is missing.",
+                style: .warning
+            )
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func showFileInFinder(_ relativePath: String) {
+        guard let url = fileURL(for: relativePath) else { return }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            BannerManager.shared.show(
+                message: "Could not show \(relativePath) in Finder because the file is missing.",
+                style: .warning
+            )
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
     // MARK: - Content Updates
 
-    func update(with newEntries: [FileDiffEntry], branchName: String? = nil, baseBranch: String? = nil) {
+    func update(
+        with newEntries: [FileDiffEntry],
+        worktreePath: String? = nil,
+        branchName: String? = nil,
+        baseBranch: String? = nil
+    ) {
         entries = newEntries
         selectedFilePath = nil
+        self.worktreePath = worktreePath
 
         // Remove old rows
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -327,6 +391,7 @@ final class DiffPanelView: NSView {
     func clear() {
         entries = []
         selectedFilePath = nil
+        worktreePath = nil
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         headerButton.title = "CHANGES"
         branchInfoLabel.isHidden = true
@@ -347,6 +412,15 @@ final class DiffPanelView: NSView {
         container.translatesAutoresizingMaskIntoConstraints = false
         container.onClick = { [weak self] path in
             self?.selectFile(path)
+        }
+        container.onSecondaryClick = { [weak self] path in
+            self?.selectFileForContextMenu(path)
+        }
+        container.onDoubleClick = { [weak self] path in
+            self?.openFileInDefaultApp(path)
+        }
+        container.onShowInFinder = { [weak self] path in
+            self?.showFileInFinder(path)
         }
 
         // Filename — show just the last path component for brevity
