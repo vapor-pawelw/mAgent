@@ -89,6 +89,14 @@ extension ThreadDetailViewController {
 
         if index < thread.tmuxSessionNames.count {
             let sessionName = thread.tmuxSessionNames[index]
+            let canShowTOC = thread.agentTmuxSessions.contains(sessionName)
+            promptTOCCanShowForCurrentTab = canShowTOC
+            updatePromptTOCToggleButtonState(canShow: canShowTOC)
+            if !canShowTOC {
+                promptTOCView?.isHidden = true
+            } else if !isPromptTOCManuallyHidden {
+                promptTOCView?.isHidden = false
+            }
             if thread.lastSelectedTmuxSessionName != sessionName {
                 thread.lastSelectedTmuxSessionName = sessionName
                 threadManager.updateLastSelectedSession(for: thread.id, sessionName: sessionName)
@@ -102,6 +110,8 @@ extension ThreadDetailViewController {
             threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: sessionName)
             threadManager.markSessionWaitingSeen(threadId: thread.id, sessionName: sessionName)
         }
+
+        schedulePromptTOCRefresh()
     }
 
     func rateLimitTooltip(for sessionName: String) -> String? {
@@ -112,6 +122,9 @@ extension ThreadDetailViewController {
 
     func showEmptyState() {
         guard emptyStateView == nil else { return }
+        promptTOCCanShowForCurrentTab = false
+        updatePromptTOCToggleButtonState(canShow: false)
+        promptTOCView?.isHidden = true
 
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
@@ -160,6 +173,7 @@ extension ThreadDetailViewController {
     func hideEmptyState() {
         emptyStateView?.removeFromSuperview()
         emptyStateView = nil
+        schedulePromptTOCRefresh()
     }
 
     func rebindTabActions() {

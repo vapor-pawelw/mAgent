@@ -346,6 +346,23 @@ final class TmuxService {
         return output
     }
 
+    /// Scrolls the pane in copy-mode so the specified history line is anchored
+    /// near the top of the viewport when enough lines are available below it.
+    func scrollHistoryLineToTop(sessionName: String, lineIndex: Int) async throws {
+        let normalizedLine = max(0, lineIndex)
+        let paneHeightOutput = try await ShellExecutor.run(
+            "tmux display-message -p -t \(shellQuote(sessionName)) '#{pane_height}'"
+        )
+        let paneHeight = max(1, Int(paneHeightOutput) ?? 1)
+        let downCount = max(0, normalizedLine + paneHeight - 1)
+
+        var command = "tmux copy-mode -t \(shellQuote(sessionName)); tmux send-keys -t \(shellQuote(sessionName)) -X history-top"
+        if downCount > 0 {
+            command += "; tmux send-keys -t \(shellQuote(sessionName)) -X -N \(downCount) cursor-down"
+        }
+        _ = try await ShellExecutor.run(command)
+    }
+
     /// Captures the last N lines of the active pane in a tmux session.
     func capturePane(sessionName: String, lastLines: Int = 15) async -> String? {
         guard let output = try? await ShellExecutor.run(
