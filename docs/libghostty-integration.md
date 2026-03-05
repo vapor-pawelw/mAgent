@@ -94,3 +94,12 @@ mAgent is macOS-only, so use the native macOS path:
 The Ghostty macOS app source is the definitive reference:
 - `macos/Sources/Ghostty/` — App lifecycle, config
 - `macos/Sources/Features/Terminal/` — Surface/terminal view implementation
+
+## Overlay Z-Order Contract (mAgent)
+
+When terminal overlays are enabled (for example, the prompt Table of Contents), they must remain visible above terminal content during tab switches and session view recreation.
+
+Implementation note:
+- `TerminalSurfaceView` hosts a Metal-backed surface, and terminal views are often added/re-added to the same container during tab lifecycle events.
+- Keep overlay views above terminal surfaces by assigning a higher layer z-position (or explicitly bringing overlays to front after terminal subview updates).
+- If this contract is broken, UI toggles may report "shown" while the overlay is visually hidden behind terminal surfaces.
