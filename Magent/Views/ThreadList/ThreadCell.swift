@@ -20,6 +20,18 @@ final class ThreadCell: NSTableCellView {
 
     var onArchive: (() -> Void)?
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
     override var backgroundStyle: NSView.BackgroundStyle {
         didSet {
             updateMainTextColorForSelection()

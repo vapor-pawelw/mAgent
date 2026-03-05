@@ -122,9 +122,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if let thread = item as? MagentThread {
             rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion
             rowView.showsSubtleBottomSeparator = false
+            rowView.showsBusyShimmer = thread.hasAgentBusy
         } else {
             rowView.showsCompletionHighlight = false
             rowView.showsSubtleBottomSeparator = false
+            rowView.showsBusyShimmer = false
         }
         return rowView
     }
