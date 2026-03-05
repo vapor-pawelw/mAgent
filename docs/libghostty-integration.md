@@ -20,12 +20,14 @@ To build a different Ghostty ref:
 GHOSTTY_REF=v1.2.3 ./scripts/bootstrap-ghosttykit.sh
 ```
 
-**Build command (native macOS only):**
+**Build command used by bootstrap script:**
 ```bash
-zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Dxcframework-target=native
+zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Dxcframework-target=universal
 ```
 
-Output: `macos/GhosttyKit.xcframework`
+Output: `macos/GhosttyKit.xcframework` (includes `macos-arm64_x86_64/libghostty.a`).
+
+Note: for older refs that still point `iterm2_themes` at removed GitHub release assets, `./scripts/bootstrap-ghosttykit.sh` retries automatically: it first runs a normal build, and if it fails with the known `ghostty-themes.tgz` `404`, it rewrites that dependency to the maintained Ghostty mirror URL/hash and rebuilds once.
 
 **Full build (all platforms):**
 ```bash
