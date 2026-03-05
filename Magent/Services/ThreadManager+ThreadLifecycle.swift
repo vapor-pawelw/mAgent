@@ -176,7 +176,19 @@ extension ThreadManager {
             selectedAgentType: selectedAgentType,
             lastSelectedTmuxSessionName: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName],
-            baseBranch: baseBranch
+            baseBranch: baseBranch,
+            submittedPromptsBySession: {
+                guard useAgentCommand,
+                      let initialPrompt,
+                      !initialPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    return [:]
+                }
+                return [tmuxSessionName: [
+                    initialPrompt
+                        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                ]]
+            }()
         )
 
         threads.append(thread)
@@ -321,6 +333,7 @@ extension ThreadManager {
             allThreads[i].isArchived = true
             allThreads[i].tmuxSessionNames = []
             allThreads[i].sessionConversationIDs = [:]
+            allThreads[i].submittedPromptsBySession = [:]
         }
         try persistence.saveThreads(allThreads)
 
@@ -427,6 +440,7 @@ extension ThreadManager {
             }
             threads[index].tmuxSessionNames = []
             threads[index].sessionConversationIDs = [:]
+            threads[index].submittedPromptsBySession = [:]
             threads[index].lastSelectedTmuxSessionName = nil
 
             // Re-create the worktree

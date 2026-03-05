@@ -94,6 +94,11 @@ The underlying worktree directory is not moved. To keep active sessions stable, 
 Manual `Rename...` from the non-main thread context menu reuses the same model payload path as first-prompt auto-rename so branch slug generation, task description generation, and icon suggestion stay behaviorally aligned.
 This manual path intentionally skips first-prompt eligibility gates (for example "already auto-renamed") so users can explicitly request a regenerated name/description/icon at any time.
 
+### 4.3 Prompt TOC Source of Truth
+
+Prompt TOC content is submission-driven, not pane-marker-driven. Persist per-session submitted prompt history and use it as the source of truth for TOC rows.
+When session names are renamed/migrated, re-key this prompt history together with other session-scoped maps; when sessions are removed, prune it. Parser-based pane scanning is fallback-only for legacy sessions without stored history.
+
 ### 5. Persistence Model
 
 Thread state persisted as JSON in app's Application Support directory:

@@ -118,6 +118,9 @@ final class ThreadManager {
                 threads[i].sessionConversationIDs = filteredConversationIDs
                 didMigrate = true
             }
+            if pruneSubmittedPromptHistoryToKnownSessions(threadIndex: i) {
+                didMigrate = true
+            }
         }
 
         // Do NOT prune dead tmux session names — the attach-or-create pattern

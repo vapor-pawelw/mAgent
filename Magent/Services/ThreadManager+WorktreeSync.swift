@@ -181,6 +181,7 @@ extension ThreadManager {
                     (renameMap[key] ?? key, value)
                 }
             )
+            _ = remapSubmittedPromptHistory(threadIndex: i, sessionRenameMap: renameMap)
             var newCustomTabNames: [String: String] = [:]
             for (key, value) in threads[i].customTabNames {
                 newCustomTabNames[renameMap[key] ?? key] = value

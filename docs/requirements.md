@@ -90,6 +90,13 @@ Before the app is usable, the user must complete a configuration step:
 - **Main pane**: Terminal display with tab bar for multiple terminals per thread
 - **Settings**: Accessible from sidebar or menu bar
 
+## Prompt Table of Contents (TOC)
+
+- TOC entries must represent only user-submitted prompts for the active agent tab.
+- Do not include non-submitted composer content, placeholder suggestions, or interactive selector rows.
+- Switching threads/tabs must not surface stale non-submitted prompt text in TOC.
+- TOC entry ordering follows actual submission order for that session.
+
 ## Thread Row Display Rules
 
 For non-main threads, naming and labels in the sidebar follow these rules:

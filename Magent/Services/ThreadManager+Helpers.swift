@@ -266,6 +266,75 @@ extension ThreadManager {
         UUID(uuidString: value.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
     }
 
+    // MARK: - Submitted Prompt History
+
+    private static let maxSubmittedPromptsPerSession = 250
+
+    func submittedPromptHistory(threadId: UUID, sessionName: String) -> [String] {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return [] }
+        return threads[index].submittedPromptsBySession[sessionName] ?? []
+    }
+
+    func recordSubmittedPrompt(threadId: UUID, sessionName: String, prompt: String) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard threads[index].agentTmuxSessions.contains(sessionName) else { return }
+
+        let normalized = normalizedSubmittedPrompt(prompt)
+        guard !normalized.isEmpty else { return }
+
+        var history = threads[index].submittedPromptsBySession[sessionName] ?? []
+        history.append(normalized)
+        if history.count > Self.maxSubmittedPromptsPerSession {
+            history.removeFirst(history.count - Self.maxSubmittedPromptsPerSession)
+        }
+        threads[index].submittedPromptsBySession[sessionName] = history
+        try? persistence.saveThreads(threads)
+    }
+
+    private func normalizedSubmittedPrompt(_ prompt: String) -> String {
+        prompt
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    @discardableResult
+    func remapSubmittedPromptHistory(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
+        guard threads.indices.contains(index) else { return false }
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        var changed = false
+        var updated: [String: [String]] = [:]
+        for (sessionName, prompts) in threads[index].submittedPromptsBySession {
+            let newName = sessionRenameMap[sessionName] ?? sessionName
+            let existing = updated[newName] ?? []
+            updated[newName] = existing + prompts
+            if newName != sessionName {
+                changed = true
+            }
+        }
+
+        if changed || updated.count != threads[index].submittedPromptsBySession.count {
+            threads[index].submittedPromptsBySession = updated
+            return true
+        }
+        return false
+    }
+
+    @discardableResult
+    func pruneSubmittedPromptHistoryToKnownSessions(threadIndex index: Int) -> Bool {
+        guard threads.indices.contains(index) else { return false }
+
+        let validSessions = Set(threads[index].tmuxSessionNames)
+        let filtered = threads[index].submittedPromptsBySession.filter { key, prompts in
+            validSessions.contains(key) && !prompts.isEmpty
+        }
+        if filtered != threads[index].submittedPromptsBySession {
+            threads[index].submittedPromptsBySession = filtered
+            return true
+        }
+        return false
+    }
+
     // MARK: - Session-State Rekey/Prune
 
     /// Rekeys transient, session-scoped state after tmux session renames.

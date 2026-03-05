@@ -152,6 +152,15 @@ extension ThreadManager {
             threads[index].selectedAgentType = selectedAgentType
         }
         try persistence.saveThreads(threads)
+        if shouldMarkAsAgentTab,
+           let initialPrompt,
+           !initialPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            recordSubmittedPrompt(
+                threadId: currentThread.id,
+                sessionName: tmuxSessionName,
+                prompt: initialPrompt
+            )
+        }
 
         let tab = Tab(
             threadId: currentThread.id,
@@ -287,6 +296,7 @@ extension ThreadManager {
         threads[index].rateLimitedSessions.removeValue(forKey: sessionName)
         notifiedWaitingSessions.remove(sessionName)
         threads[index].customTabNames.removeValue(forKey: sessionName)
+        threads[index].submittedPromptsBySession.removeValue(forKey: sessionName)
         threads[index].tmuxSessionNames.removeAll { $0 == sessionName }
         if threads[index].lastSelectedTmuxSessionName == sessionName {
             threads[index].lastSelectedTmuxSessionName = threads[index].tmuxSessionNames.first

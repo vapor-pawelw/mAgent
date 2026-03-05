@@ -99,6 +99,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var taskDescription: String?
     var threadIcon: ThreadIcon
     var isThreadIconManuallySet: Bool
+    /// Persisted per-session history of user-submitted prompts (newest at end).
+    var submittedPromptsBySession: [String: [String]]
 
     // Transient (not persisted) — tracks which agent sessions are currently working
     var busySessions: Set<String> = []
@@ -195,6 +197,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case taskDescription
         case threadIcon
         case isThreadIconManuallySet
+        case submittedPromptsBySession
     }
 
     init(
@@ -225,7 +228,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         jiraTicketKey: String? = nil,
         taskDescription: String? = nil,
         threadIcon: ThreadIcon = .other,
-        isThreadIconManuallySet: Bool = false
+        isThreadIconManuallySet: Bool = false,
+        submittedPromptsBySession: [String: [String]] = [:]
     ) {
         self.id = id
         self.projectId = projectId
@@ -255,6 +259,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.taskDescription = taskDescription
         self.threadIcon = threadIcon
         self.isThreadIconManuallySet = isThreadIconManuallySet
+        self.submittedPromptsBySession = submittedPromptsBySession
     }
 
     init(from decoder: Decoder) throws {
@@ -287,6 +292,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         threadIcon = try container.decodeIfPresent(ThreadIcon.self, forKey: .threadIcon) ?? .other
         isThreadIconManuallySet = try container.decodeIfPresent(Bool.self, forKey: .isThreadIconManuallySet)
             ?? (threadIcon != .other)
+        submittedPromptsBySession = try container.decodeIfPresent([String: [String]].self, forKey: .submittedPromptsBySession) ?? [:]
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -333,6 +339,9 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encodeIfPresent(taskDescription, forKey: .taskDescription)
         try container.encode(threadIcon, forKey: .threadIcon)
         try container.encode(isThreadIconManuallySet, forKey: .isThreadIconManuallySet)
+        if !submittedPromptsBySession.isEmpty {
+            try container.encode(submittedPromptsBySession, forKey: .submittedPromptsBySession)
+        }
     }
 }
 

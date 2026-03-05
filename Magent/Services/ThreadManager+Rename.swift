@@ -501,6 +501,7 @@ extension ThreadManager {
             newCustomTabNames[newKey] = value
         }
         threads[index].customTabNames = newCustomTabNames
+        _ = remapSubmittedPromptHistory(threadIndex: index, sessionRenameMap: sessionRenameMap)
         if let selectedName = threads[index].lastSelectedTmuxSessionName {
             threads[index].lastSelectedTmuxSessionName = sessionRenameMap[selectedName] ?? selectedName
         }
@@ -925,6 +926,10 @@ extension ThreadManager {
         if let conversationID = currentThread.sessionConversationIDs[sessionName] {
             threads[index].sessionConversationIDs.removeValue(forKey: sessionName)
             threads[index].sessionConversationIDs[resolvedSessionName] = conversationID
+        }
+        if let promptHistory = currentThread.submittedPromptsBySession[sessionName] {
+            threads[index].submittedPromptsBySession.removeValue(forKey: sessionName)
+            threads[index].submittedPromptsBySession[resolvedSessionName] = promptHistory
         }
         _ = remapTransientSessionState(
             threadIndex: index,

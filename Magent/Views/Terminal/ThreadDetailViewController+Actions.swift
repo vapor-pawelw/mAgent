@@ -188,6 +188,10 @@ extension ThreadDetailViewController {
         guard !trimmed.isEmpty else { return }
 
         if thread.agentTmuxSessions.contains(sessionName) {
+            threadManager.recordSubmittedPrompt(threadId: thread.id, sessionName: sessionName, prompt: trimmed)
+        }
+
+        if thread.agentTmuxSessions.contains(sessionName) {
             threadManager.markSessionBusy(threadId: thread.id, sessionName: sessionName)
         }
 

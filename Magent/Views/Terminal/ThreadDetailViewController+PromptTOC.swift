@@ -5,6 +5,12 @@ struct PromptTOCEntry: Sendable {
     let displayText: String
 }
 
+private struct PromptPaneCandidate {
+    let lineIndex: Int
+    let promptText: String
+    let normalizedPromptText: String
+}
+
 extension ThreadDetailViewController {
 
     func setupPromptTOCOverlay() {
@@ -85,7 +91,15 @@ extension ThreadDetailViewController {
         guard !Task.isCancelled else { return }
         guard currentTabIndex < thread.tmuxSessionNames.count, thread.tmuxSessionNames[currentTabIndex] == sessionName else { return }
 
-        let entries = parsePromptEntries(from: paneContent, agentType: agentType)
+        let latestThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let submittedPrompts = threadManager.submittedPromptHistory(threadId: thread.id, sessionName: sessionName)
+        let isWaitingForInput = latestThread.waitingForInputSessions.contains(sessionName)
+        let entries = parsePromptEntries(
+            from: paneContent,
+            agentType: agentType,
+            submittedPrompts: submittedPrompts,
+            isWaitingForInput: isWaitingForInput
+        )
         promptTOCSessionName = sessionName
         promptTOCEntries = entries
         promptTOCView?.setEntries(entries, agentType: agentType)
@@ -96,7 +110,34 @@ extension ThreadDetailViewController {
         clampPromptTOCPositionIfNeeded()
     }
 
-    private func parsePromptEntries(from paneContent: String, agentType: AgentType?) -> [PromptTOCEntry] {
+    private func parsePromptEntries(
+        from paneContent: String,
+        agentType: AgentType?,
+        submittedPrompts: [String],
+        isWaitingForInput: Bool
+    ) -> [PromptTOCEntry] {
+        let (candidates, lineCount) = parsePromptCandidates(from: paneContent, agentType: agentType)
+        if candidates.isEmpty { return [] }
+
+        let normalizedSubmitted = submittedPrompts
+            .map(normalizedPromptText(_:))
+            .filter { !$0.isEmpty }
+        if !normalizedSubmitted.isEmpty {
+            return entriesFromSubmittedPrompts(
+                candidates: candidates,
+                normalizedSubmittedPrompts: normalizedSubmitted
+            )
+        }
+
+        // Legacy fallback when prompt history has not been captured yet.
+        var fallback = candidates
+        if isWaitingForInput {
+            fallback = removingTrailingComposerCandidates(from: fallback, lineCount: lineCount)
+        }
+        return entriesFromCandidates(fallback)
+    }
+
+    private func parsePromptCandidates(from paneContent: String, agentType: AgentType?) -> ([PromptPaneCandidate], Int) {
         let codexPromptMarker = "\u{203A}" // ›
         let claudePromptMarker = "\u{276F}" // ❯
 
@@ -106,13 +147,13 @@ extension ThreadDetailViewController {
         default: [codexPromptMarker, claudePromptMarker]
         }
 
-        var entries: [PromptTOCEntry] = []
+        var candidates: [PromptPaneCandidate] = []
         let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
 
         for (lineIndex, rawLine) in lines.enumerated() {
             let leftTrimmed = String(rawLine.drop { $0 == " " || $0 == "\t" })
             guard let marker = markers.first(where: { leftTrimmed.hasPrefix($0) }) else { continue }
-            var promptText = String(leftTrimmed.dropFirst(marker.count)).trimmingCharacters(in: .whitespaces)
+            let promptText = String(leftTrimmed.dropFirst(marker.count)).trimmingCharacters(in: .whitespaces)
             guard !promptText.isEmpty else { continue }
 
             // Skip interactive selector rows (for example: "❯ 1. Continue").
@@ -120,18 +161,98 @@ extension ThreadDetailViewController {
             let lowerPrompt = promptText.lowercased()
             if lowerPrompt == "yes" || lowerPrompt == "no" { continue }
 
-            if promptText.count > 140 {
-                promptText = String(promptText.prefix(139)) + "…"
-            }
-
-            entries.append(PromptTOCEntry(lineIndex: lineIndex, displayText: promptText))
+            candidates.append(
+                PromptPaneCandidate(
+                    lineIndex: lineIndex,
+                    promptText: promptText,
+                    normalizedPromptText: normalizedPromptText(promptText)
+                )
+            )
         }
 
+        return (candidates, lines.count)
+    }
+
+    private func entriesFromSubmittedPrompts(
+        candidates: [PromptPaneCandidate],
+        normalizedSubmittedPrompts: [String]
+    ) -> [PromptTOCEntry] {
+        var matched: [PromptTOCEntry] = []
+        var searchStart = 0
+
+        for submitted in normalizedSubmittedPrompts {
+            guard !submitted.isEmpty else { continue }
+            while searchStart < candidates.count {
+                let candidate = candidates[searchStart]
+                if promptsMatch(submittedPrompt: submitted, candidatePrompt: candidate.normalizedPromptText) {
+                    matched.append(
+                        PromptTOCEntry(
+                            lineIndex: candidate.lineIndex,
+                            displayText: truncatedPromptText(candidate.promptText)
+                        )
+                    )
+                    searchStart += 1
+                    break
+                }
+                searchStart += 1
+            }
+        }
+
+        if matched.count > 250 {
+            matched = Array(matched.suffix(250))
+        }
+        return matched
+    }
+
+    private func entriesFromCandidates(_ candidates: [PromptPaneCandidate]) -> [PromptTOCEntry] {
+        var entries = candidates.map { candidate in
+            PromptTOCEntry(
+                lineIndex: candidate.lineIndex,
+                displayText: truncatedPromptText(candidate.promptText)
+            )
+        }
         if entries.count > 250 {
             entries = Array(entries.suffix(250))
         }
-
         return entries
+    }
+
+    private func promptsMatch(submittedPrompt: String, candidatePrompt: String) -> Bool {
+        if submittedPrompt.caseInsensitiveCompare(candidatePrompt) == .orderedSame {
+            return true
+        }
+        return submittedPrompt.hasPrefix(candidatePrompt) || candidatePrompt.hasPrefix(submittedPrompt)
+    }
+
+    private func normalizedPromptText(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func truncatedPromptText(_ text: String) -> String {
+        if text.count > 140 {
+            return String(text.prefix(139)) + "…"
+        }
+        return text
+    }
+
+    private func removingTrailingComposerCandidates(from candidates: [PromptPaneCandidate], lineCount: Int) -> [PromptPaneCandidate] {
+        guard !candidates.isEmpty else { return candidates }
+
+        var cutoff = min(lineCount, candidates.last!.lineIndex)
+        var previousLineIndex = candidates.last!.lineIndex
+        for candidate in candidates.dropLast().reversed() {
+            // Treat tightly clustered prompt-marker rows near the bottom as the active
+            // composer/suggestion area and exclude them from fallback TOC parsing.
+            if previousLineIndex - candidate.lineIndex <= 2 {
+                cutoff = candidate.lineIndex
+                previousLineIndex = candidate.lineIndex
+                continue
+            }
+            break
+        }
+        return candidates.filter { $0.lineIndex < cutoff }
     }
 
     private func handlePromptTOCSelection(entryIndex: Int) {

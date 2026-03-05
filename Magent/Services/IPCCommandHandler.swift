@@ -282,6 +282,7 @@ final class IPCCommandHandler {
         }
 
         if thread.agentTmuxSessions.contains(sessionName) {
+            threadManager.recordSubmittedPrompt(threadId: thread.id, sessionName: sessionName, prompt: prompt)
             threadManager.scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: sessionName)
         }
 
