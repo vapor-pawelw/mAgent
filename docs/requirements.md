@@ -90,6 +90,10 @@ Before the app is usable, the user must complete a configuration step:
 - **Main pane**: Terminal display with tab bar for multiple terminals per thread
 - **Settings**: Accessible from sidebar or menu bar
 
+### Project Header Controls
+
+- In each project header row, the trailing `+` create-thread control must treat the entire visible icon frame as clickable, not just the drawn plus glyph.
+
 ## Prompt Table of Contents (TOC)
 
 - TOC entries must represent only user-submitted prompts for the active agent tab.
