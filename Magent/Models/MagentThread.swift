@@ -3,6 +3,7 @@ import Foundation
 nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
     case feature
     case fix
+    case improvement
     case refactor
     case test
     case other
@@ -13,6 +14,8 @@ nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
             return "star.fill"
         case .fix:
             return "ladybug.fill"
+        case .improvement:
+            return "arrow.up.circle.fill"
         case .refactor:
             return "arrow.triangle.branch"
         case .test:
@@ -28,6 +31,8 @@ nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
             return "Feature"
         case .fix:
             return "Fix"
+        case .improvement:
+            return "Improvement"
         case .refactor:
             return "Refactor"
         case .test:

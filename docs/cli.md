@@ -140,6 +140,14 @@ magent-cli set-description --thread <name> --description <text>
 magent-cli set-description --thread <name> --clear
 ```
 
+### set-thread-icon
+
+Set a thread icon manually.
+
+```bash
+magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
+```
+
 ### archive-thread
 
 Archive a thread (removes worktree, keeps git branch).

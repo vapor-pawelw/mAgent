@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 - New interactive SSH attach flow with persistent launchers, making it much easier to reconnect to remote Magent sessions.
 - SSH picker now uses app-like thread rows with back navigation, and has a more reliable fallback path when advanced picker tools are unavailable.
 - Auto-generated task descriptions now use cleaner capitalization for better readability.
+- Added an `Improvement` thread icon type.
+- Added `set-thread-icon` CLI command to manually set thread icon type (`feature`, `fix`, `improvement`, `refactor`, `test`, `other`).
 
 ### Sidebar
 - Sidebar sections now show thread count badges.
