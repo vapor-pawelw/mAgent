@@ -192,7 +192,7 @@ extension ThreadDetailViewController {
         }
 
         let previousThread = thread
-        await threadManager.autoRenameThreadAfterFirstPromptIfNeeded(
+        let didHandleTaskDescriptionInRenameFlow = await threadManager.autoRenameThreadAfterFirstPromptIfNeeded(
             threadId: thread.id,
             sessionName: sessionName,
             prompt: trimmed
@@ -212,10 +212,13 @@ extension ThreadDetailViewController {
             }
         }
 
-        // Generate task description independently (fire-and-forget)
-        let threadId = thread.id
-        Task {
-            await threadManager.generateTaskDescriptionIfNeeded(threadId: threadId, prompt: trimmed)
+        // Generate task description independently (fire-and-forget) only when
+        // first-prompt rename flow did not already cover it.
+        if !didHandleTaskDescriptionInRenameFlow {
+            let threadId = thread.id
+            Task {
+                await threadManager.generateTaskDescriptionIfNeeded(threadId: threadId, prompt: trimmed)
+            }
         }
 
         if thread.lastSelectedTmuxSessionName == sessionName {
