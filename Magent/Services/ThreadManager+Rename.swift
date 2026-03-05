@@ -458,6 +458,12 @@ extension ThreadManager {
     private static let fixWorkTypePhrases = [
         "doesn't work", "doesnt work", "failing to", "not working"
     ]
+    private static let improvementWorkTypeWords: Set<String> = [
+        "enhance", "enhancement", "improve", "improvement", "optimize", "optimization", "performance", "polish", "tune", "tuning"
+    ]
+    private static let improvementWorkTypePhrases = [
+        "performance improvement", "quality improvement"
+    ]
     private static let refactorWorkTypeWords: Set<String> = [
         "clean", "cleanup", "extract", "modularize", "refactor", "rename", "reorganize", "restructure", "simplify"
     ]
@@ -583,6 +589,12 @@ extension ThreadManager {
                 text: normalized,
                 tokens: tokens
             ),
+            .improvement: workTypeSignalScore(
+                words: Self.improvementWorkTypeWords,
+                phrases: Self.improvementWorkTypePhrases,
+                text: normalized,
+                tokens: tokens
+            ),
             .refactor: workTypeSignalScore(
                 words: Self.refactorWorkTypeWords,
                 phrases: Self.refactorWorkTypePhrases,
@@ -638,11 +650,11 @@ extension ThreadManager {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
             Generate a short task description (2-8 words) in natural casing, with the first letter uppercase. \
-            Also output one icon type: feature, fix, refactor, test, or other. \
+            Also output one icon type: feature, fix, improvement, refactor, test, or other. \
             If not sure, return other. \
             Output exactly: \
             DESC: <description or EMPTY> \
-            TYPE: <feature|fix|refactor|test|other> \
+            TYPE: <feature|fix|improvement|refactor|test|other> \
             For pure knowledge questions, output DESC: EMPTY and TYPE: other.
             Task: \(truncated)
             """

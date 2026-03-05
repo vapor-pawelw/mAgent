@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 - Project settings now include project reorder and visibility controls.
 - Sidebar sections now show thread count badges.
 - Project-level **Pre-Agent Command** setting in App Settings to run setup commands before the selected agent starts for new/recreated agent sessions.
+- New `set-thread-icon` CLI command to set a thread icon manually (`feature`, `fix`, `improvement`, `refactor`, `test`, `other`).
+- Added an `Improvement` thread icon type.
 
 ### Fixed
 - Reordering sections no longer changes the default section unexpectedly.

@@ -22,6 +22,7 @@ extension ThreadManager {
       /tmp/magent-cli rename-thread --thread <name> --prompt <text>
       /tmp/magent-cli rename-branch --thread <name> --name <text>
       /tmp/magent-cli set-description --thread <name> [--description <text> | --clear]
+      /tmp/magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
       /tmp/magent-cli thread-info --thread <name>
       /tmp/magent-cli list-sections [--project <name>]
       /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
@@ -36,6 +37,7 @@ extension ThreadManager {
     Use auto-rename-thread (or its rename-thread alias) by default; it generates both branch name and description from one prompt.
     Use rename-branch ONLY when the user specifies an exact branch name.
     Use set-description to manually set or clear only the thread description.
+    Use set-thread-icon to manually set the thread icon type.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
     """
 
@@ -330,7 +332,7 @@ extension ThreadManager {
 
     private static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     private static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    private static let codexIPCVersion = "<!-- magent-ipc-v8 -->"
+    private static let codexIPCVersion = "<!-- magent-ipc-v9 -->"
 
     private static let codexIPCBlock = """
     \(codexIPCMarkerStart)
@@ -355,6 +357,7 @@ extension ThreadManager {
     /tmp/magent-cli rename-thread --thread <name> --prompt <text>
     /tmp/magent-cli rename-branch --thread <name> --name <text>
     /tmp/magent-cli set-description --thread <name> [--description <text> | --clear]
+    /tmp/magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
     /tmp/magent-cli thread-info --thread <name>
     /tmp/magent-cli list-sections [--project <name>]
     /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
@@ -371,6 +374,7 @@ extension ThreadManager {
     Use `auto-rename-thread` (or its `rename-thread` alias) by default; it generates both branch name and description from one prompt.
     Use `rename-branch` ONLY when the user specifies an exact branch name.
     Use `set-description` to manually set or clear only the thread description.
+    Use `set-thread-icon` to manually set the thread icon type.
     Section commands without `--project` operate on global sections. With `--project`, they operate on project-specific overrides.
     \(codexIPCMarkerEnd)
     """

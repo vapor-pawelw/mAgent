@@ -19,6 +19,7 @@ enum IPCAgentDocs {
     /tmp/magent-cli rename-thread --thread <name> --prompt <text>
     /tmp/magent-cli rename-branch --thread <name> --name <text>
     /tmp/magent-cli set-description --thread <name> [--description <text> | --clear]
+    /tmp/magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
     /tmp/magent-cli thread-info --thread <name>
     /tmp/magent-cli list-sections [--project <name>]
     /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
@@ -37,6 +38,7 @@ enum IPCAgentDocs {
     Use auto-rename-thread (or its rename-thread alias) by default; it generates both branch name and description from one prompt.
     Use rename-branch ONLY when the user gives a literal branch name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about, use auto-rename-thread instead.
     Use set-description to manually set or clear the thread description without renaming the branch.
+    Use set-thread-icon to manually set the thread icon type.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
     """
 
@@ -51,7 +53,7 @@ enum IPCAgentDocs {
 
     static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    static let codexIPCVersion = "<!-- magent-ipc-v8 -->"
+    static let codexIPCVersion = "<!-- magent-ipc-v9 -->"
 
     /// Markdown format used for Codex's `AGENTS.md` file.
     static let codexAgentsMdBlock: String = """
@@ -71,6 +73,7 @@ enum IPCAgentDocs {
     Use `auto-rename-thread` (or its `rename-thread` alias) by default; it generates both branch name and description from one prompt.
     Use `rename-branch` ONLY when the user specifies an exact branch name.
     Use `set-description` to manually set or clear only the thread description.
+    Use `set-thread-icon` to manually set the thread icon type.
     Section commands without `--project` operate on global sections. With `--project`, they operate on project-specific overrides.
     \(codexIPCMarkerEnd)
     """
