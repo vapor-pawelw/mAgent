@@ -34,6 +34,8 @@ final class IPCCommandHandler {
             return await renameBranch(request)
         case "set-description":
             return setDescription(request)
+        case "set-thread-icon":
+            return setThreadIcon(request)
         case "current-thread":
             return currentThread(request)
         case "thread-info":
@@ -477,6 +479,38 @@ final class IPCCommandHandler {
             return .failure("Invalid description. Use 2-8 words.", id: request.id)
         } catch {
             return .failure("Failed to set description: \(error.localizedDescription)", id: request.id)
+        }
+
+        let settings = persistence.loadSettings()
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        let info = IPCThreadInfo(thread: updated, projectName: projectName)
+        return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
+    private func setThreadIcon(_ request: IPCRequest) -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        guard let iconRaw = request.icon?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !iconRaw.isEmpty else {
+            return .failure("Missing required field: icon", id: request.id)
+        }
+
+        guard let icon = ThreadIcon(rawValue: iconRaw) else {
+            let validIcons = ThreadIcon.allCases.map(\.rawValue).joined(separator: ", ")
+            return .failure("Unknown icon: \(iconRaw). Valid: \(validIcons)", id: request.id)
+        }
+
+        do {
+            try threadManager.setThreadIcon(threadId: thread.id, icon: icon)
+        } catch {
+            return .failure("Failed to set thread icon: \(error.localizedDescription)", id: request.id)
         }
 
         let settings = persistence.loadSettings()

@@ -533,11 +533,11 @@ extension ThreadManager {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
             Generate a short task description (2-8 words) in natural casing, with the first letter uppercase. \
-            Icon types: feature (new functionality), fix (bug/regression), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
+            Icon types: feature (new functionality), fix (bug/regression), improvement (quality/performance polish), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
             Evaluate all icon types, pick the highest-confidence one, and use other when no icon type is above 70% confidence. \
             Output exactly: \
             DESC: <description or EMPTY> \
-            TYPE: <feature|fix|refactor|test|other> \
+            TYPE: <feature|fix|improvement|refactor|test|other> \
             For pure knowledge questions, output DESC: EMPTY and TYPE: other.
             Task: \(truncated)
             """

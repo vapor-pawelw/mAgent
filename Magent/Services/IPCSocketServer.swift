@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v16"
+    private static let cliVersion = "magent-cli-v17"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -693,6 +693,18 @@ actor IPCSocketServer {
             json="$json}"
             send_request "$json"
             ;;
+        set-thread-icon)
+            thread=""; icon=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    --icon)   icon="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] && [ -n "$icon" ] || die "Usage: magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>"
+            send_request "{$(json_kv command set-thread-icon),$(json_kv threadName "$thread"),$(json_kv icon "$icon")}"
+            ;;
         thread-info)
             thread=""; thread_id=""
             while [ $# -gt 0 ]; do
@@ -857,6 +869,7 @@ actor IPCSocketServer {
             echo "  rename-branch        --thread <name> --name <text>         (exact branch name)"
             echo "  rename-thread-exact  --thread <name> --name <text>         (alias for rename-branch)"
             echo "  set-description      --thread <name> [--description <text> | --clear]"
+            echo "  set-thread-icon      --thread <name> --icon <type>         (set thread icon: feature|fix|improvement|refactor|test|other)"
             echo "  thread-info          (--thread <name> | --thread-id <id>)  (full thread details)"
             echo "  move-thread          --thread <name> --section <name>      (move thread to section)"
             echo ""
