@@ -45,12 +45,15 @@ Commits on `main` without a tag do **not** produce a release.
 When updating `CHANGELOG.md` for a release or pre-release notes:
 
 1. Keep pending release notes under `## Unreleased`, then let `./scripts/release-interactive.sh` promote them into the versioned section.
-2. Include only:
+2. Group notes by domain using `### <Domain>` headings (for example: `Thread`, `Sidebar`, `Settings`, `Agents`).
+3. Omit empty domains; only keep headings that have at least one note.
+4. Include only:
    - New features
    - Bug fixes
    - Performance improvements
-3. Omit implementation details, internal refactors, tooling-only changes, and infrastructure-only updates.
-4. Order entries by user impact:
+5. Omit implementation details, internal refactors, tooling-only changes, and infrastructure-only updates.
+6. Within each domain, order entries by user impact:
    - Put broad/high-impact features first and describe them at a higher level.
    - Keep niche or smaller items shorter and place them near the end.
-5. Use user-facing wording focused on outcomes, not code internals.
+7. Within each domain, keep user-facing additions/UX improvements above bug fixes and technical improvements.
+8. Use user-facing wording focused on outcomes, not code internals.
