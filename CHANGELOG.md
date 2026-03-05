@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Added `set-thread-icon` CLI command to manually set thread icon type (`feature`, `fix`, `improvement`, `refactor`, `test`, `other`).
 
 ### Sidebar
+- Busy threads now show a sweeping shimmer state in sidebar rows for clearer in-progress visibility.
 - Sidebar now has clearer visual separation between project headers and their `Main` thread row, making scanning and navigation easier.
 - Sidebar sections now show thread count badges.
 - Reordering sections no longer changes the default section unexpectedly.

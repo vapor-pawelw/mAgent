@@ -1,16 +1,48 @@
 import Cocoa
 
 final class AlwaysEmphasizedRowView: NSTableRowView {
+    private static let busyOpacitySweepAnimationKey = "busy-row-opacity-sweep"
+    private static let busyMaskOverscanLeft: CGFloat = 96
+    private static let busyMaskOverscanRight: CGFloat = 48
+    private var busyOpacityMaskLayer: CAGradientLayer?
+    private weak var maskedContentView: NSView?
+
     var showsCompletionHighlight = false {
         didSet { needsDisplay = true }
     }
     var showsSubtleBottomSeparator = false {
         didSet { needsDisplay = true }
     }
+    var showsBusyShimmer = false {
+        didSet { updateBusyShimmerAnimation() }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+    }
 
     override var isEmphasized: Bool {
         get { true }
         set {}
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateBusyShimmerAnimation()
+    }
+
+    override func layout() {
+        super.layout()
+        guard let busyOpacityMaskLayer,
+              let maskedContentView,
+              let contentLayer = maskedContentView.layer else { return }
+        busyOpacityMaskLayer.frame = busyMaskFrame(for: contentLayer.bounds)
     }
 
     override func drawBackground(in dirtyRect: NSRect) {
@@ -31,6 +63,91 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             NSColor.separatorColor.withAlphaComponent(0.24).setFill()
             NSBezierPath(rect: separatorRect).fill()
         }
+    }
+
+    private func updateBusyShimmerAnimation() {
+        guard let contentView = targetContentView(),
+              let contentLayer = contentView.layer else {
+            stopBusyShimmerAnimation()
+            return
+        }
+        if showsBusyShimmer {
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                stopBusyShimmerAnimation()
+                return
+            }
+            let maskLayer = ensureBusyOpacityMaskLayer()
+            maskLayer.frame = busyMaskFrame(for: contentLayer.bounds)
+            if contentLayer.mask !== maskLayer {
+                contentLayer.mask = maskLayer
+            }
+            maskedContentView = contentView
+
+            guard maskLayer.animation(forKey: Self.busyOpacitySweepAnimationKey) == nil else { return }
+
+            // Keep the dip fully offscreen at cycle boundaries so leading icons
+            // do not appear to blink/disappear when the animation loops.
+            let startLocations: [NSNumber] = [-0.72, -0.56, -0.47, -0.38, -0.22]
+            let endLocations: [NSNumber] = [1.22, 1.38, 1.47, 1.56, 1.72]
+            maskLayer.locations = startLocations
+
+            let animation = CABasicAnimation(keyPath: "locations")
+            animation.fromValue = startLocations
+            animation.toValue = endLocations
+            animation.duration = 2.6
+            animation.repeatCount = .infinity
+            animation.timingFunction = CAMediaTimingFunction(name: .linear)
+            maskLayer.add(animation, forKey: Self.busyOpacitySweepAnimationKey)
+        } else {
+            stopBusyShimmerAnimation()
+        }
+    }
+
+    private func stopBusyShimmerAnimation() {
+        busyOpacityMaskLayer?.removeAnimation(forKey: Self.busyOpacitySweepAnimationKey)
+        if let maskedContentView,
+           let maskedLayer = maskedContentView.layer,
+           maskedLayer.mask === busyOpacityMaskLayer {
+            maskedLayer.mask = nil
+        }
+        maskedContentView = nil
+    }
+
+    private func ensureBusyOpacityMaskLayer() -> CAGradientLayer {
+        if let busyOpacityMaskLayer {
+            return busyOpacityMaskLayer
+        }
+        let mask = CAGradientLayer()
+        mask.startPoint = CGPoint(x: 0, y: 0.5)
+        mask.endPoint = CGPoint(x: 1, y: 0.5)
+        mask.colors = [
+            NSColor.white.withAlphaComponent(1.0).cgColor,
+            NSColor.white.withAlphaComponent(1.0).cgColor,
+            NSColor.white.withAlphaComponent(0.74).cgColor,
+            NSColor.white.withAlphaComponent(1.0).cgColor,
+            NSColor.white.withAlphaComponent(1.0).cgColor,
+        ]
+        busyOpacityMaskLayer = mask
+        return mask
+    }
+
+    private func targetContentView() -> NSView? {
+        if let maskedContentView, subviews.contains(maskedContentView) {
+            return maskedContentView
+        }
+        if let cellView = subviews.first(where: { $0 is NSTableCellView }) {
+            return cellView
+        }
+        return subviews.first
+    }
+
+    private func busyMaskFrame(for contentBounds: CGRect) -> CGRect {
+        CGRect(
+            x: -Self.busyMaskOverscanLeft,
+            y: contentBounds.minY,
+            width: contentBounds.width + Self.busyMaskOverscanLeft + Self.busyMaskOverscanRight,
+            height: contentBounds.height
+        )
     }
 }
 
