@@ -7,6 +7,7 @@ final class ThreadDetailViewController: NSViewController {
 
     static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
     static let lastOpenedSessionDefaultsKey = "MagentLastOpenedSessionName"
+    static let promptTOCPositionDefaultsPrefix = "MagentPromptTOCPosition"
 
     var thread: MagentThread
     let threadManager = ThreadManager.shared
@@ -19,6 +20,7 @@ final class ThreadDetailViewController: NSViewController {
     let archiveThreadButton = NSButton()
     let reviewButton = NSButton()
     let exportContextButton = NSButton()
+    let togglePromptTOCButton = NSButton()
     let addTabButton = NSButton()
 
     var tabItems: [TabItemView] = []
@@ -30,6 +32,15 @@ final class ThreadDetailViewController: NSViewController {
     var loadingOverlay: NSView?
     var loadingPollTimer: Timer?
     var emptyStateView: NSView?
+    var promptTOCView: PromptTableOfContentsView?
+    var promptTOCTopConstraint: NSLayoutConstraint?
+    var promptTOCTrailingConstraint: NSLayoutConstraint?
+    var promptTOCRefreshTask: Task<Void, Never>?
+    var promptTOCEntries: [PromptTOCEntry] = []
+    var promptTOCSessionName: String?
+    var promptTOCDragStartOrigin: NSPoint = .zero
+    var promptTOCCanShowForCurrentTab = false
+    var isPromptTOCManuallyHidden = false
 
     // MARK: - Inline Diff Viewer
     var diffVC: InlineDiffViewController?
@@ -146,7 +157,13 @@ final class ThreadDetailViewController: NSViewController {
         }
     }
 
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        clampPromptTOCPositionIfNeeded()
+    }
+
     deinit {
+        promptTOCRefreshTask?.cancel()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -206,10 +223,16 @@ final class ThreadDetailViewController: NSViewController {
         exportContextButton.action = #selector(exportContextButtonTapped)
         exportContextButton.toolTip = "Export terminal context as Markdown"
 
+        togglePromptTOCButton.bezelStyle = .texturedRounded
+        togglePromptTOCButton.imageScaling = .scaleProportionallyDown
+        togglePromptTOCButton.target = self
+        togglePromptTOCButton.action = #selector(togglePromptTOCTapped)
+
         addTabButton.bezelStyle = .texturedRounded
         addTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Tab")
         addTabButton.target = self
         addTabButton.action = #selector(addTabTapped)
+        updatePromptTOCToggleButtonState(canShow: false)
 
         let separator = VerticalSeparatorView()
         separator.translatesAutoresizingMaskIntoConstraints = false
@@ -219,7 +242,7 @@ final class ThreadDetailViewController: NSViewController {
         separator.setContentHuggingPriority(.required, for: .vertical)
         separator.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        let topBar = NSStackView(views: [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, separator, archiveThreadButton])
+        let topBar = NSStackView(views: [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, togglePromptTOCButton, separator, archiveThreadButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
@@ -231,6 +254,7 @@ final class ThreadDetailViewController: NSViewController {
 
         view.addSubview(topBar)
         view.addSubview(terminalContainer)
+        setupPromptTOCOverlay()
 
         terminalBottomToView = terminalContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
 

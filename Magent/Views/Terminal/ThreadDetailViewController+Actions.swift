@@ -143,6 +143,7 @@ extension ThreadDetailViewController {
         thread = updated
         refreshTabStatusIndicators()
         refreshReviewButtonVisibility()
+        schedulePromptTOCRefresh()
     }
 
     func handleRename(_ updated: MagentThread) {
@@ -168,6 +169,7 @@ extension ThreadDetailViewController {
             item.titleLabel.stringValue = thread.displayName(for: thread.tmuxSessionNames[i], at: i)
         }
         refreshTabStatusIndicators()
+        schedulePromptTOCRefresh()
     }
 
     private func refreshTabStatusIndicators() {
@@ -206,6 +208,10 @@ extension ThreadDetailViewController {
         Task {
             await threadManager.generateTaskDescriptionIfNeeded(threadId: threadId, prompt: trimmed)
         }
+
+        if thread.lastSelectedTmuxSessionName == sessionName {
+            schedulePromptTOCRefresh(after: 0.2)
+        }
     }
 
     // MARK: - Review
@@ -221,6 +227,10 @@ extension ThreadDetailViewController {
 
     @objc func exportContextButtonTapped() {
         exportTabContext(at: currentTabIndex)
+    }
+
+    @objc func togglePromptTOCTapped() {
+        togglePromptTOCVisibility()
     }
 
     func continueTabInAgent(at index: Int, targetAgent: AgentType) {
