@@ -340,6 +340,8 @@ final class PromptTableOfContentsView: NSView {
 
     private func setupUI() {
         wantsLayer = true
+        // Keep TOC above terminal surfaces that are added later.
+        layer?.zPosition = 10
         layer?.cornerRadius = 8
         layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.95).cgColor
         layer?.borderWidth = 1

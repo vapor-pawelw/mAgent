@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Added a draggable terminal Table of Contents with a top-bar show/hide toggle that lists submitted Codex/Claude prompts per tab, jumps directly to the selected prompt in scrollback, and remembers panel position per tab.
+- Fixed a TOC visibility regression where turning it on could leave the panel hidden behind terminal content after tab/session view updates.
 - New interactive SSH attach flow with persistent launchers, making it much easier to reconnect to remote Magent sessions.
 - SSH picker now uses app-like thread rows with back navigation, and has a more reliable fallback path when advanced picker tools are unavailable.
 - Project settings now include project reorder and visibility controls.
