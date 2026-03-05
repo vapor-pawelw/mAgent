@@ -49,7 +49,12 @@ extension ThreadDetailViewController {
                 // crashes if a sheet is being presented on the same window.
                 Task {
                     do {
-                        try await self.threadManager.archiveThread(threadToArchive)
+                        try await self.threadManager.archiveThread(
+                            threadToArchive,
+                            promptForLocalSyncConflicts: true
+                        )
+                    } catch ThreadManagerError.archiveCancelled {
+                        return
                     } catch {
                         await MainActor.run {
                             BannerManager.shared.show(

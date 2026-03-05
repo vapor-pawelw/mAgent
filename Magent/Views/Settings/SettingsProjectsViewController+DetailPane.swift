@@ -100,6 +100,14 @@ extension SettingsProjectsViewController {
         defaultBranchField.action = #selector(defaultBranchFieldChanged)
         detailsStack.addArrangedSubview(defaultBranchField)
 
+        localFileSyncPathsTextView = createOverrideSection(
+            in: detailsStack,
+            title: "Local Sync Paths",
+            description: "Line-separated repo-relative files/directories copied into new thread worktrees, then merged back to the repo root on archive.",
+            value: project.normalizedLocalFileSyncPaths.joined(separator: "\n"),
+            font: .monospacedSystemFont(ofSize: 13, weight: .regular)
+        )
+
         // Default Section popup
         defaultSectionContainer = NSStackView()
         defaultSectionContainer.orientation = .vertical

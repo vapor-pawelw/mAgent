@@ -115,6 +115,20 @@ Prompt row interaction/visual rules:
 Navigation behavior:
 - TOC selection uses tmux copy-mode positioning (`scrollHistoryLineToTop`) so the selected prompt line is anchored at the top of the viewport whenever enough lines exist below it.
 
+### 4.4 Project Local File Sync Paths
+
+Projects can define repo-relative local sync paths (files or directories).
+
+- On thread creation, configured paths are copied from repo root into the new worktree.
+- On thread archive, configured paths are merged back from worktree to repo root before worktree removal.
+- Merge-back is additive/safe: do not delete destination files that are missing in worktree.
+- If a copy would overwrite an existing destination (including file-vs-directory collisions at intermediate paths), require explicit user choice in UI archive flows:
+  - `Override`
+  - `Override All`
+  - `Ignore`
+  - `Cancel Archive`
+- CLI/non-interactive archive paths should avoid destructive overwrite prompts and skip conflicting targets by default.
+
 ### 5. Persistence Model
 
 Thread state persisted as JSON in app's Application Support directory:
