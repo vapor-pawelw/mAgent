@@ -579,7 +579,8 @@ extension ThreadManager {
         projectId: UUID? = nil,
         agentType: AgentType?,
         envExports: String,
-        workingDirectory: String
+        workingDirectory: String,
+        resumeSessionID: String? = nil
     ) -> String {
         let shell = ShellExecutor.shellQuote(Self.startupShell)
         let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
@@ -598,6 +599,37 @@ extension ThreadManager {
             // Pre-agent startup commands are best-effort and should not block agent launch.
             parts.append("{ \(preAgentCommand) ; } || true")
         }
+        let command = agentCommand(
+            settings: settings,
+            agentType: agentType,
+            resumeSessionID: resumeSessionID
+        )
+        // Wrap the agent command in a login shell so user profile files are sourced
+        // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
+        parts.append(command)
+        let innerCmd = parts.joined(separator: " && ") + "; exec \(shell) -l"
+        return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
+    }
+
+    private func agentCommand(
+        settings: AppSettings,
+        agentType: AgentType,
+        resumeSessionID: String?
+    ) -> String {
+        let fresh = freshAgentCommand(settings: settings, agentType: agentType)
+        guard let resumeSessionID = normalizedResumeID(resumeSessionID),
+              let resume = resumableAgentCommand(
+                settings: settings,
+                agentType: agentType,
+                sessionID: resumeSessionID
+              ) else {
+            return fresh
+        }
+        // Always attempt deterministic resume first; fall back to a fresh session.
+        return "{ \(resume) || \(fresh) ; }"
+    }
+
+    private func freshAgentCommand(settings: AppSettings, agentType: AgentType) -> String {
         var command = settings.command(for: agentType)
         if agentType == .claude {
             command += " --settings \(Self.claudeHooksSettingsPath)"
@@ -605,11 +637,46 @@ extension ThreadManager {
                 command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
             }
         }
-        // Wrap the agent command in a login shell so user profile files are sourced
-        // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
-        parts.append(command)
-        let innerCmd = parts.joined(separator: " && ") + "; exec \(shell) -l"
-        return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
+        return command
+    }
+
+    private func resumableAgentCommand(
+        settings: AppSettings,
+        agentType: AgentType,
+        sessionID: String
+    ) -> String? {
+        let quotedID = ShellExecutor.shellQuote(sessionID)
+        switch agentType {
+        case .claude:
+            var command = settings.agentSkipPermissions
+                ? "claude --dangerously-skip-permissions"
+                : "claude"
+            command += " --resume \(quotedID)"
+            command += " --settings \(Self.claudeHooksSettingsPath)"
+            if settings.ipcPromptInjectionEnabled {
+                command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
+            }
+            return command
+        case .codex:
+            if settings.agentSkipPermissions {
+                return "codex resume \(quotedID) --dangerously-bypass-approvals-and-sandbox"
+            }
+            if settings.agentSandboxEnabled {
+                return "codex resume \(quotedID) --full-auto"
+            }
+            return "codex resume \(quotedID)"
+        case .custom:
+            return nil
+        }
+    }
+
+    private func normalizedResumeID(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              isUUID(value) else {
+            return nil
+        }
+        return value
     }
 
     // MARK: - Name Availability
