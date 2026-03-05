@@ -23,7 +23,6 @@ final class ThreadListViewController: NSViewController {
     static let sectionCountBadgeLabelIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeLabel")
     static let sidebarHorizontalInset: CGFloat = 0
     static let rateLimitStatusTopInset: CGFloat = 8
-    static let rateLimitStatusRowHeight: CGFloat = 14
     static let rateLimitStatusListSpacing: CGFloat = 6
     static let projectDisclosureTrailingInset: CGFloat = 8
     static let outlineIndentationPerLevel: CGFloat = 16
@@ -178,12 +177,19 @@ final class ThreadListViewController: NSViewController {
         rateLimitStatusLabel.stringValue = summary ?? ""
         rateLimitStatusContainer.isHidden = (summary == nil)
         rateLimitStatusLabel.toolTip = summary
-        let topInset: CGFloat = summary == nil
-            ? 0
-            : (Self.rateLimitStatusTopInset + Self.rateLimitStatusRowHeight + Self.rateLimitStatusListSpacing)
+        let topInset: CGFloat
+        if summary == nil {
+            topInset = 0
+        } else {
+            view.layoutSubtreeIfNeeded()
+            let summaryHeight = ceil(rateLimitStatusContainer.fittingSize.height)
+            topInset = Self.rateLimitStatusTopInset + summaryHeight + Self.rateLimitStatusListSpacing
+        }
         if abs(topInset - currentScrollTopInset) > 0.5 {
             currentScrollTopInset = topInset
             scrollView.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 4, right: 0)
+            scrollView.scrollerInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
         }
         rebuildRateLimitStatusMenu()
     }
@@ -300,6 +306,9 @@ final class ThreadListViewController: NSViewController {
         scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)
 
         view.addSubview(scrollView)
+        if rateLimitStatusContainer.superview === view {
+            view.addSubview(rateLimitStatusContainer, positioned: .above, relativeTo: scrollView)
+        }
 
         // Diff panel at the bottom of sidebar
         diffPanelView = DiffPanelView()

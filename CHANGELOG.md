@@ -28,6 +28,7 @@ All notable changes to this project will be documented in this file.
 - Reordering sections no longer changes the default section unexpectedly.
 - Reduced excess top padding in the sidebar for a tighter layout.
 - Increased top spacing above the global Rate limits summary to 8pt and kept a fixed gap before the first thread row.
+- Fixed occasional overlap between the global Rate limits summary and top sidebar rows by reserving measured header space and keeping the summary above scroll content.
 
 ### Settings
 - Project settings now include project reorder and visibility controls.
