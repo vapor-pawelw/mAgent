@@ -22,3 +22,6 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - Project-level **Pre-Agent Command** setting in App Settings to run setup commands before the selected agent starts for new/recreated agent sessions.
 - Auto-set thread icons now rely on agent confidence-guided work-type selection, reducing unnecessary fallback to `other`.
+
+### Distribution
+- Homebrew installs now work with private release assets by using authenticated GitHub API download URLs in the cask update pipeline.

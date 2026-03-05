@@ -8,7 +8,7 @@
 ## Build
 
 ```bash
-git clone https://github.com/vapor-pawelw/magent.git
+git clone git@github.com:vapor-pawelw/magent.git
 cd magent
 
 # Generate the Xcode project
@@ -19,6 +19,8 @@ open Magent.xcworkspace
 # Or build from command line:
 xcodebuild build -workspace Magent.xcworkspace -scheme Magent -configuration Release
 ```
+
+Requires GitHub access to the private `vapor-pawelw/magent` repository.
 
 ## Rebuild + Relaunch (Debug)
 

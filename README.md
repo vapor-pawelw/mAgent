@@ -14,6 +14,8 @@
 ### Homebrew
 
 ```bash
+# Token needs read access to the private vapor-pawelw/magent repo
+export HOMEBREW_GITHUB_API_TOKEN=ghp_xxx
 brew tap vapor-pawelw/magent
 brew install --cask magent
 ```
@@ -22,7 +24,7 @@ To update: `brew upgrade magent`
 
 ### GitHub Releases
 
-Download the latest `.zip` from [Releases](https://github.com/vapor-pawelw/magent/releases), unzip, and move `Magent.app` to `/Applications`.
+Download the latest `.zip` from [Releases](https://github.com/vapor-pawelw/magent/releases) (requires repo access), unzip, and move `Magent.app` to `/Applications`.
 
 > On first launch, macOS will show a Gatekeeper warning since the app is not notarized.
 > Right-click the app → **Open** → click **Open** in the dialog to allow it.

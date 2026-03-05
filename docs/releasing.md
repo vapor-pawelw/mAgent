@@ -36,9 +36,19 @@ This triggers a GitHub Actions workflow that:
 
 1. Builds `Magent.app` (unsigned)
 2. Creates a GitHub Release with `Magent.zip` and tag-annotation release notes
-3. Auto-updates the Homebrew cask formula with the new version and SHA
+3. Auto-updates the Homebrew cask formula with the new version, SHA, and private GitHub asset API URL
 
 Commits on `main` without a tag do **not** produce a release.
+
+## Private Repo Homebrew Notes
+
+`magent` release assets are private. Homebrew users need a GitHub token with access to `vapor-pawelw/magent`:
+
+```bash
+export HOMEBREW_GITHUB_API_TOKEN=ghp_xxx
+```
+
+The cask download strategy uses this token to fetch `Magent.zip` from the GitHub Releases API.
 
 ## Changelog Guidelines
 
