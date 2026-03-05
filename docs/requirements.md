@@ -50,16 +50,20 @@ Before the app is usable, the user must complete a configuration step:
 2. If **1 project** is configured → immediately create thread for that project
 3. If **multiple projects** → show a project selection menu first
 4. A new git worktree is created for the selected project
-5. A tmux session is started in the worktree directory
-6. The configured agent is launched inside tmux
-7. The terminal is displayed in the main pane
+5. If the project has local sync paths configured, those repo-relative files/directories are copied from the repo root into the new worktree
+6. A tmux session is started in the worktree directory
+7. The configured agent is launched inside tmux
+8. The terminal is displayed in the main pane
 
 ### Archiving a Thread
 
 1. User triggers archive action on a thread
-2. The git worktree is removed/pruned
-3. The thread disappears from the sidebar/list
-4. Thread metadata may be retained for history
+2. If the project has local sync paths configured, files/directories from the worktree are merged back into the repo root before removal
+3. Existing files in the repo that are not present in the worktree are preserved (no delete sync)
+4. If merge-back would overwrite an existing target, user can choose `Override`, `Override All`, `Ignore`, or `Cancel Archive`
+5. The git worktree is removed/pruned
+6. The thread disappears from the sidebar/list
+7. Thread metadata may be retained for history
 
 ### Persistence
 
@@ -140,6 +144,7 @@ For non-main threads, naming and labels in the sidebar follow these rules:
 
 - **Projects**: Add/remove git repositories
 - **Worktrees path**: Per-project or global path for worktrees (default: `<parent>/<repo>-worktrees/`)
+- **Local sync paths** (per project): Line-separated repo-relative files/directories copied into new thread worktrees and merged back on archive
 - **Agent command**: The command to run in new threads (e.g. `claude`, `aider`, custom)
 - **Dependencies**: Check/install tmux, verify ghostty availability
 - **tmux configuration**: Optional custom tmux config or prefix key

@@ -840,6 +840,8 @@ enum ThreadManagerError: LocalizedError {
     case nameGenerationFailed
     case worktreePathConflict([String])
     case noExpectedBranch
+    case archiveCancelled
+    case localFileSyncFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -866,6 +868,10 @@ enum ThreadManagerError: LocalizedError {
             return "Cannot move worktrees — the following directories already exist in the destination: \(list)"
         case .noExpectedBranch:
             return "No expected branch configured. Set the default branch in project settings."
+        case .archiveCancelled:
+            return "Archive cancelled."
+        case .localFileSyncFailed(let message):
+            return message
         }
     }
 }

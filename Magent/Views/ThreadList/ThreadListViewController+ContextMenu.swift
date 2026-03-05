@@ -618,7 +618,12 @@ extension ThreadListViewController {
                 // crashes if a sheet is being presented on the same window.
                 Task {
                     do {
-                        try await threadManager.archiveThread(thread)
+                        try await threadManager.archiveThread(
+                            thread,
+                            promptForLocalSyncConflicts: true
+                        )
+                    } catch ThreadManagerError.archiveCancelled {
+                        return
                     } catch {
                         await MainActor.run {
                             BannerManager.shared.show(

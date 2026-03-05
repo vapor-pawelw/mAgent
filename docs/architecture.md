@@ -99,6 +99,20 @@ This manual path intentionally skips first-prompt eligibility gates (for example
 Prompt TOC content is submission-driven, not pane-marker-driven. Persist per-session submitted prompt history and use it as the source of truth for TOC rows.
 When session names are renamed/migrated, re-key this prompt history together with other session-scoped maps; when sessions are removed, prune it. Parser-based pane scanning is fallback-only for legacy sessions without stored history.
 
+### 4.4 Project Local File Sync Paths
+
+Projects can define repo-relative local sync paths (files or directories).
+
+- On thread creation, configured paths are copied from repo root into the new worktree.
+- On thread archive, configured paths are merged back from worktree to repo root before worktree removal.
+- Merge-back is additive/safe: do not delete destination files that are missing in worktree.
+- If a copy would overwrite an existing destination (including file-vs-directory collisions at intermediate paths), require explicit user choice in UI archive flows:
+  - `Override`
+  - `Override All`
+  - `Ignore`
+  - `Cancel Archive`
+- CLI/non-interactive archive paths should avoid destructive overwrite prompts and skip conflicting targets by default.
+
 ### 5. Persistence Model
 
 Thread state persisted as JSON in app's Application Support directory:

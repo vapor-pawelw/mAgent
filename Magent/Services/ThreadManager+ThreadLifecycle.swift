@@ -93,6 +93,13 @@ extension ThreadManager {
             baseBranch: baseBranch
         )
 
+        do {
+            try await syncConfiguredLocalPathsIntoWorktree(project: project, worktreePath: worktreePath)
+        } catch {
+            try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: worktreePath)
+            throw error
+        }
+
         // Record fork-point commit in the worktree metadata cache
         let forkPointResult = await ShellExecutor.execute("git rev-parse HEAD", workingDirectory: worktreePath)
         let forkPoint = forkPointResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -315,9 +322,18 @@ extension ThreadManager {
 
     // MARK: - Archive Thread
 
-    func archiveThread(_ thread: MagentThread) async throws {
+    func archiveThread(_ thread: MagentThread, promptForLocalSyncConflicts: Bool = false) async throws {
         guard !thread.isMain else {
             throw ThreadManagerError.cannotDeleteMainThread
+        }
+
+        let settings = persistence.loadSettings()
+        if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
+            try await syncConfiguredLocalPathsFromWorktree(
+                project: project,
+                worktreePath: thread.worktreePath,
+                promptForConflicts: promptForLocalSyncConflicts
+            )
         }
 
         if let ticketKey = thread.jiraTicketKey {
@@ -346,7 +362,6 @@ extension ThreadManager {
             try? await tmux.killSession(name: sessionName)
         }
 
-        let settings = persistence.loadSettings()
         if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
             try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
             pruneWorktreeCache(for: project)

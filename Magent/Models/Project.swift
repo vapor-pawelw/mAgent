@@ -24,6 +24,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
     var jiraExcludedTicketKeys: Set<String>
     var jiraAssigneeAccountId: String?
     var jiraAcknowledgedStatuses: Set<String>?
+    var localFileSyncPaths: [String]
 
     init(
         id: UUID = UUID(),
@@ -48,7 +49,8 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         jiraSiteURL: String? = nil,
         jiraExcludedTicketKeys: Set<String> = [],
         jiraAssigneeAccountId: String? = nil,
-        jiraAcknowledgedStatuses: Set<String>? = nil
+        jiraAcknowledgedStatuses: Set<String>? = nil,
+        localFileSyncPaths: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -73,6 +75,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.jiraExcludedTicketKeys = jiraExcludedTicketKeys
         self.jiraAssigneeAccountId = jiraAssigneeAccountId
         self.jiraAcknowledgedStatuses = jiraAcknowledgedStatuses
+        self.localFileSyncPaths = localFileSyncPaths
     }
 
     init(from decoder: Decoder) throws {
@@ -100,6 +103,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         jiraExcludedTicketKeys = try container.decodeIfPresent(Set<String>.self, forKey: .jiraExcludedTicketKeys) ?? []
         jiraAssigneeAccountId = try container.decodeIfPresent(String.self, forKey: .jiraAssigneeAccountId)
         jiraAcknowledgedStatuses = try container.decodeIfPresent(Set<String>.self, forKey: .jiraAcknowledgedStatuses)
+        localFileSyncPaths = try container.decodeIfPresent([String].self, forKey: .localFileSyncPaths) ?? []
     }
 
     /// Resolves template variables in `worktreesBasePath` (e.g. `$MAGENT_PROJECT_NAME`).
@@ -117,5 +121,39 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         let url = URL(fileURLWithPath: repoPath)
         let parent = url.deletingLastPathComponent().path
         return "\(parent)/.worktrees-$MAGENT_PROJECT_NAME"
+    }
+
+    static func normalizeLocalFileSyncPaths(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for rawPath in paths {
+            guard let value = normalizeLocalFileSyncPath(rawPath), seen.insert(value).inserted else { continue }
+            normalized.append(value)
+        }
+        return normalized
+    }
+
+    static func normalizeLocalFileSyncPath(_ rawPath: String) -> String? {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        var candidate = trimmed.replacingOccurrences(of: "\\", with: "/")
+        while candidate.hasPrefix("./") {
+            candidate.removeFirst(2)
+        }
+        candidate = candidate.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !candidate.isEmpty, !candidate.hasPrefix("~") else { return nil }
+
+        let segments = candidate.split(separator: "/").map(String.init)
+        guard !segments.isEmpty else { return nil }
+        for segment in segments where segment == "." || segment == ".." {
+            return nil
+        }
+
+        return segments.joined(separator: "/")
+    }
+
+    var normalizedLocalFileSyncPaths: [String] {
+        Self.normalizeLocalFileSyncPaths(localFileSyncPaths)
     }
 }

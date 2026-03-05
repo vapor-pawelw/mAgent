@@ -17,6 +17,7 @@ final class SettingsProjectsViewController: NSViewController {
     var repoPathLabel: NSTextField!
     var worktreesPathLabel: NSTextField!
     var defaultBranchField: NSTextField!
+    var localFileSyncPathsTextView: NSTextView!
     var agentTypePopup: NSPopUpButton!
     var terminalInjectionTextView: NSTextView!
     var preAgentInjectionTextView: NSTextView!
