@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v16"
+    private static let cliVersion = "magent-cli-v17"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -831,6 +831,11 @@ actor IPCSocketServer {
             json="$json}"
             send_request "$json"
             ;;
+        docs|ipc-docs)
+            cat <<'MAGENT_IPC_DOCS'
+        \#(IPCAgentDocs.cliReferenceText)
+        MAGENT_IPC_DOCS
+            ;;
         ""|help|-h|--help)
             echo "Usage: magent-cli <command> [options]"
             echo ""
@@ -840,6 +845,7 @@ actor IPCSocketServer {
             echo "  magent-cli ls [--project <name>]"
             echo "  magent-cli attach (--thread <name> | --thread-id <id>) [--index <n>]"
             echo "  magent-cli attach --session <tmux-session>"
+            echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
             echo "Thread commands:"
             echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>]"
