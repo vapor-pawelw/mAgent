@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Agent IPC guidance injection is now lightweight by default, with full `magent-cli` docs loaded only on demand (`magent-cli docs`) to reduce token usage.
+- First-prompt auto-rename now generates branch slug and thread description in one AI call, reducing duplicate background model usage.
 - Reordering sections no longer changes the default section unexpectedly.
 - Auto-generated task descriptions now use cleaner capitalization for better readability.
 - Reduced excess top padding in the sidebar for a tighter layout.

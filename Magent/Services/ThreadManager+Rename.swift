@@ -120,6 +120,12 @@ extension ThreadManager {
         case failed
     }
 
+    private enum FirstPromptRenameAttemptResult {
+        case generated(slug: String, taskDescription: GeneratedTaskDescription?)
+        case question
+        case failed
+    }
+
     private func codexBackgroundExecCommand(escapedPrompt: String) -> String {
         // ShellExecutor uses a minimal PATH; include common user-local install
         // locations so background rename/description jobs can resolve Codex.
@@ -191,6 +197,70 @@ extension ThreadManager {
             return .question
         }
         return .slug(slug)
+    }
+
+    /// First-prompt optimization: fetch branch slug + task description in one model call.
+    private func generateFirstPromptRenamePayloadViaAgent(
+        from prompt: String,
+        agentType: AgentType?,
+        projectId: UUID?
+    ) async -> FirstPromptRenameAttemptResult {
+        let truncated = String(prompt.prefix(500))
+        let settings = persistence.loadSettings()
+        let projectSlug = projectId.flatMap { pid in
+            settings.projects.first(where: { $0.id == pid })?.autoRenameSlugPrompt
+        }?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let globalSlug = settings.autoRenameSlugPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let customInstruction = (projectSlug?.isEmpty == false ? projectSlug : nil)
+            ?? (globalSlug.isEmpty ? nil : globalSlug)
+        let instruction = customInstruction ?? AppSettings.defaultSlugPrompt
+        let aiPrompt = """
+            \(instruction) \
+            Also generate a short task description (2-8 words) with first letter uppercase. \
+            Icon types: feature (new functionality), fix (bug/regression), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
+            Evaluate all icon types and use other when no icon type is above 70% confidence. \
+            Output exactly three lines and nothing else: \
+            SLUG: <slug or EMPTY> \
+            DESC: <description or EMPTY> \
+            TYPE: <feature|fix|refactor|test|other> \
+            Use SLUG: EMPTY and DESC: EMPTY for pure knowledge questions with no implied action. \
+            Bug reports, observations about broken behavior, and feature requests are actionable — always generate a slug. \
+            Task: \(truncated)
+            """
+
+        let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
+        let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
+        let command: String
+        switch agentType {
+        case .codex:
+            command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
+        default:
+            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence"
+        }
+
+        let result: String? = await withTaskGroup(of: String?.self) { group in
+            group.addTask {
+                let result = await ShellExecutor.execute(command, workingDirectory: workingDirectory)
+                guard result.exitCode == 0 else { return nil }
+                return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+
+        guard let raw = result, !raw.isEmpty else { return .failed }
+        guard let slug = sanitizeSlug(raw) else { return .failed }
+        if slug == Self.slugQuestionSentinel {
+            return .question
+        }
+        let generatedDescription = sanitizeGeneratedTaskDescription(raw)
+        return .generated(slug: slug, taskDescription: generatedDescription)
     }
 
     enum AutoRenameResult {
@@ -356,17 +426,19 @@ extension ThreadManager {
         }
     }
 
+    /// Returns true when first-prompt handling already covered task-description generation
+    /// and the caller should skip independent description generation for this prompt.
     func autoRenameThreadAfterFirstPromptIfNeeded(
         threadId: UUID,
         sessionName: String,
         prompt: String
-    ) async {
-        guard persistence.loadSettings().autoRenameBranches else { return }
-        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+    ) async -> Bool {
+        guard persistence.loadSettings().autoRenameBranches else { return false }
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return false }
         let thread = threads[index]
 
-        guard !thread.isMain else { return }
-        guard !thread.didAutoRenameFromFirstPrompt else { return }
+        guard !thread.isMain else { return false }
+        guard !thread.didAutoRenameFromFirstPrompt else { return false }
 
         // If the user already provided a description, treat first-prompt
         // auto-rename as handled and avoid skip banners/retries.
@@ -375,17 +447,17 @@ extension ThreadManager {
             .isEmpty ?? true)
         if hasTaskDescription {
             markFirstPromptAutoRenameHandled(threadId: thread.id)
-            return
+            return true
         }
 
         // If the thread name no longer matches the worktree directory basename,
         // it was already renamed (manually or otherwise) — skip auto-rename.
-        guard thread.name == (thread.worktreePath as NSString).lastPathComponent else { return }
+        guard thread.name == (thread.worktreePath as NSString).lastPathComponent else { return false }
         // Only auto-rename threads that still have an auto-generated name.
         // Threads created via CLI with an explicit name/description should keep it.
-        guard NameGenerator.isAutoGenerated(thread.name) else { return }
-        guard thread.agentTmuxSessions.contains(sessionName) else { return }
-        guard !autoRenameInProgress.contains(thread.id) else { return }
+        guard NameGenerator.isAutoGenerated(thread.name) else { return false }
+        guard thread.agentTmuxSessions.contains(sessionName) else { return false }
+        guard !autoRenameInProgress.contains(thread.id) else { return false }
 
         // If the current git branch was already renamed to a custom value
         // (for example outside Magent), skip first-prompt auto-rename and
@@ -394,27 +466,35 @@ extension ThreadManager {
         let effectiveBranch = currentBranch ?? thread.branchName
         if !effectiveBranch.isEmpty, !NameGenerator.isAutoGenerated(effectiveBranch) {
             markFirstPromptAutoRenameHandled(threadId: thread.id)
-            return
+            return false
         }
 
         let preferredAgent = thread.sessionAgentTypes[sessionName] ?? thread.selectedAgentType
 
-        let result = await autoRenameCandidates(
+        let result = await generateFirstPromptRenamePayloadViaAgent(
             from: prompt,
             agentType: preferredAgent,
             projectId: thread.projectId
         )
-        let candidates: [String]
+        let slug: String
+        let generatedTaskDescription: GeneratedTaskDescription?
         switch result {
-        case .candidates(let slugs):
-            candidates = slugs
+        case .generated(let generatedSlug, let description):
+            slug = generatedSlug
+            generatedTaskDescription = description
         case .question:
-            return
+            // Treated as handled for this prompt to avoid a second model call.
+            return true
         case .failed:
             // Keep first-prompt auto-rename one-time and avoid noisy warnings when
             // optional background slug generation fails for environment/model reasons.
             markFirstPromptAutoRenameHandled(threadId: thread.id)
-            return
+            // Let the separate description path run as a fallback.
+            return false
+        }
+        var candidates = [slug]
+        for i in 2...9 {
+            candidates.append("\(slug)-\(i)")
         }
 
         autoRenameInProgress.insert(thread.id)
@@ -423,13 +503,30 @@ extension ThreadManager {
         for candidate in candidates where candidate != thread.name {
             do {
                 try await renameThread(thread, to: candidate, markFirstPromptRenameHandled: true)
-                return
+                if let generatedTaskDescription,
+                   let currentIndex = threads.firstIndex(where: { $0.id == thread.id }),
+                   threads[currentIndex].taskDescription == nil {
+                    threads[currentIndex].taskDescription = generatedTaskDescription.description
+                    let settings = persistence.loadSettings()
+                    if settings.autoSetThreadIconFromWorkType,
+                       !threads[currentIndex].isThreadIconManuallySet {
+                        threads[currentIndex].threadIcon = generatedTaskDescription.suggestedIcon
+                    }
+                    try? persistence.saveThreads(threads)
+                    await MainActor.run {
+                        delegate?.threadManager(self, didUpdateThreads: threads)
+                    }
+                }
+                return true
             } catch ThreadManagerError.duplicateName {
                 continue
             } catch {
-                return
+                return false
             }
         }
+
+        // Rename was requested but no candidate was usable; allow fallback description path.
+        return false
     }
 
     private func markFirstPromptAutoRenameHandled(threadId: UUID) {
