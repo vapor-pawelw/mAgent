@@ -8,10 +8,13 @@ For every user-visible change, add a short bullet under `## Unreleased` in `CHAN
 
 Guidelines:
 
+- Group notes by product domain using `### <Domain>` headings (for example: `Thread`, `Sidebar`, `Settings`, `Agents`).
+- Hide empty domains; only include a domain heading when it has at least one note.
 - Focus on behavior users can notice (new features, fixes, UX changes).
 - Skip internal-only refactors unless they affect user outcomes.
 - Keep bullets short and specific.
-- Order bullets by user impact (broad/high-impact first, niche/smaller later).
+- Within each domain, order bullets by user impact (broad/high-impact first, niche/smaller later).
+- Within each domain, keep user-facing additions/UX improvements above bug fixes and technical improvements.
 
 ## During release
 
