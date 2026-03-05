@@ -15,6 +15,31 @@ Environment overrides:
 EOF
 }
 
+patch_stale_iterm2_themes_dependency() {
+  local zon_file="$1"
+  local mirror_url="https://deps.files.ghostty.org/ghostty-themes-release-20260216-151611-fc73ce3.tgz"
+  local mirror_hash="N-V-__8AABVbAwBwDRyZONfx553tvMW8_A2OKUoLzPUSRiLF"
+
+  if [[ ! -f "$zon_file" ]]; then
+    return 1
+  fi
+
+  if ! grep -q 'github.com/mbadolato/iTerm2-Color-Schemes/releases/download/.*/ghostty-themes.tgz' "$zon_file"; then
+    return 1
+  fi
+
+  echo "Patching stale iTerm2 themes dependency to Ghostty mirror"
+  GHOSTTY_ITERM2_THEMES_URL="$mirror_url" \
+  GHOSTTY_ITERM2_THEMES_HASH="$mirror_hash" \
+  perl -0777 -i -pe '
+    s#(\.iterm2_themes\s*=\s*\.\{\s*\n\s*\.url\s*=\s*)"[^"]+"(,\s*\n\s*\.hash\s*=\s*)"[^"]+"#
+      $1 . "\"" . $ENV{GHOSTTY_ITERM2_THEMES_URL} . "\"" . $2 . "\"" . $ENV{GHOSTTY_ITERM2_THEMES_HASH} . "\""
+    #gsex
+  ' "$zon_file"
+
+  return 0
+}
+
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "Missing required command: $1" >&2
@@ -81,10 +106,29 @@ git -C "$SOURCE_DIR" checkout --force FETCH_HEAD
 git -C "$SOURCE_DIR" clean -fdx
 
 echo "Building GhosttyKit.xcframework"
-(
+build_log="$(mktemp "${TMPDIR:-/tmp}/ghostty-build.XXXXXX.log")"
+if ! (
   cd "$SOURCE_DIR"
-  zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Dxcframework-target=native
-)
+  zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Dxcframework-target=universal 2>&1 | tee "$build_log"
+); then
+  if grep -q "ghostty-themes.tgz" "$build_log" && grep -q "404 Not Found" "$build_log"; then
+    if patch_stale_iterm2_themes_dependency "$SOURCE_DIR/build.zig.zon"; then
+      echo "Retrying build after patching stale iTerm2 themes dependency"
+      (
+        cd "$SOURCE_DIR"
+        zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Dxcframework-target=universal
+      )
+    else
+      echo "Build failed with stale themes 404, but automatic dependency patch was not applicable." >&2
+      rm -f "$build_log"
+      exit 1
+    fi
+  else
+    rm -f "$build_log"
+    exit 1
+  fi
+fi
+rm -f "$build_log"
 
 if [[ ! -d "$OUTPUT_XCFRAMEWORK" ]]; then
   echo "Expected output missing: $OUTPUT_XCFRAMEWORK" >&2
