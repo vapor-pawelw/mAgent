@@ -227,11 +227,13 @@ read_homebrew_cask() {
 verify_homebrew_version() {
   local tap_repo="$1"
   local version="$2"
-  local cask_content cask_version cask_sha
+  local expected_url="${3:-}"
+  local cask_content cask_version cask_sha cask_url
 
   cask_content="$(read_homebrew_cask "$tap_repo")"
   cask_version="$(printf '%s\n' "$cask_content" | sed -n 's/^[[:space:]]*version[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
   cask_sha="$(printf '%s\n' "$cask_content" | sed -n 's/^[[:space:]]*sha256[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+  cask_url="$(printf '%s\n' "$cask_content" | sed -n 's/^[[:space:]]*url[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
 
   if [[ "$cask_version" != "$version" ]]; then
     echo "Homebrew cask is at version '$cask_version', expected '$version'." >&2
@@ -243,17 +245,23 @@ verify_homebrew_version() {
     return 1
   fi
 
+  if [[ -n "$expected_url" && "$cask_url" != "$expected_url" ]]; then
+    echo "Homebrew cask URL is '$cask_url', expected '$expected_url'." >&2
+    return 1
+  fi
+
   echo "$cask_sha"
 }
 
 wait_for_homebrew_update() {
   local tap_repo="$1"
   local version="$2"
+  local expected_url="${3:-}"
   local sha=""
   local attempt
 
   for attempt in $(seq 1 30); do
-    if sha="$(verify_homebrew_version "$tap_repo" "$version" 2>/dev/null)"; then
+    if sha="$(verify_homebrew_version "$tap_repo" "$version" "$expected_url" 2>/dev/null)"; then
       printf '%s\n' "$sha"
       return 0
     fi
@@ -464,9 +472,16 @@ main() {
   echo "Verifying GitHub release assets..."
   verify_release_asset "$owner_repo" "$tag"
 
+  local expected_cask_url
+  expected_cask_url="$(gh release view "$tag" --repo "$owner_repo" --json assets --jq '.assets[] | select(.name == "Magent.zip") | .apiUrl' | head -n1 || true)"
+  if [[ -z "$expected_cask_url" ]]; then
+    echo "Could not determine expected Magent.zip asset API URL for ${tag}." >&2
+    exit 1
+  fi
+
   echo "Verifying Homebrew tap update in ${tap_repo}..."
   local cask_sha
-  cask_sha="$(wait_for_homebrew_update "$tap_repo" "$version" || true)"
+  cask_sha="$(wait_for_homebrew_update "$tap_repo" "$version" "$expected_cask_url" || true)"
   if [[ -z "$cask_sha" ]]; then
     echo "Release completed, but Homebrew tap did not update to ${version} in time." >&2
     echo "Check manually: https://github.com/${tap_repo}/blob/main/Casks/magent.rb" >&2

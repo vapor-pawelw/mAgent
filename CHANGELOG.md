@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Project-level **Pre-Agent Command** setting in App Settings to run setup commands before the selected agent starts for new/recreated agent sessions.
 
 ### Fixed
+- Homebrew installs now work with private release assets by using authenticated GitHub API download URLs in the cask update pipeline.
 - Reordering sections no longer changes the default section unexpectedly.
 - Auto-generated task descriptions now use cleaner capitalization for better readability.
 - Reduced excess top padding in the sidebar for a tighter layout.
