@@ -168,6 +168,28 @@ extension ThreadManager {
         return thread.branchName
     }
 
+    /// Updates the expected branch for a thread to match its current actual branch,
+    /// clearing the mismatch. For main threads, updates the project's default branch.
+    func acceptActualBranch(threadId: UUID) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }),
+              let actual = threads[index].actualBranch, !actual.isEmpty else { return }
+
+        if threads[index].isMain {
+            var settings = persistence.loadSettings()
+            if let projIdx = settings.projects.firstIndex(where: { $0.id == threads[index].projectId }) {
+                settings.projects[projIdx].defaultBranch = actual
+                try? persistence.saveSettings(settings)
+            }
+        } else {
+            threads[index].branchName = actual
+            try? persistence.saveThreads(threads)
+        }
+
+        threads[index].expectedBranch = actual
+        threads[index].hasBranchMismatch = false
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
     func switchToExpectedBranch(threadId: UUID) async throws {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else {
             throw ThreadManagerError.threadNotFound

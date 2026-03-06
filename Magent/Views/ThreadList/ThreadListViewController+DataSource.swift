@@ -609,6 +609,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     isDirty: thread.isDirty,
                     isBlockedByRateLimit: thread.isBlockedByRateLimit,
                     rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
+                    hasBranchMismatch: thread.hasBranchMismatch,
+                    actualBranch: thread.actualBranch,
                     leadingOffset: -Self.outlineIndentationPerLevel
                 )
                 return cell

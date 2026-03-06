@@ -286,7 +286,7 @@ final class ThreadCell: NSTableCellView {
         setLeadingOffset(leadingOffset)
 
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
-        let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let branchName = (thread.actualBranch ?? thread.branchName).trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
         let hasBranchWorktreeMismatch = worktreeName != resolvedBranchName
 
@@ -455,6 +455,8 @@ final class ThreadCell: NSTableCellView {
         isDirty: Bool = false,
         isBlockedByRateLimit: Bool = false,
         rateLimitTooltip: String? = nil,
+        hasBranchMismatch: Bool = false,
+        actualBranch: String? = nil,
         leadingOffset: CGFloat = 0
     ) {
         isConfiguredAsMain = true
@@ -471,10 +473,17 @@ final class ThreadCell: NSTableCellView {
         ensureLeadingStack()
         setLeadingOffset(leadingOffset)
         setPreferredLeadingTextWidth(nil)
-        subtitleLabel?.isHidden = true
         pinImageView?.isHidden = true
         archiveButton?.isHidden = true
         leadingPinImageView?.isHidden = true
+
+        if hasBranchMismatch, let branch = actualBranch, !branch.isEmpty {
+            subtitleLabel?.stringValue = branch
+            subtitleLabel?.textColor = .secondaryLabelColor
+            subtitleLabel?.isHidden = false
+        } else {
+            subtitleLabel?.isHidden = true
+        }
 
         imageView?.image = nil
         imageView?.isHidden = true
