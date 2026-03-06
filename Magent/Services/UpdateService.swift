@@ -56,14 +56,20 @@ private struct SemanticVersion: Comparable, Sendable {
 
 private struct AvailableUpdate: Sendable {
     let version: SemanticVersion
-    let zipURL: URL
+    let assetURL: URL
+    let assetKind: ReleaseAssetKind
+}
+
+private enum ReleaseAssetKind: String, Sendable {
+    case dmg
+    case zip
 }
 
 private enum UpdateError: LocalizedError {
     case invalidHTTPStatus(Int)
     case invalidLatestVersion(String)
     case invalidCurrentVersion(String)
-    case missingZipAsset
+    case missingReleaseAsset
     case unwritableInstallLocation(String)
     case failedToStartUpdater(String)
 
@@ -75,8 +81,8 @@ private enum UpdateError: LocalizedError {
             return "Latest release version is invalid: \(version)."
         case .invalidCurrentVersion(let version):
             return "Current app version is invalid: \(version)."
-        case .missingZipAsset:
-            return "Latest release is missing a Magent.zip asset."
+        case .missingReleaseAsset:
+            return "Latest release is missing a Magent.dmg or Magent.zip asset."
         case .unwritableInstallLocation(let path):
             return "Install location is not writable: \(path)."
         case .failedToStartUpdater(let message):
@@ -194,16 +200,20 @@ final class UpdateService {
         }
         guard latestVersion > currentVersion else { return nil }
 
-        let preferredZip = latest.assets.first(where: { $0.name == "Magent.zip" })
-            ?? latest.assets.first(where: { $0.name.lowercased().hasSuffix(".zip") })
-        guard let zipURLString = preferredZip?.browserDownloadURL,
-              let zipURL = URL(string: zipURLString) else {
-            throw UpdateError.missingZipAsset
+        let preferredAsset: (asset: UpdateReleaseAsset, kind: ReleaseAssetKind)? =
+            latest.assets.first(where: { $0.name == "Magent.dmg" }).map { ($0, .dmg) }
+            ?? latest.assets.first(where: { $0.name == "Magent.zip" }).map { ($0, .zip) }
+            ?? latest.assets.first(where: { $0.name.lowercased().hasSuffix(".dmg") }).map { ($0, .dmg) }
+            ?? latest.assets.first(where: { $0.name.lowercased().hasSuffix(".zip") }).map { ($0, .zip) }
+        guard let preferredAsset,
+              let assetURL = URL(string: preferredAsset.asset.browserDownloadURL) else {
+            throw UpdateError.missingReleaseAsset
         }
 
         return AvailableUpdate(
             version: latestVersion,
-            zipURL: zipURL
+            assetURL: assetURL,
+            assetKind: preferredAsset.kind
         )
     }
 
@@ -253,7 +263,7 @@ final class UpdateService {
             }
             try writeBundleReplacementUpdaterScript(at: updaterScriptPath)
             command = """
-            /usr/bin/nohup /bin/zsh \(q(updaterScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(appBundlePath)) \(q(update.zipURL.absoluteString)) \(q(updaterLogPath)) >/dev/null 2>&1 &
+            /usr/bin/nohup /bin/zsh \(q(updaterScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(appBundlePath)) \(q(update.assetURL.absoluteString)) \(q(update.assetKind.rawValue)) \(q(updaterLogPath)) >/dev/null 2>&1 &
             """
         }
 
@@ -285,30 +295,59 @@ final class UpdateService {
 
         pid="$1"
         target_app="$2"
-        zip_url="$3"
-        log_path="$4"
+        asset_url="$3"
+        asset_kind="$4"
+        log_path="$5"
 
         exec >>"$log_path" 2>&1
 
         echo "[magent-updater] started at $(date)"
 
         tmp_dir="$(/usr/bin/mktemp -d /tmp/magent-update.XXXXXX)"
+        mount_dir="$tmp_dir/mount"
         cleanup() {
+          if [[ -d "$mount_dir" ]]; then
+            /usr/bin/hdiutil detach "$mount_dir" -quiet >/dev/null 2>&1 || true
+          fi
           /bin/rm -rf "$tmp_dir"
         }
         trap cleanup EXIT
 
-        /usr/bin/curl --fail --location --silent --show-error "$zip_url" -o "$tmp_dir/Magent.zip"
-        /bin/mkdir -p "$tmp_dir/unpacked"
-        /usr/bin/ditto -x -k "$tmp_dir/Magent.zip" "$tmp_dir/unpacked"
+        archive_path="$tmp_dir/Magent.${asset_kind}"
+        /usr/bin/curl --fail --location --silent --show-error "$asset_url" -o "$archive_path"
 
-        new_app="$(
-          /usr/bin/find "$tmp_dir/unpacked" -maxdepth 3 -type d -name "Magent.app" \
-          | /usr/bin/head -n 1
-        )"
+        case "$asset_kind" in
+          dmg)
+            /bin/mkdir -p "$mount_dir"
+            /usr/bin/hdiutil attach "$archive_path" -nobrowse -readonly -mountpoint "$mount_dir" -quiet
+            mounted_app="$(
+              /usr/bin/find "$mount_dir" -maxdepth 3 -type d -name "Magent.app" \
+              | /usr/bin/head -n 1
+            )"
+            if [[ -z "$mounted_app" ]]; then
+              echo "[magent-updater] Magent.app not found in disk image"
+              exit 20
+            fi
+            new_app="$tmp_dir/Magent.app"
+            /usr/bin/ditto "$mounted_app" "$new_app"
+            ;;
+          zip)
+            /bin/mkdir -p "$tmp_dir/unpacked"
+            /usr/bin/ditto -x -k "$archive_path" "$tmp_dir/unpacked"
+            new_app="$(
+              /usr/bin/find "$tmp_dir/unpacked" -maxdepth 3 -type d -name "Magent.app" \
+              | /usr/bin/head -n 1
+            )"
+            ;;
+          *)
+            echo "[magent-updater] Unsupported update asset type: $asset_kind"
+            exit 19
+            ;;
+        esac
+
         if [[ -z "$new_app" ]]; then
           echo "[magent-updater] Magent.app not found in archive"
-          exit 20
+          exit 21
         fi
 
         while /bin/kill -0 "$pid" 2>/dev/null; do
@@ -317,7 +356,7 @@ final class UpdateService {
 
         if [[ ! -d "$target_app" ]]; then
           echo "[magent-updater] Target app path does not exist: $target_app"
-          exit 21
+          exit 22
         fi
 
         backup_app="${target_app}.magent-backup"

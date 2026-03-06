@@ -213,8 +213,13 @@ verify_release_asset() {
   local owner_repo="$1"
   local tag="$2"
 
+  if ! gh release view "$tag" --repo "$owner_repo" --json assets --jq '.assets[].name' | grep -qx "Magent.dmg"; then
+    echo "Release exists but Magent.dmg was not found on $tag." >&2
+    return 1
+  fi
+
   if ! gh release view "$tag" --repo "$owner_repo" --json assets --jq '.assets[].name' | grep -qx "Magent.zip"; then
-    echo "Release exists but Magent.zip was not found on $tag." >&2
+    echo "Release exists but compatibility asset Magent.zip was not found on $tag." >&2
     return 1
   fi
 }
@@ -395,7 +400,7 @@ main() {
   echo "- Create and push annotated tag: $tag"
   echo "- Current source commit: $commit"
   echo "- Watch workflow: $RELEASE_WORKFLOW_NAME"
-  echo "- Verify GitHub release contains Magent.zip"
+  echo "- Verify GitHub release contains Magent.dmg and Magent.zip"
   echo "- Verify Homebrew tap ${tap_repo} points to version ${version}"
   echo
 
@@ -473,9 +478,9 @@ main() {
   verify_release_asset "$owner_repo" "$tag"
 
   local expected_cask_url
-  expected_cask_url="$(gh release view "$tag" --repo "$owner_repo" --json assets --jq '.assets[] | select(.name == "Magent.zip") | .apiUrl' | head -n1 || true)"
+  expected_cask_url="$(gh release view "$tag" --repo "$owner_repo" --json assets --jq '.assets[] | select(.name == "Magent.dmg") | .apiUrl' | head -n1 || true)"
   if [[ -z "$expected_cask_url" ]]; then
-    echo "Could not determine expected Magent.zip asset API URL for ${tag}." >&2
+    echo "Could not determine expected Magent.dmg asset API URL for ${tag}." >&2
     exit 1
   fi
 
