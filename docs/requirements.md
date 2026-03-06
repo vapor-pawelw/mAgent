@@ -96,7 +96,7 @@ Before the app is usable, the user must complete a configuration step:
 
 ### Project Header Controls
 
-- In each project header row, the trailing `+` create-thread control must treat the entire visible icon frame as clickable, not just the drawn plus glyph.
+- In each project header row, the trailing `+` create-thread control must treat the entire visible icon frame as clickable, and both normal click and Option-click must reliably trigger from that full hit area instead of only the drawn plus glyph.
 
 ## Prompt Table of Contents (TOC)
 
