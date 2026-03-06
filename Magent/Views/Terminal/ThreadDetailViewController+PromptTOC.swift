@@ -45,6 +45,7 @@ extension ThreadDetailViewController {
         ])
 
         promptTOCView = tocView
+        bringPromptTOCOverlayToFront()
     }
 
     func schedulePromptTOCRefresh(after delay: TimeInterval = 0) {
@@ -110,6 +111,7 @@ extension ThreadDetailViewController {
             restorePromptTOCSize(for: sessionName)
             restorePromptTOCPosition(for: sessionName)
         }
+        bringPromptTOCOverlayToFront()
         clampPromptTOCPositionIfNeeded()
     }
 
@@ -404,6 +406,7 @@ extension ThreadDetailViewController {
         updatePromptTOCToggleButtonState(canShow: true)
 
         if !isPromptTOCManuallyHidden {
+            bringPromptTOCOverlayToFront()
             if let sessionName = promptTOCSessionName {
                 restorePromptTOCPosition(for: sessionName)
             }
@@ -485,6 +488,15 @@ extension ThreadDetailViewController {
     private func promptTOCSizeDefaultsKey(for sessionName: String) -> String {
         let raw = "\(thread.id.uuidString)-\(sessionName)"
         return "\(Self.promptTOCSizeDefaultsPrefix).\(sanitizedDefaultsKeySegment(raw))"
+    }
+
+    func bringPromptTOCOverlayToFront() {
+        guard let tocView = promptTOCView, tocView.superview === terminalContainer else { return }
+        terminalContainer.sortSubviews({ left, right, _ in
+            if left === tocView { return .orderedDescending }
+            if right === tocView { return .orderedAscending }
+            return .orderedSame
+        }, context: nil)
     }
 
     private func sanitizedDefaultsKeySegment(_ text: String) -> String {

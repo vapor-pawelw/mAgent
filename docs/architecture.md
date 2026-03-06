@@ -111,6 +111,7 @@ Prompt row interaction/visual rules:
 - Row hit target is the full row (not only text), so clicking anywhere in the row triggers navigation.
 - Row labels can wrap up to 3 lines and then truncate.
 - Apply subtle alternating row backgrounds to improve scanability without dominating the terminal UI.
+- Keep the TOC overlay frontmost in the AppKit subview order whenever terminal surfaces are attached/switched/refreshed; layer `zPosition` alone is not sufficient for mouse hit-testing against embedded Ghostty views.
 
 Navigation behavior:
 - TOC selection uses tmux copy-mode positioning (`scrollHistoryLineToTop`) so the selected prompt line is anchored at the top of the viewport whenever enough lines exist below it.

@@ -108,6 +108,7 @@ Before the app is usable, the user must complete a configuration step:
 - The minimum TOC size is the original default size (320x250).
 - Selecting a TOC row must jump to that prompt and anchor it at the top of the terminal scroll viewport when possible.
 - Prompt rows support up to 3 lines and use subtle alternating background stripes for readability.
+- When the TOC is visible, it must remain directly clickable; the terminal surface must not intercept pointer events over the panel.
 
 ## Thread Row Display Rules
 
