@@ -15,6 +15,8 @@ All notable changes to this project will be documented in this file.
 - New interactive SSH attach flow with persistent launchers, making it much easier to reconnect to remote Magent sessions.
 - SSH picker now uses app-like thread rows with back navigation, and has a more reliable fallback path when advanced picker tools are unavailable.
 - Opening a new thread that reuses an archived thread's worktree name no longer restores the old agent session from the previous thread.
+- Renaming a thread is now fully atomic: if the tmux session rename fails after the git branch was already renamed, the git branch is rolled back and the symlink is cleaned up so the thread state never ends up inconsistent (which previously caused a spurious "branch changed" warning).
+- Auto-rename failures now show a one-time error banner per thread instead of silently failing.
 - Auto-generated task descriptions now use cleaner capitalization for better readability.
 - Added an `Improvement` thread icon type.
 - Added `set-thread-icon` CLI command to manually set thread icon type (`feature`, `fix`, `improvement`, `refactor`, `test`, `other`).

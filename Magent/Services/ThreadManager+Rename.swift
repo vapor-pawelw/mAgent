@@ -435,20 +435,33 @@ extension ThreadManager {
         }
 
         // 1. Rename git branch (skip if already on the target branch)
+        let oldBranch = actualWorktreeBranch ?? currentThread.branchName
         if !branchAlreadyOwned {
             // Use the actual worktree branch if stored branchName is stale
-            let oldBranch = actualWorktreeBranch ?? currentThread.branchName
             try await git.renameBranch(repoPath: project.repoPath, oldName: oldBranch, newName: newBranchName)
         }
 
-        // 2. Create a symlink from the new name to the actual worktree directory.
-        // The worktree itself is NOT moved — running agents keep their cwd intact.
-        if symlinkPath != worktreePath {
-            createCompatibilitySymlink(from: symlinkPath, to: worktreePath)
-        }
+        // Steps 2–3 must be atomic with step 1: roll back git rename and symlink if anything fails.
+        do {
+            // 2. Create a symlink from the new name to the actual worktree directory.
+            // The worktree itself is NOT moved — running agents keep their cwd intact.
+            if symlinkPath != worktreePath {
+                createCompatibilitySymlink(from: symlinkPath, to: worktreePath)
+            }
 
-        // 3. Rename each tmux session
-        try await renameTmuxSessions(from: currentThread.tmuxSessionNames, to: newSessionNames)
+            // 3. Rename each tmux session
+            try await renameTmuxSessions(from: currentThread.tmuxSessionNames, to: newSessionNames)
+        } catch {
+            // Roll back git branch rename
+            if !branchAlreadyOwned {
+                try? await git.renameBranch(repoPath: project.repoPath, oldName: newBranchName, newName: oldBranch)
+            }
+            // Roll back symlink
+            if symlinkPath != worktreePath {
+                try? FileManager.default.removeItem(atPath: symlinkPath)
+            }
+            throw error
+        }
 
         // 4. Update pinned and agent sessions to reflect new names
         let newPinnedSessions = currentThread.pinnedTmuxSessions.map { sessionRenameMap[$0] ?? $0 }
@@ -593,6 +606,15 @@ extension ThreadManager {
             } catch ThreadManagerError.duplicateName {
                 continue
             } catch {
+                if !autoRenameFailedBannerShownThreadIds.contains(thread.id) {
+                    autoRenameFailedBannerShownThreadIds.insert(thread.id)
+                    await MainActor.run {
+                        BannerManager.shared.show(
+                            message: "Auto-rename failed for \"\(thread.name)\": \(error.localizedDescription)",
+                            style: .error
+                        )
+                    }
+                }
                 return false
             }
         }
