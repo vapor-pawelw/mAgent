@@ -79,6 +79,7 @@ extension ThreadDetailViewController {
                 terminalView.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
             ])
         }
+        bringPromptTOCOverlayToFront()
 
         for (i, tv) in terminalViews.enumerated() {
             tv.isHidden = (i != index)
