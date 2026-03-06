@@ -146,7 +146,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         let availableWidth = availableDescriptionWidth(for: thread, in: outlineView)
         guard availableWidth > 0 else { return 1 }
 
-        let font: NSFont = .preferredFont(forTextStyle: .body)
+        let font = descriptionFont(for: thread)
 
         let textStorage = NSTextStorage(
             string: description,
@@ -169,8 +169,14 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     private func compactTextRowHeightIncrement(for thread: MagentThread) -> CGFloat {
-        let font: NSFont = .preferredFont(forTextStyle: .body)
+        let font = descriptionFont(for: thread)
         return ceil(font.ascender - font.descender + font.leading)
+    }
+
+    private func descriptionFont(for thread: MagentThread) -> NSFont {
+        thread.hasUnreadAgentCompletion
+            ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+            : .preferredFont(forTextStyle: .body)
     }
 
     private func descriptionTextWidth(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
@@ -648,7 +654,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.configure(
                 with: thread,
                 sectionColor: sectionColor,
-                leadingOffset: threadLeadingOffset(for: thread, in: outlineView)
+                leadingOffset: threadLeadingOffset(for: thread, in: outlineView),
+                preferredTextWidth: availableDescriptionWidth(for: thread, in: outlineView)
             )
             cell.onArchive = { [weak self] in
                 self?.triggerArchive(for: thread)
