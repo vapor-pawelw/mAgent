@@ -494,6 +494,20 @@ extension ThreadDetailViewController {
     }
 }
 
+private final class PromptTOCEntryRowView: NSView {
+    let entryIndex: Int
+
+    init(entryIndex: Int) {
+        self.entryIndex = entryIndex
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
 final class PromptTableOfContentsView: NSView {
     var onSelectEntry: ((Int) -> Void)?
     var onDragGesture: ((NSPanGestureRecognizer) -> Void)?
@@ -539,8 +553,7 @@ final class PromptTableOfContentsView: NSView {
 
         emptyLabel.isHidden = true
         for (index, entry) in entries.enumerated() {
-            let row = NSView()
-            row.tag = index
+            let row = PromptTOCEntryRowView(entryIndex: index)
             row.translatesAutoresizingMaskIntoConstraints = false
             row.wantsLayer = true
             row.layer?.cornerRadius = 4
@@ -703,8 +716,8 @@ final class PromptTableOfContentsView: NSView {
     }
 
     @objc private func handleEntryRowTap(_ gesture: NSClickGestureRecognizer) {
-        guard let row = gesture.view else { return }
-        onSelectEntry?(row.tag)
+        guard let row = gesture.view as? PromptTOCEntryRowView else { return }
+        onSelectEntry?(row.entryIndex)
     }
 
     @objc private func handleDrag(_ gesture: NSPanGestureRecognizer) {

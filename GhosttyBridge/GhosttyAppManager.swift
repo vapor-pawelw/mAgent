@@ -220,18 +220,17 @@ private func ghosttyConfirmReadClipboardCallback(
 
 private func ghosttyWriteClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
+    _ str: UnsafePointer<CChar>?,
     _ location: ghostty_clipboard_e,
-    _ content: UnsafePointer<ghostty_clipboard_content_s>?,
-    _ count: Int,
     _ confirm: Bool
 ) {
-    guard let content, count > 0 else { return }
-    let first = content.pointee
-    if let data = first.data {
-        let text = String(cString: data)
-        Task { @MainActor in
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
+    guard let str else { return }
+    let text = String(cString: str)
+    Task { @MainActor in
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        if confirm {
+            GhosttyAppManager.log("clipboard write confirmed for location \(location.rawValue)")
         }
     }
 }

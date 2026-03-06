@@ -86,7 +86,6 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         config.env_var_count = 0
         config.initial_input = nil
         config.wait_after_command = false
-        config.context = GHOSTTY_SURFACE_CONTEXT_WINDOW
 
         surface = ghostty_surface_new(app, &config)
         GhosttyAppManager.log("surface created: \(surface != nil), bounds: \(bounds)")
@@ -552,14 +551,6 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         case 0: GHOSTTY_MOUSE_LEFT
         case 1: GHOSTTY_MOUSE_RIGHT
         case 2: GHOSTTY_MOUSE_MIDDLE
-        case 3: GHOSTTY_MOUSE_FOUR
-        case 4: GHOSTTY_MOUSE_FIVE
-        case 5: GHOSTTY_MOUSE_SIX
-        case 6: GHOSTTY_MOUSE_SEVEN
-        case 7: GHOSTTY_MOUSE_EIGHT
-        case 8: GHOSTTY_MOUSE_NINE
-        case 9: GHOSTTY_MOUSE_TEN
-        case 10: GHOSTTY_MOUSE_ELEVEN
         default: GHOSTTY_MOUSE_UNKNOWN
         }
     }

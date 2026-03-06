@@ -87,10 +87,6 @@ main() {
   cd "$root"
   ensure_build_prerequisites "$root"
 
-  echo "Killing running $APP_NAME instances..."
-  killall "$APP_NAME" 2>/dev/null || true
-  sleep 0.5
-
   build_dir="$(build_dir_from_xcodebuild)"
   if [[ -z "$build_dir" ]]; then
     echo "Failed to resolve CONFIGURATION_BUILD_DIR for scheme '$SCHEME'." >&2
@@ -107,6 +103,10 @@ main() {
     echo "Built app not found at: $app_path" >&2
     exit 1
   fi
+
+  echo "Killing running $APP_NAME instances..."
+  killall "$APP_NAME" 2>/dev/null || true
+  sleep 0.5
 
   echo "Launching $app_path..."
   if ! open -n "$app_path"; then

@@ -40,6 +40,8 @@ Produces macOS universal + iOS arm64 + iOS Simulator arm64 slices.
 `libghostty.a` is intentionally not committed to this repository.  
 `./scripts/bootstrap-ghosttykit.sh` is the canonical way to populate `Libraries/GhosttyKit.xcframework` in local dev and CI.
 
+If the local `GhosttyKit.xcframework` was rebuilt from a different Ghostty ref, rerun `./scripts/bootstrap-ghosttykit.sh` with the repo's pinned default ref before building Magent. The Swift bridge code tracks the pinned embedding API and can fail to compile against a newer local header set.
+
 ## Xcode Integration
 
 1. Copy `GhosttyKit.xcframework` into project
