@@ -244,9 +244,18 @@ extension ThreadDetailViewController {
         label.textColor = NSColor(resource: .textSecondary)
         label.translatesAutoresizingMaskIntoConstraints = false
 
-        let stack = NSStackView(views: [spinner, label])
+        let detailLabel = NSTextField(labelWithString: "")
+        detailLabel.font = .systemFont(ofSize: 11)
+        detailLabel.textColor = .tertiaryLabelColor
+        detailLabel.alignment = .center
+        detailLabel.lineBreakMode = .byWordWrapping
+        detailLabel.maximumNumberOfLines = 2
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+        detailLabel.isHidden = true
+
+        let stack = NSStackView(views: [spinner, label, detailLabel])
         stack.orientation = .vertical
-        stack.spacing = 12
+        stack.spacing = 8
         stack.alignment = .centerX
         stack.translatesAutoresizingMaskIntoConstraints = false
 
@@ -261,9 +270,12 @@ extension ThreadDetailViewController {
 
             stack.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
             stack.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: overlay.leadingAnchor, constant: 40),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: overlay.trailingAnchor, constant: -40),
         ])
 
         loadingOverlay = overlay
+        loadingDetailLabel = detailLabel
 
         let sessionName: String
         let settings = PersistenceService.shared.loadSettings()
@@ -277,6 +289,7 @@ extension ThreadDetailViewController {
         } else {
             sessionName = thread.tmuxSessionNames.first ?? TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
         }
+        loadingOverlaySessionName = sessionName
         let startTime = Date()
         let maxWait: TimeInterval = 15
         let overlayAgentType = thread.sessionAgentTypes[sessionName] ?? thread.selectedAgentType
@@ -324,10 +337,20 @@ extension ThreadDetailViewController {
             overlay.animator().alphaValue = 0
         } completionHandler: { [weak self] in
             Task { @MainActor [weak self] in
+                self?.loadingDetailLabel = nil
                 self?.loadingOverlay?.removeFromSuperview()
                 self?.loadingOverlay = nil
+                self?.loadingOverlaySessionName = nil
             }
         }
+    }
+
+    @MainActor
+    func updateLoadingOverlayDetail(_ detail: String?) {
+        guard let label = loadingDetailLabel else { return }
+        let trimmed = detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        label.stringValue = trimmed
+        label.isHidden = trimmed.isEmpty
     }
 
     // MARK: - Pin/Unpin

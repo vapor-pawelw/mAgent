@@ -190,6 +190,12 @@ User Action (+ button)
         └──► PersistenceService.save()
 ```
 
+## Session Reopen / Recovery
+
+- `ThreadDetailViewController` always calls `ThreadManager.recreateSessionIfNeeded(...)` before attaching a tab so reopened views can reuse a live tmux session or recover a missing/mismatched one.
+- Keep the fast path cheap: if the tmux session already exists and matches the expected thread/worktree context, return before doing slower resume bookkeeping such as agent conversation-ID refresh.
+- The loading overlay's secondary detail line is reserved for non-routine recovery actions reported by session recreation. Normal agent startup should continue to show only `Starting agent...`.
+
 ## Platform Scope
 
 - **macOS**: Full experience — sidebar + terminal + tabs, keyboard-driven

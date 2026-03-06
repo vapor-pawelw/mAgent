@@ -36,7 +36,9 @@ final class ThreadDetailViewController: NSViewController {
     var primaryTabIndex = 0
     var pinnedCount = 0
     var loadingOverlay: NSView?
+    var loadingDetailLabel: NSTextField?
     var loadingPollTimer: Timer?
+    var loadingOverlaySessionName: String?
     var emptyStateView: NSView?
     var promptTOCView: PromptTableOfContentsView?
     var promptTOCTopConstraint: NSLayoutConstraint?
@@ -348,7 +350,12 @@ final class ThreadDetailViewController: NSViewController {
             // Ensure the session exists and matches this thread context.
             _ = await threadManager.recreateSessionIfNeeded(
                 sessionName: sessionName,
-                thread: thread
+                thread: thread,
+                onAction: { [weak self] action in
+                    guard let self,
+                          sessionName == self.loadingOverlaySessionName else { return }
+                    self.updateLoadingOverlayDetail(action?.loadingOverlayDetail)
+                }
             )
 
             await MainActor.run {
