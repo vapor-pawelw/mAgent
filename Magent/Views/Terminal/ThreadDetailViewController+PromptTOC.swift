@@ -493,11 +493,7 @@ extension ThreadDetailViewController {
 
     func bringPromptTOCOverlayToFront() {
         guard let tocView = promptTOCView, tocView.superview === terminalContainer else { return }
-        terminalContainer.sortSubviews({ left, right, _ in
-            if left === tocView { return .orderedDescending }
-            if right === tocView { return .orderedAscending }
-            return .orderedSame
-        }, context: nil)
+        terminalContainer.addSubview(tocView, positioned: .above, relativeTo: nil)
     }
 
     private func sanitizedDefaultsKeySegment(_ text: String) -> String {

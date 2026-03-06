@@ -189,7 +189,6 @@ extension ThreadManager {
             lastSelectedTmuxSessionName: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName],
             baseBranch: baseBranch,
-            localFileSyncPathsSnapshot: localFileSyncPathsSnapshot,
             submittedPromptsBySession: {
                 guard useAgentCommand,
                       let initialPrompt,
@@ -201,7 +200,8 @@ extension ThreadManager {
                         .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                 ]]
-            }()
+            }(),
+            localFileSyncPathsSnapshot: localFileSyncPathsSnapshot
         )
 
         threads.append(thread)
