@@ -353,9 +353,20 @@ extension ThreadListViewController {
             expectedBranch: expected,
             hasMismatch: true
         )
+        branchMismatchView.onAcceptBranch = { [weak self] in
+            self?.handleAcceptBranch(for: current)
+        }
         branchMismatchView.onSwitchBranch = { [weak self] in
             self?.handleSwitchBranch(for: current)
         }
+    }
+
+    private func handleAcceptBranch(for thread: MagentThread) {
+        let actual = thread.actualBranch ?? thread.branchName
+        threadManager.acceptActualBranch(threadId: thread.id)
+        BannerManager.shared.show(message: "Branch \(actual) accepted as expected", style: .info, duration: 3)
+        branchMismatchView.clear()
+        refreshDiffPanel(for: thread)
     }
 
     private func handleSwitchBranch(for thread: MagentThread) {

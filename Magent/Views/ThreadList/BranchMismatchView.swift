@@ -3,9 +3,11 @@ import Cocoa
 final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
 
     var onSwitchBranch: (() -> Void)?
+    var onAcceptBranch: (() -> Void)?
 
     private let iconView = NSImageView()
     private let messageLabel = NSTextField(labelWithString: "")
+    private let acceptButton = NSButton()
     private let switchButton = NSButton()
     private let detailContainer = NSView()
     private let currentLabel = NSTextField(wrappingLabelWithString: "")
@@ -34,19 +36,19 @@ final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
     private func setupViews() {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
-        layer?.backgroundColor = NSColor.systemYellow.withAlphaComponent(0.12).cgColor
+        layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.08).cgColor
 
         // Click gesture on collapsed header to expand/collapse
         let click = NSClickGestureRecognizer(target: self, action: #selector(toggleExpanded))
         click.delegate = self
         addGestureRecognizer(click)
 
-        // Warning icon
+        // Info icon
         iconView.image = NSImage(
-            systemSymbolName: "exclamationmark.triangle.fill",
-            accessibilityDescription: "Branch mismatch warning"
+            systemSymbolName: "info.circle.fill",
+            accessibilityDescription: "Branch info"
         )
-        iconView.contentTintColor = .systemYellow
+        iconView.contentTintColor = .systemBlue
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.setContentHuggingPriority(.required, for: .horizontal)
         addSubview(iconView)
@@ -58,8 +60,19 @@ final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(messageLabel)
 
-        // Switch button
-        switchButton.title = "Switch"
+        // Accept button
+        acceptButton.title = "Accept"
+        acceptButton.bezelStyle = .rounded
+        acceptButton.controlSize = .mini
+        acceptButton.font = .systemFont(ofSize: 11, weight: .medium)
+        acceptButton.target = self
+        acceptButton.action = #selector(acceptTapped)
+        acceptButton.translatesAutoresizingMaskIntoConstraints = false
+        acceptButton.setContentHuggingPriority(.required, for: .horizontal)
+        addSubview(acceptButton)
+
+        // Switch back button
+        switchButton.title = "Switch back"
         switchButton.bezelStyle = .rounded
         switchButton.controlSize = .mini
         switchButton.font = .systemFont(ofSize: 11, weight: .medium)
@@ -107,7 +120,10 @@ final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
 
             messageLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 6),
             messageLabel.centerYAnchor.constraint(equalTo: iconView.centerYAnchor),
-            messageLabel.trailingAnchor.constraint(lessThanOrEqualTo: switchButton.leadingAnchor, constant: -6),
+            messageLabel.trailingAnchor.constraint(lessThanOrEqualTo: acceptButton.leadingAnchor, constant: -6),
+
+            acceptButton.trailingAnchor.constraint(equalTo: switchButton.leadingAnchor, constant: -6),
+            acceptButton.centerYAnchor.constraint(equalTo: iconView.centerYAnchor),
 
             switchButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             switchButton.centerYAnchor.constraint(equalTo: iconView.centerYAnchor),
@@ -175,7 +191,7 @@ final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
 
     override func mouseEntered(with event: NSEvent) {
         guard !isHidden, !storedActual.isEmpty else { return }
-        toolTip = "On \(storedActual), should be \(storedExpected)"
+        toolTip = "Currently on \(storedActual), expected \(storedExpected)"
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -193,12 +209,13 @@ final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
         storedActual = actualBranch
         storedExpected = expectedBranch
 
-        messageLabel.stringValue = "Branch changed"
+        messageLabel.stringValue = "On a different branch"
 
-        currentLabel.attributedStringValue = attributedBranchString(prefix: "now: ", branch: actualBranch)
+        currentLabel.attributedStringValue = attributedBranchString(prefix: "current: ", branch: actualBranch)
         expectedLabel.attributedStringValue = attributedBranchString(prefix: "expected: ", branch: expectedBranch)
-        detailExplanation.stringValue = "The working branch diverged from the thread's branch. Click Switch to restore it."
+        detailExplanation.stringValue = "The working branch differs from what's expected for this thread. Accept to update the expected branch, or Switch back to restore it."
 
+        acceptButton.toolTip = "Set \(actualBranch) as the expected branch"
         switchButton.toolTip = "Checkout \(expectedBranch)"
 
         applyExpandedState(animated: false)
@@ -210,6 +227,7 @@ final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
         storedExpected = ""
         messageLabel.stringValue = ""
         toolTip = nil
+        acceptButton.toolTip = nil
         switchButton.toolTip = nil
         isExpanded = false
         detailContainer.isHidden = true
@@ -255,7 +273,11 @@ final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
 
     func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
         let location = convert(event.locationInWindow, from: nil)
-        return !switchButton.frame.contains(location)
+        return !switchButton.frame.contains(location) && !acceptButton.frame.contains(location)
+    }
+
+    @objc private func acceptTapped() {
+        onAcceptBranch?()
     }
 
     @objc private func switchTapped() {
