@@ -247,6 +247,18 @@ final class TmuxService {
         return path.isEmpty ? nil : path
     }
 
+    func sessionCreatedAt(sessionName: String) async -> Date? {
+        guard let output = try? await ShellExecutor.run(
+            "tmux display-message -p -t \(shellQuote(sessionName)) '#{session_created}'"
+        ) else {
+            return nil
+        }
+
+        let rawValue = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let seconds = TimeInterval(rawValue), seconds > 0 else { return nil }
+        return Date(timeIntervalSince1970: seconds)
+    }
+
     func activePaneInfo(sessionName: String) async -> (command: String, path: String)? {
         guard let output = try? await ShellExecutor.run(
             "tmux list-panes -t \(shellQuote(sessionName)) -F '#{pane_active}\t#{pane_current_command}\t#{pane_current_path}'"

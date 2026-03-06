@@ -127,6 +127,7 @@ extension ThreadManager {
             selectedAgentType = nil
         }
 
+        let threadID = UUID()
         let firstTabDisplayName = useAgentCommand
             ? TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
             : "Terminal"
@@ -137,7 +138,7 @@ extension ThreadManager {
         trustDirectoryIfNeeded(worktreePath, agentType: selectedAgentType)
 
         // Create tmux session with selected agent command (or shell if no active agents)
-        let envExports = "export MAGENT_WORKTREE_PATH=\(worktreePath) && export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=\(name) && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
+        let envExports = "export MAGENT_WORKTREE_PATH=\(worktreePath) && export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=\(name) && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_THREAD_ID=\(threadID.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
         let startCmd: String
         if useAgentCommand {
             startCmd = agentStartCommand(
@@ -164,6 +165,7 @@ extension ThreadManager {
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: name)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_THREAD_ID", value: threadID.uuidString)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
         if let selectedAgentType {
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
@@ -177,6 +179,7 @@ extension ThreadManager {
         }
 
         let thread = MagentThread(
+            id: threadID,
             projectId: project.id,
             name: name,
             worktreePath: worktreePath,
@@ -246,6 +249,7 @@ extension ThreadManager {
         }
 
         let settings = persistence.loadSettings()
+        let threadID = UUID()
         let selectedAgentType = resolveAgentType(for: project.id, requestedAgentType: nil, settings: settings)
 
         let repoSlug = Self.repoSlug(from: project.name)
@@ -259,7 +263,7 @@ extension ThreadManager {
         }
 
         trustDirectoryIfNeeded(project.repoPath, agentType: selectedAgentType)
-        let envExports = "export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
+        let envExports = "export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_THREAD_ID=\(threadID.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
         let startCmd = agentStartCommand(
             settings: settings,
             projectId: project.id,
@@ -277,6 +281,7 @@ extension ThreadManager {
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_THREAD_ID", value: threadID.uuidString)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
         if let selectedAgentType {
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
@@ -290,6 +295,7 @@ extension ThreadManager {
         }
 
         let thread = MagentThread(
+            id: threadID,
             projectId: project.id,
             name: "main",
             worktreePath: project.repoPath,

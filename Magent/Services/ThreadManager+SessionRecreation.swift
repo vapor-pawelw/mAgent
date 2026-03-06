@@ -129,9 +129,9 @@ extension ThreadManager {
         let resumeSessionID = refreshedThread.sessionConversationIDs[sessionName]
         let envExports: String
         if thread.isMain {
-            envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
+            envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_THREAD_ID=\(thread.id.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
         } else {
-            envExports = "export MAGENT_WORKTREE_PATH=\(thread.worktreePath) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(thread.name) && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
+            envExports = "export MAGENT_WORKTREE_PATH=\(thread.worktreePath) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(thread.name) && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_THREAD_ID=\(thread.id.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
         }
         if isAgentSession {
             startCmd = agentStartCommand(
@@ -196,6 +196,7 @@ extension ThreadManager {
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: thread.name)
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: projectName)
         }
+        try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_THREAD_ID", value: thread.id.uuidString)
         if let agent = agentType(for: thread, sessionName: sessionName) {
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_AGENT_TYPE", value: agent.rawValue)
         } else {
@@ -213,6 +214,16 @@ extension ThreadManager {
         projectPath: String,
         isAgentSession: Bool
     ) async -> Bool {
+        if let ownerThreadID = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_THREAD_ID"),
+           !ownerThreadID.isEmpty {
+            guard ownerThreadID == thread.id.uuidString else { return false }
+        } else if let sessionCreatedAt = await tmux.sessionCreatedAt(sessionName: sessionName),
+                  sessionCreatedAt < thread.createdAt.addingTimeInterval(-1) {
+            // A session older than the current thread is from a previous owner
+            // when a branch/worktree name gets reused. Do not adopt it.
+            return false
+        }
+
         let expectedPath = thread.isMain ? projectPath : thread.worktreePath
 
         if let paneInfo = await tmux.activePaneInfo(sessionName: sessionName),

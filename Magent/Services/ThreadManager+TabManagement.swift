@@ -32,7 +32,7 @@ extension ThreadManager {
         if currentThread.isMain {
             let projectPath = currentThread.worktreePath
             let projectName = settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
-            let envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
+            let envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_THREAD_ID=\(currentThread.id.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
             if useAgentCommand {
                 selectedAgentType = resolveAgentType(
                     for: currentThread.projectId,
@@ -72,7 +72,7 @@ extension ThreadManager {
         } else {
             let project = settings.projects.first(where: { $0.id == currentThread.projectId })
             let projectPath = project?.repoPath ?? currentThread.worktreePath
-            let envExports = "export MAGENT_WORKTREE_PATH=\(currentThread.worktreePath) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(currentThread.name) && export MAGENT_PROJECT_NAME=\(project?.name ?? "project") && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
+            let envExports = "export MAGENT_WORKTREE_PATH=\(currentThread.worktreePath) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(currentThread.name) && export MAGENT_PROJECT_NAME=\(project?.name ?? "project") && export MAGENT_THREAD_ID=\(currentThread.id.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
             if useAgentCommand {
                 selectedAgentType = resolveAgentType(
                     for: currentThread.projectId,
@@ -133,6 +133,7 @@ extension ThreadManager {
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: currentThread.name)
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: tabProject?.name ?? "project")
         }
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_THREAD_ID", value: currentThread.id.uuidString)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
         if useAgentCommand, let selectedAgentType {
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
