@@ -2,6 +2,26 @@ import Foundation
 
 extension ThreadManager {
 
+    enum SessionRecreationAction {
+        case recreateMissingAgentSession
+        case recreateMismatchedAgentSession
+        case recreateMissingTerminalSession
+        case recreateMismatchedTerminalSession
+
+        var loadingOverlayDetail: String {
+            switch self {
+            case .recreateMissingAgentSession:
+                return "Recovering a missing tmux session and restoring the saved agent conversation."
+            case .recreateMismatchedAgentSession:
+                return "Replacing a stale tmux session that points at the wrong worktree, then restoring the saved conversation."
+            case .recreateMissingTerminalSession:
+                return "Recovering a missing tmux session for this tab."
+            case .recreateMismatchedTerminalSession:
+                return "Replacing a stale tmux session that points at the wrong worktree."
+            }
+        }
+    }
+
     // MARK: - Stale Session Cleanup
 
     /// Kills live tmux sessions prefixed with "ma-" that are not referenced by any non-archived thread/tab.
@@ -80,7 +100,8 @@ extension ThreadManager {
     /// Returns true if the session was recreated.
     func recreateSessionIfNeeded(
         sessionName: String,
-        thread: MagentThread
+        thread: MagentThread,
+        onAction: (@MainActor @Sendable (SessionRecreationAction?) -> Void)? = nil
     ) async -> Bool {
         // Skip if already being recreated
         guard !sessionsBeingRecreated.contains(sessionName) else { return false }
@@ -89,26 +110,23 @@ extension ThreadManager {
         defer { sessionsBeingRecreated.remove(sessionName) }
 
         let settings = persistence.loadSettings()
-        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        let refreshedThread = threads.first(where: { $0.id == thread.id }) ?? thread
+        let project = settings.projects.first(where: { $0.id == refreshedThread.projectId })
         let projectPath = project?.repoPath ?? thread.worktreePath
         let projectName = project?.name ?? "project"
-        let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
-        if isAgentSession {
-            await refreshAgentConversationID(threadId: thread.id, sessionName: sessionName)
-        }
-        let refreshedThread = threads.first(where: { $0.id == thread.id }) ?? thread
+        let isAgentSession = refreshedThread.agentTmuxSessions.contains(sessionName)
 
         if await tmux.hasSession(name: sessionName) {
             let sessionMatches = await sessionMatchesThreadContext(
                 sessionName: sessionName,
-                thread: thread,
+                thread: refreshedThread,
                 projectPath: projectPath,
                 isAgentSession: isAgentSession
             )
             if sessionMatches {
                 await setSessionEnvironment(
                     sessionName: sessionName,
-                    thread: thread,
+                    thread: refreshedThread,
                     projectPath: projectPath,
                     projectName: projectName
                 )
@@ -118,8 +136,28 @@ extension ThreadManager {
                 return false
             }
 
+            if let onAction {
+                await MainActor.run {
+                    onAction(isAgentSession ? .recreateMismatchedAgentSession : .recreateMismatchedTerminalSession)
+                }
+            }
+
             // Session name exists but points at another thread/project context.
             try? await tmux.killSession(name: sessionName)
+        } else {
+            if let onAction {
+                await MainActor.run {
+                    onAction(isAgentSession ? .recreateMissingAgentSession : .recreateMissingTerminalSession)
+                }
+            }
+        }
+
+        // Refreshing persisted resume IDs can touch agent-owned state on disk and
+        // occasionally takes much longer than a simple tmux health check. Keep it
+        // off the fast path for already-live sessions, but still do it before
+        // recreating a missing/mismatched agent session so resume remains intact.
+        if isAgentSession {
+            await refreshAgentConversationID(threadId: refreshedThread.id, sessionName: sessionName)
         }
 
         let startCmd: String

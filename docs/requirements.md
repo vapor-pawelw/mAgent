@@ -69,6 +69,7 @@ Before the app is usable, the user must complete a configuration step:
 
 - Thread state (which worktrees are active, tmux session names, project association) is saved to disk
 - On app launch, threads are restored and terminals reconnected to existing tmux sessions
+- While an agent tab is opening, the loading overlay may show a small, low-contrast technical status line only for non-routine recovery work (for example recreating a missing tmux session or replacing one tied to the wrong worktree). Routine agent startup should keep the simple `Starting agent...` message.
 
 ## UI Structure
 
