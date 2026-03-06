@@ -2,6 +2,7 @@ import Cocoa
 
 private final class SplitContentContainerViewController: NSViewController {
     private var currentChild: NSViewController?
+    private var currentChildConstraints: [NSLayoutConstraint] = []
 
     override func loadView() {
         view = NSView()
@@ -11,6 +12,8 @@ private final class SplitContentContainerViewController: NSViewController {
         if currentChild === child { return }
 
         if let currentChild {
+            NSLayoutConstraint.deactivate(currentChildConstraints)
+            currentChildConstraints.removeAll()
             currentChild.view.removeFromSuperview()
             currentChild.removeFromParent()
         }
@@ -19,12 +22,13 @@ private final class SplitContentContainerViewController: NSViewController {
         let childView = child.view
         childView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(childView)
-        NSLayoutConstraint.activate([
+        currentChildConstraints = [
             childView.topAnchor.constraint(equalTo: view.topAnchor),
             childView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             childView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             childView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
+        ]
+        NSLayoutConstraint.activate(currentChildConstraints)
 
         currentChild = child
     }
@@ -162,7 +166,9 @@ final class SplitViewController: NSSplitViewController {
         let detailVC = ThreadDetailViewController(thread: thread)
         currentDetailVC = detailVC
 
-        contentContainerVC.setContent(detailVC)
+        preserveSidebarWidthDuringContentChange {
+            contentContainerVC.setContent(detailVC)
+        }
 
         if thread.jiraUnassigned {
             BannerManager.shared.show(
@@ -292,7 +298,32 @@ final class SplitViewController: NSSplitViewController {
     private func showEmptyState() {
         currentDetailVC = nil
         ThreadManager.shared.setActiveThread(nil)
-        contentContainerVC.setContent(emptyStateVC)
+        preserveSidebarWidthDuringContentChange {
+            contentContainerVC.setContent(emptyStateVC)
+        }
+    }
+
+    private func preserveSidebarWidthDuringContentChange(_ change: () -> Void) {
+        let preservedWidth = currentSidebarWidth()
+        change()
+        restoreSidebarWidth(preservedWidth)
+        DispatchQueue.main.async { [weak self] in
+            self?.restoreSidebarWidth(preservedWidth)
+        }
+    }
+
+    private func currentSidebarWidth() -> CGFloat? {
+        guard let sidebarItem else { return nil }
+        let width = sidebarItem.viewController.view.frame.width
+        guard width.isFinite, width > 0 else { return nil }
+        return min(max(width, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+    }
+
+    private func restoreSidebarWidth(_ width: CGFloat?) {
+        guard let width else { return }
+        guard splitViewItems.count >= 2 else { return }
+        splitView.layoutSubtreeIfNeeded()
+        splitView.setPosition(width, ofDividerAt: 0)
     }
 }
 

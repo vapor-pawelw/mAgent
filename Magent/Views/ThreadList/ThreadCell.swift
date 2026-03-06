@@ -15,6 +15,7 @@ final class ThreadCell: NSTableCellView {
     private var busySpinner: NSProgressIndicator?
     private var trailingStackView: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
+    private var leadingTextWidthConstraint: NSLayoutConstraint?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
 
@@ -99,6 +100,13 @@ final class ThreadCell: NSTableCellView {
         verticalStack.alignment = .leading
         verticalStack.spacing = 1
         verticalStack.translatesAutoresizingMaskIntoConstraints = false
+        verticalStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        verticalStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let textWidthConstraint = verticalStack.widthAnchor.constraint(equalToConstant: 0)
+        textWidthConstraint.priority = .defaultHigh
+        textWidthConstraint.isActive = false
+        leadingTextWidthConstraint = textWidthConstraint
 
         let stack = NSStackView(views: [iv, verticalStack])
         stack.orientation = .horizontal
@@ -127,6 +135,16 @@ final class ThreadCell: NSTableCellView {
 
     private func setLeadingOffset(_ offset: CGFloat) {
         leadingStackConstraint?.constant = ThreadListViewController.sidebarHorizontalInset + offset
+    }
+
+    private func setPreferredLeadingTextWidth(_ width: CGFloat?) {
+        guard let leadingTextWidthConstraint else { return }
+        guard let width, width > 0 else {
+            leadingTextWidthConstraint.isActive = false
+            return
+        }
+        leadingTextWidthConstraint.constant = width
+        leadingTextWidthConstraint.isActive = true
     }
 
     private func makeDirtyDot() -> NSImageView {
@@ -256,7 +274,12 @@ final class ThreadCell: NSTableCellView {
         leadingPinImageView = pin
     }
 
-    func configure(with thread: MagentThread, sectionColor: NSColor?, leadingOffset: CGFloat = 0) {
+    func configure(
+        with thread: MagentThread,
+        sectionColor: NSColor?,
+        leadingOffset: CGFloat = 0,
+        preferredTextWidth: CGFloat? = nil
+    ) {
         isConfiguredAsMain = false
         ensureTrailingStack()
         ensureLeadingStack()
@@ -287,6 +310,7 @@ final class ThreadCell: NSTableCellView {
         textField?.lineBreakMode = .byTruncatingTail
 
         if hasDescription, let description = trimmedDescription {
+            setPreferredLeadingTextWidth(preferredTextWidth)
             textField?.stringValue = description
             textField?.maximumNumberOfLines = 2
             textField?.lineBreakMode = .byWordWrapping
@@ -296,6 +320,7 @@ final class ThreadCell: NSTableCellView {
             setDirtyDot(primaryDirtyDot, visible: false)
             setDirtyDot(secondaryDirtyDot, visible: thread.isDirty)
         } else if hasBranchWorktreeMismatch {
+            setPreferredLeadingTextWidth(nil)
             textField?.stringValue = resolvedBranchName
             textField?.maximumNumberOfLines = 1
 
@@ -309,6 +334,7 @@ final class ThreadCell: NSTableCellView {
             setDirtyDot(primaryDirtyDot, visible: false)
             setDirtyDot(secondaryDirtyDot, visible: thread.isDirty)
         } else {
+            setPreferredLeadingTextWidth(nil)
             var singleLineParts = [resolvedBranchName]
             if let pr = thread.pullRequestInfo {
                 singleLineParts.append(pr.displayLabel)
@@ -444,6 +470,7 @@ final class ThreadCell: NSTableCellView {
         ensureTrailingStack()
         ensureLeadingStack()
         setLeadingOffset(leadingOffset)
+        setPreferredLeadingTextWidth(nil)
         subtitleLabel?.isHidden = true
         pinImageView?.isHidden = true
         archiveButton?.isHidden = true
