@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Thread
+- Expanded auto-generated thread name pool from 85 to 403 Pokémon, covering Generations 1–4 in order.
 - A floating "Scroll to bottom" button now appears at the bottom-left of the terminal when scrolled up 3+ lines; clicking it snaps back to live output and fades away.
 - Added terminal scrollback buttons in the top bar, with tmux-backed page up/down and jump-to-bottom controls that still work when an agent hijacks mouse-wheel input.
 - Archive now supports project-scoped local file sync merge-back from worktree to repo root with changed-file-only sync, UI conflict prompts (`Override`, `Override All`, `Ignore`, `Cancel Archive`), and safe non-interactive/CLI conflict skipping so existing repo files are not lost.
