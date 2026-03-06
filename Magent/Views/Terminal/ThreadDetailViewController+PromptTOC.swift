@@ -65,8 +65,8 @@ extension ThreadDetailViewController {
         tocView.onDragGesture = { [weak self] gesture in
             self?.handlePromptTOCDrag(gesture)
         }
-        tocView.onResizeGesture = { [weak self] gesture in
-            self?.handlePromptTOCResize(gesture)
+        tocView.onResizeGesture = { [weak self] gesture, corner in
+            self?.handlePromptTOCResize(gesture, corner: corner)
         }
 
         terminalContainer.addSubview(tocView)
@@ -642,25 +642,78 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func handlePromptTOCResize(_ gesture: NSPanGestureRecognizer) {
+    private func handlePromptTOCResize(_ gesture: NSPanGestureRecognizer, corner: TOCResizeCorner) {
         guard promptTOCView != nil else { return }
         guard !isPromptTOCManuallyHidden else { return }
-        guard let width = promptTOCWidthConstraint, let height = promptTOCHeightConstraint else { return }
+        guard let widthConstraint = promptTOCWidthConstraint,
+              let heightConstraint = promptTOCHeightConstraint,
+              let topConstraint = promptTOCTopConstraint,
+              let trailingConstraint = promptTOCTrailingConstraint else { return }
 
         switch gesture.state {
         case .began:
-            promptTOCResizeStartSize = NSSize(width: width.constant, height: height.constant)
+            promptTOCResizeStartSize = NSSize(width: widthConstraint.constant, height: heightConstraint.constant)
+            promptTOCResizeStartTop = topConstraint.constant
+            promptTOCResizeStartTrailing = trailingConstraint.constant
         case .changed:
-            let translation = gesture.translation(in: terminalContainer)
+            let dx = gesture.translation(in: terminalContainer).x
+            let dy = gesture.translation(in: terminalContainer).y
             let minimumWidth = Self.promptTOCMinimumWidth
             let minimumHeight = Self.promptTOCMinimumHeight
             let maxWidth = max(minimumWidth, terminalContainer.bounds.width - 8)
             let maxHeight = max(minimumHeight, terminalContainer.bounds.height - 8)
 
-            let proposedWidth = promptTOCResizeStartSize.width + translation.x
-            let proposedHeight = promptTOCResizeStartSize.height - translation.y
-            width.constant = min(max(minimumWidth, proposedWidth), maxWidth)
-            height.constant = min(max(minimumHeight, proposedHeight), maxHeight)
+            // Compute proposed dimensions and position changes per corner.
+            // Right corners grow width with +dx; left corners grow with -dx.
+            // Bottom corners grow height with -dy (AppKit y-up: drag down = negative dy).
+            // Top corners grow height with +dy and move top edge up.
+            let rawWidth: CGFloat
+            let rawHeight: CGFloat
+            let movesRightEdge: Bool  // true for corners where dragging changes the right edge
+            let movesTopEdge: Bool    // true for corners where dragging changes the top edge
+
+            switch corner {
+            case .bottomRight:
+                rawWidth = promptTOCResizeStartSize.width + dx
+                rawHeight = promptTOCResizeStartSize.height - dy
+                movesRightEdge = true
+                movesTopEdge = false
+            case .bottomLeft:
+                rawWidth = promptTOCResizeStartSize.width - dx
+                rawHeight = promptTOCResizeStartSize.height - dy
+                movesRightEdge = false
+                movesTopEdge = false
+            case .topRight:
+                rawWidth = promptTOCResizeStartSize.width + dx
+                rawHeight = promptTOCResizeStartSize.height + dy
+                movesRightEdge = true
+                movesTopEdge = true
+            case .topLeft:
+                rawWidth = promptTOCResizeStartSize.width - dx
+                rawHeight = promptTOCResizeStartSize.height + dy
+                movesRightEdge = false
+                movesTopEdge = true
+            }
+
+            let clampedWidth = min(max(minimumWidth, rawWidth), maxWidth)
+            let clampedHeight = min(max(minimumHeight, rawHeight), maxHeight)
+
+            // Adjust position constraints to keep the fixed edge anchored.
+            // Use actual (clamped) deltas so the fixed edge doesn't drift at min/max limits.
+            let actualWidthDelta = clampedWidth - promptTOCResizeStartSize.width
+            let actualHeightDelta = clampedHeight - promptTOCResizeStartSize.height
+
+            widthConstraint.constant = clampedWidth
+            heightConstraint.constant = clampedHeight
+
+            // Right-edge corners: update trailing so right edge tracks the drag.
+            if movesRightEdge {
+                trailingConstraint.constant = promptTOCResizeStartTrailing + actualWidthDelta
+            }
+            // Top-edge corners: update top so top edge tracks the drag.
+            if movesTopEdge {
+                topConstraint.constant = promptTOCResizeStartTop - actualHeightDelta
+            }
 
             terminalContainer.layoutSubtreeIfNeeded()
             clampPromptTOCPositionIfNeeded()
@@ -804,6 +857,10 @@ extension ThreadDetailViewController {
     }
 }
 
+private final class PromptTOCFlippedView: NSView {
+    override var isFlipped: Bool { true }
+}
+
 private final class PromptTOCLabel: NSTextField {
     override var acceptsFirstResponder: Bool { false }
 
@@ -888,11 +945,15 @@ private final class PromptTOCEntryRowView: NSView {
     }
 }
 
+enum TOCResizeCorner {
+    case topLeft, topRight, bottomLeft, bottomRight
+}
+
 final class PromptTableOfContentsView: NSView {
     var onSelectEntry: ((Int) -> Void)?
     var onCloseRequested: (() -> Void)?
     var onDragGesture: ((NSPanGestureRecognizer) -> Void)?
-    var onResizeGesture: ((NSPanGestureRecognizer) -> Void)?
+    var onResizeGesture: ((NSPanGestureRecognizer, TOCResizeCorner) -> Void)?
 
     private let titleLabel = NSTextField(labelWithString: "Table of Contents")
     private let subtitleLabel = NSTextField(labelWithString: "")
@@ -900,7 +961,6 @@ final class PromptTableOfContentsView: NSView {
     private let scrollView = NSScrollView()
     private let emptyLabel = NSTextField(labelWithString: "No prompts yet")
     private let spinner = NSProgressIndicator()
-    private let resizeHandle = NSImageView()
     private let closeButton = NSButton()
     private var rowViews: [PromptTOCEntryRowView] = []
     private var selectedEntryIndex: Int?
@@ -1013,7 +1073,7 @@ final class PromptTableOfContentsView: NSView {
         textStack.spacing = 1
         textStack.alignment = .leading
 
-        let headerStack = NSStackView(views: [headerIcon, textStack, NSView(), spinner, closeButton])
+        let headerStack = NSStackView(views: [headerIcon, textStack, NSView(), spinner])
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.spacing = 6
@@ -1027,7 +1087,7 @@ final class PromptTableOfContentsView: NSView {
         rowsStack.spacing = 2
         rowsStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let rowsContainer = NSView()
+        let rowsContainer = PromptTOCFlippedView()
         rowsContainer.translatesAutoresizingMaskIntoConstraints = false
         rowsContainer.addSubview(rowsStack)
 
@@ -1055,22 +1115,22 @@ final class PromptTableOfContentsView: NSView {
         emptyLabel.isHidden = true
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        resizeHandle.image = NSImage(systemSymbolName: "arrow.up.left.and.arrow.down.right", accessibilityDescription: "Resize Table of Contents")
-        resizeHandle.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.8)
-        resizeHandle.translatesAutoresizingMaskIntoConstraints = false
-        resizeHandle.toolTip = "Drag to resize"
-        let resizePan = NSPanGestureRecognizer(target: self, action: #selector(handleResize(_:)))
-        resizeHandle.addGestureRecognizer(resizePan)
+        let cornerSize: CGFloat = 18
+        let cornerHandles = makeCornerHandles(size: cornerSize)
 
         addSubview(headerStack)
+        addSubview(closeButton)
         addSubview(scrollView)
         addSubview(emptyLabel)
-        addSubview(resizeHandle)
+        for handle in cornerHandles { addSubview(handle) }
 
         NSLayoutConstraint.activate([
+            closeButton.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+
             headerStack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             headerStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            headerStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            headerStack.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -4),
 
             scrollView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 8),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
@@ -1081,10 +1141,26 @@ final class PromptTableOfContentsView: NSView {
             emptyLabel.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
 
-            resizeHandle.widthAnchor.constraint(equalToConstant: 12),
-            resizeHandle.heightAnchor.constraint(equalToConstant: 12),
-            resizeHandle.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            resizeHandle.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            // Corner handles — placed at the 4 corners, layered above scroll content.
+            cornerHandles[0].widthAnchor.constraint(equalToConstant: cornerSize),
+            cornerHandles[0].heightAnchor.constraint(equalToConstant: cornerSize),
+            cornerHandles[0].leadingAnchor.constraint(equalTo: leadingAnchor),
+            cornerHandles[0].topAnchor.constraint(equalTo: topAnchor),
+
+            cornerHandles[1].widthAnchor.constraint(equalToConstant: cornerSize),
+            cornerHandles[1].heightAnchor.constraint(equalToConstant: cornerSize),
+            cornerHandles[1].trailingAnchor.constraint(equalTo: trailingAnchor),
+            cornerHandles[1].topAnchor.constraint(equalTo: topAnchor),
+
+            cornerHandles[2].widthAnchor.constraint(equalToConstant: cornerSize),
+            cornerHandles[2].heightAnchor.constraint(equalToConstant: cornerSize),
+            cornerHandles[2].leadingAnchor.constraint(equalTo: leadingAnchor),
+            cornerHandles[2].bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            cornerHandles[3].widthAnchor.constraint(equalToConstant: cornerSize),
+            cornerHandles[3].heightAnchor.constraint(equalToConstant: cornerSize),
+            cornerHandles[3].trailingAnchor.constraint(equalTo: trailingAnchor),
+            cornerHandles[3].bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
     }
 
@@ -1122,8 +1198,56 @@ final class PromptTableOfContentsView: NSView {
         onCloseRequested?()
     }
 
-    @objc private func handleResize(_ gesture: NSPanGestureRecognizer) {
-        onResizeGesture?(gesture)
+    @objc private func handleResizeTopLeft(_ gesture: NSPanGestureRecognizer) {
+        onResizeGesture?(gesture, .topLeft)
+    }
+
+    @objc private func handleResizeTopRight(_ gesture: NSPanGestureRecognizer) {
+        onResizeGesture?(gesture, .topRight)
+    }
+
+    @objc private func handleResizeBottomLeft(_ gesture: NSPanGestureRecognizer) {
+        onResizeGesture?(gesture, .bottomLeft)
+    }
+
+    @objc private func handleResizeBottomRight(_ gesture: NSPanGestureRecognizer) {
+        onResizeGesture?(gesture, .bottomRight)
+    }
+
+    // Returns corner handles in order: [topLeft, topRight, bottomLeft, bottomRight].
+    private func makeCornerHandles(size: CGFloat) -> [NSView] {
+        let corners: [(TOCResizeCorner, Selector)] = [
+            (.topLeft,     #selector(handleResizeTopLeft(_:))),
+            (.topRight,    #selector(handleResizeTopRight(_:))),
+            (.bottomLeft,  #selector(handleResizeBottomLeft(_:))),
+            (.bottomRight, #selector(handleResizeBottomRight(_:))),
+        ]
+        return corners.map { corner, selector in
+            let view = NSView()
+            view.translatesAutoresizingMaskIntoConstraints = false
+            let pan = NSPanGestureRecognizer(target: self, action: selector)
+            view.addGestureRecognizer(pan)
+
+            // Show the resize icon at the bottom-right corner only.
+            if corner == .bottomRight {
+                let icon = NSImageView()
+                icon.image = NSImage(
+                    systemSymbolName: "arrow.up.left.and.arrow.down.right",
+                    accessibilityDescription: "Resize Table of Contents"
+                )
+                icon.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.8)
+                icon.translatesAutoresizingMaskIntoConstraints = false
+                icon.toolTip = "Drag to resize"
+                view.addSubview(icon)
+                NSLayoutConstraint.activate([
+                    icon.widthAnchor.constraint(equalToConstant: 12),
+                    icon.heightAnchor.constraint(equalToConstant: 12),
+                    icon.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -3),
+                    icon.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -3),
+                ])
+            }
+            return view
+        }
     }
 
     private func updateSelection(for entryIndex: Int) {

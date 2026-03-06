@@ -51,6 +51,8 @@ final class ThreadDetailViewController: NSViewController {
     var promptTOCSessionName: String?
     var promptTOCDragStartOrigin: NSPoint = .zero
     var promptTOCResizeStartSize: NSSize = .zero
+    var promptTOCResizeStartTop: CGFloat = 0
+    var promptTOCResizeStartTrailing: CGFloat = 0
     var promptTOCCanShowForCurrentTab = false
     var isPromptTOCManuallyHidden = false
 
