@@ -24,7 +24,7 @@ To update: `brew upgrade magent`
 
 ### GitHub Releases
 
-Download the latest `.zip` from [Releases](https://github.com/vapor-pawelw/magent/releases) (requires repo access), unzip, and move `Magent.app` to `/Applications`.
+Download the latest `.dmg` from [Releases](https://github.com/vapor-pawelw/magent/releases) (requires repo access), open it, and drag `Magent.app` to `/Applications`.
 
 > On first launch, macOS will show a Gatekeeper warning since the app is not notarized.
 > Right-click the app → **Open** → click **Open** in the dialog to allow it.

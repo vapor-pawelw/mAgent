@@ -57,5 +57,6 @@ All notable changes to this project will be documented in this file.
 - Codex rate-limit parsing now keeps latest-scope separator filtering, while still falling back to full-tail parsing when no separator is present.
 
 ### Distribution
+- GitHub releases now include an installable `Magent.dmg`, and in-app updates/homebrew release automation now understand the DMG packaging while keeping a compatibility `.zip` asset.
 - Homebrew installs now work with private release assets by using authenticated GitHub API download URLs in the cask update pipeline.
 - Auto-updates now detect Homebrew installs and upgrade via `brew` instead of using in-place app replacement.

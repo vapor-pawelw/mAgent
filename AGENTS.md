@@ -85,11 +85,11 @@ When the user asks to "release", "publish", "cut a release", or "bump version":
    ```
 5. **Manual fallback only if needed**: create an **annotated** tag (`git tag -a v<new_version> -m "<notes>"`) and push it
 6. **Monitor the workflow**: `gh run list --limit 1` then `gh run watch <id> --exit-status`
-7. **Verify**: `gh release view v<new_version>` — confirm the release has `Magent.zip` attached
+7. **Verify**: `gh release view v<new_version>` — confirm the release has `Magent.dmg` attached (plus compatibility `Magent.zip`)
 
 The tag push triggers a GitHub Actions workflow (`.github/workflows/release.yml`) that:
 - Builds an unsigned `Magent.app` on `macos-26`
-- Creates a GitHub Release with changelog/tag-annotation notes and the zipped app
+- Creates a GitHub Release with changelog/tag-annotation notes, `Magent.dmg`, and a compatibility `Magent.zip`
 - Auto-updates the Homebrew cask in `vapor-pawelw/homebrew-magent`
 
 **Do NOT** manually edit `Project.swift` version strings — the workflow injects them from the git tag automatically.
