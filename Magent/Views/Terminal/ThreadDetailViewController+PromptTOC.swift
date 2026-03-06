@@ -804,9 +804,17 @@ extension ThreadDetailViewController {
     }
 }
 
+private final class PromptTOCLabel: NSTextField {
+    override var acceptsFirstResponder: Bool { false }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+}
+
 private final class PromptTOCEntryRowView: NSView {
     let entryIndex: Int
-    private let label: NSTextField
+    private let label: PromptTOCLabel
     private var showsAlternateBackground = false
     var isSelected = false {
         didSet {
@@ -816,7 +824,7 @@ private final class PromptTOCEntryRowView: NSView {
 
     init(entryIndex: Int, text: String) {
         self.entryIndex = entryIndex
-        self.label = NSTextField(wrappingLabelWithString: text)
+        self.label = PromptTOCLabel(wrappingLabelWithString: text)
         super.init(frame: .zero)
         setupUI()
     }
@@ -839,6 +847,10 @@ private final class PromptTOCEntryRowView: NSView {
         label.translatesAutoresizingMaskIntoConstraints = false
         label.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         label.textColor = NSColor(resource: .textPrimary)
+        label.isSelectable = false
+        label.isEditable = false
+        label.allowsEditingTextAttributes = false
+        label.focusRingType = .none
         label.maximumNumberOfLines = 3
         label.lineBreakMode = .byWordWrapping
         label.cell?.wraps = true
@@ -861,15 +873,15 @@ private final class PromptTOCEntryRowView: NSView {
     private func updateAppearance() {
         guard let layer else { return }
 
+        layer.borderWidth = 1
+
         if isSelected {
             layer.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.18).cgColor
-            layer.borderWidth = 1
             layer.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.55).cgColor
             return
         }
 
-        layer.borderWidth = 0
-        layer.borderColor = nil
+        layer.borderColor = NSColor.clear.cgColor
         layer.backgroundColor = showsAlternateBackground
             ? NSColor.separatorColor.withAlphaComponent(0.08).cgColor
             : NSColor.clear.cgColor
