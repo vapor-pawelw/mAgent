@@ -537,6 +537,7 @@ final class ThreadDetailViewController: NSViewController {
         }
         refreshDiffViewerIfVisible()
         syncTransientState()
+        schedulePromptTOCRefresh()
     }
 
     @objc private func handleAgentWaitingNotification(_ notification: Notification) {

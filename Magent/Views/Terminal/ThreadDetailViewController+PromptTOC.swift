@@ -41,7 +41,7 @@ private enum PromptANSIForeground: Equatable {
         case .default:
             return false
         case .indexed(let value):
-            return value == 7 || value == 8 || (240...250).contains(value)
+            return value == 8 || (240...250).contains(value)
         case .rgb(let red, let green, let blue):
             let minChannel = min(red, min(green, blue))
             let maxChannel = max(red, max(green, blue))
@@ -242,6 +242,11 @@ extension ThreadDetailViewController {
             }
             let lowerPrompt = promptText.lowercased()
             if lowerPrompt == "yes" || lowerPrompt == "no" {
+                lineIndex = continuationIndex
+                continue
+            }
+            // Skip agent-emitted system status lines (for example: "❯ Tool loaded.").
+            if lowerPrompt == "tool loaded." || lowerPrompt == "tools loaded." {
                 lineIndex = continuationIndex
                 continue
             }
