@@ -144,10 +144,12 @@ extension ThreadDetailViewController {
         guard !Task.isCancelled else { return }
         guard currentTabIndex < thread.tmuxSessionNames.count, thread.tmuxSessionNames[currentTabIndex] == sessionName else { return }
 
-        let entries = parsePromptEntries(
-            from: paneContent,
-            agentType: agentType
-        )
+        var entries = parsePromptEntries(from: paneContent, agentType: agentType)
+        // If the detected agent type found nothing, retry with both markers —
+        // guards against a wrong agent type assignment (e.g., migration mismatch).
+        if entries.isEmpty, agentType != nil {
+            entries = parsePromptEntries(from: paneContent, agentType: nil)
+        }
         threadManager.replaceSubmittedPromptHistory(
             threadId: thread.id,
             sessionName: sessionName,
@@ -180,6 +182,8 @@ extension ThreadDetailViewController {
         }
         applyPromptTOCVisibility(restoringPosition: previousSessionName != sessionName)
         bringPromptTOCOverlayToFront()
+        // Force layout so tocView.frame is up-to-date before clamping.
+        terminalContainer.layoutSubtreeIfNeeded()
         clampPromptTOCPositionIfNeeded()
     }
 
@@ -859,8 +863,12 @@ extension ThreadDetailViewController {
               let tocView = promptTOCView,
               let top = promptTOCTopConstraint,
               let trailing = promptTOCTrailingConstraint else {
-            // Reset to the default top-right position when no saved value exists.
-            promptTOCTopConstraint?.constant = 12
+            // Default to bottom-right with generous bottom padding so the TOC
+            // stays clear of the prompt / status bar area at the bottom.
+            let tocHeight = promptTOCHeightConstraint?.constant ?? Self.promptTOCMinimumHeight
+            let bottomPadding: CGFloat = 120
+            let topConstant = terminalContainer.bounds.height - tocHeight - bottomPadding
+            promptTOCTopConstraint?.constant = max(12, topConstant)
             promptTOCTrailingConstraint?.constant = -12
             return
         }
@@ -1029,6 +1037,10 @@ final class PromptTableOfContentsView: NSView {
     private let closeButton = NSButton()
     private var rowViews: [PromptTOCEntryRowView] = []
     private var selectedEntryIndex: Int?
+    private var isHovered = false
+
+    private static let backgroundAlphaDefault: CGFloat = 0.35
+    private static let backgroundAlphaHovered: CGFloat = 0.95
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1091,12 +1103,47 @@ final class PromptTableOfContentsView: NSView {
         }
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach { removeTrackingArea($0) }
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        updateBackground(animated: true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        updateBackground(animated: true)
+    }
+
+    private func updateBackground(animated: Bool) {
+        let alpha = isHovered ? Self.backgroundAlphaHovered : Self.backgroundAlphaDefault
+        let newColor = NSColor(resource: .surface).withAlphaComponent(alpha).cgColor
+        if animated, let layer {
+            let anim = CABasicAnimation(keyPath: "backgroundColor")
+            anim.fromValue = layer.backgroundColor
+            anim.toValue = newColor
+            anim.duration = 0.15
+            layer.add(anim, forKey: "backgroundColor")
+        }
+        layer?.backgroundColor = newColor
+    }
+
     private func setupUI() {
         wantsLayer = true
         // Keep TOC above terminal surfaces that are added later.
         layer?.zPosition = 10
         layer?.cornerRadius = 8
-        layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.95).cgColor
+        layer?.backgroundColor = NSColor(resource: .surface)
+            .withAlphaComponent(Self.backgroundAlphaDefault).cgColor
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
 
