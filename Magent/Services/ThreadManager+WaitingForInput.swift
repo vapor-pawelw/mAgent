@@ -88,6 +88,10 @@ extension ThreadManager {
         guard !trimmedLines.isEmpty else { return false }
         let lastChunk = trimmedLines.suffix(15).joined(separator: "\n")
 
+        // If the agent is actively processing ("esc to interrupt" visible), it's
+        // not waiting for input — even if a waiting-style phrase is in older output.
+        if paneContentShowsEscToInterrupt(text) { return false }
+
         // The Claude Code rate-limit prompt uses ❯ + numbered list and would
         // otherwise match the interactive selector pattern below. Exclude it
         // so it's handled as a rate-limit marker by syncBusySessionsFromProcessState.

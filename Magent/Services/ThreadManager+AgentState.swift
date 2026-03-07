@@ -494,24 +494,28 @@ extension ThreadManager {
     /// present, the agent is busy. If a ❯ prompt is visible without
     /// "esc to interrupt", the agent is idle (even if the user has typed text
     /// at the prompt but hasn't submitted it yet).
-    private func isAgentIdleAtPrompt(_ paneContent: String) -> Bool {
-        let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        let nonEmpty = lines.suffix(15)
+    /// Returns true when the "esc to interrupt" status bar text is visible in the
+    /// last 15 non-empty lines of pane content. This is the definitive Claude Code
+    /// busy signal — present while the agent is actively processing, absent when idle.
+    func paneContentShowsEscToInterrupt(_ paneContent: String) -> Bool {
+        let nonEmpty = paneContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .suffix(15)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+        return nonEmpty.contains(where: { $0.localizedCaseInsensitiveContains("esc to interrupt") })
+    }
 
+    private func isAgentIdleAtPrompt(_ paneContent: String) -> Bool {
         // "esc to interrupt" is shown in the status bar while Claude processes
         // → definitely busy, regardless of prompt visibility.
-        // In bypass mode the status bar appends "· esc to interrupt" only while
-        // the agent is actively processing; when idle it just shows the bypass
-        // text without it. So "esc to interrupt" is a reliable busy signal
-        // regardless of bypass mode.
-        let hasBusyIndicator = nonEmpty.contains(where: {
-            $0.localizedCaseInsensitiveContains("esc to interrupt")
-        })
-        if hasBusyIndicator {
-            return false
-        }
+        if paneContentShowsEscToInterrupt(paneContent) { return false }
+
+        let nonEmpty = paneContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .suffix(15)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
 
         // ❯ prompt visible without the busy status bar → agent is idle
         let hasPrompt = nonEmpty.contains(where: { $0.hasPrefix("\u{276F}") })
