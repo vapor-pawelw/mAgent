@@ -902,13 +902,11 @@ extension ThreadDetailViewController {
     }
 
     private func promptTOCPositionDefaultsKey(for sessionName: String) -> String {
-        let raw = "\(thread.id.uuidString)-\(sessionName)"
-        return "\(Self.promptTOCPositionDefaultsPrefix).\(sanitizedDefaultsKeySegment(raw))"
+        return Self.promptTOCPositionDefaultsPrefix
     }
 
     private func promptTOCSizeDefaultsKey(for sessionName: String) -> String {
-        let raw = "\(thread.id.uuidString)-\(sessionName)"
-        return "\(Self.promptTOCSizeDefaultsPrefix).\(sanitizedDefaultsKeySegment(raw))"
+        return Self.promptTOCSizeDefaultsPrefix
     }
 
     func bringPromptTOCOverlayToFront() {

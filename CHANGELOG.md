@@ -46,6 +46,7 @@ All notable changes to this project will be documented in this file.
 - Prompt TOC now filters generic suggestion templates like `Implement (feature)` so they do not appear as submitted entries.
 - Prompt TOC now also filters brace-style suggestion templates like `Implement {feature}` and avoids re-falling back to parser rows once submitted-history exists for a session.
 - Prompt TOC confirmation now waits for pane evidence that a prompt moved past the active bottom composer area, and ignores pinned bottom chrome like `gpt-5.4 high · ...` instead of storing raw keystroke submissions immediately.
+- Prompt TOC position and size are now remembered globally across all threads, so the panel stays where you left it when switching threads.
 
 ### Diff Viewer
 - Double-clicking a file in the `CHANGES` panel now opens it in the default macOS app, and right-click now includes `Show in Finder`.
