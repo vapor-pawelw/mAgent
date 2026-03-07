@@ -1546,7 +1546,7 @@ final class InlineDiffViewController: NSViewController {
 
     private func scrollSectionIntoViewIfNeeded(_ section: DiffSectionView) {
         let sectionFrame = section.convert(section.bounds, to: sectionsStackView)
-        scrollView.contentView.scrollToVisible(sectionFrame)
+        sectionsStackView.scrollToVisible(sectionFrame)
     }
 
     // MARK: - Diff Splitting

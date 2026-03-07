@@ -60,7 +60,7 @@ All notable changes to this project will be documented in this file.
 ### Diff Viewer
 - The `CHANGES` panel now has an `ⓘ` button in the top-right corner that shows a color legend explaining what each file color means (staged, unstaged, untracked, committed).
 - Double-clicking a file in the `CHANGES` panel now opens it in the default macOS app, and right-click now includes `Show in Finder`.
-- Selecting files in `CHANGES` now opens and scrolls the inline diff to the correct file section, including renamed files and paths that Git would otherwise quote.
+- Selecting files in `CHANGES` now reliably opens and scrolls the inline diff to the correct file section, including renamed files, quoted paths, and cases where AppKit layout had not settled yet.
 
 ### Sidebar
 - The `+` create-thread menu now shows a header (e.g. "New Thread in ios-apps") so its purpose is immediately clear.
