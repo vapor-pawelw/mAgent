@@ -538,16 +538,6 @@ extension ThreadManager {
         guard !thread.isMain else { return false }
         guard !thread.didAutoRenameFromFirstPrompt else { return false }
 
-        // If the user already provided a description, treat first-prompt
-        // auto-rename as handled and avoid skip banners/retries.
-        let hasTaskDescription = !(thread.taskDescription?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty ?? true)
-        if hasTaskDescription {
-            markFirstPromptAutoRenameHandled(threadId: thread.id)
-            return true
-        }
-
         // If the thread name no longer matches the worktree directory basename,
         // it was already renamed (manually or otherwise) — skip auto-rename.
         guard thread.name == (thread.worktreePath as NSString).lastPathComponent else { return false }

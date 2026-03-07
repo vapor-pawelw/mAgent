@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
 - Opening a new thread that reuses an archived thread's worktree name no longer restores the old agent session from the previous thread.
 - Renaming a thread is now fully atomic: if the tmux session rename fails after the git branch was already renamed, the git branch is rolled back and the symlink is cleaned up so the thread state never ends up inconsistent (which previously caused a spurious "branch changed" warning).
 - Auto-rename failures now show a one-time error banner per thread instead of silently failing.
+- Fixed a race where auto-description generation completing before the first-prompt TOC scan caused the branch rename to be skipped entirely.
 - Thread cells now display the live git branch instead of the potentially stale stored branch name.
 - The "branch changed" panel is now an info indicator (blue) instead of a warning; it shows for both worktree threads (when the actual branch differs from the thread's expected branch) and the main thread (when not on the project's default branch).
 - Added an **Accept** button to the branch info panel: for worktree threads it updates the thread's expected branch to match the current one; for the main thread it updates the project's default branch.
