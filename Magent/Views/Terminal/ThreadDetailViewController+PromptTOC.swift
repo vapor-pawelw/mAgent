@@ -45,7 +45,9 @@ private enum PromptANSIForeground: Equatable {
         case .rgb(let red, let green, let blue):
             let minChannel = min(red, min(green, blue))
             let maxChannel = max(red, max(green, blue))
-            return maxChannel - minChannel <= 18
+            // Exclude very bright colors (near-white): rgb(255,255,255) is normal
+            // terminal text, not placeholder text, even though all channels match.
+            return maxChannel - minChannel <= 18 && maxChannel < 220
         }
     }
 }
