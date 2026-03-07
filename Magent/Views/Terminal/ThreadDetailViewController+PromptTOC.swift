@@ -177,6 +177,10 @@ extension ThreadDetailViewController {
                 guard let updated = self.threadManager.threads.first(where: { $0.id == threadId }) else { return }
                 if updated.name != previousThread.name || updated.worktreePath != previousThread.worktreePath {
                     self.handleRename(updated)
+                } else if updated.didAutoRenameFromFirstPrompt, !previousThread.didAutoRenameFromFirstPrompt {
+                    // No rename but flag changed (e.g., custom branch skip) — sync the flag to
+                    // prevent this auto-rename task from being spawned again on every refresh.
+                    self.thread = updated
                 }
             }
         }
