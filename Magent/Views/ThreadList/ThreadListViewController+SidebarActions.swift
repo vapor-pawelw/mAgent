@@ -322,16 +322,34 @@ extension ThreadListViewController {
         refreshDiffPanel(for: thread)
     }
 
+    func refreshDiffPanelContextForSelectedThread() {
+        let row = outlineView.selectedRow
+        guard row >= 0,
+              let thread = outlineView.item(atRow: row) as? MagentThread else {
+            diffPanelView.updateBranchInfo(branchName: nil, baseBranch: nil)
+            return
+        }
+        refreshDiffPanelContext(for: thread)
+    }
+
+    func refreshDiffPanelContext(for thread: MagentThread) {
+        let current = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let branchName = current.isMain ? nil : (current.actualBranch ?? current.branchName)
+        let baseBranch = current.isMain ? nil : threadManager.resolveBaseBranch(for: current)
+        diffPanelView.updateBranchInfo(branchName: branchName, baseBranch: baseBranch)
+    }
+
     func refreshDiffPanel(for thread: MagentThread) {
         Task {
             let entries = await threadManager.refreshDiffStats(for: thread.id)
-            let baseBranch = threadManager.resolveBaseBranch(for: thread)
+            let current = self.threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+            let baseBranch = self.threadManager.resolveBaseBranch(for: current)
             await MainActor.run {
                 self.diffPanelView.update(
                     with: entries,
-                    worktreePath: thread.worktreePath,
-                    branchName: thread.isMain ? nil : thread.branchName,
-                    baseBranch: thread.isMain ? nil : baseBranch
+                    worktreePath: current.worktreePath,
+                    branchName: current.isMain ? nil : (current.actualBranch ?? current.branchName),
+                    baseBranch: current.isMain ? nil : baseBranch
                 )
             }
         }
@@ -367,7 +385,7 @@ extension ThreadListViewController {
         threadManager.acceptActualBranch(threadId: thread.id)
         BannerManager.shared.show(message: "Branch \(actual) accepted as expected", style: .info, duration: 3)
         branchMismatchView.clear()
-        refreshDiffPanel(for: thread)
+        refreshDiffPanelForSelectedThread()
     }
 
     private func handleSwitchBranch(for thread: MagentThread) {
@@ -378,7 +396,7 @@ extension ThreadListViewController {
                 await MainActor.run {
                     BannerManager.shared.show(message: "Switched back to \(expected)", style: .info, duration: 3)
                     self.branchMismatchView.clear()
-                    self.refreshDiffPanel(for: thread)
+                    self.refreshDiffPanelForSelectedThread()
                 }
             } catch {
                 await MainActor.run {

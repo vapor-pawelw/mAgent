@@ -110,6 +110,7 @@ extension ThreadManager {
         let settings = persistence.loadSettings()
         let snapshot = threads.filter { !$0.isArchived }
         var changed = false
+        var persistedChanged = false
         for thread in snapshot {
             let worktreePath = thread.worktreePath
             guard FileManager.default.fileExists(atPath: worktreePath) else { continue }
@@ -130,20 +131,35 @@ extension ThreadManager {
                 expected = thread.branchName
             }
 
+            // Re-lookup after await — the thread may have been removed
+            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
+            if !threads[i].isMain,
+               let actual,
+               !actual.isEmpty,
+               threads[i].branchName != actual {
+                threads[i].branchName = actual
+                persistedChanged = true
+            }
+
+            let resolvedExpected = threads[i].isMain ? expected : threads[i].branchName
             let mismatch: Bool
-            if let expected, let actual {
-                mismatch = actual != expected
+            if threads[i].isMain, let resolvedExpected, let actual {
+                mismatch = actual != resolvedExpected
             } else {
                 mismatch = false
             }
-            // Re-lookup after await — the thread may have been removed
-            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
-            if threads[i].actualBranch != actual || threads[i].expectedBranch != expected || threads[i].hasBranchMismatch != mismatch {
+
+            if threads[i].actualBranch != actual
+                || threads[i].expectedBranch != resolvedExpected
+                || threads[i].hasBranchMismatch != mismatch {
                 threads[i].actualBranch = actual
-                threads[i].expectedBranch = expected
+                threads[i].expectedBranch = resolvedExpected
                 threads[i].hasBranchMismatch = mismatch
                 changed = true
             }
+        }
+        if persistedChanged {
+            try? persistence.saveThreads(threads)
         }
         if changed {
             await MainActor.run {
