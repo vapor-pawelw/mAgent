@@ -412,6 +412,19 @@ final class TmuxService {
         )
     }
 
+    /// Returns how many lines the active pane is currently scrolled above live output.
+    func scrollPosition(sessionName: String) async -> UInt64? {
+        guard let output = try? await ShellExecutor.run(
+            "tmux display-message -p -t \(shellQuote(sessionName)) '#{scroll_position}'"
+        ) else {
+            return nil
+        }
+
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return 0 }
+        return UInt64(trimmed)
+    }
+
     /// Captures the last N lines of the active pane in a tmux session.
     func capturePane(sessionName: String, lastLines: Int = 15) async -> String? {
         guard let output = try? await ShellExecutor.run(

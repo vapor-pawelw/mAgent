@@ -52,6 +52,7 @@ final class ThreadDetailViewController: NSViewController {
     var scrollOverlayBottomConstraint: NSLayoutConstraint?
     var scrollOverlayDragStartTrailing: CGFloat = 16
     var scrollOverlayDragStartBottom: CGFloat = 16
+    var scrollFABRefreshTask: Task<Void, Never>?
 
     var promptTOCDragStartOrigin: NSPoint = .zero
     var promptTOCResizeStartSize: NSSize = .zero
@@ -195,6 +196,7 @@ final class ThreadDetailViewController: NSViewController {
 
     deinit {
         promptTOCRefreshTask?.cancel()
+        scrollFABRefreshTask?.cancel()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -406,6 +408,7 @@ final class ThreadDetailViewController: NSViewController {
 
     func updateTerminalScrollControlsState() {
         scrollOverlay.isScrollEnabled = currentSessionName() != nil
+        scheduleScrollFABVisibilityRefresh()
     }
 
     func makeTerminalView(for sessionName: String) -> TerminalSurfaceView {
@@ -421,6 +424,9 @@ final class ThreadDetailViewController: NSViewController {
             Task { @MainActor [weak self] in
                 await self?.handleSubmittedLine(line, sessionName: sessionName)
             }
+        }
+        view.onScroll = { [weak self] in
+            self?.scheduleScrollFABVisibilityRefresh()
         }
         return view
     }

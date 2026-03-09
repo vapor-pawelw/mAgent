@@ -638,6 +638,9 @@ extension ThreadDetailViewController {
         Task {
             do {
                 try await TmuxService.shared.scrollHistoryLineToTop(sessionName: sessionName, lineIndex: entry.lineIndex)
+                await MainActor.run {
+                    self.scheduleScrollFABVisibilityRefresh()
+                }
             } catch {
                 await MainActor.run {
                     BannerManager.shared.show(
