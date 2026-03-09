@@ -7,6 +7,8 @@ CONFIGURATION="${MAGENT_CONFIGURATION:-Debug}"
 APP_NAME="${MAGENT_APP_NAME:-Magent}"
 WORKSPACE="${MAGENT_WORKSPACE:-Magent.xcworkspace}"
 GHOSTTY_LIB_REL="Libraries/GhosttyKit.xcframework/macos-arm64_x86_64/libghostty.a"
+GHOSTTY_REF_METADATA_REL="Libraries/GhosttyKit.xcframework/.ghostty-ref"
+PINNED_GHOSTTY_REF="${MAGENT_GHOSTTY_REF:-v1.3.0}"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -43,11 +45,26 @@ refresh_workspace_with_tuist() {
 ensure_build_prerequisites() {
   local root="$1"
   local ghostty_lib="$root/$GHOSTTY_LIB_REL"
+  local ghostty_ref_file="$root/$GHOSTTY_REF_METADATA_REL"
   local needs_mise=0
+  local installed_ghostty_ref=""
 
   if [[ ! -f "$ghostty_lib" ]]; then
     echo "Missing $GHOSTTY_LIB_REL"
     needs_mise=1
+  fi
+
+  if [[ "$needs_mise" -eq 0 ]]; then
+    if [[ ! -f "$ghostty_ref_file" ]]; then
+      echo "Missing Ghostty ref metadata at $GHOSTTY_REF_METADATA_REL"
+      needs_mise=1
+    else
+      installed_ghostty_ref="$(tr -d '\n' < "$ghostty_ref_file")"
+      if [[ "$installed_ghostty_ref" != "$PINNED_GHOSTTY_REF" ]]; then
+        echo "GhosttyKit is built from $installed_ghostty_ref, expected $PINNED_GHOSTTY_REF"
+        needs_mise=1
+      fi
+    fi
   fi
 
   if [[ "$needs_mise" -eq 0 ]]; then
@@ -76,7 +93,7 @@ ensure_build_prerequisites() {
     fi
 
     echo "Bootstrapping GhosttyKit.xcframework..."
-    mise x -- "$root/scripts/bootstrap-ghosttykit.sh"
+    mise x -- env GHOSTTY_REF="$PINNED_GHOSTTY_REF" "$root/scripts/bootstrap-ghosttykit.sh"
   fi
 
   refresh_workspace_with_tuist "$WORKSPACE"

@@ -1,4 +1,5 @@
 import Cocoa
+import Darwin
 import GhosttyBridge
 import UserNotifications
 import MagentCore
@@ -8,6 +9,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     private var coordinator: AppCoordinator?
     private var ipcServer: IPCSocketServer?
+
+    private func isLiveNonZombieProcess(_ pid: pid_t) -> Bool {
+        guard pid > 0 else { return false }
+
+        var info = kinfo_proc()
+        var mib = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        let mibCount = u_int(mib.count)
+        var size = MemoryLayout<kinfo_proc>.stride
+
+        let result = mib.withUnsafeMutableBufferPointer { mibPointer in
+            withUnsafeMutablePointer(to: &info) { infoPointer in
+                sysctl(
+                    mibPointer.baseAddress,
+                    mibCount,
+                    infoPointer,
+                    &size,
+                    nil,
+                    0
+                )
+            }
+        }
+
+        guard result == 0, size == MemoryLayout<kinfo_proc>.stride else {
+            return false
+        }
+
+        return info.kp_proc.p_stat != UInt8(SZOMB)
+    }
+
     private var appDisplayName: String {
         if let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
            !displayName.isEmpty {
@@ -31,8 +61,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Enforce single instance — activate existing and terminate this one.
         // This avoids "already running" modal interruptions when a notification
         // tap triggers an app-open attempt while Magent is already running.
+        let currentPID = ProcessInfo.processInfo.processIdentifier
         let runningInstances = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier!)
-        if let existing = runningInstances.first(where: { $0 != .current }) {
+        if let existing = runningInstances.first(where: {
+            $0.processIdentifier != currentPID
+                && !$0.isTerminated
+                && isLiveNonZombieProcess($0.processIdentifier)
+        }) {
             _ = existing.activate(options: [.activateAllWindows])
             NSApp.terminate(nil)
             return

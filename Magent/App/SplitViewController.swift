@@ -49,6 +49,7 @@ final class SplitViewController: NSSplitViewController {
     private var didApplyInitialSidebarWidth = false
     private var preferredSidebarWidth: CGFloat = defaultSidebarWidth
     private var enforcedSidebarWidth: CGFloat?
+    private var isRestoringSidebarWidth = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -132,6 +133,7 @@ final class SplitViewController: NSSplitViewController {
     }
 
     override func splitViewDidResizeSubviews(_ notification: Notification) {
+        guard !isRestoringSidebarWidth else { return }
         guard let sidebarItem else { return }
         let width = sidebarItem.viewController.view.frame.width
         guard width.isFinite, width > 0 else { return }
@@ -344,7 +346,14 @@ final class SplitViewController: NSSplitViewController {
         guard let sidebarItem else { return }
         guard splitViewItems.count >= 2 else { return }
         let clampedWidth = min(max(width, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+        if let currentWidth = currentSidebarWidth(), abs(currentWidth - clampedWidth) <= 0.5 {
+            preferredSidebarWidth = clampedWidth
+            return
+        }
+
         preferredSidebarWidth = clampedWidth
+        isRestoringSidebarWidth = true
+        defer { isRestoringSidebarWidth = false }
         splitView.layoutSubtreeIfNeeded()
         splitView.setPosition(clampedWidth, ofDividerAt: 0)
     }
