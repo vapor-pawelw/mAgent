@@ -2,34 +2,34 @@ import Foundation
 
 // MARK: - Types
 
-nonisolated struct JiraAuthStatus: Sendable {
-    let isAuthenticated: Bool
-    let siteURL: String?
-    let email: String?
-    let errorMessage: String?
+public nonisolated struct JiraAuthStatus: Sendable {
+    public let isAuthenticated: Bool
+    public let siteURL: String?
+    public let email: String?
+    public let errorMessage: String?
 }
 
-nonisolated struct JiraBoard: Codable, Sendable {
-    let id: Int
-    let name: String
-    let type: String?
+public nonisolated struct JiraBoard: Codable, Sendable {
+    public let id: Int
+    public let name: String
+    public let type: String?
 }
 
-nonisolated struct JiraTicket: Codable, Sendable {
-    let key: String
-    let summary: String
-    let status: String
-    let assigneeAccountId: String?
-    let issueId: Int?
+public nonisolated struct JiraTicket: Codable, Sendable {
+    public let key: String
+    public let summary: String
+    public let status: String
+    public let assigneeAccountId: String?
+    public let issueId: Int?
 }
 
-enum JiraError: LocalizedError {
+public enum JiraError: LocalizedError {
     case acliNotInstalled
     case notAuthenticated
     case commandFailed(String)
     case parseError(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .acliNotInstalled:
             return "acli CLI is not installed"
@@ -45,20 +45,20 @@ enum JiraError: LocalizedError {
 
 // MARK: - Service
 
-final class JiraService {
+public final class JiraService: Sendable {
 
-    static let shared = JiraService()
+    public static let shared = JiraService()
 
     // MARK: - CLI Check
 
-    func isAcliInstalled() async -> Bool {
+    public func isAcliInstalled() async -> Bool {
         let result = await ShellExecutor.execute("which acli")
         return result.exitCode == 0 && !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     // MARK: - Auth
 
-    func checkAuthStatus() async -> JiraAuthStatus {
+    public func checkAuthStatus() async -> JiraAuthStatus {
         let result = await ShellExecutor.execute("acli jira auth status")
         let output = result.stdout + result.stderr
         let lines = output.components(separatedBy: "\n")
@@ -103,13 +103,13 @@ final class JiraService {
         )
     }
 
-    func openLoginPage() async {
+    public func openLoginPage() async {
         _ = await ShellExecutor.execute("acli jira auth login --web")
     }
 
     // MARK: - Boards
 
-    func listBoards() async throws -> [JiraBoard] {
+    public func listBoards() async throws -> [JiraBoard] {
         try await ensureAuthenticated()
 
         let result = await ShellExecutor.execute("acli jira board search --json --paginate")
@@ -122,7 +122,7 @@ final class JiraService {
 
     // MARK: - Tickets
 
-    func searchTickets(jql: String) async throws -> [JiraTicket] {
+    public func searchTickets(jql: String) async throws -> [JiraTicket] {
         try await ensureAuthenticated()
 
         let escapedJQL = shellQuote(jql)
@@ -142,7 +142,7 @@ final class JiraService {
 
     // MARK: - Status Discovery
 
-    func discoverStatuses(projectKey: String) async throws -> [String] {
+    public func discoverStatuses(projectKey: String) async throws -> [String] {
         let jql = "project = \(projectKey) ORDER BY updated DESC"
         let tickets = try await searchTickets(jql: jql)
 
@@ -159,7 +159,7 @@ final class JiraService {
 
     // MARK: - URL Builders
 
-    func boardURL(siteURL: String, projectKey: String, boardId: Int) -> URL? {
+    public func boardURL(siteURL: String, projectKey: String, boardId: Int) -> URL? {
         let site = siteURL
             .replacingOccurrences(of: "https://", with: "")
             .replacingOccurrences(of: "http://", with: "")
@@ -167,7 +167,7 @@ final class JiraService {
         return URL(string: "https://\(site)/jira/software/projects/\(projectKey)/boards/\(boardId)")
     }
 
-    func ticketURL(siteURL: String, ticketKey: String) -> URL? {
+    public func ticketURL(siteURL: String, ticketKey: String) -> URL? {
         let site = siteURL
             .replacingOccurrences(of: "https://", with: "")
             .replacingOccurrences(of: "http://", with: "")
@@ -175,7 +175,7 @@ final class JiraService {
         return URL(string: "https://\(site)/browse/\(ticketKey)")
     }
 
-    func projectURL(siteURL: String, projectKey: String) -> URL? {
+    public func projectURL(siteURL: String, projectKey: String) -> URL? {
         let site = siteURL
             .replacingOccurrences(of: "https://", with: "")
             .replacingOccurrences(of: "http://", with: "")

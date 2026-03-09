@@ -1,41 +1,41 @@
 import Foundation
 
-nonisolated struct AppSettings: Codable, Sendable {
-    static let defaultSlugPrompt = "Generate a short kebab-case slug (2-4 words) for a git branch name. Extract the core concept or feature — ignore filler words like 'I want', 'how do I', 'can you', etc. Bug reports, observations about broken behavior, and feature requests are all actionable — generate a slug for them."
-    static let defaultReviewPrompt = "Review the changes on this branch compared to {baseBranch}. Run `git diff $(git merge-base {baseBranch} HEAD)` to see all changes (committed and uncommitted) since this branch diverged. Also run `git log HEAD..{baseBranch} --oneline` to check if {baseBranch} has moved ahead, and flag any likely merge conflicts. Provide a thorough code review covering correctness, potential bugs, code style, and any suggestions for improvement."
+public nonisolated struct AppSettings: Codable, Sendable {
+    public static let defaultSlugPrompt = "Generate a short kebab-case slug (2-4 words) for a git branch name. Extract the core concept or feature — ignore filler words like 'I want', 'how do I', 'can you', etc. Bug reports, observations about broken behavior, and feature requests are all actionable — generate a slug for them."
+    public static let defaultReviewPrompt = "Review the changes on this branch compared to {baseBranch}. Run `git diff $(git merge-base {baseBranch} HEAD)` to see all changes (committed and uncommitted) since this branch diverged. Also run `git log HEAD..{baseBranch} --oneline` to check if {baseBranch} has moved ahead, and flag any likely merge conflicts. Provide a thorough code review covering correctness, potential bugs, code style, and any suggestions for improvement."
 
-    var projects: [Project]
-    var activeAgents: [AgentType]
-    var defaultAgentType: AgentType?
-    var customAgentCommand: String
-    var showSystemBanners: Bool
-    var playSoundForAgentCompletion: Bool
-    var agentCompletionSoundName: String
-    var autoReorderThreadsOnAgentCompletion: Bool
-    var autoRenameBranches: Bool
-    var autoSetThreadDescription: Bool
-    var autoSetThreadIconFromWorkType: Bool
-    var autoRenameSlugPrompt: String
-    var useThreadSections: Bool
-    var isConfigured: Bool
-    var threadSections: [ThreadSection]
-    var defaultSectionId: UUID?
-    var terminalInjectionCommand: String
-    var agentContextInjection: String
-    var agentSandboxEnabled: Bool
-    var agentSkipPermissions: Bool
-    var ipcPromptInjectionEnabled: Bool
-    var reviewPrompt: String
-    var jiraSiteURL: String
-    var enableRateLimitDetection: Bool
-    var playSoundOnRateLimitDetected: Bool
-    var rateLimitDetectedSoundName: String
-    var showSystemNotificationOnRateLimitLifted: Bool
-    var notifyOnRateLimitLifted: Bool
-    var rateLimitLiftedSoundName: String
-    var autoCheckForUpdates: Bool
+    public var projects: [Project]
+    public var activeAgents: [AgentType]
+    public var defaultAgentType: AgentType?
+    public var customAgentCommand: String
+    public var showSystemBanners: Bool
+    public var playSoundForAgentCompletion: Bool
+    public var agentCompletionSoundName: String
+    public var autoReorderThreadsOnAgentCompletion: Bool
+    public var autoRenameBranches: Bool
+    public var autoSetThreadDescription: Bool
+    public var autoSetThreadIconFromWorkType: Bool
+    public var autoRenameSlugPrompt: String
+    public var useThreadSections: Bool
+    public var isConfigured: Bool
+    public var threadSections: [ThreadSection]
+    public var defaultSectionId: UUID?
+    public var terminalInjectionCommand: String
+    public var agentContextInjection: String
+    public var agentSandboxEnabled: Bool
+    public var agentSkipPermissions: Bool
+    public var ipcPromptInjectionEnabled: Bool
+    public var reviewPrompt: String
+    public var jiraSiteURL: String
+    public var enableRateLimitDetection: Bool
+    public var playSoundOnRateLimitDetected: Bool
+    public var rateLimitDetectedSoundName: String
+    public var showSystemNotificationOnRateLimitLifted: Bool
+    public var notifyOnRateLimitLifted: Bool
+    public var rateLimitLiftedSoundName: String
+    public var autoCheckForUpdates: Bool
 
-    init(
+    public init(
         projects: [Project] = [],
         activeAgents: [AgentType] = [.claude],
         defaultAgentType: AgentType? = nil,
@@ -99,7 +99,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.autoCheckForUpdates = autoCheckForUpdates
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         projects = try container.decode([Project].self, forKey: .projects)
         let legacyAgentType = try container.decodeIfPresent(AgentType.self, forKey: .agentType) ?? .claude
@@ -136,7 +136,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         autoCheckForUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckForUpdates) ?? true
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(projects, forKey: .projects)
         try container.encode(activeAgents, forKey: .activeAgents)
@@ -172,11 +172,11 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoCheckForUpdates, forKey: .autoCheckForUpdates)
     }
 
-    var visibleSections: [ThreadSection] {
+    public var visibleSections: [ThreadSection] {
         threadSections.filter(\.isVisible).sorted { $0.sortOrder < $1.sortOrder }
     }
 
-    var defaultSection: ThreadSection? {
+    public var defaultSection: ThreadSection? {
         let visible = visibleSections
         if let id = defaultSectionId, let match = visible.first(where: { $0.id == id }) {
             return match
@@ -184,7 +184,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         return visible.first
     }
 
-    func defaultSection(for projectId: UUID) -> ThreadSection? {
+    public func defaultSection(for projectId: UUID) -> ThreadSection? {
         guard let project = projects.first(where: { $0.id == projectId }) else {
             return defaultSection
         }
@@ -204,7 +204,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     }
 
     /// Returns sections for a specific project — project override if set, otherwise global.
-    func sections(for projectId: UUID) -> [ThreadSection] {
+    public func sections(for projectId: UUID) -> [ThreadSection] {
         if let project = projects.first(where: { $0.id == projectId }),
            let override = project.threadSections {
             return override
@@ -213,11 +213,11 @@ nonisolated struct AppSettings: Codable, Sendable {
     }
 
     /// Returns visible sections for a specific project, sorted by sortOrder.
-    func visibleSections(for projectId: UUID) -> [ThreadSection] {
+    public func visibleSections(for projectId: UUID) -> [ThreadSection] {
         sections(for: projectId).filter(\.isVisible).sorted { $0.sortOrder < $1.sortOrder }
     }
 
-    func shouldUseThreadSections(for projectId: UUID) -> Bool {
+    public func shouldUseThreadSections(for projectId: UUID) -> Bool {
         if let project = projects.first(where: { $0.id == projectId }),
            let projectOverride = project.useThreadSectionsOverride {
             return projectOverride
@@ -225,12 +225,12 @@ nonisolated struct AppSettings: Codable, Sendable {
         return useThreadSections
     }
 
-    var availableActiveAgents: [AgentType] {
+    public var availableActiveAgents: [AgentType] {
         var seen = Set<AgentType>()
         return activeAgents.filter { seen.insert($0).inserted }
     }
 
-    var effectiveGlobalDefaultAgentType: AgentType? {
+    public var effectiveGlobalDefaultAgentType: AgentType? {
         let agents = availableActiveAgents
         guard !agents.isEmpty else { return nil }
         if agents.count == 1 {
@@ -242,7 +242,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         return agents[0]
     }
 
-    func command(for agentType: AgentType) -> String {
+    public func command(for agentType: AgentType) -> String {
         switch agentType {
         case .claude:
             return agentSkipPermissions ? "claude --dangerously-skip-permissions" : "claude"

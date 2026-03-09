@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import MagentCore
 
 extension ThreadManager {
 

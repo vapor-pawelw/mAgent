@@ -1,5 +1,6 @@
 import Cocoa
 import UserNotifications
+import MagentCore
 
 final class OnboardingNotificationsView: NSView {
 
@@ -236,8 +237,10 @@ final class OnboardingNotificationsView: NSView {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                guard let self, !self.isHidden else { return }
-                self.refreshNotificationStatus()
+                Task { @MainActor [weak self] in
+                    guard let self, !self.isHidden else { return }
+                    self.refreshNotificationStatus()
+                }
             }
         } else if let observer = appActiveObserver {
             NotificationCenter.default.removeObserver(observer)

@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 final class OnboardingPermissionsView: NSView {
 
@@ -115,8 +116,10 @@ final class OnboardingPermissionsView: NSView {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                guard let self, !self.isHidden else { return }
-                self.refreshFDAStatus()
+                Task { @MainActor [weak self] in
+                    guard let self, !self.isHidden else { return }
+                    self.refreshFDAStatus()
+                }
             }
         } else if let observer = appActiveObserver {
             NotificationCenter.default.removeObserver(observer)

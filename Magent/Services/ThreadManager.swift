@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import UserNotifications
+import MagentCore
 
 @MainActor
 protocol ThreadManagerDelegate: AnyObject {

@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import Foundation
+import MagentCore
 
 extension ThreadManager {
 

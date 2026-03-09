@@ -1,8 +1,8 @@
 import Foundation
 
-final class PersistenceService {
+public final class PersistenceService {
 
-    static let shared = PersistenceService()
+    public static let shared = PersistenceService()
 
     private let fileManager = FileManager.default
     private let encoder: JSONEncoder = {
@@ -34,19 +34,19 @@ final class PersistenceService {
 
     // MARK: - Threads
 
-    func loadThreads() -> [MagentThread] {
+    public func loadThreads() -> [MagentThread] {
         guard let data = try? Data(contentsOf: threadsURL) else { return [] }
         return (try? decoder.decode([MagentThread].self, from: data)) ?? []
     }
 
-    func saveThreads(_ threads: [MagentThread]) throws {
+    public func saveThreads(_ threads: [MagentThread]) throws {
         let data = try encoder.encode(threads)
         try data.write(to: threadsURL, options: .atomic)
     }
 
     // MARK: - Settings
 
-    func loadSettings() -> AppSettings {
+    public func loadSettings() -> AppSettings {
         guard let data = try? Data(contentsOf: settingsURL) else { return AppSettings() }
         let settings = (try? decoder.decode(AppSettings.self, from: data)) ?? AppSettings()
 
@@ -61,7 +61,7 @@ final class PersistenceService {
         return settings
     }
 
-    func saveSettings(_ settings: AppSettings) throws {
+    public func saveSettings(_ settings: AppSettings) throws {
         let data = try encoder.encode(settings)
         try data.write(to: settingsURL, options: .atomic)
     }
@@ -72,19 +72,19 @@ final class PersistenceService {
         URL(fileURLWithPath: worktreesBasePath).appendingPathComponent(".magent-cache.json")
     }
 
-    func loadWorktreeCache(worktreesBasePath: String) -> WorktreeMetadataCache {
+    public func loadWorktreeCache(worktreesBasePath: String) -> WorktreeMetadataCache {
         let url = worktreeCacheURL(worktreesBasePath: worktreesBasePath)
         guard let data = try? Data(contentsOf: url) else { return WorktreeMetadataCache() }
         return (try? decoder.decode(WorktreeMetadataCache.self, from: data)) ?? WorktreeMetadataCache()
     }
 
-    func saveWorktreeCache(_ cache: WorktreeMetadataCache, worktreesBasePath: String) {
+    public func saveWorktreeCache(_ cache: WorktreeMetadataCache, worktreesBasePath: String) {
         let url = worktreeCacheURL(worktreesBasePath: worktreesBasePath)
         guard let data = try? encoder.encode(cache) else { return }
         try? data.write(to: url, options: .atomic)
     }
 
-    func pruneWorktreeCache(worktreesBasePath: String, activeNames: Set<String>) {
+    public func pruneWorktreeCache(worktreesBasePath: String, activeNames: Set<String>) {
         var cache = loadWorktreeCache(worktreesBasePath: worktreesBasePath)
         let before = cache.worktrees.count
         cache.worktrees = cache.worktrees.filter { activeNames.contains($0.key) }
@@ -104,7 +104,7 @@ final class PersistenceService {
 
     /// Loads persisted rate limit fingerprints (fingerprint → concrete resetAt).
     /// Automatically prunes expired entries on load.
-    func loadRateLimitCache() -> [String: Date] {
+    public func loadRateLimitCache() -> [String: Date] {
         let url = rateLimitCacheURL
         guard let data = try? Data(contentsOf: url) else { return [:] }
         let cache = (try? decoder.decode([String: Date].self, from: data)) ?? [:]
@@ -125,12 +125,12 @@ final class PersistenceService {
         return pruned
     }
 
-    func saveRateLimitCache(_ cache: [String: Date]) {
+    public func saveRateLimitCache(_ cache: [String: Date]) {
         guard let data = try? encoder.encode(cache) else { return }
         try? data.write(to: rateLimitCacheURL, options: .atomic)
     }
 
-    func loadIgnoredRateLimitFingerprints() -> [AgentType: Set<String>] {
+    public func loadIgnoredRateLimitFingerprints() -> [AgentType: Set<String>] {
         let url = ignoredRateLimitFingerprintsURL
         guard let data = try? Data(contentsOf: url) else { return [:] }
         let raw = (try? decoder.decode([String: [String]].self, from: data)) ?? [:]
@@ -153,7 +153,7 @@ final class PersistenceService {
         return parsed
     }
 
-    func saveIgnoredRateLimitFingerprints(_ ignored: [AgentType: Set<String>]) {
+    public func saveIgnoredRateLimitFingerprints(_ ignored: [AgentType: Set<String>]) {
         var raw: [String: [String]] = [:]
         for (agent, fingerprints) in ignored {
             guard agent == .claude || agent == .codex else { continue }

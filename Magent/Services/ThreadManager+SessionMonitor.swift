@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import MagentCore
 
 extension ThreadManager {
 
@@ -90,7 +91,7 @@ extension ThreadManager {
             if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
                 pruneRepos.insert(project.repoPath)
             }
-            try? await archiveThread(thread)
+            _ = try? await archiveThread(thread)
             archivedAny = true
         }
 

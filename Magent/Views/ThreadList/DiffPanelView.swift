@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 // MARK: - Flipped clip view for top-aligned scroll content
 

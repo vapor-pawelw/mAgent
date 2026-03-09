@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 final class SettingsProjectsViewController: NSViewController {
     static let projectRowPasteboardType = NSPasteboard.PasteboardType("com.magent.settings.project-row")

@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 struct PromptTOCEntry: Sendable {
     let lineIndex: Int

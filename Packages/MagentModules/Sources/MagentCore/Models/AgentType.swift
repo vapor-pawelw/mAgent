@@ -1,11 +1,11 @@
 import Foundation
 
-nonisolated enum AgentType: String, Codable, CaseIterable, Sendable {
+public nonisolated enum AgentType: String, Codable, CaseIterable, Sendable {
     case claude = "claude"
     case codex = "codex"
     case custom = "custom"
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .claude: return "Claude Code"
         case .codex: return "Codex"
@@ -14,7 +14,7 @@ nonisolated enum AgentType: String, Codable, CaseIterable, Sendable {
     }
 
     /// Whether this agent type supports the /resume command for restoring conversations.
-    var supportsResume: Bool {
+    public var supportsResume: Bool {
         self == .claude || self == .codex
     }
 }

@@ -1,14 +1,14 @@
 import Cocoa
 
-nonisolated struct ThreadSection: Codable, Identifiable, Hashable, Sendable {
-    let id: UUID
-    var name: String
-    var colorHex: String
-    var sortOrder: Int
-    var isDefault: Bool
-    var isVisible: Bool
+public nonisolated struct ThreadSection: Codable, Identifiable, Hashable, Sendable {
+    public let id: UUID
+    public var name: String
+    public var colorHex: String
+    public var sortOrder: Int
+    public var isDefault: Bool
+    public var isVisible: Bool
 
-    init(
+    public init(
         id: UUID = UUID(),
         name: String,
         colorHex: String,
@@ -25,20 +25,20 @@ nonisolated struct ThreadSection: Codable, Identifiable, Hashable, Sendable {
     }
 
     @MainActor
-    var color: NSColor {
+    public var color: NSColor {
         NSColor(hex: colorHex) ?? .systemGray
     }
 
-    static let colorPalette: [String] = [
+    public static let colorPalette: [String] = [
         "#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#007AFF",
         "#5856D6", "#AF52DE", "#FF2D55", "#A2845E", "#00C7BE",
     ]
 
-    static func randomColorHex() -> String {
+    public static func randomColorHex() -> String {
         colorPalette.randomElement() ?? "#007AFF"
     }
 
-    static func defaults() -> [ThreadSection] {
+    public static func defaults() -> [ThreadSection] {
         [
             ThreadSection(name: "TODO", colorHex: "#007AFF", sortOrder: 0, isDefault: true),
             ThreadSection(name: "In Progress", colorHex: "#FF9500", sortOrder: 1, isDefault: true),
@@ -50,8 +50,8 @@ nonisolated struct ThreadSection: Codable, Identifiable, Hashable, Sendable {
 
 // MARK: - NSColor Hex Extensions
 
-extension NSColor {
-    convenience init?(hex: String) {
+public extension NSColor {
+    public convenience init?(hex: String) {
         var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         hexSanitized = hexSanitized.hasPrefix("#") ? String(hexSanitized.dropFirst()) : hexSanitized
 
@@ -68,7 +68,7 @@ extension NSColor {
         )
     }
 
-    var hexString: String {
+    public var hexString: String {
         guard let rgb = usingColorSpace(.sRGB) else { return "#000000" }
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         rgb.getRed(&r, green: &g, blue: &b, alpha: &a)

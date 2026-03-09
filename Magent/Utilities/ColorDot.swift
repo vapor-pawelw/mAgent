@@ -1,4 +1,5 @@
 import AppKit
+import MagentCore
 
 /// Creates a circular color dot image of the given size.
 func colorDotImage(color: NSColor, size: CGFloat) -> NSImage {

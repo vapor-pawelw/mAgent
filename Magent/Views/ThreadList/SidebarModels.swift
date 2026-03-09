@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 class SidebarProject {
     let projectId: UUID

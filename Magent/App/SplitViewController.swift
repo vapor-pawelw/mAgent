@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 private final class SplitContentContainerViewController: NSViewController {
     private var currentChild: NSViewController?

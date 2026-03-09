@@ -1,4 +1,5 @@
 import AppKit
+import MagentCore
 
 /// Builds an NSMenu with agent type choices (project default, each active agent, terminal).
 ///

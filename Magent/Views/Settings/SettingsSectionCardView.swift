@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 final class SettingsSectionCardView: NSView {
     override init(frame frameRect: NSRect) {

@@ -1,8 +1,8 @@
 import Foundation
 
-final class GitService {
+public final class GitService: Sendable {
 
-    static let shared = GitService()
+    public static let shared = GitService()
 
     // Normalize git diff/status path formats (especially rename syntax) to the
     // actual "new/current" path used by file operations and diff sections.
@@ -46,7 +46,7 @@ final class GitService {
 
     // MARK: - Worktree Operations
 
-    func createWorktree(repoPath: String, branchName: String, worktreePath: String, baseBranch: String? = nil) async throws -> URL {
+    public func createWorktree(repoPath: String, branchName: String, worktreePath: String, baseBranch: String? = nil) async throws -> URL {
         let worktreeURL = URL(fileURLWithPath: worktreePath)
 
         // Create parent directory if needed
@@ -81,11 +81,11 @@ final class GitService {
         return worktreeURL
     }
 
-    func pruneWorktrees(repoPath: String) async {
+    public func pruneWorktrees(repoPath: String) async {
         _ = await ShellExecutor.execute("git worktree prune", workingDirectory: repoPath)
     }
 
-    func addWorktreeForExistingBranch(repoPath: String, branchName: String, worktreePath: String) async throws -> URL {
+    public func addWorktreeForExistingBranch(repoPath: String, branchName: String, worktreePath: String) async throws -> URL {
         let worktreeURL = URL(fileURLWithPath: worktreePath)
 
         // Create parent directory if needed
@@ -112,7 +112,7 @@ final class GitService {
         return worktreeURL
     }
 
-    func removeWorktree(repoPath: String, worktreePath: String) async throws {
+    public func removeWorktree(repoPath: String, worktreePath: String) async throws {
         _ = try await ShellExecutor.run(
             "git worktree remove --force \(shellQuote(worktreePath))",
             workingDirectory: repoPath
@@ -123,7 +123,7 @@ final class GitService {
         )
     }
 
-    func listWorktrees(repoPath: String) async throws -> [WorktreeInfo] {
+    public func listWorktrees(repoPath: String) async throws -> [WorktreeInfo] {
         let output = try await ShellExecutor.run(
             "git worktree list --porcelain",
             workingDirectory: repoPath
@@ -157,28 +157,28 @@ final class GitService {
         return worktrees
     }
 
-    func moveWorktree(repoPath: String, oldPath: String, newPath: String) async throws {
+    public func moveWorktree(repoPath: String, oldPath: String, newPath: String) async throws {
         _ = try await ShellExecutor.run(
             "git worktree move \(shellQuote(oldPath)) \(shellQuote(newPath))",
             workingDirectory: repoPath
         )
     }
 
-    func renameBranch(repoPath: String, oldName: String, newName: String) async throws {
+    public func renameBranch(repoPath: String, oldName: String, newName: String) async throws {
         _ = try await ShellExecutor.run(
             "git branch -m \(shellQuote(oldName)) \(shellQuote(newName))",
             workingDirectory: repoPath
         )
     }
 
-    func deleteBranch(repoPath: String, branchName: String) async throws {
+    public func deleteBranch(repoPath: String, branchName: String) async throws {
         _ = try await ShellExecutor.run(
             "git branch -D \(shellQuote(branchName))",
             workingDirectory: repoPath
         )
     }
 
-    func branchExists(repoPath: String, branchName: String) async -> Bool {
+    public func branchExists(repoPath: String, branchName: String) async -> Bool {
         do {
             _ = try await ShellExecutor.run(
                 "git rev-parse --verify \(shellQuote(branchName))",
@@ -191,7 +191,7 @@ final class GitService {
     }
 
     /// Detects the default branch via origin/HEAD, falling back to main/master existence check.
-    func detectDefaultBranch(repoPath: String) async -> String? {
+    public func detectDefaultBranch(repoPath: String) async -> String? {
         // Try origin/HEAD (set during clone)
         let result = await ShellExecutor.execute(
             "git symbolic-ref refs/remotes/origin/HEAD",
@@ -214,7 +214,7 @@ final class GitService {
 
     // MARK: - Remote Operations
 
-    func getRemotes(repoPath: String) async -> [GitRemote] {
+    public func getRemotes(repoPath: String) async -> [GitRemote] {
         let result = await ShellExecutor.execute(
             "git remote -v",
             workingDirectory: repoPath
@@ -243,7 +243,7 @@ final class GitService {
     private var _ghAvailable: Bool?
     private var _glabAvailable: Bool?
 
-    func fetchPullRequest(remote: GitRemote, branch: String) async -> PullRequestInfo? {
+    public func fetchPullRequest(remote: GitRemote, branch: String) async -> PullRequestInfo? {
         switch remote.provider {
         case .github:   return await fetchGitHubPR(remote: remote, branch: branch)
         case .gitlab:   return await fetchGitLabMR(remote: remote, branch: branch)
@@ -295,7 +295,7 @@ final class GitService {
         return PullRequestInfo(number: number, url: url, provider: remote.provider)
     }
 
-    func getCurrentBranch(workingDirectory: String) async -> String? {
+    public func getCurrentBranch(workingDirectory: String) async -> String? {
         let result = await ShellExecutor.execute(
             "git rev-parse --abbrev-ref HEAD",
             workingDirectory: workingDirectory
@@ -306,7 +306,7 @@ final class GitService {
     }
 
     /// Returns `true` when the worktree has no uncommitted changes (untracked files are ignored).
-    func isClean(worktreePath: String) async -> Bool {
+    public func isClean(worktreePath: String) async -> Bool {
         let result = await ShellExecutor.execute(
             "git status --porcelain -uno",
             workingDirectory: worktreePath
@@ -316,7 +316,7 @@ final class GitService {
     }
 
     /// Returns `true` when the branch has no commits beyond `baseBranch`.
-    func isMergedInto(worktreePath: String, baseBranch: String) async -> Bool {
+    public func isMergedInto(worktreePath: String, baseBranch: String) async -> Bool {
         let result = await ShellExecutor.execute(
             "git log \(shellQuote(baseBranch))..HEAD --oneline",
             workingDirectory: worktreePath
@@ -330,7 +330,7 @@ final class GitService {
     ///
     /// When `forkPointCommit` is provided, it's used to distinguish "branch was merged"
     /// from "brand new branch with no commits" in the case where HEAD is an ancestor of baseBranch.
-    func isFullyDelivered(worktreePath: String, baseBranch: String, forkPointCommit: String? = nil) async -> Bool {
+    public func isFullyDelivered(worktreePath: String, baseBranch: String, forkPointCommit: String? = nil) async -> Bool {
         let headTip = await ShellExecutor.execute("git rev-parse HEAD", workingDirectory: worktreePath)
         let head = headTip.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !head.isEmpty else { return false }
@@ -404,7 +404,7 @@ final class GitService {
     // MARK: - Merge Base & File Data
 
     /// Returns the merge-base commit hash between `baseBranch` and HEAD.
-    func mergeBase(worktreePath: String, baseBranch: String) async -> String? {
+    public func mergeBase(worktreePath: String, baseBranch: String) async -> String? {
         let result = await ShellExecutor.execute(
             "git merge-base \(shellQuote(baseBranch)) HEAD",
             workingDirectory: worktreePath
@@ -415,7 +415,7 @@ final class GitService {
     }
 
     /// Returns the raw file contents at a given git ref (commit, branch, tag).
-    func fileData(atRef ref: String, relativePath: String, worktreePath: String) async -> Data? {
+    public func fileData(atRef ref: String, relativePath: String, worktreePath: String) async -> Data? {
         let result = await ShellExecutor.executeData(
             "git show \(shellQuote(ref)):\(shellQuote(relativePath))",
             workingDirectory: worktreePath
@@ -427,7 +427,7 @@ final class GitService {
     // MARK: - Diff & Status
 
     /// Returns `true` when the worktree has any uncommitted changes or untracked files.
-    func isDirty(worktreePath: String) async -> Bool {
+    public func isDirty(worktreePath: String) async -> Bool {
         let result = await ShellExecutor.execute(
             "git status --porcelain",
             workingDirectory: worktreePath
@@ -437,7 +437,7 @@ final class GitService {
     }
 
     /// Returns per-file diff stats comparing the worktree to its base branch.
-    func diffStats(worktreePath: String, baseBranch: String) async -> [FileDiffEntry] {
+    public func diffStats(worktreePath: String, baseBranch: String) async -> [FileDiffEntry] {
         guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return [] }
 
         // Get numstat for all changes from merge-base to working tree (includes uncommitted)
@@ -508,7 +508,7 @@ final class GitService {
     }
 
     /// Returns the full unified diff output comparing the worktree to its base branch.
-    func diffContent(worktreePath: String, baseBranch: String) async -> String? {
+    public func diffContent(worktreePath: String, baseBranch: String) async -> String? {
         guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return nil }
 
         let diffResult = await ShellExecutor.execute(
@@ -546,7 +546,7 @@ final class GitService {
     }
 
     /// Returns the unified diff for a single file comparing the worktree to its base branch.
-    func diffContentForFile(worktreePath: String, baseBranch: String, relativePath: String) async -> String? {
+    public func diffContentForFile(worktreePath: String, baseBranch: String, relativePath: String) async -> String? {
         guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return nil }
 
         let diffResult = await ShellExecutor.execute(
@@ -581,14 +581,14 @@ final class GitService {
         return nil
     }
 
-    func checkoutBranch(workingDirectory: String, branchName: String) async throws {
+    public func checkoutBranch(workingDirectory: String, branchName: String) async throws {
         _ = try await ShellExecutor.run(
             "git checkout \(shellQuote(branchName))",
             workingDirectory: workingDirectory
         )
     }
 
-    func isGitRepository(at path: String) async -> Bool {
+    public func isGitRepository(at path: String) async -> Bool {
         do {
             _ = try await ShellExecutor.run("git rev-parse --git-dir", workingDirectory: path)
             return true

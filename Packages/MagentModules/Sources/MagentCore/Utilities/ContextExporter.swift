@@ -1,11 +1,11 @@
 import Foundation
 
-enum ContextExporter {
+public enum ContextExporter {
 
     // MARK: - ANSI Stripping
 
     /// Strips ANSI escape sequences (CSI, OSC, SGR, cursor movement, C1 controls, SI/SO).
-    static func stripANSI(_ text: String) -> String {
+    public static func stripANSI(_ text: String) -> String {
         let patterns = [
             "\\x1B\\[[0-9;]*[A-Za-z]",                     // CSI sequences
             "\\x1B\\][^\\x07\\x1B]*(\\x07|\\x1B\\\\)",     // OSC sequences
@@ -23,7 +23,7 @@ enum ContextExporter {
     // MARK: - Line Wrapping
 
     /// Wraps lines exceeding maxChars at word boundaries; shorter lines pass through.
-    static func wrapLongLines(_ text: String, maxChars: Int = 500) -> String {
+    public static func wrapLongLines(_ text: String, maxChars: Int = 500) -> String {
         text.split(separator: "\n", omittingEmptySubsequences: false).map { line in
             let s = String(line)
             guard s.count > maxChars else { return s }
@@ -55,7 +55,7 @@ enum ContextExporter {
     // MARK: - Markdown Formatting
 
     /// Formats cleaned content into markdown with metadata header.
-    static func formatAsMarkdown(
+    public static func formatAsMarkdown(
         rawContent: String,
         sourceAgent: AgentType?,
         threadName: String,
@@ -84,7 +84,7 @@ enum ContextExporter {
     // MARK: - File Writing
 
     /// Writes markdown to `.magent-context.md` in the given directory. Returns absolute path on success.
-    static func writeContextFile(markdown: String, in directory: String) -> String? {
+    public static func writeContextFile(markdown: String, in directory: String) -> String? {
         let path = (directory as NSString).appendingPathComponent(".magent-context.md")
         do {
             try markdown.write(toFile: path, atomically: true, encoding: .utf8)
@@ -103,7 +103,7 @@ enum ContextExporter {
     }
 
     /// Removes any leftover `.magent-context.md` files from all known worktree directories.
-    static func cleanupAllContextFiles(worktreePaths: [String]) {
+    public static func cleanupAllContextFiles(worktreePaths: [String]) {
         for dir in worktreePaths {
             let path = (dir as NSString).appendingPathComponent(".magent-context.md")
             try? FileManager.default.removeItem(atPath: path)
@@ -113,7 +113,7 @@ enum ContextExporter {
     // MARK: - Transfer Prompt
 
     /// Builds the initial prompt for the receiving agent.
-    static func transferPrompt(contextFilePath: String) -> String {
+    public static func transferPrompt(contextFilePath: String) -> String {
         return "Read \(contextFilePath) for context from the previous session. Continue where it left off. If work was interrupted or unfinished, resume and complete it first. Report progress and results directly. Ask what to do next only if no clear unfinished task remains."
     }
 }

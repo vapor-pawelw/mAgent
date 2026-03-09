@@ -1,7 +1,7 @@
 import Foundation
 
 /// Single source of truth for Magent IPC hints + on-demand CLI docs.
-enum IPCAgentDocs {
+public enum IPCAgentDocs {
 
     /// CLI commands available through magent-cli.
     nonisolated private static let cliCommands = """
@@ -43,7 +43,7 @@ enum IPCAgentDocs {
     """
 
     /// On-demand CLI reference returned by `magent-cli docs`.
-    nonisolated static let cliReferenceText: String = """
+    public nonisolated static let cliReferenceText: String = """
     Magent IPC is available via `/tmp/magent-cli`.
 
     Commands:
@@ -54,7 +54,7 @@ enum IPCAgentDocs {
     """
 
     /// Lightweight prompt hint used for Claude's `--append-system-prompt`.
-    static let claudeSystemPrompt: String = """
+    public static let claudeSystemPrompt: String = """
     Magent IPC is available via `/tmp/magent-cli` when needed.
     Use it only for thread/tab/section management tasks.
     For details on demand, run `/tmp/magent-cli docs` (full reference) or `/tmp/magent-cli help` (quick usage).
@@ -62,12 +62,12 @@ enum IPCAgentDocs {
 
     // MARK: - Codex AGENTS.md
 
-    static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
-    static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    static let codexIPCVersion = "<!-- magent-ipc-v10 -->"
+    public static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
+    public static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
+    public static let codexIPCVersion = "<!-- magent-ipc-v10 -->"
 
     /// Lightweight Codex `AGENTS.md` hint that points to on-demand docs.
-    static let codexAgentsMdBlock: String = """
+    public static let codexAgentsMdBlock: String = """
     \(codexIPCMarkerStart)
     \(codexIPCVersion)
     # Magent IPC

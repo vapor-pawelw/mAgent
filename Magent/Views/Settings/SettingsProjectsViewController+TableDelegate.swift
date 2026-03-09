@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 private enum SettingsProjectsTableLayout {
     static let horizontalInset: CGFloat = 4

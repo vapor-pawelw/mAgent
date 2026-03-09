@@ -1,4 +1,5 @@
 import Foundation
+import MagentCore
 
 extension IPCCommandHandler {
 
@@ -359,7 +360,7 @@ extension IPCCommandHandler {
             return .failure("Section not found: \(sectionName)", id: request.id)
         }
 
-        await threadManager.moveThread(thread, toSection: section.id)
+        threadManager.moveThread(thread, toSection: section.id)
 
         let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
         guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {

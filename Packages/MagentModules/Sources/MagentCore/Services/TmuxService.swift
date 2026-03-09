@@ -1,17 +1,22 @@
 import Foundation
 
-final class TmuxService {
+public final class TmuxService: Sendable {
 
-    static let shared = TmuxService()
+    public static let shared = TmuxService()
     private let agentCompletionEventsPath = "/tmp/magent-agent-completion-events.log"
-    struct ZombieParentSummary {
-        let parentPid: Int
-        let zombieCount: Int
+    public struct ZombieParentSummary {
+        public let parentPid: Int
+        public let zombieCount: Int
+
+        public init(parentPid: Int, zombieCount: Int) {
+            self.parentPid = parentPid
+            self.zombieCount = zombieCount
+        }
     }
 
     // MARK: - Session Operations
 
-    func createSession(name: String, workingDirectory: String, command: String? = nil) async throws {
+    public func createSession(name: String, workingDirectory: String, command: String? = nil) async throws {
         var cmd = "tmux new-session -d -s \(shellQuote(name)) -c \(shellQuote(workingDirectory))"
         if let command {
             cmd += " \(shellQuote(command))"
@@ -23,7 +28,7 @@ final class TmuxService {
 
     /// Configures tmux settings needed by Magent (mouse selection behavior, etc.).
     /// Called once at app startup; applies globally to all sessions.
-    func applyGlobalSettings() async {
+    public func applyGlobalSettings() async {
         // Keep selection visible after mouse drag — don't copy or exit copy-mode
         _ = try? await ShellExecutor.run("tmux unbind-key -T copy-mode MouseDragEnd1Pane")
         _ = try? await ShellExecutor.run("tmux unbind-key -T copy-mode-vi MouseDragEnd1Pane")
@@ -48,7 +53,7 @@ final class TmuxService {
 
     /// Sets up `pipe-pane` on a tmux session to detect bell characters (0x07) in pane output.
     /// This replaces the broken tmux `alert-bell` hook (which does not fire in tmux ≤3.6a).
-    func setupBellPipe(for sessionName: String) async {
+    public func setupBellPipe(for sessionName: String) async {
         installBellWatcherScript()
         _ = try? await ShellExecutor.run(
             "tmux pipe-pane -o -t \(shellQuote(sessionName)) \(shellQuote("\(bellWatcherScriptPath) \(sessionName)"))"
@@ -59,7 +64,7 @@ final class TmuxService {
     /// Use after tmux session rename: the old pipe survives the rename and keeps writing
     /// the pre-rename session name to the event log. Stopping it first and starting fresh
     /// ensures subsequent bell events are attributed to the correct (new) session name.
-    func forceSetupBellPipe(for sessionName: String) async {
+    public func forceSetupBellPipe(for sessionName: String) async {
         installBellWatcherScript()
         // Stop any existing pipe on this session (idempotent; no-op if already stopped).
         _ = try? await ShellExecutor.run("tmux pipe-pane -t \(shellQuote(sessionName))")
@@ -135,7 +140,7 @@ final class TmuxService {
     }
 
     /// Returns the set of session names that currently have an active pipe-pane.
-    func sessionsWithActivePipe() async -> Set<String> {
+    public func sessionsWithActivePipe() async -> Set<String> {
         // Query all panes: session_name and pane_pipe flag
         guard let output = try? await ShellExecutor.run(
             "tmux list-panes -a -F '#{session_name} #{pane_pipe}'"
@@ -152,7 +157,7 @@ final class TmuxService {
         return result
     }
 
-    func consumeAgentCompletionSessions() async -> [String] {
+    public func consumeAgentCompletionSessions() async -> [String] {
         let command = "if [ -f \(shellQuote(agentCompletionEventsPath)) ]; then cat \(shellQuote(agentCompletionEventsPath)); : > \(shellQuote(agentCompletionEventsPath)); fi"
         guard let output = try? await ShellExecutor.run(command), !output.isEmpty else {
             return []
@@ -164,15 +169,15 @@ final class TmuxService {
     }
 
     /// Copies the current tmux copy-mode selection to the system clipboard, then exits copy-mode.
-    func copySelectionToClipboard(sessionName: String) async {
+    public func copySelectionToClipboard(sessionName: String) async {
         _ = try? await ShellExecutor.run("tmux send-keys -t \(shellQuote(sessionName)) -X copy-pipe-and-cancel pbcopy")
     }
 
-    func killSession(name: String) async throws {
+    public func killSession(name: String) async throws {
         _ = try await ShellExecutor.run("tmux kill-session -t \(shellQuote(name))")
     }
 
-    func killServer() async {
+    public func killServer() async {
         _ = await ShellExecutor.execute("tmux kill-server")
         // Also kill any zombie-heavy tmux processes that kill-server may not reach
         await killZombieHeavyTmuxProcesses()
@@ -180,7 +185,7 @@ final class TmuxService {
 
     /// Finds tmux processes that are parents of zombie children and kills them.
     /// After killing, waits briefly for the OS to reap the zombies.
-    func killZombieHeavyTmuxProcesses() async {
+    public func killZombieHeavyTmuxProcesses() async {
         let summaries = await zombieParentSummaries()
         for summary in summaries where summary.zombieCount >= 10 {
             _ = await ShellExecutor.execute("kill -9 \(summary.parentPid)")
@@ -190,7 +195,7 @@ final class TmuxService {
         try? await Task.sleep(for: .seconds(2))
     }
 
-    func hasSession(name: String) async -> Bool {
+    public func hasSession(name: String) async -> Bool {
         do {
             _ = try await ShellExecutor.run("tmux has-session -t \(shellQuote(name))")
             return true
@@ -199,43 +204,43 @@ final class TmuxService {
         }
     }
 
-    func renameSession(from oldName: String, to newName: String) async throws {
+    public func renameSession(from oldName: String, to newName: String) async throws {
         _ = try await ShellExecutor.run(
             "tmux rename-session -t \(shellQuote(oldName)) \(shellQuote(newName))"
         )
     }
 
-    func listSessions() async throws -> [String] {
+    public func listSessions() async throws -> [String] {
         let output = try await ShellExecutor.run("tmux list-sessions -F '#{session_name}'")
         return output.components(separatedBy: "\n").filter { !$0.isEmpty }
     }
 
-    func sendKeys(sessionName: String, keys: String) async throws {
+    public func sendKeys(sessionName: String, keys: String) async throws {
         _ = try await ShellExecutor.run(
             "tmux send-keys -t \(shellQuote(sessionName)) \(shellQuote(keys)) Enter"
         )
     }
 
     /// Sends text without pressing Enter — use `sendEnter` separately to submit.
-    func sendText(sessionName: String, text: String) async throws {
+    public func sendText(sessionName: String, text: String) async throws {
         _ = try await ShellExecutor.run(
             "tmux send-keys -t \(shellQuote(sessionName)) \(shellQuote(text))"
         )
     }
 
-    func sendEnter(sessionName: String) async throws {
+    public func sendEnter(sessionName: String) async throws {
         _ = try await ShellExecutor.run(
             "tmux send-keys -t \(shellQuote(sessionName)) Enter"
         )
     }
 
-    func setEnvironment(sessionName: String, key: String, value: String) async throws {
+    public func setEnvironment(sessionName: String, key: String, value: String) async throws {
         _ = try await ShellExecutor.run(
             "tmux set-environment -t \(shellQuote(sessionName)) \(shellQuote(key)) \(shellQuote(value))"
         )
     }
 
-    func environmentValue(sessionName: String, key: String) async -> String? {
+    public func environmentValue(sessionName: String, key: String) async -> String? {
         guard let output = try? await ShellExecutor.run(
             "tmux show-environment -t \(shellQuote(sessionName)) \(shellQuote(key))"
         ) else {
@@ -250,7 +255,7 @@ final class TmuxService {
         return String(line.dropFirst(prefix.count))
     }
 
-    func sessionPath(sessionName: String) async -> String? {
+    public func sessionPath(sessionName: String) async -> String? {
         guard let output = try? await ShellExecutor.run(
             "tmux display-message -p -t \(shellQuote(sessionName)) '#{session_path}'"
         ) else {
@@ -261,7 +266,7 @@ final class TmuxService {
         return path.isEmpty ? nil : path
     }
 
-    func sessionCreatedAt(sessionName: String) async -> Date? {
+    public func sessionCreatedAt(sessionName: String) async -> Date? {
         guard let output = try? await ShellExecutor.run(
             "tmux display-message -p -t \(shellQuote(sessionName)) '#{session_created}'"
         ) else {
@@ -273,7 +278,7 @@ final class TmuxService {
         return Date(timeIntervalSince1970: seconds)
     }
 
-    func activePaneInfo(sessionName: String) async -> (command: String, path: String)? {
+    public func activePaneInfo(sessionName: String) async -> (command: String, path: String)? {
         guard let output = try? await ShellExecutor.run(
             "tmux list-panes -t \(shellQuote(sessionName)) -F '#{pane_active}\t#{pane_current_command}\t#{pane_current_path}'"
         ) else {
@@ -298,7 +303,7 @@ final class TmuxService {
 
     /// Returns a dictionary mapping session names to their active pane's current command.
     /// Only includes sessions from the given set that are alive.
-    func activeCommands(forSessions sessionNames: Set<String>) async -> [String: String] {
+    public func activeCommands(forSessions sessionNames: Set<String>) async -> [String: String] {
         guard !sessionNames.isEmpty else { return [:] }
         guard let output = try? await ShellExecutor.run(
             "tmux list-panes -a -F '#{session_name}\t#{pane_active}\t#{pane_current_command}'"
@@ -323,7 +328,7 @@ final class TmuxService {
 
     /// Returns a dictionary mapping session names to the active pane's command, title, and PID.
     /// Only includes sessions from the given set that are alive.
-    func activePaneStates(forSessions sessionNames: Set<String>) async -> [String: (command: String, title: String, pid: pid_t)] {
+    public func activePaneStates(forSessions sessionNames: Set<String>) async -> [String: (command: String, title: String, pid: pid_t)] {
         guard !sessionNames.isEmpty else { return [:] }
         guard let output = try? await ShellExecutor.run(
             "tmux list-panes -a -F '#{session_name}\t#{pane_active}\t#{pane_current_command}\t#{pane_title}\t#{pane_pid}'"
@@ -349,7 +354,7 @@ final class TmuxService {
     }
 
     /// Returns child PIDs for each specified parent PID, in one `ps` call.
-    func childPids(forParents parentPids: Set<pid_t>) async -> [pid_t: [pid_t]] {
+    public func childPids(forParents parentPids: Set<pid_t>) async -> [pid_t: [pid_t]] {
         guard !parentPids.isEmpty else { return [:] }
         guard let output = try? await ShellExecutor.run("ps -o ppid=,pid= -ax"),
               !output.isEmpty else { return [:] }
@@ -366,7 +371,7 @@ final class TmuxService {
     }
 
     /// Captures the full scrollback history of the active pane in a tmux session.
-    func captureFullPane(sessionName: String, includeAttributes: Bool = false) async -> String? {
+    public func captureFullPane(sessionName: String, includeAttributes: Bool = false) async -> String? {
         let attributesFlag = includeAttributes ? "-e " : ""
         guard let output = try? await ShellExecutor.run(
             "tmux capture-pane \(attributesFlag)-p -t \(shellQuote(sessionName)) -S - -E -"
@@ -378,7 +383,7 @@ final class TmuxService {
 
     /// Scrolls the pane in copy-mode so the specified history line is anchored
     /// near the top of the viewport when enough lines are available below it.
-    func scrollHistoryLineToTop(sessionName: String, lineIndex: Int) async throws {
+    public func scrollHistoryLineToTop(sessionName: String, lineIndex: Int) async throws {
         let normalizedLine = max(0, lineIndex)
         let paneHeightOutput = try await ShellExecutor.run(
             "tmux display-message -p -t \(shellQuote(sessionName)) '#{pane_height}'"
@@ -393,19 +398,19 @@ final class TmuxService {
         _ = try await ShellExecutor.run(command)
     }
 
-    func scrollPageUp(sessionName: String) async throws {
+    public func scrollPageUp(sessionName: String) async throws {
         _ = try await ShellExecutor.run(
             "tmux copy-mode -e -t \(shellQuote(sessionName)); tmux send-keys -t \(shellQuote(sessionName)) -X page-up"
         )
     }
 
-    func scrollPageDown(sessionName: String) async throws {
+    public func scrollPageDown(sessionName: String) async throws {
         _ = try await ShellExecutor.run(
             "tmux copy-mode -e -t \(shellQuote(sessionName)); tmux send-keys -t \(shellQuote(sessionName)) -X page-down-and-cancel"
         )
     }
 
-    func scrollToBottom(sessionName: String) async throws {
+    public func scrollToBottom(sessionName: String) async throws {
         // Ignore "not in a mode" — pane is already at the bottom (not in copy-mode), which is fine.
         _ = try? await ShellExecutor.run(
             "tmux send-keys -t \(shellQuote(sessionName)) -X cancel"
@@ -413,7 +418,7 @@ final class TmuxService {
     }
 
     /// Returns how many lines the active pane is currently scrolled above live output.
-    func scrollPosition(sessionName: String) async -> UInt64? {
+    public func scrollPosition(sessionName: String) async -> UInt64? {
         guard let output = try? await ShellExecutor.run(
             "tmux display-message -p -t \(shellQuote(sessionName)) '#{scroll_position}'"
         ) else {
@@ -426,7 +431,7 @@ final class TmuxService {
     }
 
     /// Captures the last N lines of the active pane in a tmux session.
-    func capturePane(sessionName: String, lastLines: Int = 15) async -> String? {
+    public func capturePane(sessionName: String, lastLines: Int = 15) async -> String? {
         guard let output = try? await ShellExecutor.run(
             "tmux capture-pane -p -t \(shellQuote(sessionName)) -S -\(lastLines)"
         ) else {
@@ -436,7 +441,7 @@ final class TmuxService {
     }
 
     /// Returns tmux parent processes that currently hold zombie children.
-    func zombieParentSummaries() async -> [ZombieParentSummary] {
+    public func zombieParentSummaries() async -> [ZombieParentSummary] {
         let command = """
         ps -axo pid=,ppid=,state=,comm= | awk '
         $4=="tmux" { tmux[$1]=1 }
@@ -466,10 +471,10 @@ final class TmuxService {
 
 }
 
-enum TmuxError: LocalizedError {
+public enum TmuxError: LocalizedError {
     case commandFailed(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .commandFailed(let message):
             return "tmux error: \(message)"

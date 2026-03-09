@@ -1,5 +1,6 @@
 import Cocoa
 import UserNotifications
+import MagentCore
 
 final class FlippedDocumentView: NSView {
     override var isFlipped: Bool { true }

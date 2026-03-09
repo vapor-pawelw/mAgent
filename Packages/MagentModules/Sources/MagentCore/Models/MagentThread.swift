@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
+public nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
     case feature
     case fix
     case improvement
@@ -8,7 +8,7 @@ nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
     case test
     case other
 
-    var symbolName: String {
+    public var symbolName: String {
         switch self {
         case .feature:
             return "star.fill"
@@ -25,7 +25,7 @@ nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    var menuTitle: String {
+    public var menuTitle: String {
         switch self {
         case .feature:
             return "Feature"
@@ -42,93 +42,105 @@ nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    var accessibilityDescription: String {
+    public var accessibilityDescription: String {
         "\(menuTitle) thread"
     }
 }
 
-nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
-    var resetAt: Date
-    var resetDescription: String?
-    var detectedAt: Date
+public nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
+    public var resetAt: Date
+    public var resetDescription: String?
+    public var detectedAt: Date
     /// True for markers set from the interactive rate-limit prompt (e.g. "Stop and
     /// wait for limit to reset"). These are managed by syncBusySessionsFromProcessState
     /// and should not be cleared by checkForRateLimitedSessions.
-    var isPromptBased: Bool = false
+    public var isPromptBased: Bool = false
+
+    public init(
+        resetAt: Date,
+        resetDescription: String? = nil,
+        detectedAt: Date,
+        isPromptBased: Bool = false
+    ) {
+        self.resetAt = resetAt
+        self.resetDescription = resetDescription
+        self.detectedAt = detectedAt
+        self.isPromptBased = isPromptBased
+    }
 }
 
-nonisolated struct PullRequestInfo: Sendable, Equatable {
-    let number: Int
-    let url: URL
-    let provider: GitHostingProvider
+public nonisolated struct PullRequestInfo: Sendable, Equatable {
+    public let number: Int
+    public let url: URL
+    public let provider: GitHostingProvider
 
-    var displayLabel: String {
+    public var displayLabel: String {
         provider == .gitlab ? "MR !\(number)" : "PR #\(number)"
     }
-    var shortLabel: String {
+    public var shortLabel: String {
         provider == .gitlab ? "!\(number)" : "#\(number)"
     }
 }
 
-nonisolated struct MagentThread: Codable, Identifiable, Sendable {
-    let id: UUID
-    let projectId: UUID
-    var name: String
-    var worktreePath: String
-    var branchName: String
-    var tmuxSessionNames: [String]
-    var agentTmuxSessions: [String]
-    var sessionAgentTypes: [String: AgentType]
-    var sessionConversationIDs: [String: String]
-    var pinnedTmuxSessions: [String]
-    let createdAt: Date
-    var isArchived: Bool
-    var sectionId: UUID?
-    var isMain: Bool
-    var lastSelectedTmuxSessionName: String?
-    var agentHasRun: Bool
-    var isPinned: Bool
-    var lastAgentCompletionAt: Date?
-    var unreadCompletionSessions: Set<String>
-    var didAutoRenameFromFirstPrompt: Bool
-    var customTabNames: [String: String]
-    var baseBranch: String?
-    var displayOrder: Int
-    var jiraTicketKey: String?
-    var taskDescription: String?
-    var threadIcon: ThreadIcon
-    var isThreadIconManuallySet: Bool
+public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
+    public let id: UUID
+    public let projectId: UUID
+    public var name: String
+    public var worktreePath: String
+    public var branchName: String
+    public var tmuxSessionNames: [String]
+    public var agentTmuxSessions: [String]
+    public var sessionAgentTypes: [String: AgentType]
+    public var sessionConversationIDs: [String: String]
+    public var pinnedTmuxSessions: [String]
+    public let createdAt: Date
+    public var isArchived: Bool
+    public var sectionId: UUID?
+    public var isMain: Bool
+    public var lastSelectedTmuxSessionName: String?
+    public var agentHasRun: Bool
+    public var isPinned: Bool
+    public var lastAgentCompletionAt: Date?
+    public var unreadCompletionSessions: Set<String>
+    public var didAutoRenameFromFirstPrompt: Bool
+    public var customTabNames: [String: String]
+    public var baseBranch: String?
+    public var displayOrder: Int
+    public var jiraTicketKey: String?
+    public var taskDescription: String?
+    public var threadIcon: ThreadIcon
+    public var isThreadIconManuallySet: Bool
     /// Persisted per-session history of TOC-confirmed prompts (newest at end).
-    var submittedPromptsBySession: [String: [String]]
+    public var submittedPromptsBySession: [String: [String]]
     /// Snapshot of project local sync paths taken when the thread was created.
     /// `nil` means the thread predates path snapshotting and should fall back to
     /// current project settings during archive.
-    var localFileSyncPathsSnapshot: [String]?
+    public var localFileSyncPathsSnapshot: [String]?
 
     // Transient (not persisted) — tracks which agent sessions are currently working
-    var busySessions: Set<String> = []
+    public var busySessions: Set<String> = []
     // Transient (not persisted) — tracks which agent sessions are waiting for user input
-    var waitingForInputSessions: Set<String> = []
+    public var waitingForInputSessions: Set<String> = []
     // Transient (not persisted) — tracks whether worktree has uncommitted/untracked changes
-    var isDirty: Bool = false
+    public var isDirty: Bool = false
     // Transient (not persisted) — tracks whether all commits are in the base branch
-    var isFullyDelivered: Bool = false
+    public var isFullyDelivered: Bool = false
     // Transient (not persisted) — tracks whether Jira ticket is no longer assigned to user
-    var jiraUnassigned: Bool = false
+    public var jiraUnassigned: Bool = false
     // Transient (not persisted) — current HEAD branch from git
-    var actualBranch: String? = nil
+    public var actualBranch: String? = nil
     // Transient (not persisted) — expected branch (detected or from branchName)
-    var expectedBranch: String? = nil
+    public var expectedBranch: String? = nil
     // Transient (not persisted) — whether actual branch != expected branch
-    var hasBranchMismatch: Bool = false
+    public var hasBranchMismatch: Bool = false
     // Transient (not persisted) — tracks agent rate limit status per session.
-    var rateLimitedSessions: [String: AgentRateLimitInfo] = [:]
+    public var rateLimitedSessions: [String: AgentRateLimitInfo] = [:]
     // Transient (not persisted) — detected open PR/MR for this branch.
-    var pullRequestInfo: PullRequestInfo? = nil
+    public var pullRequestInfo: PullRequestInfo? = nil
 
     /// Resolves the effective section ID for this thread given a set of known section IDs.
     /// If the thread's sectionId is recognized, returns it; otherwise returns the fallback.
-    func resolvedSectionId(knownSectionIds: Set<UUID>, fallback: UUID?) -> UUID? {
+    public func resolvedSectionId(knownSectionIds: Set<UUID>, fallback: UUID?) -> UUID? {
         if let sid = sectionId, knownSectionIds.contains(sid) {
             return sid
         }
@@ -137,36 +149,36 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     /// The effective agent type for this thread, derived from per-session tracking.
     /// Returns the agent type of the most recently added agent session.
-    var effectiveAgentType: AgentType? {
+    public var effectiveAgentType: AgentType? {
         agentTmuxSessions.reversed().compactMap { sessionAgentTypes[$0] }.first
     }
 
-    var hasUnreadAgentCompletion: Bool {
+    public var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
     }
 
-    var hasAgentBusy: Bool {
+    public var hasAgentBusy: Bool {
         !busySessions.isEmpty
     }
 
-    var hasWaitingForInput: Bool {
+    public var hasWaitingForInput: Bool {
         !waitingForInputSessions.isEmpty
     }
 
-    var showArchiveSuggestion: Bool {
+    public var showArchiveSuggestion: Bool {
         isFullyDelivered && !isDirty && !hasAgentBusy && !hasWaitingForInput
     }
 
     /// True only when every tab in the thread currently reports an active rate-limit message.
     /// This intentionally hides the blocked icon if any tab is terminal or has unknown state.
-    var isBlockedByRateLimit: Bool {
+    public var isBlockedByRateLimit: Bool {
         guard !agentTmuxSessions.isEmpty else { return false }
         return agentTmuxSessions.allSatisfy { rateLimitedSessions[$0] != nil }
     }
 
     /// When all tabs are rate-limited, the thread is effectively unblocked at the latest reset time.
     /// Prompt-based markers (no concrete reset time) are excluded from the computation.
-    var rateLimitLiftAt: Date? {
+    public var rateLimitLiftAt: Date? {
         guard isBlockedByRateLimit else { return nil }
         return agentTmuxSessions.compactMap { session -> Date? in
             guard let info = rateLimitedSessions[session], !info.isPromptBased else { return nil }
@@ -174,31 +186,31 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         }.max()
     }
 
-    var rateLimitLiftDescription: String? {
+    public var rateLimitLiftDescription: String? {
         guard let latest = rateLimitLiftAt else { return nil }
         return "Resets \(latest.formatted(date: .abbreviated, time: .shortened))"
     }
 
     /// True when the thread is technically rate-limited but the concrete reset time has already passed,
     /// meaning the user can resume the agent without waiting.
-    var isRateLimitExpiredAndResumable: Bool {
+    public var isRateLimitExpiredAndResumable: Bool {
         guard isBlockedByRateLimit else { return false }
         guard let liftAt = rateLimitLiftAt else { return false }
         return liftAt <= Date()
     }
 
-    func displayName(for sessionName: String, at index: Int) -> String {
+    public func displayName(for sessionName: String, at index: Int) -> String {
         if let custom = customTabNames[sessionName], !custom.isEmpty {
             return custom
         }
         return Self.defaultDisplayName(at: index)
     }
 
-    static func defaultDisplayName(at index: Int) -> String {
+    public static func defaultDisplayName(at index: Int) -> String {
         "Tab \(index)"
     }
 
-    enum CodingKeys: String, CodingKey {
+    public enum CodingKeys: String, CodingKey {
         case id, projectId, name, worktreePath, branchName
         case tmuxSessionNames, agentTmuxSessions, sessionAgentTypes, sessionConversationIDs, pinnedTmuxSessions
         case createdAt, isArchived, sectionId, isMain
@@ -218,7 +230,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case localFileSyncPathsSnapshot
     }
 
-    init(
+    public init(
         id: UUID = UUID(),
         projectId: UUID,
         name: String,
@@ -280,7 +292,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.localFileSyncPathsSnapshot = localFileSyncPathsSnapshot
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         projectId = try container.decode(UUID.self, forKey: .projectId)
@@ -321,7 +333,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(projectId, forKey: .projectId)
@@ -364,11 +376,11 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 }
 
 extension MagentThread: Hashable {
-    func hash(into hasher: inout Hasher) {
+    public func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
 
-    static func == (lhs: MagentThread, rhs: MagentThread) -> Bool {
+    public static func == (lhs: MagentThread, rhs: MagentThread) -> Bool {
         lhs.id == rhs.id
     }
 }

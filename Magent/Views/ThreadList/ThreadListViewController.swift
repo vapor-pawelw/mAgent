@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 @MainActor
 protocol ThreadListDelegate: AnyObject {

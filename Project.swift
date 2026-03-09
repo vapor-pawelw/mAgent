@@ -24,7 +24,21 @@ let project = Project(
                 "NSApplicationDelegateClassName": "AppDelegate",
                 "CFBundleIconFile": "AppIcon",
             ]),
-            sources: ["Magent/**"],
+            sources: [
+                "Magent/App/**",
+                "Magent/Services/BannerManager.swift",
+                "Magent/Services/CrashReportingService.swift",
+                "Magent/Services/IPCCommandHandler.swift",
+                "Magent/Services/IPCCommandHandler+Sections.swift",
+                "Magent/Services/IPCSocketServer.swift",
+                "Magent/Services/ThreadManager.swift",
+                "Magent/Services/ThreadManager+*.swift",
+                "Magent/Services/UpdateService.swift",
+                "Magent/Utilities/AgentMenuBuilder.swift",
+                "Magent/Utilities/ColorDot.swift",
+                "Magent/Utilities/SpinnerSheet.swift",
+                "Magent/Views/**",
+            ],
             resources: [
                 "Magent/Resources/Assets.xcassets",
                 "Magent/Resources/AppIcon.icon",
@@ -32,7 +46,8 @@ let project = Project(
             ],
             entitlements: .file(path: "Magent/Magent.entitlements"),
             dependencies: [
-                .target(name: "GhosttyBridge"),
+                .external(name: "GhosttyBridge"),
+                .external(name: "MagentCore"),
                 .external(name: "Sentry-Dynamic"),
             ],
             settings: .settings(
@@ -46,24 +61,6 @@ let project = Project(
                     "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS": "YES",
                     "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
                     "STRING_CATALOG_GENERATE_SYMBOLS": "YES",
-                ]
-            )
-        ),
-        .target(
-            name: "GhosttyBridge",
-            destinations: [.mac],
-            product: .staticFramework,
-            bundleId: "com.magent.ghosttybridge",
-            deploymentTargets: .macOS("14.0"),
-            sources: ["GhosttyBridge/**"],
-            dependencies: [
-                .xcframework(path: "Libraries/GhosttyKit.xcframework"),
-            ],
-            settings: .settings(
-                base: [
-                    "SWIFT_VERSION": "6.2",
-                    "SWIFT_STRICT_CONCURRENCY": "complete",
-                    "OTHER_LDFLAGS": "$(inherited) -lc++ -framework Carbon",
                 ]
             )
         ),

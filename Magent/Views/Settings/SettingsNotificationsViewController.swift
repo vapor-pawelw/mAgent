@@ -1,5 +1,6 @@
 import Cocoa
 import UserNotifications
+import MagentCore
 
 final class SettingsNotificationsViewController: NSViewController {
 
@@ -230,7 +231,9 @@ final class SettingsNotificationsViewController: NSViewController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshNotificationPermissionStatus()
+            Task { @MainActor [weak self] in
+                self?.refreshNotificationPermissionStatus()
+            }
         }
     }
 

@@ -1,4 +1,5 @@
 import Sentry
+import MagentCore
 
 nonisolated(unsafe) private var _sentryInitialized = false
 

@@ -1,10 +1,10 @@
 import Foundation
 
-enum ShellError: LocalizedError {
+public enum ShellError: LocalizedError {
     case commandFailed(status: Int32, stderr: String)
     case spawnFailed(errno: Int32)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .commandFailed(let status, let stderr):
             return "Command failed (exit \(status)): \(stderr)"
@@ -14,22 +14,22 @@ enum ShellError: LocalizedError {
     }
 }
 
-enum ShellExecutor {
+public enum ShellExecutor {
 
-    struct Result: Sendable {
-        let stdout: String
-        let stderr: String
-        let exitCode: Int32
+    public struct Result: Sendable {
+        public let stdout: String
+        public let stderr: String
+        public let exitCode: Int32
     }
 
-    struct BinaryResult: Sendable {
-        let stdoutData: Data
-        let stderr: String
-        let exitCode: Int32
+    public struct BinaryResult: Sendable {
+        public let stdoutData: Data
+        public let stderr: String
+        public let exitCode: Int32
     }
 
     /// Runs a command using /bin/sh -c and returns the result.
-    nonisolated static func run(_ command: String, workingDirectory: String? = nil) async throws -> String {
+    public nonisolated static func run(_ command: String, workingDirectory: String? = nil) async throws -> String {
         let result = await execute(command, workingDirectory: workingDirectory)
 
         if result.exitCode != 0 {
@@ -40,7 +40,7 @@ enum ShellExecutor {
     }
 
     /// Runs a command and returns the full result including exit code.
-    nonisolated static func execute(_ command: String, workingDirectory: String? = nil) async -> Result {
+    public nonisolated static func execute(_ command: String, workingDirectory: String? = nil) async -> Result {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let bin = synchronousExecuteData(command, workingDirectory: workingDirectory)
@@ -55,7 +55,7 @@ enum ShellExecutor {
     }
 
     /// Runs a command and returns raw binary stdout data.
-    nonisolated static func executeData(_ command: String, workingDirectory: String? = nil) async -> BinaryResult {
+    public nonisolated static func executeData(_ command: String, workingDirectory: String? = nil) async -> BinaryResult {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let result = synchronousExecuteData(command, workingDirectory: workingDirectory)
@@ -164,7 +164,7 @@ enum ShellExecutor {
         return data
     }
 
-    nonisolated static func shellQuote(_ string: String) -> String {
-        Magent.shellQuote(string)
+    public nonisolated static func shellQuote(_ string: String) -> String {
+        shellQuote(string)
     }
 }

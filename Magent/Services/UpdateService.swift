@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 private struct UpdateReleaseAsset: Decodable, Sendable {
     let name: String

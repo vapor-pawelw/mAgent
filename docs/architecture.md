@@ -10,7 +10,7 @@
 | Build system | Xcode + Swift Package Manager | Standard Apple toolchain |
 | Persistence | JSON files or SQLite | Thread state, project config, settings |
 
-## Project Structure (Planned)
+## Project Structure
 
 ```
 magent/
@@ -19,33 +19,38 @@ magent/
 │   ├── requirements.md
 │   ├── architecture.md
 │   └── libghostty-integration.md
+├── Packages/
+│   └── MagentModules/
+│       ├── Package.swift
+│       └── Sources/
+│           ├── MagentCore/          # Shared models, services, utilities
+│           └── GhosttyBridge/       # SwiftPM wrapper around GhosttyKit
 ├── Magent/                          # Main app target
 │   ├── App/
 │   │   ├── AppDelegate.swift
-│   │   ├── SceneDelegate.swift
 │   │   └── AppCoordinator.swift
-│   ├── Models/
-│   │   ├── Thread.swift             # Thread model (worktree + sessions)
-│   │   ├── Project.swift            # Git project configuration
-│   │   ├── Tab.swift                # Tab within a thread
-│   │   └── AppSettings.swift        # User settings/preferences
 │   ├── Services/
-│   │   ├── GitService.swift         # Git/worktree operations
-│   │   ├── TmuxService.swift        # tmux session management
 │   │   ├── ThreadManager.swift      # Thread lifecycle (create, archive, restore)
-│   │   ├── PersistenceService.swift # Save/load thread state
-│   │   └── DependencyChecker.swift  # Check/install tmux, etc.
+│   │   ├── IPCSocketServer.swift    # App-owned IPC socket server
+│   │   └── UpdateService.swift      # App update flow + UI banners
 │   ├── Views/
 │   │   ├── ThreadList/
-│   │   ├── TerminalPane/
-│   │   ├── TabBar/
+│   │   ├── Terminal/
 │   │   ├── Settings/
 │   │   └── Configuration/          # First-run setup wizard
 │   └── Resources/
-├── Magent.xcodeproj/
+├── Project.swift
+├── Tuist/
+│   └── Package.swift
 └── Libraries/
-    └── libghostty/                  # Ghostty terminal library (vendored or submodule)
+    └── GhosttyKit.xcframework       # Local Ghostty terminal binary
 ```
+
+Module boundary rules:
+- `MagentCore` holds shared non-UI models, CLI-facing DTOs, and low-level services/utilities.
+- `GhosttyBridge` wraps `GhosttyKit.xcframework` and is consumed as a local package product.
+- The app target keeps AppKit controllers/views plus resource-backed code that depends on generated asset and string-catalog symbols.
+- Extract new pure logic into package modules first; do not move resource-heavy AppKit code into SwiftPM targets until theme/localization wrappers exist.
 
 ## Key Architecture Decisions
 

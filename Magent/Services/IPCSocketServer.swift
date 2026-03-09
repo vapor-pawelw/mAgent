@@ -1,4 +1,5 @@
 import Foundation
+import MagentCore
 
 actor IPCSocketServer {
 
@@ -79,7 +80,7 @@ actor IPCSocketServer {
     // MARK: - Accept Loop
 
     private func acceptLoop(serverFD: Int32) async {
-        while await self.isRunning {
+        while self.isRunning {
             let clientFD = await withCheckedContinuation { (continuation: CheckedContinuation<Int32, Never>) in
                 DispatchQueue.global(qos: .utility).async {
                     var clientAddr = sockaddr_un()
@@ -94,7 +95,7 @@ actor IPCSocketServer {
             }
 
             guard clientFD >= 0 else {
-                if await self.isRunning {
+                if self.isRunning {
                     NSLog("[IPC] Accept failed: \(String(cString: strerror(errno)))")
                 }
                 break

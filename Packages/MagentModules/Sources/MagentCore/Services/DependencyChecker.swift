@@ -1,23 +1,23 @@
 import Foundation
 
-nonisolated struct DependencyStatus: Sendable {
-    let name: String
-    let isInstalled: Bool
-    let path: String?
-    let installHint: String
+public nonisolated struct DependencyStatus: Sendable {
+    public let name: String
+    public let isInstalled: Bool
+    public let path: String?
+    public let installHint: String
 }
 
-final class DependencyChecker {
+public final class DependencyChecker: Sendable {
 
-    static let shared = DependencyChecker()
+    public static let shared = DependencyChecker()
 
-    func checkAll() async -> [DependencyStatus] {
+    public func checkAll() async -> [DependencyStatus] {
         async let tmux = checkTmux()
         async let git = checkGit()
         return await [git, tmux]
     }
 
-    func checkGit() async -> DependencyStatus {
+    public func checkGit() async -> DependencyStatus {
         let path = await findExecutable("git")
         return DependencyStatus(
             name: "git",
@@ -27,7 +27,7 @@ final class DependencyChecker {
         )
     }
 
-    func checkTmux() async -> DependencyStatus {
+    public func checkTmux() async -> DependencyStatus {
         let path = await findExecutable("tmux")
         return DependencyStatus(
             name: "tmux",
@@ -37,7 +37,7 @@ final class DependencyChecker {
         )
     }
 
-    func allDependenciesMet() async -> Bool {
+    public func allDependenciesMet() async -> Bool {
         let statuses = await checkAll()
         return statuses.allSatisfy(\.isInstalled)
     }

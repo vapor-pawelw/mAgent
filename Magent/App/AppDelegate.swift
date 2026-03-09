@@ -1,6 +1,7 @@
 import Cocoa
 import GhosttyBridge
 import UserNotifications
+import MagentCore
 
 @objc(AppDelegate)
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {

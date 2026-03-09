@@ -1,4 +1,5 @@
 import AppKit
+import MagentCore
 
 /// Creates a titled text-editing section with a resizable text view.
 ///

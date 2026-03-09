@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 final class AlwaysEmphasizedRowView: NSTableRowView {
     private static let busyOpacitySweepAnimationKey = "busy-row-opacity-sweep"

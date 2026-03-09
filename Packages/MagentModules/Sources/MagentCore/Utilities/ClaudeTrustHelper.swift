@@ -1,7 +1,7 @@
 import Foundation
 
 /// Pre-trusts directories in ~/.claude.json so claude doesn't show the "Do you trust this folder?" dialog.
-enum ClaudeTrustHelper {
+public enum ClaudeTrustHelper {
 
     private static let claudeJsonURL: URL = {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -9,7 +9,7 @@ enum ClaudeTrustHelper {
     }()
 
     /// Marks the given directory as trusted in ~/.claude.json
-    static func trustDirectory(_ path: String) {
+    public static func trustDirectory(_ path: String) {
         var root = loadClaudeJson()
 
         var projects = root["projects"] as? [String: Any] ?? [:]
@@ -38,14 +38,14 @@ enum ClaudeTrustHelper {
 }
 
 /// Pre-trusts directories in ~/.codex/config.toml so codex doesn't show trust prompts.
-enum CodexTrustHelper {
+public enum CodexTrustHelper {
 
     private static let configURL: URL = {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return home.appendingPathComponent(".codex/config.toml")
     }()
 
-    static func trustDirectory(_ path: String) {
+    public static func trustDirectory(_ path: String) {
         let escapedPath = path.replacingOccurrences(of: "\"", with: "\\\"")
         let header = "[projects.\"\(escapedPath)\"]"
         let trustLine = "trust_level = \"trusted\""

@@ -1,15 +1,15 @@
 import Foundation
 
-nonisolated struct WorktreeInfo: Sendable {
-    let path: String
-    let branch: String
-    let isBareStem: Bool
+public nonisolated struct WorktreeInfo: Sendable {
+    public let path: String
+    public let branch: String
+    public let isBareStem: Bool
 }
 
-enum GitError: LocalizedError {
+public enum GitError: LocalizedError {
     case commandFailed(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .commandFailed(let message):
             return "Git error: \(message)"
@@ -17,25 +17,25 @@ enum GitError: LocalizedError {
     }
 }
 
-nonisolated enum GitHostingProvider: Sendable {
+public nonisolated enum GitHostingProvider: Sendable {
     case github
     case gitlab
     case bitbucket
     case unknown
 }
 
-nonisolated struct GitRemote: Sendable {
-    let name: String
-    let host: String
-    let repoPath: String  // e.g. "owner/repo"
-    let provider: GitHostingProvider
+public nonisolated struct GitRemote: Sendable {
+    public let name: String
+    public let host: String
+    public let repoPath: String  // e.g. "owner/repo"
+    public let provider: GitHostingProvider
 
-    var repoWebURL: URL? {
+    public var repoWebURL: URL? {
         URL(string: "https://\(host)/\(repoPath)")
     }
 
     /// URL to the open pull/merge requests listing page.
-    var openPullRequestsURL: URL? {
+    public var openPullRequestsURL: URL? {
         switch provider {
         case .github:
             return URL(string: "https://\(host)/\(repoPath)/pulls?q=is%3Aopen+is%3Apr")
@@ -48,7 +48,7 @@ nonisolated struct GitRemote: Sendable {
         }
     }
 
-    func pullRequestURL(for branch: String, defaultBranch: String?) -> URL? {
+    public func pullRequestURL(for branch: String, defaultBranch: String?) -> URL? {
         // If on the default branch, show the open PRs listing
         if let defaultBranch, branch == defaultBranch {
             return openPullRequestsURL
@@ -68,7 +68,7 @@ nonisolated struct GitRemote: Sendable {
         }
     }
 
-    func directPullRequestURL(number: Int) -> URL? {
+    public func directPullRequestURL(number: Int) -> URL? {
         switch provider {
         case .github:    URL(string: "https://\(host)/\(repoPath)/pull/\(number)")
         case .gitlab:    URL(string: "https://\(host)/\(repoPath)/-/merge_requests/\(number)")
@@ -77,7 +77,7 @@ nonisolated struct GitRemote: Sendable {
         }
     }
 
-    static func parse(name: String, rawURL: String) -> GitRemote? {
+    public static func parse(name: String, rawURL: String) -> GitRemote? {
         let (host, repoPath) = parseRemoteURL(rawURL)
         guard let host, let repoPath else { return nil }
         let provider = detectProvider(host: host)
@@ -147,16 +147,16 @@ nonisolated struct GitRemote: Sendable {
 
 // MARK: - Diff Types
 
-nonisolated enum FileWorkingStatus: Sendable {
+public nonisolated enum FileWorkingStatus: Sendable {
     case committed   // only in committed diff, working tree clean
     case staged      // staged changes
     case unstaged    // unstaged modifications
     case untracked   // untracked file
 }
 
-nonisolated struct FileDiffEntry: Sendable {
-    let relativePath: String
-    let additions: Int
-    let deletions: Int
-    let workingStatus: FileWorkingStatus
+public nonisolated struct FileDiffEntry: Sendable {
+    public let relativePath: String
+    public let additions: Int
+    public let deletions: Int
+    public let workingStatus: FileWorkingStatus
 }

@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate, NSTableViewDataSource, NSTableViewDelegate {
 

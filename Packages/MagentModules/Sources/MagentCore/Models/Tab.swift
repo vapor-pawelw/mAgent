@@ -1,12 +1,12 @@
 import Foundation
 
-nonisolated struct Tab: Codable, Identifiable, Hashable, Sendable {
-    let id: UUID
-    let threadId: UUID
-    var tmuxSessionName: String
-    var index: Int
+public nonisolated struct Tab: Codable, Identifiable, Hashable, Sendable {
+    public let id: UUID
+    public let threadId: UUID
+    public var tmuxSessionName: String
+    public var index: Int
 
-    init(
+    public init(
         id: UUID = UUID(),
         threadId: UUID,
         tmuxSessionName: String,

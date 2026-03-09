@@ -1,32 +1,32 @@
 import Foundation
 
-nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
-    let id: UUID
-    var name: String
-    var repoPath: String
-    var worktreesBasePath: String
-    var defaultBranch: String?
-    var agentType: AgentType?
-    var terminalInjectionCommand: String?
-    var preAgentInjectionCommand: String?
-    var agentContextInjection: String?
-    var autoRenameSlugPrompt: String?
-    var isPinned: Bool
-    var isHidden: Bool
-    var useThreadSectionsOverride: Bool?
-    var defaultSectionId: UUID?
-    var threadSections: [ThreadSection]?
-    var jiraProjectKey: String?
-    var jiraBoardId: Int?
-    var jiraBoardName: String?
-    var jiraSyncEnabled: Bool
-    var jiraSiteURL: String?
-    var jiraExcludedTicketKeys: Set<String>
-    var jiraAssigneeAccountId: String?
-    var jiraAcknowledgedStatuses: Set<String>?
-    var localFileSyncPaths: [String]
+public nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
+    public let id: UUID
+    public var name: String
+    public var repoPath: String
+    public var worktreesBasePath: String
+    public var defaultBranch: String?
+    public var agentType: AgentType?
+    public var terminalInjectionCommand: String?
+    public var preAgentInjectionCommand: String?
+    public var agentContextInjection: String?
+    public var autoRenameSlugPrompt: String?
+    public var isPinned: Bool
+    public var isHidden: Bool
+    public var useThreadSectionsOverride: Bool?
+    public var defaultSectionId: UUID?
+    public var threadSections: [ThreadSection]?
+    public var jiraProjectKey: String?
+    public var jiraBoardId: Int?
+    public var jiraBoardName: String?
+    public var jiraSyncEnabled: Bool
+    public var jiraSiteURL: String?
+    public var jiraExcludedTicketKeys: Set<String>
+    public var jiraAssigneeAccountId: String?
+    public var jiraAcknowledgedStatuses: Set<String>?
+    public var localFileSyncPaths: [String]
 
-    init(
+    public init(
         id: UUID = UUID(),
         name: String,
         repoPath: String,
@@ -78,7 +78,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.localFileSyncPaths = localFileSyncPaths
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
@@ -107,23 +107,23 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
     }
 
     /// Resolves template variables in `worktreesBasePath` (e.g. `$MAGENT_PROJECT_NAME`).
-    func resolvedWorktreesBasePath() -> String {
+    public func resolvedWorktreesBasePath() -> String {
         worktreesBasePath.replacingOccurrences(of: "$MAGENT_PROJECT_NAME", with: name)
     }
 
     /// Whether the repo path still points to an existing directory.
-    var isValid: Bool {
+    public var isValid: Bool {
         FileManager.default.fileExists(atPath: repoPath)
     }
 
     /// Suggests a default worktrees base path using the `$MAGENT_PROJECT_NAME` template variable.
-    static func suggestedWorktreesPath(for repoPath: String) -> String {
+    public static func suggestedWorktreesPath(for repoPath: String) -> String {
         let url = URL(fileURLWithPath: repoPath)
         let parent = url.deletingLastPathComponent().path
         return "\(parent)/.worktrees-$MAGENT_PROJECT_NAME"
     }
 
-    static func normalizeLocalFileSyncPaths(_ paths: [String]) -> [String] {
+    public static func normalizeLocalFileSyncPaths(_ paths: [String]) -> [String] {
         var seen = Set<String>()
         var normalized: [String] = []
         for rawPath in paths {
@@ -133,7 +133,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         return normalized
     }
 
-    static func normalizeLocalFileSyncPath(_ rawPath: String) -> String? {
+    public static func normalizeLocalFileSyncPath(_ rawPath: String) -> String? {
         let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -153,7 +153,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         return segments.joined(separator: "/")
     }
 
-    var normalizedLocalFileSyncPaths: [String] {
+    public var normalizedLocalFileSyncPaths: [String] {
         Self.normalizeLocalFileSyncPaths(localFileSyncPaths)
     }
 }

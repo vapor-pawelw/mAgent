@@ -1,5 +1,6 @@
 import Cocoa
 import GhosttyBridge
+import MagentCore
 
 extension ThreadDetailViewController {
 

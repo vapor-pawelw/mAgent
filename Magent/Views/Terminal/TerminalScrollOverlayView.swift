@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 /// A compact, draggable, semi-transparent floating overlay that exposes three
 /// scroll controls (page-up, page-down, jump-to-bottom) for the terminal panel.

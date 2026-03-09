@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 // MARK: - Banner Types
 
