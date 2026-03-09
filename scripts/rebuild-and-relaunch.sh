@@ -36,12 +36,18 @@ ensure_build_prerequisites() {
     needs_mise=1
   fi
 
-  if [[ ! -d "$root/$WORKSPACE" ]]; then
-    echo "Missing $WORKSPACE"
-    needs_mise=1
-  fi
-
   if [[ "$needs_mise" -eq 0 ]]; then
+    if command -v mise >/dev/null 2>&1; then
+      echo "Refreshing $WORKSPACE via Tuist..."
+      mise x -- tuist generate --no-open
+      return
+    fi
+
+    if [[ ! -d "$root/$WORKSPACE" ]]; then
+      echo "Missing $WORKSPACE and mise is not installed. Cannot generate project files." >&2
+      exit 1
+    fi
+
     return
   fi
 
@@ -60,10 +66,8 @@ ensure_build_prerequisites() {
     mise x -- "$root/scripts/bootstrap-ghosttykit.sh"
   fi
 
-  if [[ ! -d "$root/$WORKSPACE" ]]; then
-    echo "Generating $WORKSPACE..."
-    mise x -- tuist generate --no-open
-  fi
+  echo "Refreshing $WORKSPACE via Tuist..."
+  mise x -- tuist generate --no-open
 
   if [[ ! -f "$ghostty_lib" ]]; then
     echo "Still missing $GHOSTTY_LIB_REL after bootstrap." >&2
