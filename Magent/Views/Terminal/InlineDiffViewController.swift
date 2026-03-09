@@ -298,8 +298,12 @@ private final class ImageDiffContentView: NSView {
     private var beforeLabel: NSTextField?
     private var afterLabel: NSTextField?
     private var heightConstraint: NSLayoutConstraint!
+    private var beforeImageHeightConstraint: NSLayoutConstraint?
+    private var afterImageHeightConstraint: NSLayoutConstraint?
 
-    private static let maxImageHeight: CGFloat = 300
+    private static let maxImageHeight: CGFloat = 420
+    private static let maxViewportHeightFraction: CGFloat = 0.55
+    private static let minimumPlaceholderHeight: CGFloat = 60
     private static let labelHeight: CGFloat = 18
     private static let padding: CGFloat = 12
 
@@ -360,9 +364,15 @@ private final class ImageDiffContentView: NSView {
             addSubview(arrow)
 
             heightConstraint = heightAnchor.constraint(equalToConstant: 200)
+            let beforeHeight = bImage.heightAnchor.constraint(equalToConstant: Self.minimumPlaceholderHeight)
+            let afterHeight = aImage.heightAnchor.constraint(equalToConstant: Self.minimumPlaceholderHeight)
+            beforeImageHeightConstraint = beforeHeight
+            afterImageHeightConstraint = afterHeight
 
             NSLayoutConstraint.activate([
                 heightConstraint,
+                beforeHeight,
+                afterHeight,
 
                 bLabel.topAnchor.constraint(equalTo: topAnchor, constant: topPadding),
                 bLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.padding),
@@ -399,9 +409,12 @@ private final class ImageDiffContentView: NSView {
             addSubview(imageView)
 
             heightConstraint = heightAnchor.constraint(equalToConstant: 200)
+            let imageHeight = imageView.heightAnchor.constraint(equalToConstant: Self.minimumPlaceholderHeight)
+            afterImageHeightConstraint = imageHeight
 
             NSLayoutConstraint.activate([
                 heightConstraint,
+                imageHeight,
                 label.topAnchor.constraint(equalTo: topAnchor, constant: topPadding),
                 label.centerXAnchor.constraint(equalTo: centerXAnchor),
 
@@ -420,9 +433,12 @@ private final class ImageDiffContentView: NSView {
             addSubview(imageView)
 
             heightConstraint = heightAnchor.constraint(equalToConstant: 200)
+            let imageHeight = imageView.heightAnchor.constraint(equalToConstant: Self.minimumPlaceholderHeight)
+            beforeImageHeightConstraint = imageHeight
 
             NSLayoutConstraint.activate([
                 heightConstraint,
+                imageHeight,
                 label.topAnchor.constraint(equalTo: topAnchor, constant: topPadding),
                 label.centerXAnchor.constraint(equalTo: centerXAnchor),
 
@@ -439,27 +455,49 @@ private final class ImageDiffContentView: NSView {
     func setImages(before: NSImage?, after: NSImage?) {
         beforeImageView?.image = before
         afterImageView?.image = after
+        updateContentWidth(bounds.width)
+    }
 
+    func updateContentWidth(_ width: CGFloat) {
         let imageTop = Self.padding + Self.labelHeight + 4
         let bottomPadding = Self.padding
 
-        // Compute the height needed based on image aspect ratios and available width
-        let availableWidth: CGFloat
+        let contentWidth = max(width, Self.padding * 2 + 100)
+        let viewportHeight = max(enclosingScrollView?.contentSize.height ?? 0, Self.minimumPlaceholderHeight)
+        let maxRenderedHeight = min(
+            Self.maxImageHeight,
+            max(Self.minimumPlaceholderHeight, viewportHeight * Self.maxViewportHeightFraction)
+        )
+
+        func renderedHeight(for image: NSImage?, availableWidth: CGFloat) -> CGFloat {
+            guard let image else { return Self.minimumPlaceholderHeight }
+            let aspect = image.size.height / max(image.size.width, 1)
+            let widthFitHeight = availableWidth * aspect
+            let intrinsicHeight = max(image.size.height, Self.minimumPlaceholderHeight)
+            return min(widthFitHeight, intrinsicHeight, maxRenderedHeight)
+        }
+
         switch mode {
         case .modified:
-            availableWidth = max((bounds.width - Self.padding * 2 - 24) / 2, 100)
-        case .added, .deleted:
-            availableWidth = max(bounds.width - Self.padding * 2, 100)
+            let availableWidth = max((contentWidth - Self.padding * 2 - 24) / 2, 100)
+            let maxH = max(
+                renderedHeight(for: beforeImageView?.image, availableWidth: availableWidth),
+                renderedHeight(for: afterImageView?.image, availableWidth: availableWidth)
+            )
+            beforeImageHeightConstraint?.constant = maxH
+            afterImageHeightConstraint?.constant = maxH
+            heightConstraint.constant = imageTop + maxH + bottomPadding
+        case .added:
+            let availableWidth = max(contentWidth - Self.padding * 2, 100)
+            let imageHeight = renderedHeight(for: afterImageView?.image, availableWidth: availableWidth)
+            afterImageHeightConstraint?.constant = imageHeight
+            heightConstraint.constant = imageTop + imageHeight + bottomPadding
+        case .deleted:
+            let availableWidth = max(contentWidth - Self.padding * 2, 100)
+            let imageHeight = renderedHeight(for: beforeImageView?.image, availableWidth: availableWidth)
+            beforeImageHeightConstraint?.constant = imageHeight
+            heightConstraint.constant = imageTop + imageHeight + bottomPadding
         }
-
-        var maxH: CGFloat = 60 // minimum content area
-        for image in [before, after].compactMap({ $0 }) {
-            let aspect = image.size.height / max(image.size.width, 1)
-            let h = min(availableWidth * aspect, Self.maxImageHeight)
-            maxH = max(maxH, h)
-        }
-
-        heightConstraint.constant = imageTop + maxH + bottomPadding
     }
 }
 
@@ -940,7 +978,14 @@ private final class DiffSectionView: NSView {
     }
 
     func updateContentWidth(_ width: CGFloat) {
-        guard !isImageMode else { return }
+        if isImageMode {
+            imageContentView?.updateContentWidth(width)
+            if let icv = imageContentView {
+                icv.layoutSubtreeIfNeeded()
+                imageHeightConstraint?.constant = icv.fittingSize.height
+            }
+            return
+        }
         // Update gap views
         for gapView in gapViews {
             gapView.updateContentWidth(width)
