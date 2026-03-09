@@ -51,8 +51,12 @@ extension ThreadManager {
             guard !existingPaths.contains(fullPath) else { continue }
 
             // If a symlink points here, the worktree was renamed — use the symlink name
+            // as the sidebar thread label, but seed branchName from the actual checkout.
             let threadName = latestSymlinkName[fullPath]?.name ?? dirName
-            let branchName = threadName
+            let currentBranch = await git.getCurrentBranch(workingDirectory: fullPath)
+            let branchName = currentBranch?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                ? currentBranch!
+                : threadName
 
             let settings = persistence.loadSettings()
             let thread = MagentThread(

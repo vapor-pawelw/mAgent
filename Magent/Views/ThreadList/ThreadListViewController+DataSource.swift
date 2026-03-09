@@ -731,6 +731,7 @@ extension ThreadListViewController: ThreadManagerDelegate {
         let row = outlineView.selectedRow
         if row >= 0, let selected = outlineView.item(atRow: row) as? MagentThread {
             refreshBranchMismatchView(for: selected)
+            refreshDiffPanelContext(for: selected)
         }
     }
 }
