@@ -147,7 +147,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         let availableWidth = availableDescriptionWidth(for: thread, in: outlineView)
         guard availableWidth > 0 else { return 1 }
 
-        let font = descriptionFont(for: thread)
+        let font = stableDescriptionMeasurementFont()
 
         let textStorage = NSTextStorage(
             string: description,
@@ -169,15 +169,15 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         return max(1, lineCount)
     }
 
-    private func compactTextRowHeightIncrement(for thread: MagentThread) -> CGFloat {
-        let font = descriptionFont(for: thread)
+    private func compactTextRowHeightIncrement() -> CGFloat {
+        let font = stableDescriptionMeasurementFont()
         return ceil(font.ascender - font.descender + font.leading)
     }
 
-    private func descriptionFont(for thread: MagentThread) -> NSFont {
-        thread.hasUnreadAgentCompletion
-            ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-            : .preferredFont(forTextStyle: .body)
+    private func stableDescriptionMeasurementFont() -> NSFont {
+        // Selection can clear unread completion, which changes the rendered font.
+        // Measure with the widest sidebar description font so row heights stay stable.
+        .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
     }
 
     private func descriptionTextWidth(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
@@ -294,7 +294,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 let baseTwoRowHeight: CGFloat = 46
                 let descriptionLines = descriptionLineCount(description, for: thread, in: outlineView)
                 if descriptionLines > 1 {
-                    return baseTwoRowHeight + compactTextRowHeightIncrement(for: thread)
+                    return baseTwoRowHeight + compactTextRowHeightIncrement()
                 }
                 return baseTwoRowHeight
             }
