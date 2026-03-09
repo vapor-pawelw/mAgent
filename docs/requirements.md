@@ -118,8 +118,10 @@ Before the app is usable, the user must complete a configuration step:
 
 ## Terminal Scrollback
 
-- The terminal top bar must expose a reliable scrollback fallback that does not depend on mouse-wheel behavior inside the agent session.
+- The terminal panel must expose a reliable scrollback fallback that does not depend on mouse-wheel behavior inside the agent session.
 - Users must be able to page up, page down, and jump back to live output even when the embedded terminal forwards wheel input to the agent instead of tmux scrollback.
+- The page-up/page-down/jump controls may live in floating terminal chrome instead of the top bar, as long as they stay visible and usable above the embedded terminal surface.
+- The bottom-left floating `Przewin w dol` button should appear only after the user has scrolled meaningfully away from live output, not on tiny incidental near-bottom scrolls.
 
 ## Thread Row Display Rules
 

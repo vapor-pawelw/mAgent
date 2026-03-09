@@ -37,6 +37,9 @@ extension ThreadDetailViewController {
                 case .bottom:
                     try await TmuxService.shared.scrollToBottom(sessionName: sessionName)
                 }
+                await MainActor.run {
+                    self.scheduleScrollFABVisibilityRefresh()
+                }
             } catch {
                 await MainActor.run {
                     BannerManager.shared.show(

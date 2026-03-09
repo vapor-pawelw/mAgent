@@ -3,8 +3,9 @@ import Cocoa
 extension ThreadDetailViewController {
 
     // Minimum lines scrolled from the bottom before the FAB appears.
-    // This prevents the button from flashing on minor incidental scrolls.
-    private static let scrollFABThreshold: UInt64 = 3
+    // This prevents the button from flashing on minor incidental scrolls near live output.
+    private static let scrollFABThreshold: UInt64 = 12
+    private static let scrollFABRefreshDelayNanoseconds: UInt64 = 120_000_000
 
     // MARK: - Setup
 
@@ -69,14 +70,19 @@ extension ThreadDetailViewController {
         btn.translatesAutoresizingMaskIntoConstraints = false
         btn.isHidden = true
         btn.alphaValue = 0
-        btn.bezelStyle = .texturedRounded
-        btn.title = " Scroll to bottom"
+        btn.setButtonType(.momentaryPushIn)
+        btn.isBordered = false
+        btn.focusRingType = .none
+        btn.title = " Przewin w dol"
         btn.image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: nil)
         btn.imagePosition = .imageLeading
         btn.imageScaling = .scaleProportionallyDown
-        btn.font = .systemFont(ofSize: 12)
+        btn.font = .systemFont(ofSize: 12, weight: .semibold)
+        btn.contentTintColor = NSColor.labelColor
+        btn.toolTip = "Przewin do live output"
         btn.target = self
         btn.action = #selector(floatingScrollToBottomTapped)
+        btn.imageHugsTitle = true
 
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.25)
@@ -84,11 +90,15 @@ extension ThreadDetailViewController {
         shadow.shadowBlurRadius = 6
         btn.wantsLayer = true
         btn.shadow = shadow
+        btn.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96).cgColor
+        btn.layer?.cornerRadius = 18
+        btn.layer?.borderWidth = 1
+        btn.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
 
         terminalContainer.addSubview(btn)
         NSLayoutConstraint.activate([
-            btn.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor, constant: 16),
-            btn.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor, constant: -16),
+            btn.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor, constant: 18),
+            btn.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor, constant: -18),
         ])
     }
 
@@ -111,6 +121,29 @@ extension ThreadDetailViewController {
                     self?.floatingScrollToBottomButton.isHidden = true
                 }
             })
+        }
+    }
+
+    func scheduleScrollFABVisibilityRefresh() {
+        scrollFABRefreshTask?.cancel()
+
+        guard let sessionName = currentSessionName() else {
+            setScrollFABVisible(false)
+            return
+        }
+
+        scrollFABRefreshTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.scrollFABRefreshDelayNanoseconds)
+            guard !Task.isCancelled else { return }
+
+            let linesFromBottom = await TmuxService.shared.scrollPosition(sessionName: sessionName) ?? 0
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard let self else { return }
+                guard self.currentSessionName() == sessionName else { return }
+                self.setScrollFABVisible(linesFromBottom >= Self.scrollFABThreshold)
+            }
         }
     }
 
@@ -137,6 +170,7 @@ extension ThreadDetailViewController {
     @objc func floatingScrollToBottomTapped() {
         // Hide immediately for instant feedback.
         setScrollFABVisible(false)
+        scrollFABRefreshTask?.cancel()
 
         // Scroll ghostty's own scrollback to the bottom.
         if currentTabIndex < terminalViews.count {
@@ -145,5 +179,6 @@ extension ThreadDetailViewController {
 
         // Also cancel tmux copy-mode in case scroll overlay page-up was used.
         scrollTerminalToBottomTapped()
+        scheduleScrollFABVisibilityRefresh()
     }
 }

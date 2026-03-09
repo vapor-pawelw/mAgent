@@ -19,6 +19,8 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     public var onCopy: (() -> Void)?
     /// Called when user submits a line with Return (best-effort local keystroke tracking).
     public var onSubmitLine: ((String) -> Void)?
+    /// Called after the user scrolls the terminal surface.
+    public var onScroll: (() -> Void)?
 
     private var currentInputLine = ""
     private static let supportedDropTypes: [NSPasteboard.PasteboardType] = [
@@ -585,6 +587,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         scrollMods |= momentum << 1
 
         ghostty_surface_mouse_scroll(surface, x, y, ghostty_input_scroll_mods_t(scrollMods))
+        onScroll?()
     }
 
     // MARK: - Drag and Drop
