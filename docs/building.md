@@ -4,7 +4,7 @@
 
 - **Xcode 26+**
 - **[mise](https://mise.jdx.dev/)** — tool version manager (installs Tuist)
-- **Zig 0.14.1** (managed via `mise`)
+- **Zig 0.15.2** (managed via `mise`)
 
 ## Build
 

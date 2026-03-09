@@ -10,7 +10,7 @@ Builds GhosttyKit.xcframework from ghostty-org/ghostty and installs it into:
   Libraries/GhosttyKit.xcframework
 
 Environment overrides:
-  GHOSTTY_REF       Ghostty git ref to build (default: v1.2.3)
+  GHOSTTY_REF       Ghostty git ref to build (default: v1.3.0)
   GHOSTTY_WORK_DIR  Working directory for ghostty checkout (default: .build/ghostty-src)
 EOF
 }
@@ -50,7 +50,7 @@ require_cmd() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-GHOSTTY_REF="${GHOSTTY_REF:-v1.2.3}"
+GHOSTTY_REF="${GHOSTTY_REF:-v1.3.0}"
 WORK_DIR="${GHOSTTY_WORK_DIR:-$REPO_ROOT/.build/ghostty-src}"
 
 while [[ $# -gt 0 ]]; do
@@ -92,6 +92,7 @@ DEST_XCFRAMEWORK="$REPO_ROOT/Libraries/GhosttyKit.xcframework"
 require_cmd git
 require_cmd zig
 require_cmd rsync
+require_cmd plutil
 
 mkdir -p "$WORK_DIR"
 
@@ -106,7 +107,7 @@ git -C "$SOURCE_DIR" checkout --force FETCH_HEAD
 git -C "$SOURCE_DIR" clean -fdx
 
 echo "Building GhosttyKit.xcframework"
-build_log="$(mktemp "${TMPDIR:-/tmp}/ghostty-build.XXXXXX.log")"
+build_log="$(mktemp "${TMPDIR%/}/ghostty-build.XXXXXX")"
 if ! (
   cd "$SOURCE_DIR"
   zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Dxcframework-target=universal 2>&1 | tee "$build_log"
@@ -138,5 +139,20 @@ fi
 rm -rf "$DEST_XCFRAMEWORK"
 mkdir -p "$(dirname "$DEST_XCFRAMEWORK")"
 rsync -a "$OUTPUT_XCFRAMEWORK/" "$DEST_XCFRAMEWORK/"
+
+# Ghostty 1.3.0's "universal" xcframework now includes iOS slices too.
+# Magent is macOS-only, so keep the installed xcframework trimmed to the
+# tracked macOS layout and avoid leaving local iOS archives behind.
+rm -rf "$DEST_XCFRAMEWORK/ios-arm64" "$DEST_XCFRAMEWORK/ios-arm64-simulator"
+plutil -replace AvailableLibraries -json '[
+  {
+    "BinaryPath": "libghostty.a",
+    "HeadersPath": "Headers",
+    "LibraryIdentifier": "macos-arm64_x86_64",
+    "LibraryPath": "libghostty.a",
+    "SupportedArchitectures": ["arm64", "x86_64"],
+    "SupportedPlatform": "macos"
+  }
+]' "$DEST_XCFRAMEWORK/Info.plist"
 
 echo "Installed $DEST_XCFRAMEWORK from $GHOSTTY_REF"

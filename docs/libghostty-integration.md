@@ -4,11 +4,12 @@
 
 Source: https://github.com/ghostty-org/ghostty
 
-Pinned default ref for this repo bootstrap script: `v1.2.3`.
+Pinned default ref for this repo bootstrap script: `v1.3.0`.
 
 **Zig version requirements (strict):**
 - Ghostty 1.0.x / 1.1.x: Zig 0.13.0
 - Ghostty 1.2.x: Zig 0.14.1
+- Ghostty 1.3.x: Zig 0.15.2
 
 **Project bootstrap command (recommended):**
 ```bash
@@ -17,7 +18,7 @@ Pinned default ref for this repo bootstrap script: `v1.2.3`.
 
 To build a different Ghostty ref:
 ```bash
-GHOSTTY_REF=v1.2.3 ./scripts/bootstrap-ghosttykit.sh
+GHOSTTY_REF=v1.3.0 ./scripts/bootstrap-ghosttykit.sh
 ```
 
 **Build command used by bootstrap script:**
@@ -26,6 +27,10 @@ zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Dxcframe
 ```
 
 Output: `macos/GhosttyKit.xcframework` (includes `macos-arm64_x86_64/libghostty.a`).
+
+When bootstrapping Magent, the installed copy under `Libraries/GhosttyKit.xcframework`
+is trimmed back to the macOS slice only. Ghostty 1.3.0's upstream "universal"
+xcframework includes iOS slices too, but Magent does not consume or track them.
 
 Note: for older refs that still point `iterm2_themes` at removed GitHub release assets, `./scripts/bootstrap-ghosttykit.sh` retries automatically: it first runs a normal build, and if it fails with the known `ghostty-themes.tgz` `404`, it rewrites that dependency to the maintained Ghostty mirror URL/hash and rebuilds once.
 
