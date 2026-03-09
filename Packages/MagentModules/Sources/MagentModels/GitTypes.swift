@@ -4,6 +4,12 @@ public nonisolated struct WorktreeInfo: Sendable {
     public let path: String
     public let branch: String
     public let isBareStem: Bool
+
+    public init(path: String, branch: String, isBareStem: Bool) {
+        self.path = path
+        self.branch = branch
+        self.isBareStem = isBareStem
+    }
 }
 
 public enum GitError: LocalizedError {
@@ -159,4 +165,11 @@ public nonisolated struct FileDiffEntry: Sendable {
     public let additions: Int
     public let deletions: Int
     public let workingStatus: FileWorkingStatus
+
+    public init(relativePath: String, additions: Int, deletions: Int, workingStatus: FileWorkingStatus) {
+        self.relativePath = relativePath
+        self.additions = additions
+        self.deletions = deletions
+        self.workingStatus = workingStatus
+    }
 }

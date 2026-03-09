@@ -74,6 +74,12 @@ public nonisolated struct PullRequestInfo: Sendable, Equatable {
     public let url: URL
     public let provider: GitHostingProvider
 
+    public init(number: Int, url: URL, provider: GitHostingProvider) {
+        self.number = number
+        self.url = url
+        self.provider = provider
+    }
+
     public var displayLabel: String {
         provider == .gitlab ? "MR !\(number)" : "PR #\(number)"
     }

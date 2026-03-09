@@ -23,7 +23,12 @@ magent/
 │   └── MagentModules/
 │       ├── Package.swift
 │       └── Sources/
-│           ├── MagentCore/          # Shared models, services, utilities
+│           ├── MagentCore/          # Facade re-export for app target imports
+│           ├── MagentModels/        # Shared domain models and DTOs
+│           ├── ShellInfra/          # Shell execution + quoting primitives
+│           ├── GitCore/             # Git/worktree operations
+│           ├── TmuxCore/            # tmux session management
+│           ├── JiraCore/            # Jira/acli integration
 │           └── GhosttyBridge/       # SwiftPM wrapper around GhosttyKit
 ├── Magent/                          # Main app target
 │   ├── App/
@@ -47,7 +52,10 @@ magent/
 ```
 
 Module boundary rules:
-- `MagentCore` holds shared non-UI models, CLI-facing DTOs, and low-level services/utilities.
+- `MagentCore` is the facade imported by the app target and re-exports the internal package modules needed by the app.
+- `MagentModels` holds shared non-UI models and CLI-facing DTOs.
+- `ShellInfra` holds shell execution primitives that other package targets can depend on without pulling in higher-level services.
+- `GitCore`, `TmuxCore`, and `JiraCore` isolate subsystem-specific services behind narrower dependency edges.
 - `GhosttyBridge` wraps `GhosttyKit.xcframework` and is consumed as a local package product.
 - The app target keeps AppKit controllers/views plus resource-backed code that depends on generated asset and string-catalog symbols.
 - Extract new pure logic into package modules first; do not move resource-heavy AppKit code into SwiftPM targets until theme/localization wrappers exist.

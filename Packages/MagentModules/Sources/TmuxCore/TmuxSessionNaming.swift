@@ -1,4 +1,6 @@
 import Foundation
+import ShellInfra
+import MagentModels
 
 /// Centralizes tmux session naming conventions used by Magent.
 public enum TmuxSessionNaming {

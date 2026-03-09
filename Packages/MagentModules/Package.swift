@@ -22,7 +22,43 @@ let package = Package(
             path: "../../Libraries/GhosttyKit.xcframework"
         ),
         .target(
+            name: "MagentModels",
+            path: "Sources/MagentModels"
+        ),
+        .target(
+            name: "ShellInfra",
+            path: "Sources/ShellInfra"
+        ),
+        .target(
+            name: "GitCore",
+            dependencies: [
+                "MagentModels",
+                "ShellInfra",
+            ],
+            path: "Sources/GitCore"
+        ),
+        .target(
+            name: "TmuxCore",
+            dependencies: [
+                "MagentModels",
+                "ShellInfra",
+            ],
+            path: "Sources/TmuxCore"
+        ),
+        .target(
+            name: "JiraCore",
+            dependencies: ["ShellInfra"],
+            path: "Sources/JiraCore"
+        ),
+        .target(
             name: "MagentCore",
+            dependencies: [
+                "MagentModels",
+                "ShellInfra",
+                "GitCore",
+                "TmuxCore",
+                "JiraCore",
+            ],
             path: "Sources/MagentCore"
         ),
         .target(

@@ -1,4 +1,6 @@
 import Foundation
+import ShellInfra
+import MagentModels
 
 /// Manages compatibility symlinks left by worktree rename operations.
 public enum SymlinkManager {

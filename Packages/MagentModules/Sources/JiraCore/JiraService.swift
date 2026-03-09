@@ -1,4 +1,5 @@
 import Foundation
+import ShellInfra
 
 // MARK: - Types
 

@@ -1,4 +1,6 @@
 import Foundation
+import ShellInfra
+import MagentModels
 
 /// Single source of truth for Magent IPC hints + on-demand CLI docs.
 public enum IPCAgentDocs {

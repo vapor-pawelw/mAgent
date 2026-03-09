@@ -1,4 +1,6 @@
 import Foundation
+import ShellInfra
+import MagentModels
 
 public nonisolated struct DependencyStatus: Sendable {
     public let name: String

@@ -1,4 +1,6 @@
 import Foundation
+import ShellInfra
+import MagentModels
 
 /// Pre-trusts directories in ~/.claude.json so claude doesn't show the "Do you trust this folder?" dialog.
 public enum ClaudeTrustHelper {
