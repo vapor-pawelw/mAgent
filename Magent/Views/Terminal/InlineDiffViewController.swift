@@ -288,18 +288,31 @@ private final class FlippedDiffClipView: NSClipView {
     override var isFlipped: Bool { true }
 }
 
+private final class ClickableDiffImageView: NSImageView {
+    var onLeftClick: (() -> Void)?
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onLeftClick?()
+    }
+}
+
 // MARK: - ImageDiffContentView
 
 private final class ImageDiffContentView: NSView {
 
     private let mode: ImageDiffMode
-    private var beforeImageView: NSImageView?
-    private var afterImageView: NSImageView?
+    private var beforeImageView: ClickableDiffImageView?
+    private var afterImageView: ClickableDiffImageView?
     private var beforeLabel: NSTextField?
     private var afterLabel: NSTextField?
     private var heightConstraint: NSLayoutConstraint!
     private var beforeImageHeightConstraint: NSLayoutConstraint?
     private var afterImageHeightConstraint: NSLayoutConstraint?
+    var onImageClick: ((NSImageView, NSImage) -> Void)?
 
     private static let maxImageHeight: CGFloat = 420
     private static let maxViewportHeightFraction: CGFloat = 0.55
@@ -326,8 +339,8 @@ private final class ImageDiffContentView: NSView {
         return label
     }
 
-    private func makeImageView() -> NSImageView {
-        let iv = NSImageView()
+    private func makeImageView() -> ClickableDiffImageView {
+        let iv = ClickableDiffImageView()
         iv.imageScaling = .scaleProportionallyDown
         iv.imageAlignment = .alignCenter
         iv.translatesAutoresizingMaskIntoConstraints = false
@@ -335,6 +348,11 @@ private final class ImageDiffContentView: NSView {
         iv.layer?.cornerRadius = 4
         iv.layer?.borderWidth = 1
         iv.layer?.borderColor = NSColor(resource: .textSecondary).withAlphaComponent(0.2).cgColor
+        iv.toolTip = "Click to enlarge"
+        iv.onLeftClick = { [weak self, weak iv] in
+            guard let self, let iv, let image = iv.image else { return }
+            self.onImageClick?(iv, image)
+        }
         return iv
     }
 
@@ -693,6 +711,11 @@ private final class DiffSectionView: NSView {
     // Image mode
     private var imageContentView: ImageDiffContentView?
     private var imageHeightConstraint: NSLayoutConstraint?
+    var onImageClick: ((NSImageView, NSImage) -> Void)? {
+        didSet {
+            imageContentView?.onImageClick = onImageClick
+        }
+    }
 
     // Expand/collapse constraints
     private var expandedBottomConstraint: NSLayoutConstraint!
@@ -948,6 +971,7 @@ private final class DiffSectionView: NSView {
 
     private func setupImageContent(mode: ImageDiffMode) {
         let imageView = ImageDiffContentView(mode: mode)
+        imageView.onImageClick = onImageClick
         addSubview(imageView)
 
         let ihc = imageView.heightAnchor.constraint(equalToConstant: 200)
@@ -1036,6 +1060,7 @@ final class InlineDiffViewController: NSViewController {
     private var mergeBase: String?
 
     var onClose: (() -> Void)?
+    var onImageClick: ((_ imageView: NSImageView, _ image: NSImage) -> Void)?
     /// Called during drag with the delta (positive = drag up = diff taller).
     var onResizeDrag: ((_ phase: NSPanGestureRecognizer.State, _ deltaY: CGFloat) -> Void)?
 
@@ -1385,6 +1410,9 @@ final class InlineDiffViewController: NSViewController {
             if isImageFile(path) {
                 let state = detectImageDiffState(from: chunkContent)
                 section = DiffSectionView(filePath: path, imageDiffMode: state)
+                section.onImageClick = { [weak self] imageView, image in
+                    self?.onImageClick?(imageView, image)
+                }
                 loadImages(for: section, path: path, chunk: chunkContent, state: state)
             } else {
                 let (additions, deletions) = countStats(in: chunkContent)

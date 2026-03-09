@@ -1,5 +1,159 @@
 import Cocoa
 
+final class DiffImageOverlayView: NSView {
+    private let dimView = NSView()
+    private let imageCardView = NSView()
+    private let imageView = NSImageView()
+    private let sourceRectProvider: () -> NSRect?
+    private let initialSourceRect: NSRect
+    private let image: NSImage
+    private var isPresented = false
+    private var isDismissing = false
+
+    var onDismiss: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    init(image: NSImage, sourceRect: NSRect, sourceRectProvider: @escaping () -> NSRect?) {
+        self.image = image
+        self.initialSourceRect = sourceRect
+        self.sourceRectProvider = sourceRectProvider
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.zPosition = 500
+        setup()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        dimView.frame = bounds
+        if isPresented, !isDismissing {
+            imageCardView.frame = targetFrame(for: bounds)
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            dismiss(animated: true)
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    func present() {
+        layoutSubtreeIfNeeded()
+        imageCardView.frame = initialSourceRect
+        dimView.alphaValue = 0
+        alphaValue = 1
+        window?.makeFirstResponder(self)
+
+        let targetFrame = targetFrame(for: bounds)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            dimView.animator().alphaValue = 1
+            imageCardView.animator().frame = targetFrame
+        } completionHandler: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.isPresented = true
+            }
+        }
+    }
+
+    func dismiss(animated: Bool) {
+        guard !isDismissing else { return }
+        isDismissing = true
+
+        guard animated else {
+            finishDismissal()
+            return
+        }
+
+        let targetRect = sourceRectProvider() ?? initialSourceRect
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            dimView.animator().alphaValue = 0
+            imageCardView.animator().frame = targetRect
+        } completionHandler: {
+            Task { @MainActor [weak self] in
+                self?.finishDismissal()
+            }
+        }
+    }
+
+    private func setup() {
+        let click = NSClickGestureRecognizer(target: self, action: #selector(handleOverlayClick))
+        addGestureRecognizer(click)
+
+        dimView.wantsLayer = true
+        dimView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.72).cgColor
+        dimView.alphaValue = 0
+        dimView.autoresizingMask = [.width, .height]
+        addSubview(dimView)
+
+        imageCardView.wantsLayer = true
+        imageCardView.layer?.shadowColor = NSColor.black.withAlphaComponent(0.35).cgColor
+        imageCardView.layer?.shadowOpacity = 1
+        imageCardView.layer?.shadowRadius = 30
+        imageCardView.layer?.shadowOffset = CGSize(width: 0, height: -8)
+        addSubview(imageCardView)
+
+        imageView.image = image
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignCenter
+        imageView.frame = imageCardView.bounds
+        imageView.autoresizingMask = [.width, .height]
+        imageView.wantsLayer = true
+        imageView.layer?.cornerRadius = 12
+        imageView.layer?.masksToBounds = true
+        imageView.layer?.borderWidth = 1
+        imageView.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        imageView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        imageCardView.addSubview(imageView)
+    }
+
+    @objc private func handleOverlayClick() {
+        dismiss(animated: true)
+    }
+
+    @MainActor
+    private func finishDismissal() {
+        removeFromSuperview()
+        onDismiss?()
+    }
+
+    private func targetFrame(for bounds: NSRect) -> NSRect {
+        let horizontalInset = min(max(bounds.width * 0.08, 32), 96)
+        let verticalInset = min(max(bounds.height * 0.1, 32), 120)
+        let availableRect = bounds.insetBy(dx: horizontalInset, dy: verticalInset)
+        guard availableRect.width > 0, availableRect.height > 0 else { return initialSourceRect }
+
+        let imageSize = image.size
+        guard imageSize.width > 0, imageSize.height > 0 else { return availableRect }
+
+        let scale = min(
+            availableRect.width / imageSize.width,
+            availableRect.height / imageSize.height,
+            1
+        )
+        let renderedSize = NSSize(
+            width: max(imageSize.width * scale, 120),
+            height: max(imageSize.height * scale, 120)
+        )
+        return NSRect(
+            x: availableRect.midX - renderedSize.width / 2,
+            y: availableRect.midY - renderedSize.height / 2,
+            width: min(renderedSize.width, availableRect.width),
+            height: min(renderedSize.height, availableRect.height)
+        ).integral
+    }
+}
+
 extension ThreadDetailViewController {
 
     // MARK: - Inline Diff Viewer
@@ -62,6 +216,9 @@ extension ThreadDetailViewController {
                 vc.onClose = { [weak self] in
                     self?.hideDiffViewer()
                 }
+                vc.onImageClick = { [weak self] imageView, image in
+                    self?.presentDiffImageOverlay(from: imageView, image: image)
+                }
                 vc.onResizeDrag = { [weak self] phase, delta in
                     self?.handleDiffResizeDrag(phase: phase, delta: delta)
                 }
@@ -120,6 +277,7 @@ extension ThreadDetailViewController {
     }
 
     func hideDiffViewer() {
+        dismissDiffImageOverlay(animated: false)
         guard let vc = diffVC else { return }
         // Save height before removing
         if let h = diffHeightConstraint?.constant {
@@ -186,5 +344,45 @@ extension ThreadDetailViewController {
         default:
             break
         }
+    }
+
+    func presentDiffImageOverlay(from sourceImageView: NSImageView, image: NSImage) {
+        dismissDiffImageOverlay(animated: false)
+
+        let hostView = view.window?.contentView ?? view
+
+        let sourceRectProvider: () -> NSRect? = { [weak sourceImageView, weak hostView] in
+            guard let sourceImageView, let hostView, sourceImageView.window === hostView.window else { return nil }
+            let rectInWindow = sourceImageView.convert(sourceImageView.bounds, to: nil)
+            return hostView.convert(rectInWindow, from: nil)
+        }
+
+        guard let sourceRect = sourceRectProvider() else { return }
+
+        let overlay = DiffImageOverlayView(
+            image: image,
+            sourceRect: sourceRect,
+            sourceRectProvider: sourceRectProvider
+        )
+        overlay.onDismiss = { [weak self, weak overlay] in
+            guard let self, let overlay, self.diffImageOverlay === overlay else { return }
+            self.diffImageOverlay = nil
+        }
+
+        hostView.addSubview(overlay)
+        NSLayoutConstraint.activate([
+            overlay.topAnchor.constraint(equalTo: hostView.topAnchor),
+            overlay.leadingAnchor.constraint(equalTo: hostView.leadingAnchor),
+            overlay.trailingAnchor.constraint(equalTo: hostView.trailingAnchor),
+            overlay.bottomAnchor.constraint(equalTo: hostView.bottomAnchor),
+        ])
+        hostView.layoutSubtreeIfNeeded()
+
+        diffImageOverlay = overlay
+        overlay.present()
+    }
+
+    func dismissDiffImageOverlay(animated: Bool) {
+        diffImageOverlay?.dismiss(animated: animated)
     }
 }

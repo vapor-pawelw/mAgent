@@ -3,6 +3,7 @@
 ## User Behavior
 
 - In the sidebar `CHANGES` panel, single-clicking a file still selects it and opens the inline diff viewer for that path.
+- Left-clicking an image preview inside the inline diff opens a larger overlay above the full thread view with a darkened background; clicking anywhere or pressing Escape dismisses it.
 - Double-clicking a file opens the file with the system default macOS app.
 - Right-clicking a file opens a context menu with `Show in Finder`.
 
@@ -14,6 +15,7 @@
 - Opening files uses `NSWorkspace.shared.open(url)`.
 - Revealing files in Finder uses `NSWorkspace.shared.activateFileViewerSelecting([url])`.
 - Missing files (for example deleted paths still listed in diff stats) show a warning banner instead of failing silently.
+- Image zoom is implemented as a separate overlay in `ThreadDetailViewController+DiffViewer.swift`, not by resizing the inline diff section. `InlineDiffViewController` only forwards click events from image views upward.
 
 ## Gotcha
 
@@ -23,3 +25,5 @@
 - When scrolling to a section after `expandFile`, always call `view.layoutSubtreeIfNeeded()` before reading section frame coordinates. AppKit's layout cycle runs asynchronously, so frames inside a `DispatchQueue.main.async` block can still be zero or stale (fresh creation) or reflect pre-toggle constraint state (existing viewer). Without the forced layout pass, `section.convert(bounds, to: sectionsStackView)` returns wrong coordinates and the scroll always lands at the wrong file. Use `view` (not just `sectionsStackView`) so that `viewDidLayout` fires and `updateContentWidth` sets correct text heights before the scroll target is computed.
 - When revealing a diff section by rect, call `scrollToVisible` on the document view (`sectionsStackView`), not on `scrollView.contentView`. The section rect is converted into document-view coordinates, and asking the clip view to reveal that rect mixes coordinate spaces and can leave the viewer on the wrong file.
 - Image diff sections must recompute their height whenever the inline diff viewport width changes. A one-time size calculation based on initial bounds can leave only the top of the image visible after layout settles. Cap rendered height against the visible diff pane (instead of letting it scale to the image's full width-fit height) so very tall assets do not turn into multi-screen previews.
+- Keep image enlargement separate from inline image sizing. Changing section height on click would perturb the `expandFile`/`scrollToVisible` geometry used by `CHANGES` file selection; the overlay approach preserves section frames so scroll-to-file keeps landing on the correct diff block.
+- The zoom overlay should attach to the window content view when available, not the diff view itself, so the dimmed backdrop covers the rest of the app and the animation can expand from the tapped image into full-window coordinates.
