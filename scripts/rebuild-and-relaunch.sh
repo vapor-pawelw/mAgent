@@ -26,6 +26,20 @@ build_dir_from_xcodebuild() {
     | head -n1
 }
 
+refresh_workspace_with_tuist() {
+  local workspace="$1"
+
+  echo "Refreshing $workspace via Tuist..."
+  if mise x -- tuist generate --no-open; then
+    return
+  fi
+
+  echo "Tuist generate failed. Running tuist install and retrying..."
+  mise x -- tuist install
+  echo "Refreshing $workspace via Tuist (retry)..."
+  mise x -- tuist generate --no-open
+}
+
 ensure_build_prerequisites() {
   local root="$1"
   local ghostty_lib="$root/$GHOSTTY_LIB_REL"
@@ -38,8 +52,7 @@ ensure_build_prerequisites() {
 
   if [[ "$needs_mise" -eq 0 ]]; then
     if command -v mise >/dev/null 2>&1; then
-      echo "Refreshing $WORKSPACE via Tuist..."
-      mise x -- tuist generate --no-open
+      refresh_workspace_with_tuist "$WORKSPACE"
       return
     fi
 
@@ -66,8 +79,7 @@ ensure_build_prerequisites() {
     mise x -- "$root/scripts/bootstrap-ghosttykit.sh"
   fi
 
-  echo "Refreshing $WORKSPACE via Tuist..."
-  mise x -- tuist generate --no-open
+  refresh_workspace_with_tuist "$WORKSPACE"
 
   if [[ ! -f "$ghostty_lib" ]]; then
     echo "Still missing $GHOSTTY_LIB_REL after bootstrap." >&2
