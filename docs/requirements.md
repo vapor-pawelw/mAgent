@@ -131,6 +131,7 @@ For non-main threads, naming and labels in the sidebar follow these rules:
 - Worktree directory name is derived from `worktreePath` basename.
 - `taskDescription` is optional; it can be generated from the first agent prompt or set manually.
 - Generated description should be short (2-8 words) and naturally cased (not forced Title Case).
+- Generated description should describe the same concrete task as the branch slug and read like a useful sidebar label; avoid vague abstractions such as "readiness" when the work is really a fix or feature.
 
 ### Non-Main Thread Rename Actions
 
