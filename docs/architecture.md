@@ -93,6 +93,8 @@ The underlying worktree directory is not moved. To keep active sessions stable, 
 
 Manual `Rename...` from the non-main thread context menu reuses the same model payload path as first-prompt auto-rename so branch slug generation, task description generation, and icon suggestion stay behaviorally aligned.
 This manual path intentionally skips first-prompt eligibility gates (for example "already auto-renamed") so users can explicitly request a regenerated name/description/icon at any time.
+When parsing combined rename payloads, treat only the first `SLUG:` line as the slug field before checking for the `EMPTY` sentinel. Multi-line model replies also include `DESC:` and `TYPE:` lines; checking the whole tail can incorrectly sanitize `SLUG: EMPTY` into the literal branch name `empty`.
+Generated descriptions should stay semantically aligned with the slug and read like concrete task labels in the sidebar, not abstract nouns unless the prompt is explicitly about that concept.
 
 ### 4.3 Prompt TOC Source of Truth
 

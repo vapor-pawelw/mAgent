@@ -77,20 +77,20 @@ extension ThreadManager {
         let afterPrefix = raw[prefixRange.upperBound...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // For multi-line payloads, only the first line belongs to the slug field.
+        let line = afterPrefix.components(separatedBy: .newlines).first ?? afterPrefix
+        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
         // Agent signals "this is a question, not a task" → return sentinel
-        if afterPrefix.uppercased() == "EMPTY" || afterPrefix.isEmpty {
+        if trimmedLine.uppercased() == "EMPTY" || trimmedLine.isEmpty {
             return Self.slugQuestionSentinel
         }
 
-        // Take first line only
-        let line = afterPrefix.components(separatedBy: .newlines).first ?? afterPrefix
-
         // Strip quotes and backticks
-        var slug = line
+        var slug = trimmedLine
             .replacingOccurrences(of: "`", with: "")
             .replacingOccurrences(of: "\"", with: "")
             .replacingOccurrences(of: "'", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Lowercase, replace non-alphanumeric with hyphens
         slug = slug.lowercased()
@@ -212,6 +212,8 @@ extension ThreadManager {
         let aiPrompt = """
             \(instruction) \
             Also generate a short task description (2-8 words) with first letter uppercase. \
+            The description should read like a clear branch/sidebar label for the work to do, and should describe the same task as the slug. \
+            Prefer concrete phrases such as "Fix ...", "Add ...", "Improve ...", or a specific feature/bug name. Avoid vague abstract wording like "readiness", "handling", "management", or "support" unless that exact concept is the task. \
             Icon types: feature (new functionality), fix (bug/regression), improvement (non-breaking polish/performance/quality), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
             Evaluate all icon types and use other when no icon type is above 70% confidence. \
             Output exactly three lines and nothing else: \
@@ -727,6 +729,8 @@ extension ThreadManager {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
             Generate a short task description (2-8 words) in natural casing, with the first letter uppercase. \
+            The description should read like a clear branch/sidebar label for the work to do. \
+            Prefer concrete phrases such as "Fix ...", "Add ...", "Improve ...", or a specific feature/bug name. Avoid vague abstract wording like "readiness", "handling", "management", or "support" unless that exact concept is the task. \
             Icon types: feature (new functionality), fix (bug/regression), improvement (non-breaking polish/performance/quality), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
             Evaluate all icon types, pick the highest-confidence one, and use other when no icon type is above 70% confidence. \
             Output exactly: \
