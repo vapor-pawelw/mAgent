@@ -66,6 +66,7 @@ final class ThreadDetailViewController: NSViewController {
     var terminalBottomToView: NSLayoutConstraint?
     var terminalBottomToDiff: NSLayoutConstraint?
     var diffHeightConstraint: NSLayoutConstraint?
+    var diffImageOverlay: DiffImageOverlayView?
     var isDiffDragging = false
     var diffDragStartHeight: CGFloat = 0
     static let diffMinHeight: CGFloat = 100
