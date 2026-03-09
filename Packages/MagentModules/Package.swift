@@ -56,9 +56,24 @@ let package = Package(
             path: "Sources/IPCCore"
         ),
         .target(
+            name: "PersistenceCore",
+            dependencies: ["MagentModels"],
+            path: "Sources/PersistenceCore"
+        ),
+        .target(
+            name: "UtilityCore",
+            dependencies: [
+                "MagentModels",
+                "ShellInfra",
+            ],
+            path: "Sources/UtilityCore"
+        ),
+        .target(
             name: "MagentCore",
             dependencies: [
                 "IPCCore",
+                "PersistenceCore",
+                "UtilityCore",
                 "MagentModels",
                 "ShellInfra",
                 "GitCore",

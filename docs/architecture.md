@@ -30,6 +30,8 @@ magent/
 │           ├── TmuxCore/            # tmux session management
 │           ├── JiraCore/            # Jira/acli integration
 │           ├── IPCCore/             # IPC request/response contracts + agent docs
+│           ├── PersistenceCore/     # Settings/thread/cache persistence
+│           ├── UtilityCore/         # Shared non-UI helper utilities
 │           └── GhosttyBridge/       # SwiftPM wrapper around GhosttyKit
 ├── Magent/                          # Main app target
 │   ├── App/
@@ -58,6 +60,8 @@ Module boundary rules:
 - `ShellInfra` holds shell execution primitives that other package targets can depend on without pulling in higher-level services.
 - `GitCore`, `TmuxCore`, and `JiraCore` isolate subsystem-specific services behind narrower dependency edges.
 - `IPCCore` isolates CLI/IPC-facing request-response models and agent guidance text from the rest of the shared domain layer.
+- `PersistenceCore` owns JSON/file-backed persistence for threads, settings, and caches.
+- `UtilityCore` holds remaining cross-cutting non-UI helpers that do not justify their own subsystem target yet.
 - `GhosttyBridge` wraps `GhosttyKit.xcframework` and is consumed as a local package product.
 - The app target keeps AppKit controllers/views plus resource-backed code that depends on generated asset and string-catalog symbols.
 - Extract new pure logic into package modules first; do not move resource-heavy AppKit code into SwiftPM targets until theme/localization wrappers exist.
