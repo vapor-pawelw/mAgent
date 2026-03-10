@@ -309,6 +309,17 @@
         }
       }
     },
+    "settingsCategoryThreads": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Threads"
+          }
+        }
+      }
+    },
     "soundGlass": {
       "extractionState": "manual",
       "localizations": {
