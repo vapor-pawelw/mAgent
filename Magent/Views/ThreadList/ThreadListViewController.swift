@@ -36,7 +36,8 @@ final class ThreadListViewController: NSViewController {
     static let sidebarTopInset: CGFloat = 8
     static let rateLimitStatusTopInset: CGFloat = 8
     static let rateLimitStatusListSpacing: CGFloat = 6
-    static let projectDisclosureTrailingInset: CGFloat = 8
+    static let sidebarTrailingInset: CGFloat = 20
+    static let projectDisclosureTrailingInset: CGFloat = sidebarTrailingInset
     static let outlineIndentationPerLevel: CGFloat = 16
     static let disclosureButtonSize: CGFloat = 16
     static let projectHeaderActionButtonSize: CGFloat = 24
@@ -50,7 +51,7 @@ final class ThreadListViewController: NSViewController {
     static let projectSpacerDividerHorizontalInset: CGFloat = 8
     static let projectSpacerDividerLeadingInset: CGFloat =
         projectSpacerDividerHorizontalInset - (outlineIndentationPerLevel / 2)
-    static let projectSpacerDividerTrailingInset: CGFloat = projectSpacerDividerHorizontalInset
+    static let projectSpacerDividerTrailingInset: CGFloat = sidebarTrailingInset
     static let sidebarRowLeadingInset: CGFloat = projectSpacerDividerLeadingInset
     static let projectHeaderTitleLeadingInset: CGFloat = sidebarRowLeadingInset + 3
     static let projectHeaderInterProjectGap: CGFloat =

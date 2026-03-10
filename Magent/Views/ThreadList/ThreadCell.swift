@@ -163,7 +163,7 @@ final class ThreadCell: NSTableCellView {
         if let trailingStack = trailingStackView {
             constraints.append(stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingStack.leadingAnchor, constant: -6))
         } else {
-            constraints.append(stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -ThreadListViewController.sidebarHorizontalInset))
+            constraints.append(stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -ThreadListViewController.sidebarTrailingInset))
         }
         NSLayoutConstraint.activate(constraints)
     }
@@ -282,10 +282,7 @@ final class ThreadCell: NSTableCellView {
         addSubview(stack)
 
         // Keep markers hard-aligned to the trailing edge so additional markers grow leftward.
-        // Offset chosen to preserve the previous resting position of a single completion indicator.
-        let trailingAlignmentInset = ThreadListViewController.projectDisclosureTrailingInset
-            + (ThreadListViewController.disclosureButtonSize / 2)
-            - (completionIndicatorSize / 2)
+        let trailingAlignmentInset = ThreadListViewController.sidebarTrailingInset
 
         NSLayoutConstraint.activate([
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
