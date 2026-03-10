@@ -5,6 +5,127 @@ import MagentCore
 
 extension ThreadListViewController: NSOutlineViewDataSource {
 
+    private func draggedThread(from info: NSDraggingInfo) -> MagentThread? {
+        guard let pasteboardItem = info.draggingPasteboard.pasteboardItems?.first,
+              let uuidString = pasteboardItem.string(forType: .string),
+              let threadId = UUID(uuidString: uuidString) else {
+            return nil
+        }
+        return threadManager.threads.first(where: { $0.id == threadId })
+    }
+
+    private func flatRegularThreads(in project: SidebarProject) -> [MagentThread] {
+        project.children.compactMap { child in
+            guard let thread = child as? MagentThread, !thread.isMain else { return nil }
+            return thread
+        }
+    }
+
+    private func flatInsertionIndex(
+        in project: SidebarProject,
+        childIndex: Int,
+        pinState: Bool,
+        excluding threadId: UUID
+    ) -> Int {
+        let priorChildren = project.children.prefix(max(0, childIndex))
+        return priorChildren.reduce(into: 0) { count, child in
+            guard let thread = child as? MagentThread,
+                  !thread.isMain,
+                  thread.id != threadId,
+                  thread.isPinned == pinState else { return }
+            count += 1
+        }
+    }
+
+    private func flatRegularInsertionIndex(
+        in project: SidebarProject,
+        childIndex: Int,
+        excluding threadId: UUID
+    ) -> Int {
+        let priorChildren = project.children.prefix(max(0, childIndex))
+        return priorChildren.reduce(into: 0) { count, child in
+            guard let thread = child as? MagentThread,
+                  !thread.isMain,
+                  thread.id != threadId else { return }
+            count += 1
+        }
+    }
+
+    private func validateFlatProjectDrop(
+        for thread: MagentThread,
+        in project: SidebarProject,
+        childIndex index: Int
+    ) -> NSDragOperation {
+        guard thread.projectId == project.projectId,
+              index != NSOutlineViewDropOnItemIndex else {
+            return []
+        }
+
+        let regularThreads = flatRegularThreads(in: project)
+        let pinnedCount = regularThreads
+            .filter { $0.isPinned && $0.id != thread.id }
+            .count
+        let flatIndex = flatRegularInsertionIndex(
+            in: project,
+            childIndex: index,
+            excluding: thread.id
+        )
+
+        if thread.isPinned {
+            guard flatIndex <= pinnedCount else { return [] }
+        } else {
+            guard flatIndex >= pinnedCount else { return [] }
+        }
+
+        return .move
+    }
+
+    private func acceptFlatProjectDrop(
+        for thread: MagentThread,
+        in project: SidebarProject,
+        childIndex index: Int
+    ) -> Bool {
+        guard thread.projectId == project.projectId,
+              index != NSOutlineViewDropOnItemIndex else {
+            return false
+        }
+
+        let visibleGroup = flatRegularThreads(in: project)
+            .filter { $0.isPinned == thread.isPinned && $0.id != thread.id }
+        let insertionIndex = flatInsertionIndex(
+            in: project,
+            childIndex: index,
+            pinState: thread.isPinned,
+            excluding: thread.id
+        )
+        let clampedInsertionIndex = max(0, min(insertionIndex, visibleGroup.count))
+
+        let previousThread = clampedInsertionIndex > 0 ? visibleGroup[clampedInsertionIndex - 1] : nil
+        let nextThread = clampedInsertionIndex < visibleGroup.count ? visibleGroup[clampedInsertionIndex] : nil
+        guard let anchorThread = previousThread ?? nextThread else {
+            reloadData()
+            return true
+        }
+
+        guard let targetSectionId = threadManager.effectiveSectionId(for: anchorThread) else {
+            reloadData()
+            return true
+        }
+
+        if threadManager.effectiveSectionId(for: thread) != targetSectionId {
+            threadManager.moveThread(thread, toSection: targetSectionId)
+        }
+
+        let targetSectionThreadsBeforeInsertion = visibleGroup
+            .prefix(clampedInsertionIndex)
+            .filter { threadManager.effectiveSectionId(for: $0) == targetSectionId }
+            .count
+        let targetIndex = previousThread == nil ? 0 : targetSectionThreadsBeforeInsertion
+        threadManager.reorderThread(thread.id, toIndex: targetIndex, inSection: targetSectionId)
+        reloadData()
+        return true
+    }
+
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
         if item == nil { return sidebarRootItems.count }
         if let project = item as? SidebarProject { return project.children.count }
@@ -40,15 +161,17 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
-        guard let section = item as? SidebarSection else { return [] }
-
-        // Read the dragged thread's pin status
-        guard let pasteboardItem = info.draggingPasteboard.pasteboardItems?.first,
-              let uuidString = pasteboardItem.string(forType: .string),
-              let threadId = UUID(uuidString: uuidString),
-              let thread = threadManager.threads.first(where: { $0.id == threadId }) else {
+        guard let thread = draggedThread(from: info) else {
             return []
         }
+
+        if let project = item as? SidebarProject {
+            let settings = persistence.loadSettings()
+            guard !settings.shouldUseThreadSections(for: project.projectId) else { return [] }
+            return validateFlatProjectDrop(for: thread, in: project, childIndex: index)
+        }
+
+        guard let section = item as? SidebarSection else { return [] }
 
         // Drop "on" section header → cross-section move (always allowed)
         if index == NSOutlineViewDropOnItemIndex {
@@ -75,13 +198,17 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         item: Any?,
         childIndex index: Int
     ) -> Bool {
-        guard let section = item as? SidebarSection,
-              let pasteboardItem = info.draggingPasteboard.pasteboardItems?.first,
-              let uuidString = pasteboardItem.string(forType: .string),
-              let threadId = UUID(uuidString: uuidString),
-              let thread = threadManager.threads.first(where: { $0.id == threadId }) else {
+        guard let thread = draggedThread(from: info) else {
             return false
         }
+
+        if let project = item as? SidebarProject {
+            let settings = persistence.loadSettings()
+            guard !settings.shouldUseThreadSections(for: project.projectId) else { return false }
+            return acceptFlatProjectDrop(for: thread, in: project, childIndex: index)
+        }
+
+        guard let section = item as? SidebarSection else { return false }
 
         if index == NSOutlineViewDropOnItemIndex {
             // Cross-section move (drop on section header)
@@ -100,7 +227,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         // Calculate group-relative index for the reorder
         let pinnedCount = section.threads.filter(\.isPinned).count
         let groupIndex = thread.isPinned ? index : index - pinnedCount
-        threadManager.reorderThread(threadId, toIndex: groupIndex, inSection: section.sectionId)
+        threadManager.reorderThread(thread.id, toIndex: groupIndex, inSection: section.sectionId)
         reloadData()
         return true
     }
