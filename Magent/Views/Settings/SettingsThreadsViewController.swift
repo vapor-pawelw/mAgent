@@ -212,22 +212,6 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         narrowThreadsDesc.textColor = NSColor(resource: .textSecondary)
         sidebarSection.addArrangedSubview(narrowThreadsDesc)
 
-        let (recentArchivedCard, recentArchivedSection) = createSectionCard(
-            title: "Recently Archived",
-            description: "Shows up to 10 archived threads. Restore uses the same flow as the archive banner."
-        )
-        stackView.addArrangedSubview(recentArchivedCard)
-
-        recentArchivedThreadsStackView = NSStackView()
-        recentArchivedThreadsStackView.orientation = .vertical
-        recentArchivedThreadsStackView.alignment = .leading
-        recentArchivedThreadsStackView.spacing = 10
-        recentArchivedThreadsStackView.translatesAutoresizingMaskIntoConstraints = false
-        recentArchivedSection.addArrangedSubview(recentArchivedThreadsStackView)
-
-        NSLayoutConstraint.activate([
-            recentArchivedThreadsStackView.widthAnchor.constraint(equalTo: recentArchivedSection.widthAnchor),
-        ])
         let (injectionCard, injectionSection) = createSectionCard(
             title: "Startup Injection",
             description: "Values in this section are applied to every new terminal/agent tab at startup."
@@ -266,6 +250,23 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         resetReviewButton.controlSize = .small
         reviewSection.addArrangedSubview(resetReviewButton)
 
+        let (recentArchivedCard, recentArchivedSection) = createSectionCard(
+            title: "Recently Archived",
+            description: "Shows up to 10 archived threads. Restore uses the same flow as the archive banner."
+        )
+        stackView.addArrangedSubview(recentArchivedCard)
+
+        recentArchivedThreadsStackView = NSStackView()
+        recentArchivedThreadsStackView.orientation = .vertical
+        recentArchivedThreadsStackView.alignment = .leading
+        recentArchivedThreadsStackView.spacing = 10
+        recentArchivedThreadsStackView.translatesAutoresizingMaskIntoConstraints = false
+        recentArchivedSection.addArrangedSubview(recentArchivedThreadsStackView)
+
+        NSLayoutConstraint.activate([
+            recentArchivedThreadsStackView.widthAnchor.constraint(equalTo: recentArchivedSection.widthAnchor),
+        ])
+
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stackView)
@@ -288,9 +289,9 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             threadNamingCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sectionsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sidebarCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-            recentArchivedCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             injectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             reviewCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            recentArchivedCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
 
         NotificationCenter.default.addObserver(
