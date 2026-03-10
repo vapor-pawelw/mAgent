@@ -4,7 +4,7 @@ import MagentCore
 
 extension ThreadManager {
 
-    private static let archivedThreadBannerDuration: TimeInterval = 5.0
+    private static let archivedThreadBannerDuration: TimeInterval = 10.0
 
     // MARK: - Thread Creation
 
@@ -686,6 +686,7 @@ extension ThreadManager {
                 ) ?? "Archived thread '\(thread.name)'.",
                 style: warning == nil ? .info : .warning,
                 duration: Self.archivedThreadBannerDuration,
+                isDismissible: true,
                 actions: [
                     BannerAction(title: "Restore") {
                         Task { [weak self] in
