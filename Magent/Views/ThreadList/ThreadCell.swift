@@ -45,8 +45,9 @@ final class ThreadCell: NSTableCellView {
         ceil(font.ascender - font.descender + font.leading)
     }
 
-    static func uniformSidebarRowHeight() -> CGFloat {
-        let titleBlockHeight = (lineHeight(for: descriptionFont()) * 2)
+    static func uniformSidebarRowHeight(maxDescriptionLines: Int) -> CGFloat {
+        let clampedDescriptionLines = max(1, maxDescriptionLines)
+        let titleBlockHeight = (lineHeight(for: descriptionFont()) * CGFloat(clampedDescriptionLines))
             + lineHeight(for: metadataFont())
             + primarySecondaryRowSpacing
         let contentHeight = max(
@@ -87,7 +88,7 @@ final class ThreadCell: NSTableCellView {
     }
 
     /// Reparents imageView and textField into a horizontal stack.
-    /// The first row can show a multi-line description; the second row shows branch/worktree.
+    /// The first row shows the description/name; the second row shows branch/worktree metadata.
     /// Safe to call multiple times — only runs once.
     func ensureLeadingStack() {
         guard primaryDirtyDot == nil, let iv = imageView, let tf = textField else { return }
@@ -328,7 +329,8 @@ final class ThreadCell: NSTableCellView {
     func configure(
         with thread: MagentThread,
         sectionColor: NSColor?,
-        leadingOffset: CGFloat = 0
+        leadingOffset: CGFloat = 0,
+        maxDescriptionLines: Int = 2
     ) {
         isConfiguredAsMain = false
         ensureTrailingStack()
@@ -355,6 +357,7 @@ final class ThreadCell: NSTableCellView {
         let trimmedDescription = thread.taskDescription?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let hasDescription = !(trimmedDescription?.isEmpty ?? true)
+        let clampedDescriptionLines = max(1, maxDescriptionLines)
 
         if hasDescription {
             // Keep description wrapping stable across selection/unread state changes.
@@ -370,8 +373,8 @@ final class ThreadCell: NSTableCellView {
 
         if hasDescription, let description = trimmedDescription {
             textField?.stringValue = description
-            textField?.maximumNumberOfLines = 2
-            textField?.lineBreakMode = .byWordWrapping
+            textField?.maximumNumberOfLines = clampedDescriptionLines
+            textField?.lineBreakMode = clampedDescriptionLines > 1 ? .byWordWrapping : .byTruncatingTail
             subtitleLabel?.stringValue = fullSecondaryLine
             subtitleLabel?.textColor = showsJiraState && thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
             subtitleLabel?.isHidden = false

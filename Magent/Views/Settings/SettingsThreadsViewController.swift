@@ -9,6 +9,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var autoRenameBranchCheckbox: NSButton!
     private var autoSetDescriptionCheckbox: NSButton!
     private var autoSetIconFromWorkTypeCheckbox: NSButton!
+    private var narrowThreadsCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
     var agentContextTextView: NSTextView!
@@ -178,6 +179,27 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             defaultSectionPopup.widthAnchor.constraint(equalTo: defaultSectionStack.widthAnchor),
         ])
 
+        let (sidebarCard, sidebarSection) = createSectionCard(
+            title: "Sidebar",
+            description: "Control how much space each thread row uses in the sidebar."
+        )
+        stackView.addArrangedSubview(sidebarCard)
+
+        narrowThreadsCheckbox = NSButton(
+            checkboxWithTitle: "Narrow threads",
+            target: self,
+            action: #selector(narrowThreadsToggled)
+        )
+        narrowThreadsCheckbox.state = settings.narrowThreads ? .on : .off
+        sidebarSection.addArrangedSubview(narrowThreadsCheckbox)
+
+        let narrowThreadsDesc = NSTextField(
+            wrappingLabelWithString: "Limit thread descriptions to one line and size every thread row for that tighter layout."
+        )
+        narrowThreadsDesc.font = .systemFont(ofSize: 11)
+        narrowThreadsDesc.textColor = NSColor(resource: .textSecondary)
+        sidebarSection.addArrangedSubview(narrowThreadsDesc)
+
         let (injectionCard, injectionSection) = createSectionCard(
             title: "Startup Injection",
             description: "Values in this section are applied to every new terminal/agent tab at startup."
@@ -237,6 +259,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
             threadNamingCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sectionsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            sidebarCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             injectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             reviewCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
@@ -364,19 +387,30 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         return textView
     }
 
+    private func persistSettings(notify: Bool = false) {
+        try? persistence.saveSettings(settings)
+        guard notify else { return }
+        NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+    }
+
     @objc private func autoRenameBranchToggled() {
         settings.autoRenameBranches = autoRenameBranchCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings()
     }
 
     @objc private func autoSetDescriptionToggled() {
         settings.autoSetThreadDescription = autoSetDescriptionCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings()
     }
 
     @objc private func autoSetIconFromWorkTypeToggled() {
         settings.autoSetThreadIconFromWorkType = autoSetIconFromWorkTypeCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings()
+    }
+
+    @objc private func narrowThreadsToggled() {
+        settings.narrowThreads = narrowThreadsCheckbox.state == .on
+        persistSettings(notify: true)
     }
 
     func textDidChange(_ notification: Notification) {
@@ -392,25 +426,25 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             settings.reviewPrompt = textView.string
         }
 
-        try? persistence.saveSettings(settings)
+        persistSettings()
     }
 
     @objc private func useSectionsToggled() {
         settings.useThreadSections = useSectionsCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings()
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
     @objc private func resetSlugPromptToDefault() {
         slugPromptTextView.string = AppSettings.defaultSlugPrompt
         settings.autoRenameSlugPrompt = AppSettings.defaultSlugPrompt
-        try? persistence.saveSettings(settings)
+        persistSettings()
     }
 
     @objc private func resetReviewPromptToDefault() {
         reviewPromptTextView.string = AppSettings.defaultReviewPrompt
         settings.reviewPrompt = AppSettings.defaultReviewPrompt
-        try? persistence.saveSettings(settings)
+        persistSettings()
     }
 
     func refreshDefaultSectionPopup() {
@@ -432,7 +466,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         let selected = defaultSectionPopup.indexOfSelectedItem
         guard selected >= 0, selected < visible.count else { return }
         settings.defaultSectionId = visible[selected].id
-        try? persistence.saveSettings(settings)
+        persistSettings()
         sectionsTableView.reloadData()
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
@@ -461,7 +495,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             sortOrder: maxOrder + 1
         )
         settings.threadSections.append(section)
-        try? persistence.saveSettings(settings)
+        persistSettings()
         sectionsTableView.reloadData()
         refreshDefaultSectionPopup()
 

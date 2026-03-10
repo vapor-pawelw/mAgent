@@ -156,7 +156,7 @@ For the main thread, the sidebar uses these rules:
 ### Line 1 / Line 2 Layout
 
 - If `taskDescription` exists:
-  - Line 1: description (up to 2 lines)
+  - Line 1: description (up to 2 lines, or 1 line when `Narrow threads` is enabled)
   - Line 2: `branch · worktree · PR` (PR segment shown only when present)
 - If no `taskDescription` and branch differs from worktree:
   - Line 1: `branch`

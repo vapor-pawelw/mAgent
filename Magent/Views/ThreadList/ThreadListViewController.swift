@@ -74,6 +74,7 @@ final class ThreadListViewController: NSViewController {
     var projectsWithValidRemotes: Set<UUID> = []
     private var lastFittedOutlineWidth: CGFloat = 0
     private var currentScrollTopOffset: CGFloat = 0
+    var currentSettings = AppSettings()
 
     private struct SidebarScrollSnapshot {
         let origin: NSPoint
@@ -121,6 +122,12 @@ final class ThreadListViewController: NSViewController {
             self,
             selector: #selector(globalRateLimitSummaryDidChange),
             name: .magentGlobalRateLimitSummaryChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(settingsDidChange),
+            name: .magentSettingsDidChange,
             object: nil
         )
         updateGlobalRateLimitSummary()
@@ -179,6 +186,11 @@ final class ThreadListViewController: NSViewController {
 
     @objc private func globalRateLimitSummaryDidChange() {
         updateGlobalRateLimitSummary()
+    }
+
+    @objc private func settingsDidChange() {
+        reloadData()
+        refreshSidebarLayout(forceColumnRefit: true)
     }
 
     // MARK: - Toolbar Buttons
@@ -396,6 +408,7 @@ final class ThreadListViewController: NSViewController {
         }()
 
         let settings = persistence.loadSettings()
+        currentSettings = settings
         let allThreads = threadManager.threads
         let mainThreads = allThreads.filter { $0.isMain }
         let regularThreads = allThreads.filter { !$0.isMain }

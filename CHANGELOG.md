@@ -86,6 +86,7 @@ All notable changes to this project will be documented in this file.
 - Selecting files in `CHANGES` now reliably opens and scrolls the inline diff to the correct file section, including renamed files, quoted paths, and cases where AppKit layout had not settled yet.
 
 ### Sidebar
+- Added a `Narrow threads` option that limits sidebar thread descriptions to one line and shrinks all thread rows to that denser height, while staying off by default.
 - All thread rows now use the same measured height as description rows, so the sidebar stays visually even even when some threads only render a single text line.
 - Threads can now be hidden to the bottom of their section/list and appear dimmed, with matching right-click and CLI hide/unhide actions so inactive work stays visible without competing with active threads.
 - When section grouping is disabled, the flat sidebar now behaves like one combined section: new threads land at the bottom, agent-completed threads jump to the top of their pin group, and manual reordering works without changing each thread's stored section.

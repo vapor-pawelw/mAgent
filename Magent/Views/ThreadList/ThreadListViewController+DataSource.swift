@@ -341,9 +341,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return 28
         }
         if item is MagentThread {
-            // Keep every thread row visually stable by reserving the two-line
-            // description layout height, even when a thread only renders one line.
-            return ThreadCell.uniformSidebarRowHeight()
+            return ThreadCell.uniformSidebarRowHeight(
+                maxDescriptionLines: currentSettings.sidebarDescriptionLineLimit
+            )
         }
         return 26
     }
@@ -689,7 +689,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     return c
                 }()
 
-            let settings = persistence.loadSettings()
+            let settings = currentSettings
             let shouldUseSections = settings.shouldUseThreadSections(for: thread.projectId)
             let sectionColor: NSColor?
             if shouldUseSections {
@@ -707,7 +707,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.configure(
                 with: thread,
                 sectionColor: sectionColor,
-                leadingOffset: threadLeadingOffset(for: thread, in: outlineView)
+                leadingOffset: threadLeadingOffset(for: thread, in: outlineView),
+                maxDescriptionLines: settings.sidebarDescriptionLineLimit
             )
             cell.onArchive = { [weak self] in
                 self?.triggerArchive(for: thread)

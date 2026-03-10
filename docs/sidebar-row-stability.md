@@ -5,7 +5,7 @@
 - Selecting a thread should not change the sidebar width.
 - Selecting a thread should not make a multiline thread row grow or shrink.
 - Task descriptions should keep the same wrapping/height while selection state changes.
-- All thread rows should occupy the same visual height as the two-line description layout, even when a thread only renders one line of text.
+- All thread rows should occupy the same visual height for the active sidebar density, even when a thread only renders one line of text.
 - Pin, rate-limit, and completion markers should stay visually aligned, with pin always rightmost.
 - Periodic sidebar refreshes should not scroll the thread list back to the top while the user is reading older rows.
 - Periodic sidebar refreshes should not yank the current selection back into view if the user has intentionally scrolled elsewhere in the list.
@@ -15,7 +15,8 @@
 - Keep the main split view structure stable: swap detail content inside a persistent container instead of removing and re-adding split-view items.
 - Preserve the sidebar width during detail-content swaps with `SplitViewController.preserveSidebarWidthDuringContentChange(...)`.
 - Load the saved sidebar width into `preferredSidebarWidth` before startup selection/detail work begins, and apply the initial divider position no later than `viewWillAppear`. If launch-time content swaps run first, AppKit will build sidebar rows against the default width and then reflow them again when the saved width is restored.
-- Route thread-row height through `ThreadCell.uniformSidebarRowHeight()` so every thread row derives the reserved two-line layout height from the cell's actual fonts, line counts, marker sizes, and vertical insets.
+- Route thread-row height through `ThreadCell.uniformSidebarRowHeight(maxDescriptionLines:)` so every thread row derives the reserved layout height from the cell's actual fonts, line counts, marker sizes, and vertical insets.
+- Keep the reserved description line count in `AppSettings.sidebarDescriptionLineLimit` so the `Narrow threads` toggle switches both text wrapping and row height together.
 - Keep description text style stable for description rows (semibold) so wrapping does not change with unread-selection state transitions.
 - Reserve a fixed status-marker slot in trailing row layout (14 pt) and keep pin as the rightmost marker. This prevents marker visibility toggles from changing available text width.
 - Refit sidebar outline width from the scroll view's visible clip width, not from `NSOutlineView`'s current frame width. On launch, the outline can hold a stale frame width even after the split view has restored the real sidebar size, which leaves trailing markers and project `+` buttons flush against the outer edge until a manual divider drag forces a resize.
