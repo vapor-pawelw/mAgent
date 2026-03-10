@@ -49,6 +49,32 @@ Optional overrides:
 MAGENT_SCHEME=Magent MAGENT_CONFIGURATION=Debug MAGENT_APP_NAME=Magent ./scripts/rebuild-and-relaunch.sh
 ```
 
+## Archive Thread Workflow Helper
+
+Use the helper script when you want to merge the current thread branch into its base branch and then archive the thread in one flow:
+
+```bash
+./scripts/archive-current-thread.sh
+```
+
+Useful options:
+
+```bash
+# Keep main worktree clean from Local Sync copy-back
+./scripts/archive-current-thread.sh --skip-local-sync
+
+# Allow merge commit only when ff-only merge is impossible and explicitly desired
+./scripts/archive-current-thread.sh --allow-merge-commit
+
+# Skip pushing base branch (local-only flow)
+./scripts/archive-current-thread.sh --no-push
+
+# Preview actions without modifying git/thread state
+./scripts/archive-current-thread.sh --dry-run
+```
+
+The script intentionally does not perform changelog/docs decisions; handle those in the agent workflow before running the script.
+
 ## Build Notes
 
 - `./scripts/bootstrap-ghosttykit.sh` builds Ghostty from the repo's pinned default ref. If local `Libraries/GhosttyKit.xcframework` drifts to another Ghostty ref, rerun the bootstrap script before building to realign the C headers and Swift bridge.
