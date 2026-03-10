@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Archiving a thread now shows a 5-second in-app banner with thread details and a one-click `Restore` action, including when the archive was triggered through `magent-cli`.
+- Fixed `archive-current-thread.sh` failing when the base worktree match was the last entry in `git worktree list`, so the helper now resolves the main worktree correctly before merging and archiving.
 - `magent-cli`'s interactive picker now shows live thread status badges (`done`, `busy`, `input`, `dirty`, `limited`, `delivered`) and uses ANSI colors to make thread state easier to scan.
 - `Open in Finder` and pull-request actions now reuse the same Finder/repo-host icons across top-bar buttons, thread right-click menus, and the `CHANGES` file menu.
 - When Magent is in the background, new unread agent completions can now bounce the Dock icon and show a Dock badge with the number of unread completed threads, with a Notifications setting to disable that behavior.
