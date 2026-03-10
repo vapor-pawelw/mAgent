@@ -141,7 +141,6 @@ public nonisolated struct IPCThreadInfo: Encodable, Sendable {
     public let projectName: String
     public let worktreePath: String
     public let tmuxSession: String
-    public let agentType: String?
     public let isMain: Bool
     public let taskDescription: String?
     public var sectionName: String?
@@ -155,7 +154,6 @@ public nonisolated struct IPCThreadInfo: Encodable, Sendable {
         self.projectName = projectName
         self.worktreePath = thread.worktreePath
         self.tmuxSession = thread.tmuxSessionNames.first ?? ""
-        self.agentType = thread.effectiveAgentType?.rawValue
         self.isMain = thread.isMain
         self.taskDescription = thread.taskDescription
     }
@@ -166,7 +164,6 @@ public nonisolated struct IPCThreadInfo: Encodable, Sendable {
         self.projectName = projectName
         self.worktreePath = thread.worktreePath
         self.tmuxSession = thread.tmuxSessionNames.first ?? ""
-        self.agentType = thread.effectiveAgentType?.rawValue
         self.isMain = thread.isMain
         self.taskDescription = thread.taskDescription
         self.sectionName = sectionName
@@ -190,13 +187,11 @@ public nonisolated struct IPCTabInfo: Encodable, Sendable {
     public let index: Int
     public let sessionName: String
     public let isAgent: Bool
-    public let agentType: String?
 
-    public init(index: Int, sessionName: String, isAgent: Bool, agentType: String?) {
+    public init(index: Int, sessionName: String, isAgent: Bool) {
         self.index = index
         self.sessionName = sessionName
         self.isAgent = isAgent
-        self.agentType = agentType
     }
 }
 

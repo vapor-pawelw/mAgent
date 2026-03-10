@@ -25,7 +25,7 @@ extension ThreadManager {
         let startCmd: String
         let tabDisplayName: String
 
-        var selectedAgentType = currentThread.effectiveAgentType
+        var selectedAgentType: AgentType? = nil
         let requestedTabBaseName: String
         let repoSlug = Self.repoSlug(from:
             settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
@@ -77,7 +77,7 @@ extension ThreadManager {
             if useAgentCommand {
                 selectedAgentType = resolveAgentType(
                     for: currentThread.projectId,
-                    requestedAgentType: requestedAgentType ?? currentThread.effectiveAgentType,
+                    requestedAgentType: requestedAgentType,
                     settings: settings
                 )
                 startCmd = agentStartCommand(
@@ -145,9 +145,6 @@ extension ThreadManager {
         let shouldMarkAsAgentTab = (currentThread.isMain || useAgentCommand) && selectedAgentType != nil
         if shouldMarkAsAgentTab {
             threads[index].agentTmuxSessions.append(tmuxSessionName)
-            if let selectedAgentType {
-                threads[index].sessionAgentTypes[tmuxSessionName] = selectedAgentType
-            }
             threads[index].agentHasRun = true
         }
         try persistence.saveThreads(threads)
@@ -217,7 +214,6 @@ extension ThreadManager {
         threads[index].tmuxSessionNames.append(sessionName)
         if agentType != nil {
             threads[index].agentTmuxSessions.append(sessionName)
-            threads[index].sessionAgentTypes[sessionName] = agentType
             threads[index].agentHasRun = true
         }
         threads[index].customTabNames[sessionName] = TmuxSessionNaming.defaultTabDisplayName(for: agentType)
@@ -278,7 +274,6 @@ extension ThreadManager {
         // Also remove from pinned, agent, unread completion, waiting, and custom tab names if present
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
         threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
-        threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
         threads[index].sessionConversationIDs.removeValue(forKey: sessionName)
         threads[index].unreadCompletionSessions.remove(sessionName)
         threads[index].busySessions.remove(sessionName)

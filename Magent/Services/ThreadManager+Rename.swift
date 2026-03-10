@@ -345,7 +345,7 @@ extension ThreadManager {
             throw ThreadManagerError.invalidPrompt
         }
 
-        let selectedAgent = preferredAgent ?? currentThread.effectiveAgentType
+        let selectedAgent = preferredAgent ?? effectiveAgentType(for: currentThread.projectId)
         let payloadResult = await generateFirstPromptRenamePayloadViaAgent(
             from: trimmedPrompt,
             agentType: selectedAgent,
@@ -498,11 +498,6 @@ extension ThreadManager {
                 (sessionRenameMap[key] ?? key, value)
             }
         )
-        threads[index].sessionAgentTypes = Dictionary(
-            uniqueKeysWithValues: threads[index].sessionAgentTypes.map { key, value in
-                (sessionRenameMap[key] ?? key, value)
-            }
-        )
         threads[index].sessionConversationIDs = Dictionary(
             uniqueKeysWithValues: threads[index].sessionConversationIDs.map { key, value in
                 (sessionRenameMap[key] ?? key, value)
@@ -570,7 +565,7 @@ extension ThreadManager {
 
         // Try agents in preferred-first order; fall back to other built-in generators
         // (Claude/Codex) if the preferred one fails — per AGENTS.md fallback convention.
-        let preferredAgent = thread.sessionAgentTypes[sessionName] ?? thread.effectiveAgentType
+        let preferredAgent = effectiveAgentType(for: thread.projectId)
         let agentOrder = slugGenerationAgentOrder(preferred: preferredAgent, projectId: thread.projectId)
 
         var slug: String?
@@ -785,7 +780,7 @@ extension ThreadManager {
 
         let settings = persistence.loadSettings()
         let shouldAutoSetIcon = settings.autoSetThreadIconFromWorkType
-        let agentOrder = slugGenerationAgentOrder(preferred: thread.effectiveAgentType, projectId: thread.projectId)
+        let agentOrder = slugGenerationAgentOrder(preferred: effectiveAgentType(for: thread.projectId), projectId: thread.projectId)
         guard !agentOrder.allTrackable.isEmpty, !agentOrder.available.isEmpty else { return nil }
 
         for candidateAgent in agentOrder.available {
@@ -943,10 +938,6 @@ extension ThreadManager {
         if let info = currentThread.rateLimitedSessions[sessionName] {
             threads[index].rateLimitedSessions.removeValue(forKey: sessionName)
             threads[index].rateLimitedSessions[resolvedSessionName] = info
-        }
-        if let agentType = currentThread.sessionAgentTypes[sessionName] {
-            threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
-            threads[index].sessionAgentTypes[resolvedSessionName] = agentType
         }
         if let conversationID = currentThread.sessionConversationIDs[sessionName] {
             threads[index].sessionConversationIDs.removeValue(forKey: sessionName)

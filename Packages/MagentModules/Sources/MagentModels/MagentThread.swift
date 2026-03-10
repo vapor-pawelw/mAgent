@@ -102,7 +102,6 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var branchName: String
     public var tmuxSessionNames: [String]
     public var agentTmuxSessions: [String]
-    public var sessionAgentTypes: [String: AgentType]
     public var sessionConversationIDs: [String: String]
     public var pinnedTmuxSessions: [String]
     public let createdAt: Date
@@ -159,12 +158,6 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             return sid
         }
         return fallback
-    }
-
-    /// The effective agent type for this thread, derived from per-session tracking.
-    /// Returns the agent type of the most recently added agent session.
-    public var effectiveAgentType: AgentType? {
-        agentTmuxSessions.reversed().compactMap { sessionAgentTypes[$0] }.first
     }
 
     public var hasUnreadAgentCompletion: Bool {
@@ -236,7 +229,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     public enum CodingKeys: String, CodingKey {
         case id, projectId, name, worktreePath, branchName
-        case tmuxSessionNames, agentTmuxSessions, sessionAgentTypes, sessionConversationIDs, pinnedTmuxSessions
+        case tmuxSessionNames, agentTmuxSessions, sessionConversationIDs, pinnedTmuxSessions
         case createdAt, isArchived, archivedAt, sectionId, isMain
         case lastSelectedTmuxSessionName
         case agentHasRun, isPinned, isSidebarHidden, lastAgentCompletionAt
@@ -262,7 +255,6 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         branchName: String,
         tmuxSessionNames: [String] = [],
         agentTmuxSessions: [String] = [],
-        sessionAgentTypes: [String: AgentType] = [:],
         sessionConversationIDs: [String: String] = [:],
         pinnedTmuxSessions: [String] = [],
         createdAt: Date = Date(),
@@ -294,7 +286,6 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.branchName = branchName
         self.tmuxSessionNames = tmuxSessionNames
         self.agentTmuxSessions = agentTmuxSessions
-        self.sessionAgentTypes = sessionAgentTypes
         self.sessionConversationIDs = sessionConversationIDs
         self.pinnedTmuxSessions = pinnedTmuxSessions
         self.createdAt = createdAt
@@ -329,7 +320,6 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         branchName = try container.decode(String.self, forKey: .branchName)
         tmuxSessionNames = try container.decode([String].self, forKey: .tmuxSessionNames)
         agentTmuxSessions = try container.decodeIfPresent([String].self, forKey: .agentTmuxSessions) ?? []
-        sessionAgentTypes = try container.decodeIfPresent([String: AgentType].self, forKey: .sessionAgentTypes) ?? [:]
         sessionConversationIDs = try container.decodeIfPresent([String: String].self, forKey: .sessionConversationIDs) ?? [:]
         pinnedTmuxSessions = try container.decodeIfPresent([String].self, forKey: .pinnedTmuxSessions) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
@@ -372,9 +362,6 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(branchName, forKey: .branchName)
         try container.encode(tmuxSessionNames, forKey: .tmuxSessionNames)
         try container.encode(agentTmuxSessions, forKey: .agentTmuxSessions)
-        if !sessionAgentTypes.isEmpty {
-            try container.encode(sessionAgentTypes, forKey: .sessionAgentTypes)
-        }
         if !sessionConversationIDs.isEmpty {
             try container.encode(sessionConversationIDs, forKey: .sessionConversationIDs)
         }

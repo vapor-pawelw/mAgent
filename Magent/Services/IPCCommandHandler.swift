@@ -344,8 +344,7 @@ final class IPCCommandHandler {
 
         let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
             let isAgent = thread.agentTmuxSessions.contains(sessionName)
-            let agentType: String? = isAgent ? (thread.sessionAgentTypes[sessionName]?.rawValue ?? thread.effectiveAgentType?.rawValue ?? "unknown") : nil
-            return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent, agentType: agentType)
+            return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent)
         }
         return IPCResponse(ok: true, id: request.id, tabs: tabs)
     }
@@ -370,9 +369,9 @@ final class IPCCommandHandler {
                 return .failure("Unknown agent type: \(agentStr). Valid: claude, codex, custom, terminal", id: request.id)
             }
         } else {
-            // Default to thread's agent type
+            // Default to project/global default agent
             useAgent = !thread.agentTmuxSessions.isEmpty
-            requestedAgent = thread.effectiveAgentType
+            requestedAgent = nil
         }
 
         do {
@@ -395,12 +394,11 @@ final class IPCCommandHandler {
                 thread: latestThread
             )
 
-            let isAgent = useAgent && requestedAgent != nil
+            let isAgent = useAgent
             let info = IPCTabInfo(
                 index: tab.index,
                 sessionName: tab.tmuxSessionName,
-                isAgent: isAgent,
-                agentType: isAgent ? (requestedAgent?.rawValue ?? thread.effectiveAgentType?.rawValue) : nil
+                isAgent: isAgent
             )
 
             return IPCResponse(ok: true, id: request.id, tab: info)
@@ -425,7 +423,7 @@ final class IPCCommandHandler {
 
         let renameResult = await threadManager.autoRenameCandidates(
             from: prompt,
-            agentType: thread.effectiveAgentType,
+            agentType: threadManager.effectiveAgentType(for: thread.projectId),
             projectId: thread.projectId
         )
         guard case .candidates(let candidates) = renameResult else {
@@ -601,8 +599,7 @@ final class IPCCommandHandler {
         // Build tab list
         let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
             let isAgent = thread.agentTmuxSessions.contains(sessionName)
-            let agentType: String? = isAgent ? (thread.sessionAgentTypes[sessionName]?.rawValue ?? thread.effectiveAgentType?.rawValue ?? "unknown") : nil
-            return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent, agentType: agentType)
+            return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent)
         }
 
         let status = makeThreadStatus(for: thread)
