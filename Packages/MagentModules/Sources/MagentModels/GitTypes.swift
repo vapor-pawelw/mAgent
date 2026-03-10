@@ -174,9 +174,15 @@ public nonisolated struct FileDiffEntry: Sendable {
     }
 }
 
-nonisolated struct BranchCommit: Sendable {
-    let shortHash: String
-    let subject: String
-    let authorName: String
-    let date: String
+public nonisolated struct BranchCommit: Sendable {
+    public let shortHash: String
+    public let subject: String
+    public let authorName: String
+    public let date: String
+    public init(shortHash: String, subject: String, authorName: String, date: String) {
+        self.shortHash = shortHash
+        self.subject = subject
+        self.authorName = authorName
+        self.date = date
+    }
 }

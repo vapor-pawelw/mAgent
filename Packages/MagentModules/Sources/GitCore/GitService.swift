@@ -417,7 +417,7 @@ public final class GitService: Sendable {
     }
 
     /// Returns commits on HEAD that are not reachable from `baseBranch`, ordered newest-first.
-    func commitLog(worktreePath: String, baseBranch: String) async -> [BranchCommit] {
+    public func commitLog(worktreePath: String, baseBranch: String) async -> [BranchCommit] {
         let sep = "\u{1F}"  // unit separator unlikely to appear in commit messages
         let fmt = "%h\(sep)%s\(sep)%an\(sep)%ad"
         let result = await ShellExecutor.execute(
