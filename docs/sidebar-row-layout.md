@@ -12,6 +12,7 @@ This thread refined the left-rail and spacing rules for project headers, section
 - Section headers and the main-thread labels share the same leading text rail.
 - Threads inside sections keep their extra indentation level relative to top-level rows.
 - Project separators sit closer to the following repo name, while the first repo still keeps a visible gap from the very top of the sidebar.
+- All sidebar elements (thread status markers, section disclosure buttons, project `+` button, separators) share a consistent trailing-edge inset controlled by `sidebarTrailingInset`.
 
 ## Implementation Notes
 
@@ -19,6 +20,7 @@ This thread refined the left-rail and spacing rules for project headers, section
   - `projectSpacerDividerLeadingInset` is the base left rail for separators.
   - `sidebarRowLeadingInset` reuses that rail for section dots, main-row accent bar, and top-level thread geometry.
   - `projectHeaderTitleLeadingInset` is the slightly inset text rail used by repo titles.
+  - `sidebarTrailingInset` is the single trailing-edge constant used by all sidebar elements: thread marker stack, text-only trailing fallback, section disclosure button, project `+` button, and separators. `projectDisclosureTrailingInset` and `projectSpacerDividerTrailingInset` both derive from it.
 - `ThreadListViewController+DataSource.swift` uses `threadLeadingOffset(for:in:)` to cancel AppKit outline indentation for level-1 rows while preserving extra indentation for threads nested inside sections.
 - `ThreadCell` owns the main-row accent bar and toggles it only for `configureAsMain(...)`.
 - The main-thread leading stack uses `detachesHiddenViews = true` so hiding the row icon does not leave phantom horizontal spacing.

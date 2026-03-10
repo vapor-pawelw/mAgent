@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Sidebar
+- Trailing-edge padding for all sidebar rows (thread markers, section disclosure buttons, project `+` button, separators) is now consistent and symmetric with the leading edge.
+
 ### Performance
 - Reduced CPU usage from periodic polling: session monitor now runs every 5 seconds (was 3s), pane output is cached for 5 seconds and shared across concurrent checks, and rate-limit scanning for background sessions is throttled to once every 15 seconds.
 
