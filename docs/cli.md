@@ -18,8 +18,8 @@ magent-cli attach (--thread <name> | --thread-id <id>) [--index <n>]
 magent-cli docs
 ```
 
-- `interactive`: picker flow `project -> thread (or create) -> tab -> tmux attach`
-- `ls`: table view (project/thread/branch/type/status/description/session)
+- `interactive`: picker flow `project -> thread (or create) -> tab -> tmux attach`, with live status badges (`done`, `busy`, `input`, `dirty`, `limited`, `delivered`) and ANSI colors when the terminal supports them
+- `ls`: table view (project/thread/branch/type/status/description/session), reusing the same live thread status data
 - `attach`: attach directly by session or by thread + tab index
 - `docs`: full on-demand IPC command reference + usage guidance (for agent/tooling prompts)
 
@@ -62,6 +62,8 @@ List all threads, optionally filtered by project.
 ```bash
 magent-cli list-threads [--project <name>]
 ```
+
+Each returned thread now includes the same `status` object described under `thread-info`, so CLI tools can render live state without issuing one request per thread.
 
 ### thread-info
 

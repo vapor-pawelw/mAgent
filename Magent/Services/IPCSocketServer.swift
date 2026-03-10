@@ -5,7 +5,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v19"
+    private static let cliVersion = "magent-cli-v20"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -189,6 +189,134 @@ actor IPCSocketServer {
             return 0
         }
 
+        can_use_color() {
+            [ "${MAGENT_USE_COLOR:-1}" != "0" ] || return 1
+            [ -z "${NO_COLOR:-}" ] || return 1
+            [ "${TERM:-}" != "dumb" ] || return 1
+            return 0
+        }
+
+        setup_colors() {
+            if can_use_color; then
+                ANSI_RESET="$(printf '\033[0m')"
+                ANSI_BOLD="$(printf '\033[1m')"
+                ANSI_DIM="$(printf '\033[2m')"
+                ANSI_WHITE="$(printf '\033[97m')"
+                ANSI_MUTED="$(printf '\033[38;5;245m')"
+                ANSI_BLUE="$(printf '\033[38;5;117m')"
+                ANSI_GREEN="$(printf '\033[38;5;78m')"
+                ANSI_YELLOW="$(printf '\033[38;5;221m')"
+                ANSI_ORANGE="$(printf '\033[38;5;215m')"
+                ANSI_RED="$(printf '\033[38;5;203m')"
+                ANSI_CYAN="$(printf '\033[38;5;81m')"
+                ANSI_MAGENTA="$(printf '\033[38;5;176m')"
+            else
+                ANSI_RESET=""
+                ANSI_BOLD=""
+                ANSI_DIM=""
+                ANSI_WHITE=""
+                ANSI_MUTED=""
+                ANSI_BLUE=""
+                ANSI_GREEN=""
+                ANSI_YELLOW=""
+                ANSI_ORANGE=""
+                ANSI_RED=""
+                ANSI_CYAN=""
+                ANSI_MAGENTA=""
+            fi
+        }
+
+        paint() {
+            paint_color="$1"
+            shift
+            if [ -n "$paint_color" ]; then
+                printf '%s%s%s' "$paint_color" "$*" "$ANSI_RESET"
+            else
+                printf '%s' "$*"
+            fi
+        }
+
+        join_with_dot() {
+            joined=""
+            while [ $# -gt 0 ]; do
+                if [ -n "$1" ]; then
+                    if [ -n "$joined" ]; then
+                        joined="$joined · $1"
+                    else
+                        joined="$1"
+                    fi
+                fi
+                shift
+            done
+            printf '%s' "$joined"
+        }
+
+        append_badge() {
+            existing="$1"
+            badge="$2"
+            if [ -n "$existing" ] && [ -n "$badge" ]; then
+                printf '%s %s' "$existing" "$badge"
+            elif [ -n "$badge" ]; then
+                printf '%s' "$badge"
+            else
+                printf '%s' "$existing"
+            fi
+        }
+
+        format_thread_badges() {
+            badges=""
+            [ "$1" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_BLUE" "[busy]")")
+            [ "$2" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_YELLOW" "[input]")")
+            [ "$3" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_GREEN" "[done]")")
+            [ "$4" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_ORANGE" "[dirty]")")
+            [ "$5" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_RED" "[limited]")")
+            [ "$6" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_CYAN" "[delivered]")")
+            [ "$7" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_MAGENTA" "[pinned]")")
+            [ "$8" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_MUTED" "[hidden]")")
+            [ "$9" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_YELLOW" "[branch?]")")
+            [ "${10}" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_RED" "[jira]")")
+            [ -n "$badges" ] || badges="$(paint "$ANSI_MUTED" "[idle]")"
+            printf '%s' "$badges"
+        }
+
+        format_picker_title() {
+            picker_is_main="$1"
+            picker_title="$2"
+            if [ "$picker_is_main" = "true" ]; then
+                paint "$ANSI_BOLD$ANSI_CYAN" "$picker_title"
+            else
+                paint "$ANSI_BOLD$ANSI_WHITE" "$picker_title"
+            fi
+        }
+
+        format_picker_detail() {
+            picker_title="$1"
+            picker_name="$2"
+            picker_branch="$3"
+            picker_worktree="$4"
+            picker_agent="$5"
+            picker_badges="$6"
+
+            picker_meta=""
+            if [ -n "$picker_name" ] && [ "$picker_name" != "$picker_title" ]; then
+                picker_meta=$(join_with_dot "$picker_meta" "$(paint "$ANSI_MUTED" "$picker_name")")
+            fi
+            picker_meta=$(join_with_dot "$picker_meta" "$(paint "$ANSI_WHITE" "$picker_branch")")
+            picker_meta=$(join_with_dot "$picker_meta" "$(paint "$ANSI_MUTED" "$picker_worktree")")
+            picker_meta=$(join_with_dot "$picker_meta" "$(paint "$ANSI_BLUE" "$picker_agent")")
+
+            if [ -n "$picker_meta" ]; then
+                printf '%s  %s' "$picker_badges" "$picker_meta"
+            else
+                printf '%s' "$picker_badges"
+            fi
+        }
+
+        format_ls_status() {
+            ls_badges=$(format_thread_badges "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}")
+            printf '%s' "$ls_badges" | sed 's/\[//g; s/\]//g; s/ /,/g'
+        }
+
         # Escape a value for JSON string embedding
         json_escape() {
             printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g'
@@ -216,6 +344,8 @@ actor IPCSocketServer {
             printf '%s\n' "$checked_resp"
         }
 
+        setup_colors
+
         pick_value() {
             picker_prompt="$1"
             picker_tmp=$(mktemp 2>/dev/null || mktemp -t magent-picker)
@@ -228,6 +358,10 @@ actor IPCSocketServer {
 
             picker_choice=""
             if can_use_fzf; then
+                picker_fzf_color=""
+                if can_use_color; then
+                    picker_fzf_color="--ansi --color=fg:#ffffff,fg+:#ffffff,bg+:-1,hl:#7ee787,hl+:#7ee787,info:#7aa2f7,prompt:#7ee787,pointer:#7ee787,marker:#7ee787,spinner:#7ee787,border:#5c6370,separator:#5c6370"
+                fi
                 picker_selected=$(awk -F '\037' '{
                     label = $2
                     if (NF >= 3 && $3 != "") {
@@ -235,7 +369,7 @@ actor IPCSocketServer {
                     }
                     printf "%s\t%s\n", label, $1
                 }' "$picker_tmp" \
-                    | env -u FZF_DEFAULT_OPTS -u FZF_DEFAULT_COMMAND fzf --prompt="$picker_prompt> " --height=40% --layout=reverse --border)
+                    | env -u FZF_DEFAULT_OPTS -u FZF_DEFAULT_COMMAND fzf $picker_fzf_color --delimiter="$(printf '\t')" --with-nth=1 --prompt="$picker_prompt> " --height=40% --layout=reverse --border)
                 picker_status=$?
                 if [ "$picker_status" -eq 0 ]; then
                     picker_choice=$(printf '%s' "$picker_selected" | awk -F '\t' '{print $NF}')
@@ -291,11 +425,38 @@ actor IPCSocketServer {
                 .threads
                 | sort_by((if .isMain then 0 else 1 end), .name)
                 | .[]
-                | . as $t
-                | (if $t.isMain then "main" else (if ($t.taskDescription // "") != "" then $t.taskDescription else $t.name end) end) as $title
-                | (($t.name) + " · " + (($t.worktreePath | split("/") | last)) + " · " + ($t.agentType // "terminal")) as $detail
-                | "\($t.id)\u001f\($title)\u001f\($detail)"
+                | [
+                    .id,
+                    (if .isMain then "true" else "false" end),
+                    (if .isMain then "main" else (if (.taskDescription // "") != "" then .taskDescription else .name end) end),
+                    .name,
+                    (.status.branchName // "-"),
+                    (.worktreePath | split("/") | last),
+                    (.agentType // "terminal"),
+                    (if (.status.isBusy // false) then "true" else "false" end),
+                    (if (.status.isWaitingForInput // false) then "true" else "false" end),
+                    (if (.status.hasUnreadCompletion // false) then "true" else "false" end),
+                    (if (.status.isDirty // false) then "true" else "false" end),
+                    (if (.status.isBlockedByRateLimit // false) then "true" else "false" end),
+                    (if (.status.isFullyDelivered // false) then "true" else "false" end),
+                    (if (.status.isPinned // false) then "true" else "false" end),
+                    (if (.status.isSidebarHidden // false) then "true" else "false" end),
+                    (if (.status.hasBranchMismatch // false) then "true" else "false" end),
+                    (if (.status.jiraUnassigned // false) then "true" else "false" end)
+                ]
+                | @tsv
             ')
+            if [ -n "$thread_lines" ]; then
+                thread_tmp=$(mktemp 2>/dev/null || mktemp -t magent-thread-picker)
+                printf '%s\n' "$thread_lines" >"$thread_tmp"
+                thread_lines=$(while IFS="$(printf '\t')" read -r thread_id thread_is_main thread_title thread_name thread_branch thread_worktree thread_agent thread_busy thread_input thread_done thread_dirty thread_limited thread_delivered thread_pinned thread_hidden thread_mismatch thread_jira; do
+                    thread_badges=$(format_thread_badges "$thread_busy" "$thread_input" "$thread_done" "$thread_dirty" "$thread_limited" "$thread_delivered" "$thread_pinned" "$thread_hidden" "$thread_mismatch" "$thread_jira")
+                    thread_label=$(format_picker_title "$thread_is_main" "$thread_title")
+                    thread_detail=$(format_picker_detail "$thread_title" "$thread_name" "$thread_branch" "$thread_worktree" "$thread_agent" "$thread_badges")
+                    printf '%s%s%s%s%s\n' "$thread_id" "$SEP" "$thread_label" "$SEP" "$thread_detail"
+                done <"$thread_tmp")
+                rm -f "$thread_tmp"
+            fi
             if [ -n "$thread_lines" ]; then
                 {
                     printf '__back__%s← Back%sReturn to project list\n' "$SEP" "$SEP"
@@ -413,22 +574,26 @@ actor IPCSocketServer {
 
             ls_tmp=$(mktemp 2>/dev/null || mktemp -t magent-ls)
             printf '%s' "$ls_resp" \
-                | jq -r '.threads[] | [.id, .projectName, .name, (.agentType // "terminal"), (.taskDescription // ""), .tmuxSession] | @tsv' \
-                | while IFS="$(printf '\t')" read -r ls_id ls_project_name ls_name ls_agent ls_desc ls_session; do
-                    ls_info_req="{$(json_kv command thread-info),$(json_kv threadId "$ls_id")}"
-                    ls_info_resp=$(send_checked_request "$ls_info_req")
-                    ls_branch=$(printf '%s' "$ls_info_resp" | jq -r '.thread.status.branchName // "-"')
-                    ls_status=$(printf '%s' "$ls_info_resp" | jq -r '
-                        .thread.status as $s
-                        | [
-                            (if $s.isBusy then "busy" else empty end),
-                            (if $s.isWaitingForInput then "input" else empty end),
-                            (if $s.hasUnreadCompletion then "done" else empty end),
-                            (if $s.isDirty then "dirty" else empty end),
-                            (if $s.isBlockedByRateLimit then "limited" else empty end)
-                        ]
-                        | if length == 0 then "-" else join(",") end
-                    ')
+                | jq -r '.threads[] | [
+                    .projectName,
+                    .name,
+                    (.status.branchName // "-"),
+                    (.agentType // "terminal"),
+                    (.taskDescription // ""),
+                    .tmuxSession,
+                    (if (.status.isBusy // false) then "true" else "false" end),
+                    (if (.status.isWaitingForInput // false) then "true" else "false" end),
+                    (if (.status.hasUnreadCompletion // false) then "true" else "false" end),
+                    (if (.status.isDirty // false) then "true" else "false" end),
+                    (if (.status.isBlockedByRateLimit // false) then "true" else "false" end),
+                    (if (.status.isFullyDelivered // false) then "true" else "false" end),
+                    (if (.status.isPinned // false) then "true" else "false" end),
+                    (if (.status.isSidebarHidden // false) then "true" else "false" end),
+                    (if (.status.hasBranchMismatch // false) then "true" else "false" end),
+                    (if (.status.jiraUnassigned // false) then "true" else "false" end)
+                ] | @tsv' \
+                | while IFS="$(printf '\t')" read -r ls_project_name ls_name ls_branch ls_agent ls_desc ls_session ls_busy ls_input ls_done ls_dirty ls_limited ls_delivered ls_pinned ls_hidden ls_mismatch ls_jira; do
+                    ls_status=$(format_ls_status "$ls_busy" "$ls_input" "$ls_done" "$ls_dirty" "$ls_limited" "$ls_delivered" "$ls_pinned" "$ls_hidden" "$ls_mismatch" "$ls_jira")
                     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ls_project_name" "$ls_name" "$ls_branch" "$ls_agent" "$ls_status" "$ls_desc" "$ls_session"
                 done >"$ls_tmp"
 

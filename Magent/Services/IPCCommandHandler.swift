@@ -257,8 +257,12 @@ final class IPCCommandHandler {
         }
 
         let infos = threads.map { thread in
-            let name = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
-            return IPCThreadInfo(thread: thread, projectName: name)
+            let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+            var info = IPCThreadInfo(thread: thread, projectName: projectName)
+            info.sectionName = resolveSectionName(for: thread, settings: settings)
+            info.sectionId = thread.sectionId?.uuidString
+            info.status = makeThreadStatus(for: thread)
+            return info
         }
         return IPCResponse(ok: true, id: request.id, threads: infos)
     }
@@ -592,18 +596,7 @@ final class IPCCommandHandler {
 
         let settings = persistence.loadSettings()
         let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
-
-        // Resolve section name
-        let sections = settings.sections(for: thread.projectId)
-        let sectionName: String?
-        if let sectionId = thread.sectionId,
-           let section = sections.first(where: { $0.id == sectionId }) {
-            sectionName = section.name
-        } else if let defaultSection = settings.defaultSection(for: thread.projectId) {
-            sectionName = defaultSection.name
-        } else {
-            sectionName = nil
-        }
+        let sectionName = resolveSectionName(for: thread, settings: settings)
 
         // Build tab list
         let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
@@ -612,7 +605,23 @@ final class IPCCommandHandler {
             return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent, agentType: agentType)
         }
 
-        let status = IPCThreadStatus(
+        let status = makeThreadStatus(for: thread)
+
+        let info = IPCThreadInfo(thread: thread, projectName: projectName, sectionName: sectionName, tabs: tabs, status: status)
+        return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
+    private func resolveSectionName(for thread: MagentThread, settings: AppSettings) -> String? {
+        let sections = settings.sections(for: thread.projectId)
+        if let sectionId = thread.sectionId,
+           let section = sections.first(where: { $0.id == sectionId }) {
+            return section.name
+        }
+        return settings.defaultSection(for: thread.projectId)?.name
+    }
+
+    private func makeThreadStatus(for thread: MagentThread) -> IPCThreadStatus {
+        IPCThreadStatus(
             isBusy: thread.hasAgentBusy,
             isWaitingForInput: thread.hasWaitingForInput,
             hasUnreadCompletion: thread.hasUnreadAgentCompletion,
@@ -630,9 +639,6 @@ final class IPCCommandHandler {
             baseBranch: thread.baseBranch,
             rateLimitDescription: thread.isBlockedByRateLimit ? thread.rateLimitLiftDescription : nil
         )
-
-        let info = IPCThreadInfo(thread: thread, projectName: projectName, sectionName: sectionName, tabs: tabs, status: status)
-        return IPCResponse(ok: true, id: request.id, thread: info)
     }
 
     private func closeTab(_ request: IPCRequest) async -> IPCResponse {
