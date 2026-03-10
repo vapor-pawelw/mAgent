@@ -47,6 +47,8 @@ All notable changes to this project will be documented in this file.
 - Added `set-thread-icon` CLI command to manually set thread icon type (`feature`, `fix`, `improvement`, `refactor`, `test`, `other`).
 
 ### Table of Contents
+- Selecting a prompt in the TOC now jumps to the correct history position without first flashing to history-top, and tmux now anchors the selected prompt at the top edge whenever enough lines exist below it.
+- Fixed Prompt TOC in current Claude Code sessions where real submitted prompts render as dim white text with a distinct dark row background; the parser now uses Claude's prompt background as a positive signal, treats Claude dimness separately from placeholder styling, and excludes Claude's blank prompt/footer divider rows from the active composer cluster.
 - Prompt TOC header now uses a slightly darker top band so the draggable area is easier to spot at a glance.
 - Prompt TOC now opens/loads anchored to the newest prompts by default; during refresh it stays pinned to bottom when you are at/near bottom, but preserves your offset if you scrolled up.
 - Prompt TOC now stays pinned to the bottom when new prompts are appended while you were already scrolled to the bottom.

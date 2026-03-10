@@ -387,16 +387,22 @@ public final class TmuxService: Sendable {
     /// near the top of the viewport when enough lines are available below it.
     public func scrollHistoryLineToTop(sessionName: String, lineIndex: Int) async throws {
         let normalizedLine = max(0, lineIndex)
-        let paneHeightOutput = try await ShellExecutor.run(
-            "tmux display-message -p -t \(shellQuote(sessionName)) '#{pane_height}'"
+        let metrics = try await ShellExecutor.run(
+            "tmux display-message -p -t \(shellQuote(sessionName)) '#{history_size} #{pane_height}'"
         )
-        let paneHeight = max(1, Int(paneHeightOutput) ?? 1)
-        let downCount = max(0, normalizedLine + paneHeight - 1)
-
-        var command = "tmux copy-mode -t \(shellQuote(sessionName)); tmux send-keys -t \(shellQuote(sessionName)) -X history-top"
-        if downCount > 0 {
-            command += "; tmux send-keys -t \(shellQuote(sessionName)) -X -N \(downCount) cursor-down"
-        }
+        let parts = metrics
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+        let historySize = parts.first.flatMap(Int.init) ?? 0
+        let paneHeight = parts.dropFirst().first.flatMap(Int.init) ?? 1
+        let totalLineCount = max(1, historySize + max(1, paneHeight))
+        // tmux copy-mode `goto-line` counts from the bottom of history (1 = newest line),
+        // while TOC parser indexes lines from the top of `capture-pane` output.
+        let tmuxLineNumber = max(1, totalLineCount - normalizedLine)
+        let command =
+            "tmux copy-mode -t \(shellQuote(sessionName)); " +
+            "tmux send-keys -t \(shellQuote(sessionName)) -X goto-line \(tmuxLineNumber); " +
+            "tmux send-keys -t \(shellQuote(sessionName)) -X scroll-top"
         _ = try await ShellExecutor.run(command)
     }
 

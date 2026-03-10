@@ -120,6 +120,7 @@ Generated descriptions should stay semantically aligned with the slug and read l
 Prompt TOC content is confirmation-driven, not raw-keystroke-driven. Persist per-session TOC-confirmed prompt history only after pane evidence shows the prompt is no longer just active bottom composer text.
 The parser must exclude the active bottom input cluster (prompt line plus pinned status/helper rows such as model/usage lines) so draft text like `Implement {feature}` and pinned chrome like `gpt-5.4 high · ...` never enter confirmed history.
 Use `tmux capture-pane -e` for TOC parsing so placeholder/draft composer text can be rejected by style as well as text: Codex placeholders are dim/grey while real submitted prompt text is normal foreground after the input marker.
+Do not assume dim text always means placeholder content across agents: current Claude Code can render real submitted prompt text as dim white and gives those submitted rows a distinct non-default background, so Claude prompt filtering should treat that background as a positive signal and must not rely on dimness alone.
 Treat a submitted prompt as a block, not only the marker line: include directly wrapped continuation lines that belong to the same user input, then require later non-composer pane output after that full block before the prompt becomes TOC-eligible.
 When session names are renamed/migrated, re-key this confirmed prompt history together with other session-scoped maps; when sessions are removed, prune it.
 

@@ -26,10 +26,7 @@ private struct PromptPaneStyledCharacter {
 private struct PromptANSIStyle: Equatable {
     var isDim = false
     var foreground: PromptANSIForeground = .default
-
-    var looksPlaceholderLike: Bool {
-        isDim || foreground.isGrayLike
-    }
+    var background: PromptANSIForeground = .default
 }
 
 private enum PromptANSIForeground: Equatable {
@@ -257,7 +254,10 @@ extension ThreadDetailViewController {
                 continue
             }
 
-            let promptTextStyleLooksPlaceholderLike = promptTextLooksLikePlaceholder(promptCharacters)
+            let promptTextStyleLooksPlaceholderLike = promptTextLooksLikePlaceholder(
+                promptCharacters,
+                agentType: agentType
+            )
             var promptLines = [firstPromptLine]
             var endLineIndex = lineIndex
             var continuationIndex = lineIndex + 1
@@ -401,6 +401,10 @@ extension ThreadDetailViewController {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
 
+        if isPromptFooterDividerLine(trimmed) || isBarePromptInputLine(trimmed) {
+            return true
+        }
+
         let lower = trimmed.lowercased()
         if lower.contains("tab to cycle")
             || lower.contains("enter to submit")
@@ -535,10 +539,28 @@ extension ThreadDetailViewController {
                     )
                     index += 4
                 }
+            case 40...47:
+                style.background = .indexed(value - 40)
+            case 48:
+                if index + 2 < normalizedParams.count, normalizedParams[index + 1] == 5 {
+                    style.background = .indexed(normalizedParams[index + 2])
+                    index += 2
+                } else if index + 4 < normalizedParams.count, normalizedParams[index + 1] == 2 {
+                    style.background = .rgb(
+                        normalizedParams[index + 2],
+                        normalizedParams[index + 3],
+                        normalizedParams[index + 4]
+                    )
+                    index += 4
+                }
             case 39:
                 style.foreground = .default
+            case 49:
+                style.background = .default
             case 90...97:
                 style.foreground = .indexed(value - 90 + 8)
+            case 100...107:
+                style.background = .indexed(value - 100 + 8)
             default:
                 break
             }
@@ -569,17 +591,61 @@ extension ThreadDetailViewController {
         return Array(characters[index...])
     }
 
-    private func promptTextLooksLikePlaceholder(_ characters: [PromptPaneStyledCharacter]) -> Bool {
+    private func promptTextLooksLikePlaceholder(
+        _ characters: [PromptPaneStyledCharacter],
+        agentType: AgentType?
+    ) -> Bool {
         let visibleCharacters = characters.filter { !$0.character.isWhitespace }
         guard !visibleCharacters.isEmpty else { return false }
 
-        let placeholderLikeCount = visibleCharacters.reduce(into: 0) { count, character in
-            if character.style.looksPlaceholderLike {
+        let highlightedBackgroundCount = visibleCharacters.reduce(into: 0) { count, character in
+            if character.style.background != .default {
                 count += 1
             }
         }
 
+        let placeholderLikeCount = visibleCharacters.reduce(into: 0) { count, character in
+            let looksPlaceholderLike: Bool = switch agentType {
+            case .claude:
+                // Current Claude Code renders real submitted prompts as dim white text,
+                // and submitted prompts currently use a distinct non-default background.
+                // Use the background as a positive signal and avoid treating dimness
+                // alone as placeholder content for Claude.
+                character.style.foreground.isGrayLike
+            default:
+                character.style.isDim || character.style.foreground.isGrayLike
+            }
+            if looksPlaceholderLike {
+                count += 1
+            }
+        }
+
+        if agentType == .claude,
+           highlightedBackgroundCount * 100 >= visibleCharacters.count * 80 {
+            return false
+        }
+
         return placeholderLikeCount * 100 >= visibleCharacters.count * 80
+    }
+
+    private func isPromptFooterDividerLine(_ line: String) -> Bool {
+        let allowedScalars = CharacterSet(charactersIn: "-_=~|:;.,*+·•▪▫◦●○◆◇■□▲△▼▽▶▷◀◁─━│┆┄┅┈┉")
+        var sawDividerGlyph = false
+
+        for scalar in line.unicodeScalars {
+            if CharacterSet.whitespacesAndNewlines.contains(scalar) {
+                continue
+            }
+            guard allowedScalars.contains(scalar) else { return false }
+            sawDividerGlyph = true
+        }
+
+        return sawDividerGlyph
+    }
+
+    private func isBarePromptInputLine(_ line: String) -> Bool {
+        let nonWhitespace = line.filter { !$0.isWhitespace }
+        return nonWhitespace == "❯" || nonWhitespace == "›"
     }
 
     private func promptContinuationText(
