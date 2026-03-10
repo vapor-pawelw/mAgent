@@ -63,9 +63,6 @@ Useful options:
 # Keep main worktree clean from Local Sync copy-back
 ./scripts/archive-current-thread.sh --skip-local-sync
 
-# Allow merge commit only when ff-only merge is impossible and explicitly desired
-./scripts/archive-current-thread.sh --allow-merge-commit
-
 # Skip pushing base branch (local-only flow)
 ./scripts/archive-current-thread.sh --no-push
 
@@ -74,6 +71,7 @@ Useful options:
 ```
 
 The script intentionally does not perform changelog/docs decisions; handle those in the agent workflow before running the script.
+It always attempts `--ff-only` first and automatically falls back to a non-ff merge commit if branches have diverged.
 
 ## Build Notes
 

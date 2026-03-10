@@ -9,7 +9,6 @@ THREAD_NAME=""
 BASE_BRANCH_OVERRIDE=""
 SKIP_LOCAL_SYNC=0
 FORCE_ARCHIVE=0
-ALLOW_MERGE_COMMIT=0
 PUSH_AFTER_MERGE=1
 DRY_RUN=0
 
@@ -25,7 +24,6 @@ Options:
   --base-branch <name>      Override base branch (default: thread-info status.baseBranch or main)
   --skip-local-sync         Archive with --skip-local-sync
   --force-archive           Archive with --force
-  --allow-merge-commit      Allow non-fast-forward merge commit when ff-only fails
   --no-push                 Do not push base branch after merge
   --dry-run                 Print actions without changing git/thread state
   -h, --help                Show help
@@ -118,10 +116,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --force-archive)
       FORCE_ARCHIVE=1
-      shift
-      ;;
-    --allow-merge-commit)
-      ALLOW_MERGE_COMMIT=1
       shift
       ;;
     --no-push)
@@ -221,16 +215,13 @@ fi
 echo "Merging '$source_branch' into '$base_branch' (ff-only first)..."
 if [[ "$DRY_RUN" -eq 1 ]]; then
   run_cmd git -C "$base_worktree_path" merge --ff-only "$source_branch"
+  echo "[dry-run] If ff-only fails, script will run: git -C $base_worktree_path merge --no-ff $source_branch"
 else
   if git -C "$base_worktree_path" merge --ff-only "$source_branch"; then
     :
   else
-    if [[ "$ALLOW_MERGE_COMMIT" -eq 1 ]]; then
-      echo "Fast-forward unavailable; creating merge commit (--allow-merge-commit)."
-      git -C "$base_worktree_path" merge "$source_branch"
-    else
-      die "Fast-forward merge failed. Re-run with --allow-merge-commit only if user requested a merge commit."
-    fi
+    echo "Fast-forward unavailable; creating non-ff merge commit."
+    git -C "$base_worktree_path" merge --no-ff "$source_branch"
   fi
 fi
 
