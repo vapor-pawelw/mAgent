@@ -79,7 +79,7 @@ All notable changes to this project will be documented in this file.
 - Pulled the enlarged project-row `+` create-thread control closer to the trailing edge so it stays easier to scan and hit.
 - Fixed sidebar row jumping while switching threads by stabilizing thread-row text measurement and trailing status-marker layout.
 - Busy threads now show a sweeping shimmer state in sidebar rows for clearer in-progress visibility.
-- Sidebar now has clearer visual separation between project headers and their `Main` thread row, making scanning and navigation easier.
+- Sidebar project headers, sections, and `Main worktree` rows now use a cleaner shared alignment system with tighter spacing, a main-row accent bar, and clearer branch labeling.
 - Sidebar sections now show thread count badges.
 - Reordering sections no longer changes the default section unexpectedly.
 - Reduced excess top padding in the sidebar for a tighter layout.

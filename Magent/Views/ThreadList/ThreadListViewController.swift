@@ -18,11 +18,11 @@ final class ThreadListViewController: NSViewController {
     static let collapsedSectionIdsKey = "MagentCollapsedSectionIds"
     static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
     static let projectAddButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectAddButton")
-    static let projectAccentBarIdentifier = NSUserInterfaceItemIdentifier("ProjectAccentBar")
     static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
     static let sectionCountBadgeContainerIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeContainer")
     static let sectionCountBadgeLabelIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeLabel")
     static let sidebarHorizontalInset: CGFloat = 0
+    static let sidebarTopInset: CGFloat = 8
     static let rateLimitStatusTopInset: CGFloat = 8
     static let rateLimitStatusListSpacing: CGFloat = 6
     static let projectDisclosureTrailingInset: CGFloat = 8
@@ -31,14 +31,16 @@ final class ThreadListViewController: NSViewController {
     static let projectHeaderActionButtonSize: CGFloat = 24
     static let projectAddButtonTrailingInset: CGFloat =
         projectDisclosureTrailingInset - ((projectHeaderActionButtonSize - disclosureButtonSize) / 2)
-    static let projectHeaderVerticalPadding: CGFloat = 8
+    static let projectHeaderVerticalPadding: CGFloat = 4
     static let projectHeaderRowHeight: CGFloat = disclosureButtonSize + (projectHeaderVerticalPadding * 2) + 2
-    static let projectSpacerDividerVerticalSpacing: CGFloat = 8
+    static let projectSpacerDividerVerticalSpacing: CGFloat = 4
     static let projectSpacerDividerHeight: CGFloat = 1
     static let projectSpacerDividerHorizontalInset: CGFloat = 8
     static let projectSpacerDividerLeadingInset: CGFloat =
         projectSpacerDividerHorizontalInset - (outlineIndentationPerLevel / 2)
     static let projectSpacerDividerTrailingInset: CGFloat = projectSpacerDividerHorizontalInset
+    static let sidebarRowLeadingInset: CGFloat = projectSpacerDividerLeadingInset
+    static let projectHeaderTitleLeadingInset: CGFloat = sidebarRowLeadingInset + 3
     static let projectHeaderInterProjectGap: CGFloat =
         (projectSpacerDividerVerticalSpacing * 2) + projectSpacerDividerHeight
 
@@ -184,11 +186,14 @@ final class ThreadListViewController: NSViewController {
         rateLimitStatusLabel.toolTip = summary
         let topInset: CGFloat
         if summary == nil {
-            topInset = 0
+            topInset = Self.sidebarTopInset
         } else {
             view.layoutSubtreeIfNeeded()
             let summaryHeight = ceil(rateLimitStatusContainer.fittingSize.height)
-            topInset = Self.rateLimitStatusTopInset + summaryHeight + Self.rateLimitStatusListSpacing
+            topInset = Self.sidebarTopInset
+                + Self.rateLimitStatusTopInset
+                + summaryHeight
+                + Self.rateLimitStatusListSpacing
         }
         if abs(topInset - currentScrollTopOffset) > 0.5 {
             currentScrollTopOffset = topInset

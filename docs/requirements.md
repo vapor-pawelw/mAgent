@@ -135,6 +135,12 @@ For non-main threads, naming and labels in the sidebar follow these rules:
 - Generated description should be short (2-8 words) and naturally cased (not forced Title Case).
 - Generated description should describe the same concrete task as the branch slug and read like a useful sidebar label; avoid vague abstractions such as "readiness" when the work is really a fix or feature.
 
+For the main thread, the sidebar uses these rules:
+
+- Line 1: `Main worktree`
+- Line 2: current branch name when available
+- A vertical accent bar appears on the main-thread row instead of the project header row.
+
 ### Non-Main Thread Rename Actions
 
 - Context menu order for non-main threads starts with `Pin/Unpin`, then `Rename...`, then a separator.

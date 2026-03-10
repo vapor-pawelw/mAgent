@@ -15,8 +15,10 @@ final class ThreadCell: NSTableCellView {
     private var rateLimitImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
     private var trailingStackView: NSStackView?
+    private weak var leadingTextStackView: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
     private var leadingTextWidthConstraint: NSLayoutConstraint?
+    private var mainAccentBar: NSView?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
 
@@ -103,6 +105,7 @@ final class ThreadCell: NSTableCellView {
         verticalStack.translatesAutoresizingMaskIntoConstraints = false
         verticalStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         verticalStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        leadingTextStackView = verticalStack
 
         let textWidthConstraint = verticalStack.widthAnchor.constraint(equalToConstant: 0)
         textWidthConstraint.priority = .defaultHigh
@@ -113,6 +116,7 @@ final class ThreadCell: NSTableCellView {
         stack.orientation = .horizontal
         stack.spacing = 6
         stack.alignment = .centerY
+        stack.detachesHiddenViews = true
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
@@ -132,6 +136,30 @@ final class ThreadCell: NSTableCellView {
             constraints.append(stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -ThreadListViewController.sidebarHorizontalInset))
         }
         NSLayoutConstraint.activate(constraints)
+    }
+
+    private func ensureMainAccentBar() {
+        guard mainAccentBar == nil, let leadingTextStackView else { return }
+
+        let accentBar = NSView()
+        accentBar.translatesAutoresizingMaskIntoConstraints = false
+        accentBar.wantsLayer = true
+        accentBar.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.45).cgColor
+        accentBar.isHidden = true
+        addSubview(accentBar)
+
+        NSLayoutConstraint.activate([
+            accentBar.leadingAnchor.constraint(
+                equalTo: leadingAnchor,
+                constant: ThreadListViewController.sidebarRowLeadingInset
+                    - ThreadListViewController.outlineIndentationPerLevel
+            ),
+            accentBar.centerYAnchor.constraint(equalTo: leadingTextStackView.centerYAnchor),
+            accentBar.widthAnchor.constraint(equalToConstant: 3),
+            accentBar.heightAnchor.constraint(equalTo: leadingTextStackView.heightAnchor),
+        ])
+
+        mainAccentBar = accentBar
     }
 
     private func setLeadingOffset(_ offset: CGFloat) {
@@ -284,7 +312,9 @@ final class ThreadCell: NSTableCellView {
         isConfiguredAsMain = false
         ensureTrailingStack()
         ensureLeadingStack()
+        ensureMainAccentBar()
         setLeadingOffset(leadingOffset)
+        mainAccentBar?.isHidden = true
 
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
         let branchName = (thread.actualBranch ?? thread.branchName).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -468,12 +498,18 @@ final class ThreadCell: NSTableCellView {
         isBlockedByRateLimit: Bool = false,
         isRateLimitExpiredAndResumable: Bool = false,
         rateLimitTooltip: String? = nil,
-        hasBranchMismatch: Bool = false,
-        actualBranch: String? = nil,
+        currentBranch: String? = nil,
         leadingOffset: CGFloat = 0
     ) {
         isConfiguredAsMain = true
-        textField?.stringValue = "Main"
+        ensureTrailingStack()
+        ensureLeadingStack()
+        ensureMainAccentBar()
+        setLeadingOffset(leadingOffset)
+        setPreferredLeadingTextWidth(nil)
+        mainAccentBar?.isHidden = false
+
+        textField?.stringValue = "Main worktree"
         textField?.font = .systemFont(
             ofSize: NSFont.systemFontSize,
             weight: isUnreadCompletion ? .bold : .semibold
@@ -482,19 +518,17 @@ final class ThreadCell: NSTableCellView {
         textField?.lineBreakMode = .byTruncatingTail
         textField?.maximumNumberOfLines = 1
 
-        ensureTrailingStack()
-        ensureLeadingStack()
-        setLeadingOffset(leadingOffset)
-        setPreferredLeadingTextWidth(nil)
         pinImageView?.isHidden = true
         archiveButton?.isHidden = true
         leadingPinImageView?.isHidden = true
 
-        if hasBranchMismatch, let branch = actualBranch, !branch.isEmpty {
-            subtitleLabel?.stringValue = branch
+        let resolvedBranch = currentBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let resolvedBranch, !resolvedBranch.isEmpty {
+            subtitleLabel?.stringValue = resolvedBranch
             subtitleLabel?.textColor = .secondaryLabelColor
             subtitleLabel?.isHidden = false
         } else {
+            subtitleLabel?.stringValue = ""
             subtitleLabel?.isHidden = true
         }
 
@@ -502,7 +536,29 @@ final class ThreadCell: NSTableCellView {
         imageView?.isHidden = true
 
         setDirtyDot(primaryDirtyDot, visible: false)
-        setDirtyDot(secondaryDirtyDot, visible: false)
+        setDirtyDot(secondaryDirtyDot, visible: isDirty)
+
+        let detailedTooltip = buildDetailedTooltip(
+            description: "Main worktree",
+            branchName: (resolvedBranch?.isEmpty == false ? resolvedBranch : nil) ?? "Unknown branch",
+            worktreeName: "Main worktree",
+            prLabel: nil,
+            statuses: mainStatusDescriptions(
+                isDirty: isDirty,
+                isRateLimitExpiredAndResumable: isRateLimitExpiredAndResumable,
+                rateLimitTooltip: rateLimitTooltip,
+                isBlockedByRateLimit: isBlockedByRateLimit,
+                isWaitingForInput: isWaitingForInput,
+                isBusy: isBusy,
+                isUnreadCompletion: isUnreadCompletion
+            )
+        )
+        toolTip = detailedTooltip
+        imageView?.toolTip = detailedTooltip
+        textField?.toolTip = detailedTooltip
+        subtitleLabel?.toolTip = detailedTooltip
+        primaryDirtyDot?.toolTip = detailedTooltip
+        secondaryDirtyDot?.toolTip = detailedTooltip
 
         if isRateLimitExpiredAndResumable {
             busySpinner?.stopAnimation(nil)
@@ -585,7 +641,7 @@ final class ThreadCell: NSTableCellView {
 
     private func updateMainTextColorForSelection() {
         guard isConfiguredAsMain else { return }
-        textField?.textColor = backgroundStyle == .emphasized ? .white : .controlAccentColor
+        textField?.textColor = .white
     }
 
     private func statusDescriptions(for thread: MagentThread) -> [String] {
@@ -662,6 +718,42 @@ final class ThreadCell: NSTableCellView {
             return "Rate limit reached. \(detail)"
         }
         return "Rate limit reached"
+    }
+
+    private func mainStatusDescriptions(
+        isDirty: Bool,
+        isRateLimitExpiredAndResumable: Bool,
+        rateLimitTooltip: String?,
+        isBlockedByRateLimit: Bool,
+        isWaitingForInput: Bool,
+        isBusy: Bool,
+        isUnreadCompletion: Bool
+    ) -> [String] {
+        var statuses: [String] = []
+        if isDirty {
+            statuses.append("Dirty")
+        }
+
+        if isRateLimitExpiredAndResumable {
+            statuses.append("Ready to resume")
+        } else if isBlockedByRateLimit {
+            let rateLimitDetail = rateLimitTooltip?
+                .replacingOccurrences(of: "Rate limit reached. ", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let rateLimitDetail, !rateLimitDetail.isEmpty, rateLimitDetail != "Rate limit reached" {
+                statuses.append("Rate limited (\(rateLimitDetail))")
+            } else {
+                statuses.append("Rate limited")
+            }
+        } else if isWaitingForInput {
+            statuses.append("Waiting for input")
+        } else if isBusy {
+            statuses.append("Agent busy")
+        } else if isUnreadCompletion {
+            statuses.append("Agent completed")
+        }
+
+        return statuses
     }
 
     @objc private func archiveButtonClicked() {

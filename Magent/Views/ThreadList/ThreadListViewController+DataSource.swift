@@ -206,12 +206,12 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
     private func threadLeadingOffset(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
         if outlineView.parent(forItem: thread) is SidebarSection {
-            return -Self.outlineIndentationPerLevel
+            return Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel
         }
         if outlineView.parent(forItem: thread) is SidebarProject {
-            return -Self.outlineIndentationPerLevel
+            return Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel
         }
-        return 0
+        return Self.sidebarRowLeadingInset
     }
 
     private func threadTrailingMarkerWidth(for thread: MagentThread) -> CGFloat {
@@ -282,7 +282,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         }
         if let thread = item as? MagentThread {
             if thread.isMain {
-                return 34
+                return 46
             }
             let trimmedDescription = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
             let hasDescription = !(trimmedDescription?.isEmpty ?? true)
@@ -371,12 +371,6 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     c.addSubview(tf)
                     c.textField = tf
 
-                    let accentBar = NSView()
-                    accentBar.identifier = Self.projectAccentBarIdentifier
-                    accentBar.translatesAutoresizingMaskIntoConstraints = false
-                    accentBar.wantsLayer = true
-                    c.addSubview(accentBar)
-
                     let disclosureButton = NSButton()
                     disclosureButton.identifier = Self.projectDisclosureButtonIdentifier
                     disclosureButton.translatesAutoresizingMaskIntoConstraints = false
@@ -405,15 +399,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
                     NSLayoutConstraint.activate([
                         tf.centerYAnchor.constraint(equalTo: c.centerYAnchor, constant: -1),
-                        accentBar.leadingAnchor.constraint(
+                        tf.leadingAnchor.constraint(
                             equalTo: c.leadingAnchor,
-                            constant: Self.sidebarHorizontalInset - (Self.outlineIndentationPerLevel / 2)
+                            constant: Self.projectHeaderTitleLeadingInset
                         ),
-                        accentBar.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
-                        accentBar.widthAnchor.constraint(equalToConstant: 3),
-                        accentBar.heightAnchor.constraint(equalTo: tf.heightAnchor),
-                        tf.leadingAnchor.constraint(equalTo: accentBar.trailingAnchor, constant: 8),
-                        disclosureButton.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 4),
+                        disclosureButton.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 0),
                         disclosureButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor, constant: 1),
                         disclosureButton.widthAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
                         disclosureButton.heightAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
@@ -438,9 +428,6 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.textField?.stringValue = project.name
             cell.textField?.invalidateIntrinsicContentSize()
             cell.textField?.textColor = .labelColor
-            if let accentBar = cell.subviews.first(where: { $0.identifier == Self.projectAccentBarIdentifier }) {
-                accentBar.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.45).cgColor
-            }
             if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.projectDisclosureButtonIdentifier }) as? NSButton {
                 let hasChildren = !project.children.isEmpty
                 disclosureButton.objectValue = project.projectId.uuidString
@@ -529,7 +516,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     NSLayoutConstraint.activate([
                         iv.leadingAnchor.constraint(
                             equalTo: c.leadingAnchor,
-                            constant: Self.sidebarHorizontalInset - Self.outlineIndentationPerLevel
+                            constant: Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel
                         ),
                         iv.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         iv.widthAnchor.constraint(equalToConstant: 8),
@@ -584,6 +571,13 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         // Level 1 or 2: Thread item
         if let thread = item as? MagentThread {
             if thread.isMain {
+                let currentBranch = {
+                    let actualBranch = thread.actualBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    if !actualBranch.isEmpty, actualBranch != "HEAD" {
+                        return actualBranch
+                    }
+                    return thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+                }()
                 let identifier = NSUserInterfaceItemIdentifier("MainThreadCell")
                 let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? ThreadCell
                     ?? {
@@ -611,9 +605,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     isBlockedByRateLimit: thread.isBlockedByRateLimit,
                     isRateLimitExpiredAndResumable: thread.isRateLimitExpiredAndResumable,
                     rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
-                    hasBranchMismatch: thread.hasBranchMismatch,
-                    actualBranch: thread.actualBranch,
-                    leadingOffset: -Self.outlineIndentationPerLevel
+                    currentBranch: currentBranch,
+                    leadingOffset: Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel + 14
                 )
                 return cell
             }
