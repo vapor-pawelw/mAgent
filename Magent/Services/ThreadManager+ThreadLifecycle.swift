@@ -360,6 +360,8 @@ extension ThreadManager {
             excludeJiraTicket(key: ticketKey, projectId: thread.projectId)
         }
 
+        let archivedAt = Date()
+
         // Remove from active list
         threads.removeAll { $0.id == thread.id }
 
@@ -367,9 +369,13 @@ extension ThreadManager {
         var allThreads = persistence.loadThreads()
         if let i = allThreads.firstIndex(where: { $0.id == thread.id }) {
             allThreads[i].isArchived = true
+            allThreads[i].archivedAt = archivedAt
             clearPersistedSessionState(for: &allThreads[i])
         }
         try persistence.saveThreads(allThreads)
+        await MainActor.run {
+            NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)
+        }
 
         await MainActor.run {
             delegate?.threadManager(self, didArchiveThread: thread)
@@ -447,6 +453,7 @@ extension ThreadManager {
         }
 
         restoredThread.isArchived = false
+        restoredThread.archivedAt = nil
         clearPersistedSessionState(for: &restoredThread)
         restoredThread.unreadCompletionSessions.removeAll()
         restoredThread.lastAgentCompletionAt = nil
@@ -463,6 +470,9 @@ extension ThreadManager {
 
         allThreads[archivedIndex] = restoredThread
         try persistence.saveThreads(allThreads)
+        await MainActor.run {
+            NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)
+        }
 
         threads.append(restoredThread)
         bumpThreadToTopOfSection(restoredThread.id)
@@ -672,6 +682,22 @@ extension ThreadManager {
         return lines.joined(separator: "\n")
     }
 
+    func restoreArchivedThreadFromUserAction(id threadId: UUID, threadName: String) async -> Bool {
+        do {
+            _ = try await restoreArchivedThread(id: threadId)
+            return true
+        } catch {
+            await MainActor.run {
+                BannerManager.shared.show(
+                    message: "Failed to restore thread '\(threadName)': \(error.localizedDescription)",
+                    style: .error,
+                    duration: Self.archivedThreadBannerDuration
+                )
+            }
+            return false
+        }
+    }
+
     private func showArchivedThreadBanner(for thread: MagentThread, warning: String?) {
         let projectName = persistence.loadSettings()
             .projects
@@ -689,19 +715,9 @@ extension ThreadManager {
                 duration: Self.archivedThreadBannerDuration,
                 isDismissible: true,
                 actions: [
-                    BannerAction(title: "Restore") {
+                    BannerAction(title: "Restore") { [weak self] in
                         Task { [weak self] in
-                            do {
-                                _ = try await self?.restoreArchivedThread(id: thread.id)
-                            } catch {
-                                await MainActor.run {
-                                    BannerManager.shared.show(
-                                        message: "Failed to restore thread '\(thread.name)': \(error.localizedDescription)",
-                                        style: .error,
-                                        duration: Self.archivedThreadBannerDuration
-                                    )
-                                }
-                            }
+                            _ = await self?.restoreArchivedThreadFromUserAction(id: thread.id, threadName: thread.name)
                         }
                     }
                 ]

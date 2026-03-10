@@ -814,6 +814,7 @@ extension ThreadManager {
 // MARK: - Notification Names
 
 extension Notification.Name {
+    static let magentArchivedThreadsDidChange = Notification.Name("magentArchivedThreadsDidChange")
     static let magentDeadSessionsDetected = Notification.Name("magentDeadSessionsDetected")
     static let magentAgentCompletionDetected = Notification.Name("magentAgentCompletionDetected")
     static let magentAgentWaitingForInput = Notification.Name("magentAgentWaitingForInput")

@@ -107,6 +107,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var pinnedTmuxSessions: [String]
     public let createdAt: Date
     public var isArchived: Bool
+    public var archivedAt: Date?
     public var sectionId: UUID?
     public var isMain: Bool
     public var lastSelectedTmuxSessionName: String?
@@ -236,7 +237,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public enum CodingKeys: String, CodingKey {
         case id, projectId, name, worktreePath, branchName
         case tmuxSessionNames, agentTmuxSessions, sessionAgentTypes, sessionConversationIDs, pinnedTmuxSessions
-        case createdAt, isArchived, sectionId, isMain
+        case createdAt, isArchived, archivedAt, sectionId, isMain
         case lastSelectedTmuxSessionName
         case agentHasRun, isPinned, isSidebarHidden, lastAgentCompletionAt
         case unreadCompletionSessions
@@ -266,6 +267,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         pinnedTmuxSessions: [String] = [],
         createdAt: Date = Date(),
         isArchived: Bool = false,
+        archivedAt: Date? = nil,
         sectionId: UUID? = nil,
         isMain: Bool = false,
         lastSelectedTmuxSessionName: String? = nil,
@@ -297,6 +299,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.pinnedTmuxSessions = pinnedTmuxSessions
         self.createdAt = createdAt
         self.isArchived = isArchived
+        self.archivedAt = archivedAt
         self.sectionId = sectionId
         self.isMain = isMain
         self.lastSelectedTmuxSessionName = lastSelectedTmuxSessionName
@@ -331,6 +334,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         pinnedTmuxSessions = try container.decodeIfPresent([String].self, forKey: .pinnedTmuxSessions) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         isArchived = try container.decode(Bool.self, forKey: .isArchived)
+        archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
         sectionId = try container.decodeIfPresent(UUID.self, forKey: .sectionId)
         isMain = try container.decodeIfPresent(Bool.self, forKey: .isMain) ?? false
         lastSelectedTmuxSessionName = try container.decodeIfPresent(String.self, forKey: .lastSelectedTmuxSessionName)
@@ -377,6 +381,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(pinnedTmuxSessions, forKey: .pinnedTmuxSessions)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(isArchived, forKey: .isArchived)
+        try container.encodeIfPresent(archivedAt, forKey: .archivedAt)
         try container.encodeIfPresent(sectionId, forKey: .sectionId)
         try container.encode(isMain, forKey: .isMain)
         try container.encodeIfPresent(lastSelectedTmuxSessionName, forKey: .lastSelectedTmuxSessionName)

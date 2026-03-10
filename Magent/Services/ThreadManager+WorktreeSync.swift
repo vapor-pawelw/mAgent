@@ -82,6 +82,9 @@ extension ThreadManager {
             let exists = fm.fileExists(atPath: threads[i].worktreePath, isDirectory: &isDir) && isDir.boolValue
             if !exists {
                 threads[i].isArchived = true
+                if threads[i].archivedAt == nil {
+                    threads[i].archivedAt = Date()
+                }
                 changed = true
             }
         }
@@ -100,11 +103,15 @@ extension ThreadManager {
             for i in allThreads.indices {
                 if !threads.contains(where: { $0.id == allThreads[i].id }) && allThreads[i].projectId == project.id && !allThreads[i].isMain {
                     allThreads[i].isArchived = true
+                    if allThreads[i].archivedAt == nil {
+                        allThreads[i].archivedAt = Date()
+                    }
                 }
             }
             try? persistence.saveThreads(allThreads)
 
             await MainActor.run {
+                NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)
                 delegate?.threadManager(self, didUpdateThreads: threads)
             }
         }

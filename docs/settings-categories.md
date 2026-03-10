@@ -5,7 +5,7 @@
 - App-wide preferences stay in `Settings > General`.
 - Thread-focused preferences now live in `Settings > Threads`.
 - `General` currently owns update controls, terminal overlay visibility toggles, and the environment-variable reference used by startup injection settings.
-- `Threads` owns thread naming defaults, thread sections, startup injection fields, and the review prompt.
+- `Threads` owns thread naming defaults, thread sections, recently archived thread restore history, startup injection fields, and the review prompt.
 - Section color editing now reuses a single system color picker per settings screen, so switching to another section keeps the earlier section's custom dot color intact instead of resetting it.
 - Debug-only features may still appear in Settings during local development, but they should be clearly annotated with `Debug builds only` and fully hidden from release builds.
 
@@ -15,12 +15,14 @@
 - Moved thread-related controls out of the crowded `General` pane into a dedicated controller.
 - Kept terminal overlay toggles and environment-variable help in `General`, with the update section at the top and environment-variable help at the bottom.
 - Tightened section color picker ownership in both section editors so only one shared picker is active and changing focus between rows does not write the new color back into the previously edited section.
+- Added a `Recently Archived` card to `Settings > Threads` that lists up to 10 archived threads and provides inline restore actions.
 
 ## Implementation Notes
 
 - Category registration and the sidebar/detail controller wiring live in `Magent/Views/Settings/SettingsViewController.swift`.
 - `Magent/Views/Settings/SettingsGeneralViewController.swift` is intentionally limited to app-level preferences.
 - `Magent/Views/Settings/SettingsThreadsViewController.swift` owns thread-scoped preferences, and `Magent/Views/Settings/SettingsThreadsViewController+Sections.swift` owns the thread-sections table behavior.
+- The recently archived list reads from persisted threads, sorts by `archivedAt`, and listens for a shared archive-state notification so it refreshes while Settings is open.
 - Project overrides use the parallel section editor in `Magent/Views/Settings/SettingsProjectsViewController.swift` and `Magent/Views/Settings/SettingsProjectsViewController+Sections.swift`.
 - Both section editors use `NSColorPanel.shared`, so they must set the active `sectionId` and temporarily detach target/action before assigning `panel.color`, then restore the callback after the programmatic update.
 

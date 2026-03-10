@@ -6,6 +6,7 @@
 - The banner includes the archived thread's name, task description, project, branch, base branch, Jira key, tab count, worktree path, and any archive warning text.
 - The same banner appears whether archive was triggered from the UI or via `magent-cli archive-thread`.
 - The banner exposes a `Restore` action that recreates the archived worktree, returns the thread to the sidebar, and navigates back to it.
+- `Settings > Threads` also shows up to 10 recently archived threads with inline `Restore` buttons, so the same restore flow stays available after the archive banner expires.
 
 ## Implementation notes
 
@@ -13,6 +14,7 @@
 - Archive now clears persisted session-specific state (`tmuxSessionNames`, agent-session maps, pinned tabs, selected tab, tab names, submitted prompt history) before saving the archived thread record.
 - `ThreadManager.restoreArchivedThread(id:)` recreates the worktree from the saved branch/base-branch metadata, unarchives the persisted thread, re-adds it to the active thread list, and posts a navigation notification back to the restored thread.
 - Restore intentionally does not recreate all previous tmux tabs. The restored thread comes back with clean persisted session state, and the first live session is recreated lazily when the thread is opened.
+- Archived threads now persist `archivedAt`, which is used to sort the Threads-settings history card by actual archive time instead of relying on thread creation order or JSON array order.
 
 ## What changed in this thread
 
@@ -20,6 +22,8 @@
 - Added a restore path for archived threads so the archive banner action can undo an archive immediately.
 - Removed duplicate archive-warning banners from the thread detail and thread-list context-menu flows so both UI archive and CLI archive show the same final banner.
 - Ensured fallback session registration assigns a default first-tab label after restore/session reset.
+- Added a Threads-settings history card that lists recent archived threads and reuses the same restore path as the banner action.
+- Added persisted archive timestamps so recent archived-thread ordering stays stable across relaunches and worktree-sync auto-archive paths.
 
 ## Gotchas
 

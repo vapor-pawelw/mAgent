@@ -3,6 +3,7 @@ import MagentCore
 
 final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate, NSTableViewDataSource, NSTableViewDelegate {
     static let sectionColorPanelIdentifier = NSUserInterfaceItemIdentifier("SettingsThreadsSectionColorPanel")
+    private static let recentArchivedThreadLimit = 10
 
     let persistence = PersistenceService.shared
     var settings: AppSettings!
@@ -16,6 +17,8 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     var reviewPromptTextView: NSTextView!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
+    private var recentArchivedThreadsStackView: NSStackView!
+    private var recentArchivedThreadsById: [UUID: MagentThread] = [:]
 
     // Thread sections
     var sectionsTableView: NSTableView!
@@ -30,6 +33,10 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     override func viewDidLoad() {
@@ -200,6 +207,22 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         narrowThreadsDesc.textColor = NSColor(resource: .textSecondary)
         sidebarSection.addArrangedSubview(narrowThreadsDesc)
 
+        let (recentArchivedCard, recentArchivedSection) = createSectionCard(
+            title: "Recently Archived",
+            description: "Shows up to 10 archived threads. Restore uses the same flow as the archive banner."
+        )
+        stackView.addArrangedSubview(recentArchivedCard)
+
+        recentArchivedThreadsStackView = NSStackView()
+        recentArchivedThreadsStackView.orientation = .vertical
+        recentArchivedThreadsStackView.alignment = .leading
+        recentArchivedThreadsStackView.spacing = 10
+        recentArchivedThreadsStackView.translatesAutoresizingMaskIntoConstraints = false
+        recentArchivedSection.addArrangedSubview(recentArchivedThreadsStackView)
+
+        NSLayoutConstraint.activate([
+            recentArchivedThreadsStackView.widthAnchor.constraint(equalTo: recentArchivedSection.widthAnchor),
+        ])
         let (injectionCard, injectionSection) = createSectionCard(
             title: "Startup Injection",
             description: "Values in this section are applied to every new terminal/agent tab at startup."
@@ -260,9 +283,19 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             threadNamingCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sectionsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sidebarCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            recentArchivedCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             injectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             reviewCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(refreshArchivedThreadsNotificationReceived),
+            name: .magentArchivedThreadsDidChange,
+            object: nil
+        )
+
+        refreshRecentlyArchivedThreads()
     }
 
     override func viewDidAppear() {
@@ -290,6 +323,146 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         guard let clipView = contentScrollView?.contentView as NSClipView? else { return }
         clipView.scroll(to: NSPoint(x: 0, y: 0))
         contentScrollView.reflectScrolledClipView(clipView)
+    }
+
+    func refreshRecentlyArchivedThreads() {
+        guard isViewLoaded, recentArchivedThreadsStackView != nil else { return }
+
+        let currentSettings = persistence.loadSettings()
+        let projectsById = Dictionary(uniqueKeysWithValues: currentSettings.projects.map { ($0.id, $0.name) })
+        let archivedThreads = persistence.loadThreads()
+            .filter { $0.isArchived && !$0.isMain }
+            .sorted { lhs, rhs in
+                let lhsDate = lhs.archivedAt ?? .distantPast
+                let rhsDate = rhs.archivedAt ?? .distantPast
+                if lhsDate != rhsDate {
+                    return lhsDate > rhsDate
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+
+        recentArchivedThreadsById = Dictionary(
+            uniqueKeysWithValues: archivedThreads.map { ($0.id, $0) }
+        )
+
+        recentArchivedThreadsStackView.arrangedSubviews.forEach { subview in
+            recentArchivedThreadsStackView.removeArrangedSubview(subview)
+            subview.removeFromSuperview()
+        }
+
+        let recentThreads = Array(archivedThreads.prefix(Self.recentArchivedThreadLimit))
+        guard !recentThreads.isEmpty else {
+            let emptyLabel = NSTextField(wrappingLabelWithString: "No recently archived threads.")
+            emptyLabel.font = .systemFont(ofSize: 12)
+            emptyLabel.textColor = NSColor(resource: .textSecondary)
+            recentArchivedThreadsStackView.addArrangedSubview(emptyLabel)
+            NSLayoutConstraint.activate([
+                emptyLabel.widthAnchor.constraint(equalTo: recentArchivedThreadsStackView.widthAnchor),
+            ])
+            return
+        }
+
+        for thread in recentThreads {
+            let row = makeRecentArchivedThreadRow(
+                thread: thread,
+                projectName: projectsById[thread.projectId] ?? "Unknown Project"
+            )
+            recentArchivedThreadsStackView.addArrangedSubview(row)
+            NSLayoutConstraint.activate([
+                row.widthAnchor.constraint(equalTo: recentArchivedThreadsStackView.widthAnchor),
+            ])
+        }
+    }
+
+    @objc private func refreshArchivedThreadsNotificationReceived(_ notification: Notification) {
+        refreshRecentlyArchivedThreads()
+    }
+
+    private func makeRecentArchivedThreadRow(thread: MagentThread, projectName: String) -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = 12
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let textStack = NSStackView()
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 2
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let titleLabel = NSTextField(labelWithString: thread.name)
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        textStack.addArrangedSubview(titleLabel)
+
+        if let description = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !description.isEmpty {
+            let descriptionLabel = NSTextField(wrappingLabelWithString: description)
+            descriptionLabel.font = .systemFont(ofSize: 11)
+            descriptionLabel.textColor = NSColor(resource: .textSecondary)
+            textStack.addArrangedSubview(descriptionLabel)
+            NSLayoutConstraint.activate([
+                descriptionLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
+            ])
+        }
+
+        let metadataLabel = NSTextField(
+            wrappingLabelWithString: recentArchivedThreadMetadata(
+                thread: thread,
+                projectName: projectName
+            )
+        )
+        metadataLabel.font = .systemFont(ofSize: 11)
+        metadataLabel.textColor = NSColor(resource: .textSecondary)
+        textStack.addArrangedSubview(metadataLabel)
+
+        let restoreButton = NSButton(title: "Restore", target: self, action: #selector(restoreArchivedThreadTapped(_:)))
+        restoreButton.bezelStyle = .rounded
+        restoreButton.controlSize = .small
+        restoreButton.identifier = NSUserInterfaceItemIdentifier(thread.id.uuidString)
+        restoreButton.setContentHuggingPriority(.required, for: .horizontal)
+        restoreButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        textStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        row.addArrangedSubview(textStack)
+        row.addArrangedSubview(restoreButton)
+
+        NSLayoutConstraint.activate([
+            metadataLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
+        ])
+
+        return row
+    }
+
+    private func recentArchivedThreadMetadata(thread: MagentThread, projectName: String) -> String {
+        var segments = [projectName, thread.branchName]
+        if let archivedAt = thread.archivedAt {
+            segments.append("Archived \(archivedAt.formatted(date: .abbreviated, time: .shortened))")
+        }
+        return segments.joined(separator: " · ")
+    }
+
+    @objc private func restoreArchivedThreadTapped(_ sender: NSButton) {
+        guard let rawValue = sender.identifier?.rawValue,
+              let threadId = UUID(uuidString: rawValue),
+              let thread = recentArchivedThreadsById[threadId] else { return }
+
+        sender.isEnabled = false
+        Task { [weak self] in
+            let restored = await ThreadManager.shared.restoreArchivedThreadFromUserAction(
+                id: thread.id,
+                threadName: thread.name
+            )
+            await MainActor.run {
+                if restored {
+                    self?.refreshRecentlyArchivedThreads()
+                } else {
+                    sender.isEnabled = true
+                }
+            }
+        }
     }
 
     private func createSectionCard(title: String, description: String? = nil) -> (container: NSView, content: NSStackView) {
