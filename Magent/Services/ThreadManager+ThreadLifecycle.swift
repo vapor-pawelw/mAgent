@@ -175,13 +175,6 @@ extension ThreadManager {
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
         }
 
-        let sessionAgentTypes: [String: AgentType]
-        if useAgentCommand, let selectedAgentType {
-            sessionAgentTypes = [tmuxSessionName: selectedAgentType]
-        } else {
-            sessionAgentTypes = [:]
-        }
-
         let thread = MagentThread(
             id: threadID,
             projectId: project.id,
@@ -190,7 +183,6 @@ extension ThreadManager {
             branchName: branchName,
             tmuxSessionNames: [tmuxSessionName],
             agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
-            sessionAgentTypes: sessionAgentTypes,
             sectionId: settings.defaultSection(for: project.id)?.id,
             lastSelectedTmuxSessionName: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName],
@@ -279,13 +271,6 @@ extension ThreadManager {
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
         }
 
-        let mainSessionAgentTypes: [String: AgentType]
-        if let selectedAgentType {
-            mainSessionAgentTypes = [tmuxSessionName: selectedAgentType]
-        } else {
-            mainSessionAgentTypes = [:]
-        }
-
         let thread = MagentThread(
             id: threadID,
             projectId: project.id,
@@ -294,7 +279,6 @@ extension ThreadManager {
             branchName: "",
             tmuxSessionNames: [tmuxSessionName],
             agentTmuxSessions: selectedAgentType != nil ? [tmuxSessionName] : [],
-            sessionAgentTypes: mainSessionAgentTypes,
             isMain: true,
             lastSelectedTmuxSessionName: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName]
@@ -482,7 +466,7 @@ extension ThreadManager {
         }
         try persistence.saveThreads(allThreads)
 
-        trustDirectoryIfNeeded(restoredThread.worktreePath, agentType: restoredThread.effectiveAgentType)
+        trustDirectoryIfNeeded(restoredThread.worktreePath, agentType: effectiveAgentType(for: restoredThread.projectId))
         pruneWorktreeCache(for: project)
 
         await MainActor.run {
@@ -619,7 +603,7 @@ extension ThreadManager {
             }
 
             // Trust the directory for the agent if needed
-            trustDirectoryIfNeeded(thread.worktreePath, agentType: thread.effectiveAgentType)
+            trustDirectoryIfNeeded(thread.worktreePath, agentType: effectiveAgentType(for: thread.projectId))
 
             // Persist updated threads
             try persistence.saveThreads(threads)
@@ -633,7 +617,6 @@ extension ThreadManager {
     private func clearPersistedSessionState(for thread: inout MagentThread) {
         thread.tmuxSessionNames = []
         thread.agentTmuxSessions = []
-        thread.sessionAgentTypes = [:]
         thread.sessionConversationIDs = [:]
         thread.pinnedTmuxSessions = []
         thread.lastSelectedTmuxSessionName = nil
