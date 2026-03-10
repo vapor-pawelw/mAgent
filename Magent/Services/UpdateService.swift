@@ -14,11 +14,15 @@ private struct UpdateReleaseAsset: Decodable, Sendable {
 private struct UpdateReleaseResponse: Decodable, Sendable {
     let tagName: String
     let draft: Bool
+    let prerelease: Bool
+    let body: String?
     let assets: [UpdateReleaseAsset]
 
     private enum CodingKeys: String, CodingKey {
         case tagName = "tag_name"
         case draft
+        case prerelease
+        case body
         case assets
     }
 }
@@ -57,8 +61,22 @@ private struct SemanticVersion: Comparable, Sendable {
 
 private struct AvailableUpdate: Sendable {
     let version: SemanticVersion
+    let releaseNotes: String?
     let assetURL: URL
     let assetKind: ReleaseAssetKind
+}
+
+struct PendingUpdateSummary: Sendable {
+    let currentVersion: String
+    let availableVersion: String
+    let releaseNotes: String?
+    let isSkipped: Bool
+}
+
+private enum UpdateAvailability: Sendable {
+    case available(AvailableUpdate)
+    case upToDate
+    case noPublishedRelease
 }
 
 private enum ReleaseAssetKind: String, Sendable {
@@ -98,11 +116,12 @@ final class UpdateService {
     static let shared = UpdateService()
 
     private let persistence = PersistenceService.shared
-    private let latestReleaseURL = URL(string: "https://api.github.com/repos/vapor-pawelw/magent-releases/releases/latest")!
+    private let releasesURL = URL(string: "https://api.github.com/repos/vapor-pawelw/magent-releases/releases?per_page=10")!
     private let updaterLogPath = "/tmp/magent-self-update.log"
 
     private var isChecking = false
     private var isUpdating = false
+    private var detectedUpdate: AvailableUpdate?
 
     private enum InstallStrategy {
         case homebrewCask
@@ -124,6 +143,22 @@ final class UpdateService {
         await checkForUpdates(trigger: .manual)
     }
 
+    var pendingUpdateSummary: PendingUpdateSummary? {
+        guard let detectedUpdate else { return nil }
+        let availableVersion = detectedUpdate.version.displayString
+        return PendingUpdateSummary(
+            currentVersion: currentVersionString(),
+            availableVersion: availableVersion,
+            releaseNotes: normalizedReleaseNotes(detectedUpdate.releaseNotes),
+            isSkipped: isVersionSkipped(availableVersion)
+        )
+    }
+
+    func installDetectedUpdateIfAvailable() async {
+        guard let detectedUpdate else { return }
+        await installUpdate(detectedUpdate)
+    }
+
     private func checkForUpdates(trigger: CheckTrigger) async {
         guard !isChecking else {
             if trigger == .manual {
@@ -134,36 +169,39 @@ final class UpdateService {
 
         isChecking = true
         defer { isChecking = false }
+        pruneSkippedVersionIfCurrentOrOlder()
 
         do {
-            guard let available = try await fetchAvailableUpdate() else {
+            switch try await fetchUpdateAvailability() {
+            case .noPublishedRelease:
+                setDetectedUpdate(nil)
+                if trigger == .manual {
+                    BannerManager.shared.show(
+                        message: String(localized: .UpdateStrings.updateNoNewReleases),
+                        style: .info
+                    )
+                }
+            case .upToDate:
+                setDetectedUpdate(nil)
                 if trigger == .manual {
                     BannerManager.shared.show(
                         message: String(localized: .UpdateStrings.updateUpToDate(currentVersionString())),
                         style: .info
                     )
                 }
-                return
-            }
-
-            switch trigger {
-            case .launch:
-                await installUpdate(available)
-            case .manual:
+            case .available(let available):
+                setDetectedUpdate(available)
                 let availableVersion = available.version.displayString
-                let currentVersion = currentVersionString()
-                BannerManager.shared.show(
-                    message: String(localized: .UpdateStrings.updateAvailable(currentVersion, availableVersion)),
-                    style: .info,
-                    duration: nil,
-                    actions: [
-                        BannerAction(title: String(localized: .UpdateStrings.updateNow)) {
-                            Task { @MainActor in
-                                await UpdateService.shared.installUpdate(available)
-                            }
-                        },
-                    ]
-                )
+                guard !isVersionSkipped(availableVersion) else {
+                    if trigger == .manual {
+                        BannerManager.shared.show(
+                            message: String(localized: .UpdateStrings.updateVersionSkipped(availableVersion)),
+                            style: .info
+                        )
+                    }
+                    return
+                }
+                showAvailableUpdateBanner(available)
             }
         } catch {
             if trigger == .manual {
@@ -176,8 +214,83 @@ final class UpdateService {
         }
     }
 
-    private func fetchAvailableUpdate() async throws -> AvailableUpdate? {
-        var request = URLRequest(url: latestReleaseURL)
+    private func showAvailableUpdateBanner(_ available: AvailableUpdate) {
+        let availableVersion = available.version.displayString
+        let currentVersion = currentVersionString()
+        BannerManager.shared.show(
+            message: String(localized: .UpdateStrings.updateAvailable(currentVersion, availableVersion)),
+            style: .info,
+            duration: nil,
+            isDismissible: true,
+            actions: [
+                BannerAction(title: String(localized: .UpdateStrings.updateNow)) {
+                    Task { @MainActor in
+                        await UpdateService.shared.installUpdate(available)
+                    }
+                },
+                BannerAction(title: String(localized: .UpdateStrings.updateSkipVersion)) {
+                    Task { @MainActor in
+                        UpdateService.shared.skipVersion(availableVersion)
+                    }
+                },
+            ],
+            details: normalizedReleaseNotes(available.releaseNotes),
+            detailsCollapsedTitle: String(localized: .UpdateStrings.updateShowChanges),
+            detailsExpandedTitle: String(localized: .UpdateStrings.updateHideChanges)
+        )
+    }
+
+    private func skipVersion(_ version: String) {
+        var settings = persistence.loadSettings()
+        settings.skippedUpdateVersion = version
+        try? persistence.saveSettings(settings)
+        notifyUpdateStateChanged()
+        BannerManager.shared.dismissCurrent()
+    }
+
+    private func setDetectedUpdate(_ update: AvailableUpdate?) {
+        let previousVersion = detectedUpdate?.version.displayString
+        let nextVersion = update?.version.displayString
+        let previousNotes = detectedUpdate?.releaseNotes
+        let nextNotes = update?.releaseNotes
+        detectedUpdate = update
+
+        guard previousVersion != nextVersion || previousNotes != nextNotes else { return }
+        notifyUpdateStateChanged()
+    }
+
+    private func notifyUpdateStateChanged() {
+        NotificationCenter.default.post(name: .magentUpdateStateChanged, object: nil)
+    }
+
+    private func isVersionSkipped(_ version: String) -> Bool {
+        persistence.loadSettings().skippedUpdateVersion == version
+    }
+
+    private func pruneSkippedVersionIfCurrentOrOlder() {
+        let currentVersionRaw = currentVersionString()
+        guard let currentVersion = SemanticVersion(currentVersionRaw) else { return }
+
+        var settings = persistence.loadSettings()
+        guard let skippedVersionRaw = settings.skippedUpdateVersion,
+              let skippedVersion = SemanticVersion(skippedVersionRaw),
+              skippedVersion <= currentVersion else {
+            return
+        }
+
+        settings.skippedUpdateVersion = nil
+        try? persistence.saveSettings(settings)
+        notifyUpdateStateChanged()
+    }
+
+    private func normalizedReleaseNotes(_ notes: String?) -> String? {
+        guard let notes else { return nil }
+        let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func fetchUpdateAvailability() async throws -> UpdateAvailability {
+        var request = URLRequest(url: releasesURL)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("Magent-Updater", forHTTPHeaderField: "User-Agent")
 
@@ -189,8 +302,10 @@ final class UpdateService {
             throw UpdateError.invalidHTTPStatus(http.statusCode)
         }
 
-        let latest = try JSONDecoder().decode(UpdateReleaseResponse.self, from: data)
-        guard !latest.draft else { return nil }
+        let releases = try JSONDecoder().decode([UpdateReleaseResponse].self, from: data)
+        guard let latest = releases.first(where: { !$0.draft && !$0.prerelease }) else {
+            return .noPublishedRelease
+        }
 
         guard let latestVersion = SemanticVersion(latest.tagName) else {
             throw UpdateError.invalidLatestVersion(latest.tagName)
@@ -199,7 +314,7 @@ final class UpdateService {
         guard let currentVersion = SemanticVersion(currentVersionRaw) else {
             throw UpdateError.invalidCurrentVersion(currentVersionRaw)
         }
-        guard latestVersion > currentVersion else { return nil }
+        guard latestVersion > currentVersion else { return .upToDate }
 
         let preferredAsset: (asset: UpdateReleaseAsset, kind: ReleaseAssetKind)? =
             latest.assets.first(where: { $0.name == "Magent.dmg" }).map { ($0, .dmg) }
@@ -211,10 +326,13 @@ final class UpdateService {
             throw UpdateError.missingReleaseAsset
         }
 
-        return AvailableUpdate(
-            version: latestVersion,
-            assetURL: assetURL,
-            assetKind: preferredAsset.kind
+        return .available(
+            AvailableUpdate(
+                version: latestVersion,
+                releaseNotes: latest.body,
+                assetURL: assetURL,
+                assetKind: preferredAsset.kind
+            )
         )
     }
 
@@ -225,6 +343,7 @@ final class UpdateService {
 
         do {
             try await startDetachedUpdater(for: update)
+            clearSkippedVersion(matching: update.version.displayString)
             BannerManager.shared.show(
                 message: "Updating to \(update.version.displayString). Magent will restart...",
                 style: .info,
@@ -427,5 +546,13 @@ final class UpdateService {
 
     private func currentVersionString() -> String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0.0"
+    }
+
+    private func clearSkippedVersion(matching version: String) {
+        var settings = persistence.loadSettings()
+        guard settings.skippedUpdateVersion == version else { return }
+        settings.skippedUpdateVersion = nil
+        try? persistence.saveSettings(settings)
+        notifyUpdateStateChanged()
     }
 }

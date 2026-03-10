@@ -6,12 +6,23 @@ final class SettingsGeneralViewController: NSViewController {
     private let persistence = PersistenceService.shared
     private var settings: AppSettings!
     private var autoCheckForUpdatesCheckbox: NSButton!
+    private var checkNowButton: NSButton!
+    private var installUpdateButton: NSButton!
+    private var updateStatusLabel: NSTextField!
+    private var updateChangelogToggleButton: NSButton!
+    private var updateChangelogScrollView: NSScrollView!
+    private var updateChangelogTextView: NSTextView!
+    private var isUpdateChangelogExpanded = false
     private var syncLocalPathsOnArchiveCheckbox: NSButton!
     private var showScrollToBottomIndicatorCheckbox: NSButton!
     private var showScrollOverlayCheckbox: NSButton!
     private var showPromptTOCCheckbox: NSButton!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
@@ -20,6 +31,12 @@ final class SettingsGeneralViewController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         settings = persistence.loadSettings()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleUpdateStateChanged),
+            name: .magentUpdateStateChanged,
+            object: nil
+        )
 
         contentScrollView = NSScrollView()
         contentScrollView.hasVerticalScroller = true
@@ -46,16 +63,57 @@ final class SettingsGeneralViewController: NSViewController {
         updatesSection.addArrangedSubview(autoCheckForUpdatesCheckbox)
 
         let updatesDesc = NSTextField(
-            wrappingLabelWithString: "When enabled, Magent checks GitHub releases on app launch and installs newer versions automatically. Homebrew installs are updated through brew."
+            wrappingLabelWithString: "When enabled, Magent checks GitHub releases on app launch and shows a persistent update banner when a newer version is available. Homebrew installs are updated through brew."
         )
         updatesDesc.font = .systemFont(ofSize: 11)
         updatesDesc.textColor = NSColor(resource: .textSecondary)
         updatesSection.addArrangedSubview(updatesDesc)
 
-        let checkNowButton = NSButton(title: "Check for Updates Now", target: self, action: #selector(checkForUpdatesNowTapped))
+        checkNowButton = NSButton(title: "Check for Updates Now", target: self, action: #selector(checkForUpdatesNowTapped))
         checkNowButton.bezelStyle = .rounded
         checkNowButton.controlSize = .small
         updatesSection.addArrangedSubview(checkNowButton)
+
+        installUpdateButton = NSButton(title: "Update", target: self, action: #selector(updateNowTapped))
+        installUpdateButton.bezelStyle = .rounded
+        installUpdateButton.controlSize = .small
+        installUpdateButton.isHidden = true
+        updatesSection.addArrangedSubview(installUpdateButton)
+
+        updateStatusLabel = NSTextField(wrappingLabelWithString: "")
+        updateStatusLabel.font = .systemFont(ofSize: 11)
+        updateStatusLabel.textColor = NSColor(resource: .textSecondary)
+        updateStatusLabel.isHidden = true
+        updatesSection.addArrangedSubview(updateStatusLabel)
+
+        updateChangelogToggleButton = NSButton(title: "Show Changes", target: self, action: #selector(toggleUpdateChangelog))
+        updateChangelogToggleButton.bezelStyle = .rounded
+        updateChangelogToggleButton.controlSize = .small
+        updateChangelogToggleButton.isHidden = true
+        updatesSection.addArrangedSubview(updateChangelogToggleButton)
+
+        updateChangelogTextView = NSTextView()
+        updateChangelogTextView.isEditable = false
+        updateChangelogTextView.isSelectable = true
+        updateChangelogTextView.drawsBackground = false
+        updateChangelogTextView.font = .systemFont(ofSize: 12)
+        updateChangelogTextView.textColor = NSColor(resource: .textSecondary)
+        updateChangelogTextView.textContainerInset = NSSize(width: 0, height: 6)
+        updateChangelogTextView.isHorizontallyResizable = false
+        updateChangelogTextView.isVerticallyResizable = true
+        updateChangelogTextView.autoresizingMask = [.width]
+        updateChangelogTextView.textContainer?.widthTracksTextView = true
+        updateChangelogTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+
+        updateChangelogScrollView = NSScrollView()
+        updateChangelogScrollView.drawsBackground = false
+        updateChangelogScrollView.borderType = .bezelBorder
+        updateChangelogScrollView.hasVerticalScroller = true
+        updateChangelogScrollView.autohidesScrollers = true
+        updateChangelogScrollView.documentView = updateChangelogTextView
+        updateChangelogScrollView.translatesAutoresizingMaskIntoConstraints = false
+        updateChangelogScrollView.isHidden = true
+        updatesSection.addArrangedSubview(updateChangelogScrollView)
 
         let (archiveCard, archiveSection) = createSectionCard(
             title: "Archive",
@@ -191,8 +249,13 @@ final class SettingsGeneralViewController: NSViewController {
             terminalOverlaysCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             envCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             updatesDesc.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
+            updateStatusLabel.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
+            updateChangelogScrollView.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
+            updateChangelogScrollView.heightAnchor.constraint(equalToConstant: 160),
             syncLocalPathsOnArchiveDesc.widthAnchor.constraint(equalTo: archiveSection.widthAnchor),
         ])
+
+        refreshUpdateControls()
     }
 
     override func viewDidAppear() {
@@ -286,5 +349,61 @@ final class SettingsGeneralViewController: NSViewController {
         Task { @MainActor in
             await UpdateService.shared.checkForUpdatesManually()
         }
+    }
+
+    @objc private func updateNowTapped() {
+        Task { @MainActor in
+            await UpdateService.shared.installDetectedUpdateIfAvailable()
+        }
+    }
+
+    @objc private func handleUpdateStateChanged() {
+        refreshUpdateControls()
+    }
+
+    @objc private func toggleUpdateChangelog() {
+        isUpdateChangelogExpanded.toggle()
+        refreshUpdateChangelogDisclosure()
+    }
+
+    private func refreshUpdateControls() {
+        guard isViewLoaded else { return }
+
+        guard let summary = UpdateService.shared.pendingUpdateSummary else {
+            installUpdateButton.isHidden = true
+            updateStatusLabel.isHidden = true
+            updateStatusLabel.stringValue = ""
+            updateChangelogToggleButton.isHidden = true
+            updateChangelogScrollView.isHidden = true
+            updateChangelogTextView.string = ""
+            isUpdateChangelogExpanded = false
+            return
+        }
+
+        installUpdateButton.title = "Update to \(summary.availableVersion)"
+        installUpdateButton.isHidden = false
+
+        if summary.isSkipped {
+            updateStatusLabel.stringValue = "New version \(summary.availableVersion) is available. This version is currently skipped for launch banners, but you can still install it here."
+        } else {
+            updateStatusLabel.stringValue = "New version \(summary.availableVersion) is available. You are currently on \(summary.currentVersion)."
+        }
+        updateStatusLabel.isHidden = false
+
+        if let releaseNotes = summary.releaseNotes, !releaseNotes.isEmpty {
+            updateChangelogTextView.string = releaseNotes
+            updateChangelogToggleButton.isHidden = false
+            refreshUpdateChangelogDisclosure()
+        } else {
+            updateChangelogToggleButton.isHidden = true
+            updateChangelogScrollView.isHidden = true
+            updateChangelogTextView.string = ""
+            isUpdateChangelogExpanded = false
+        }
+    }
+
+    private func refreshUpdateChangelogDisclosure() {
+        updateChangelogToggleButton.title = isUpdateChangelogExpanded ? "Hide Changes" : "Show Changes"
+        updateChangelogScrollView.isHidden = !isUpdateChangelogExpanded
     }
 }

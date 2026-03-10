@@ -110,6 +110,7 @@ All notable changes to this project will be documented in this file.
 - Fixed a remaining overlap case where the global Rate limits summary could still cover the first repo row by shifting the sidebar scroll container down with a dynamic top constraint.
 
 ### Settings
+- Update checks now detect new releases on launch only when enabled, show a persistent dismissible banner with `Update Now`, `Skip this version`, and expandable changelog notes, and mirror the same version/changelog state in Settings with an `Update to …` action.
 - Settings now split thread-focused preferences into a dedicated `Threads` category for naming, sections, startup injection, and review defaults, while `General` keeps app-wide updates, terminal overlay toggles, and environment-variable help.
 - Section settings now let you delete any non-default section immediately, with a confirmation showing how many threads will be moved into the current default section.
 - Fixed section color pickers so switching to another section no longer resets the previously edited dot color, and only one picker stays active at a time.
@@ -117,7 +118,7 @@ All notable changes to this project will be documented in this file.
 - Project settings now include `Local Sync Paths` (line-separated repo-relative files/directories) copied into new thread worktrees and merged back on archive.
 - Project settings now include project reorder and visibility controls.
 - Fixed project visibility eye buttons in Settings so only the icon toggles visibility (no oversized horizontal click area), with trailing-aligned square controls.
-- Added update controls in Settings: automatic update checks on launch and a manual **Check for Updates Now** action.
+- Checking for updates no longer shows a raw `HTTP 404` warning when the public releases repo exists but has no published releases yet; Magent now reports that there are no new releases available.
 
 ### Agents
 - Recreated agent tabs now auto-resume the last Claude/Codex conversation by session ID after tmux/macOS restarts, with automatic fallback to a fresh session if resume is unavailable.

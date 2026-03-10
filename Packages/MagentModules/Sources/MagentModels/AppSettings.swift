@@ -35,6 +35,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var notifyOnRateLimitLifted: Bool
     public var rateLimitLiftedSoundName: String
     public var autoCheckForUpdates: Bool
+    public var skippedUpdateVersion: String?
     public var syncLocalPathsOnArchive: Bool
     public var showScrollToBottomIndicator: Bool
     public var showTerminalScrollOverlay: Bool
@@ -72,6 +73,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         notifyOnRateLimitLifted: Bool = true,
         rateLimitLiftedSoundName: String = "Glass",
         autoCheckForUpdates: Bool = true,
+        skippedUpdateVersion: String? = nil,
         syncLocalPathsOnArchive: Bool = true,
         showScrollToBottomIndicator: Bool = true,
         showTerminalScrollOverlay: Bool = true,
@@ -108,6 +110,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.notifyOnRateLimitLifted = notifyOnRateLimitLifted
         self.rateLimitLiftedSoundName = rateLimitLiftedSoundName
         self.autoCheckForUpdates = autoCheckForUpdates
+        self.skippedUpdateVersion = skippedUpdateVersion
         self.syncLocalPathsOnArchive = syncLocalPathsOnArchive
         self.showScrollToBottomIndicator = showScrollToBottomIndicator
         self.showTerminalScrollOverlay = showTerminalScrollOverlay
@@ -150,6 +153,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showSystemNotificationOnRateLimitLifted = try container.decodeIfPresent(Bool.self, forKey: .showSystemNotificationOnRateLimitLifted) ?? notifyOnRateLimitLifted
         rateLimitLiftedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitLiftedSoundName) ?? "Glass"
         autoCheckForUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckForUpdates) ?? true
+        skippedUpdateVersion = try container.decodeIfPresent(String.self, forKey: .skippedUpdateVersion)
         syncLocalPathsOnArchive = try container.decodeIfPresent(Bool.self, forKey: .syncLocalPathsOnArchive) ?? true
         showScrollToBottomIndicator = try container.decodeIfPresent(Bool.self, forKey: .showScrollToBottomIndicator) ?? true
         showTerminalScrollOverlay = try container.decodeIfPresent(Bool.self, forKey: .showTerminalScrollOverlay) ?? true
@@ -191,6 +195,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(showSystemNotificationOnRateLimitLifted, forKey: .showSystemNotificationOnRateLimitLifted)
         try container.encode(rateLimitLiftedSoundName, forKey: .rateLimitLiftedSoundName)
         try container.encode(autoCheckForUpdates, forKey: .autoCheckForUpdates)
+        try container.encodeIfPresent(skippedUpdateVersion, forKey: .skippedUpdateVersion)
         try container.encode(syncLocalPathsOnArchive, forKey: .syncLocalPathsOnArchive)
         try container.encode(showScrollToBottomIndicator, forKey: .showScrollToBottomIndicator)
         try container.encode(showTerminalScrollOverlay, forKey: .showTerminalScrollOverlay)
@@ -318,6 +323,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case notifyOnRateLimitLifted
         case rateLimitLiftedSoundName
         case autoCheckForUpdates
+        case skippedUpdateVersion
         case syncLocalPathsOnArchive
         case showScrollToBottomIndicator
         case showTerminalScrollOverlay

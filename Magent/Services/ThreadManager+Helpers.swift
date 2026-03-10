@@ -828,6 +828,7 @@ extension Notification.Name {
     static let magentPullRequestInfoChanged = Notification.Name("magentPullRequestInfoChanged")
     static let magentPromptTOCVisibilityChanged = Notification.Name("magentPromptTOCVisibilityChanged")
     static let magentSettingsDidChange = Notification.Name("magentSettingsDidChange")
+    static let magentUpdateStateChanged = Notification.Name("magentUpdateStateChanged")
 }
 
 // MARK: - Errors

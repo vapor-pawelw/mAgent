@@ -19,15 +19,25 @@ final class BannerManager {
         style: BannerStyle = .info,
         duration: TimeInterval? = 3.0,
         isDismissible: Bool = true,
-        actions: [BannerAction] = []
+        actions: [BannerAction] = [],
+        details: String? = nil,
+        detailsCollapsedTitle: String? = nil,
+        detailsExpandedTitle: String? = nil
     ) {
         showOnMain(config: BannerConfig(
             message: message,
             style: style,
             duration: duration,
             isDismissible: isDismissible,
-            actions: actions
+            actions: actions,
+            details: details,
+            detailsCollapsedTitle: detailsCollapsedTitle,
+            detailsExpandedTitle: detailsExpandedTitle
         ))
+    }
+
+    func dismissCurrent() {
+        dismissAnimated()
     }
 
     // MARK: - Private

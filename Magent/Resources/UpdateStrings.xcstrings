@@ -23,6 +23,28 @@
         }
       }
     },
+    "updateHideChanges": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Changes"
+          }
+        }
+      }
+    },
+    "updateNoNewReleases": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There are no new releases available."
+          }
+        }
+      }
+    },
     "updateNow": {
       "extractionState": "manual",
       "localizations": {
@@ -34,6 +56,28 @@
         }
       }
     },
+    "updateShowChanges": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Changes"
+          }
+        }
+      }
+    },
+    "updateSkipVersion": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip this version"
+          }
+        }
+      }
+    },
     "updateUpToDate": {
       "extractionState": "manual",
       "localizations": {
@@ -41,6 +85,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Magent is up to date (%@)."
+          }
+        }
+      }
+    },
+    "updateVersionSkipped": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version %@ is currently skipped. You can still update from Settings."
           }
         }
       }
