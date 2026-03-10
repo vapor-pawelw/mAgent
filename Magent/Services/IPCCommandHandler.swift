@@ -301,10 +301,11 @@ final class IPCCommandHandler {
         }
 
         do {
+            let syncOverride: Bool? = request.skipLocalSync == true ? false : nil
             let warning = try await threadManager.archiveThread(
                 thread,
                 force: request.force ?? false,
-                syncLocalPathsBackToRepo: !(request.skipLocalSync ?? false)
+                syncLocalPathsBackToRepo: syncOverride
             )
             return .success(id: request.id, warning: warning)
         } catch {

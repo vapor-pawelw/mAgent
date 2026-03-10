@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Archive now supports forced completion after non-conflict local-sync failures, with a UI `Force Archive` path and CLI `archive-thread --force`.
 - Archive local-sync merge-back can now be disabled to keep the main worktree clean for parallel merges, via Settings -> General -> Archive and per-command CLI override `archive-thread --skip-local-sync`.
 - Local sync archive merge-back is now stricter: only currently configured Local Sync Paths are eligible, and no-op directory entries no longer create destination folders when no file copy is needed.
+- Fixed CLI archive behavior so app-wide Archive local-sync setting is respected when `--skip-local-sync` is not provided.
 - Non-main thread context menus now include a prompt-based `Rename...` action (under Pin) that generates branch name, description, and icon in one flow.
 - Auto-rename slug generation now treats actionable in-project prompts as renamable by default, and only skips (`SLUG: EMPTY`) for prompts unrelated to the current project.
 - New interactive SSH attach flow with persistent launchers, making it much easier to reconnect to remote Magent sessions.
