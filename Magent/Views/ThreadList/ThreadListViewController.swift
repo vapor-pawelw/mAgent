@@ -33,7 +33,7 @@ final class ThreadListViewController: NSViewController {
         projectDisclosureTrailingInset - ((projectHeaderActionButtonSize - disclosureButtonSize) / 2)
     static let projectHeaderVerticalPadding: CGFloat = 4
     static let projectHeaderRowHeight: CGFloat = disclosureButtonSize + (projectHeaderVerticalPadding * 2) + 2
-    static let projectHeaderToMainRowGap: CGFloat = 16
+    static let projectHeaderToMainRowGap: CGFloat = 8
     static let projectSpacerDividerVerticalSpacing: CGFloat = 4
     static let projectSpacerDividerHeight: CGFloat = 1
     static let projectSpacerDividerHorizontalInset: CGFloat = 8
@@ -63,7 +63,7 @@ final class ThreadListViewController: NSViewController {
     var suppressNextProjectRowToggle = false
     /// Project IDs that have at least one recognized git hosting remote (GitHub/GitLab/Bitbucket).
     var projectsWithValidRemotes: Set<UUID> = []
-    private var lastMeasuredOutlineWidth: CGFloat = 0
+    private var lastFittedOutlineWidth: CGFloat = 0
     private var currentScrollTopOffset: CGFloat = 0
 
     // MARK: - Data Model (3-level hierarchy)
@@ -115,15 +115,11 @@ final class ThreadListViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
+        let currentWidth = outlineView.bounds.width
+        guard currentWidth > 0 else { return }
+        guard abs(currentWidth - lastFittedOutlineWidth) > 0.5 else { return }
+        lastFittedOutlineWidth = currentWidth
         outlineView.sizeLastColumnToFit()
-        let currentOutlineWidth = outlineView.bounds.width
-        if abs(currentOutlineWidth - lastMeasuredOutlineWidth) > 0.5 {
-            lastMeasuredOutlineWidth = currentOutlineWidth
-            let rows = outlineView.numberOfRows
-            if rows > 0 {
-                outlineView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<rows))
-            }
-        }
     }
 
     @objc private func sectionsDidChange() {
@@ -543,7 +539,8 @@ final class ThreadListViewController: NSViewController {
             return sortThreadsForDisplay(threads, preferRecentCompletions: preferRecentCompletions)
         }
 
-        var orderedThreads: [MagentThread] = []
+        var pinnedThreads: [MagentThread] = []
+        var unpinnedThreads: [MagentThread] = []
         var seenThreadIds: Set<UUID> = []
 
         for section in projectSections {
@@ -554,20 +551,23 @@ final class ThreadListViewController: NSViewController {
                 sectionThreads,
                 preferRecentCompletions: preferRecentCompletions
             )
-            orderedThreads.append(contentsOf: sortedSectionThreads)
+            pinnedThreads.append(contentsOf: sortedSectionThreads.filter(\.isPinned))
+            unpinnedThreads.append(contentsOf: sortedSectionThreads.filter { !$0.isPinned })
             seenThreadIds.formUnion(sortedSectionThreads.map(\.id))
         }
 
         // Keep unmatched threads visible and consistently ordered.
         let unmatchedThreads = threads.filter { !seenThreadIds.contains($0.id) }
         if !unmatchedThreads.isEmpty {
-            orderedThreads.append(contentsOf: sortThreadsForDisplay(
+            let sortedUnmatched = sortThreadsForDisplay(
                 unmatchedThreads,
                 preferRecentCompletions: preferRecentCompletions
-            ))
+            )
+            pinnedThreads.append(contentsOf: sortedUnmatched.filter(\.isPinned))
+            unpinnedThreads.append(contentsOf: sortedUnmatched.filter { !$0.isPinned })
         }
 
-        return orderedThreads
+        return pinnedThreads + unpinnedThreads
     }
 
     func autoSelectFirst() {

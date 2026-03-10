@@ -74,13 +74,21 @@ All notable changes to this project will be documented in this file.
 - Selecting files in `CHANGES` now reliably opens and scrolls the inline diff to the correct file section, including renamed files, quoted paths, and cases where AppKit layout had not settled yet.
 
 ### Sidebar
-- Added a fixed 16 pt gap between each repository header and its `Main worktree` row for clearer visual separation.
+- Added a fixed 8 pt gap between each repository header and its `Main worktree` row for clearer visual separation.
+- Fixed a sidebar row-jump case where selecting threads could make non-description rows expand/collapse; compact rows now keep a stable one-line height.
+- Fixed another sidebar row-height jitter case caused by selection-dependent scrollbar width changes affecting description line wrapping.
+- Fixed pinned description rows switching between one and two lines on selection by keeping description text style stable across unread/selected state changes.
+- Fixed intermittent top/bottom padding collapse on description rows by using a stable fixed height for description-style thread cells.
+- In flat list mode (sections disabled), pinned threads now always render before all unpinned threads while preserving ordering within each group.
 - Fixed a sidebar-width restore edge case that could re-trigger resize handling and cause width instability while reopening/restoring the window.
 - The `+` create-thread menu now shows a header (e.g. "New Thread in ios-apps") so its purpose is immediately clear.
 - Selecting a thread no longer causes the sidebar to resize, gradually shrink, rewrap task descriptions, or make rows jump taller/shorter when unread-completion state clears on selection.
 - Fixed project-row trailing `+` create-thread control so clicks reliably trigger thread creation, including Option-click on the full visible icon frame instead of only the glyph pixels.
 - Pulled the enlarged project-row `+` create-thread control closer to the trailing edge so it stays easier to scan and hit.
 - Fixed sidebar row jumping while switching threads by stabilizing thread-row text measurement and trailing status-marker layout.
+- Fixed a trailing-inset regression on launch where sidebar markers and project `+` controls could appear flush to the edge until the first manual resize.
+- Fixed sidebar live-resize lag where selection highlight and trailing markers could appear to trail divider movement while dragging.
+- Kept trailing marker alignment stable by reserving a fixed status slot and keeping pin as the rightmost marker.
 - Busy threads now show a sweeping shimmer state in sidebar rows for clearer in-progress visibility.
 - Sidebar project headers, sections, and `Main worktree` rows now use a cleaner shared alignment system with tighter spacing, a main-row accent bar, and clearer branch labeling.
 - Sidebar sections now show thread count badges.

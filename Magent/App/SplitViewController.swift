@@ -138,6 +138,7 @@ final class SplitViewController: NSSplitViewController {
         let width = sidebarItem.viewController.view.frame.width
         guard width.isFinite, width > 0 else { return }
         let clampedWidth = min(max(width, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+        let deltaFromPreferred = abs(clampedWidth - preferredSidebarWidth)
 
         if let enforcedSidebarWidth {
             if abs(clampedWidth - enforcedSidebarWidth) > 0.5 {
@@ -145,9 +146,29 @@ final class SplitViewController: NSSplitViewController {
             }
             return
         }
+        let isUserDrivenResize = splitView.inLiveResize || isMouseDrivenResizeEvent()
+        if isUserDrivenResize {
+            preferredSidebarWidth = clampedWidth
+            UserDefaults.standard.set(Double(clampedWidth), forKey: Self.sidebarWidthDefaultsKey)
+            return
+        }
 
-        preferredSidebarWidth = clampedWidth
-        UserDefaults.standard.set(Double(clampedWidth), forKey: Self.sidebarWidthDefaultsKey)
+        // Ignore spontaneous width shifts caused by internal layout changes
+        // (for example when sidebar content updates after thread selection).
+        // Sidebar width should only change via user divider drags.
+        if deltaFromPreferred > 0.1 {
+            restoreSidebarWidth(preferredSidebarWidth)
+        }
+    }
+
+    private func isMouseDrivenResizeEvent() -> Bool {
+        guard let event = NSApp.currentEvent else { return false }
+        switch event.type {
+        case .leftMouseDown, .leftMouseDragged, .leftMouseUp:
+            return true
+        default:
+            return false
+        }
     }
 
     private func newTabShortcut() {

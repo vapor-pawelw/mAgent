@@ -142,69 +142,23 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         case other
     }
 
-    private func descriptionLineCount(
-        _ description: String,
-        for thread: MagentThread,
-        in outlineView: NSOutlineView
-    ) -> Int {
-        let availableWidth = availableDescriptionWidth(for: thread, in: outlineView)
-        guard availableWidth > 0 else { return 1 }
-
-        let font = stableDescriptionMeasurementFont()
-
-        let textStorage = NSTextStorage(
-            string: description,
-            attributes: [.font: font]
-        )
-        let layoutManager = NSLayoutManager()
-        let textContainer = NSTextContainer(size: NSSize(width: availableWidth, height: .greatestFiniteMagnitude))
-        textContainer.lineFragmentPadding = 0
-        textContainer.maximumNumberOfLines = 2
-        textContainer.lineBreakMode = .byWordWrapping
-        layoutManager.addTextContainer(textContainer)
-        textStorage.addLayoutManager(layoutManager)
-
-        let glyphRange = layoutManager.glyphRange(for: textContainer)
-        var lineCount = 0
-        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, _, _, _, _ in
-            lineCount += 1
-        }
-        return max(1, lineCount)
-    }
-
-    private func compactTextRowHeightIncrement() -> CGFloat {
-        let font = stableDescriptionMeasurementFont()
-        return ceil(font.ascender - font.descender + font.leading)
-    }
-
     private func stableDescriptionMeasurementFont() -> NSFont {
         // Selection can clear unread completion, which changes the rendered font.
         // Measure with the widest sidebar description font so row heights stay stable.
         .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
     }
 
-    private func descriptionTextWidth(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
-        let baseWidth: CGFloat
-        let row = outlineView.row(forItem: thread)
-        if let outlineColumn = outlineView.outlineTableColumn {
-            let columnIndex = outlineView.tableColumns.firstIndex(of: outlineColumn) ?? -1
-            if row >= 0, columnIndex >= 0 {
-                baseWidth = outlineView.frameOfCell(atColumn: columnIndex, row: row).width
-            } else {
-                baseWidth = outlineColumn.width
-            }
-        } else {
-            baseWidth = outlineView.bounds.width
-        }
-        guard baseWidth > 0 else { return 0 }
-        let leadingOffsetCompensation = -min(0, threadLeadingOffset(for: thread, in: outlineView))
-        let leadingContentWidth: CGFloat = 16 + 6 // thread icon + icon/text spacing
-        let trailingInset = ThreadListViewController.projectDisclosureTrailingInset
-            + (ThreadListViewController.disclosureButtonSize / 2)
-            - 5 // completion indicator radius used by ThreadCell.trailingAlignmentInset
-            + 6 // gap between leading and trailing stacks
-        let trailingMarkerWidth = threadTrailingMarkerWidth(for: thread)
-        return max(0, baseWidth + leadingOffsetCompensation - leadingContentWidth - trailingInset - trailingMarkerWidth)
+    private func lineHeight(for font: NSFont) -> CGFloat {
+        ceil(font.ascender - font.descender + font.leading)
+    }
+
+    private func stableDescriptionRowHeight() -> CGFloat {
+        let primaryLineHeight = lineHeight(for: stableDescriptionMeasurementFont())
+        let secondaryLineHeight = lineHeight(for: .systemFont(ofSize: 10))
+        let primaryLineCount: CGFloat = 2
+        let rowSpacing: CGFloat = 1
+        let verticalPadding: CGFloat = 18
+        return ceil((primaryLineHeight * primaryLineCount) + secondaryLineHeight + rowSpacing + verticalPadding)
     }
 
     private func threadLeadingOffset(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
@@ -215,33 +169,6 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel
         }
         return Self.sidebarRowLeadingInset
-    }
-
-    private func threadTrailingMarkerWidth(for thread: MagentThread) -> CGFloat {
-        var markerWidths: [CGFloat] = []
-
-        if thread.jiraTicketKey != nil {
-            markerWidths.append(10)
-        }
-        if thread.showArchiveSuggestion {
-            markerWidths.append(12)
-        }
-        // Reserve width for the status marker regardless of current status so
-        // selecting/switching threads does not reflow descriptions and row heights.
-        markerWidths.append(14)
-
-        guard !markerWidths.isEmpty else { return 0 }
-        let widthsTotal = markerWidths.reduce(0, +)
-        let spacingTotal = CGFloat(max(0, markerWidths.count - 1) * 4)
-        return widthsTotal + spacingTotal
-    }
-
-    private func availableDescriptionWidth(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
-        let measuredWidth = descriptionTextWidth(for: thread, in: outlineView)
-        return max(
-            0,
-            measuredWidth
-        )
     }
 
     private func projectHeaderHitArea(_ project: SidebarProject) -> ProjectHeaderHitArea {
@@ -292,19 +219,12 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             }
             let trimmedDescription = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
             let hasDescription = !(trimmedDescription?.isEmpty ?? true)
-            let worktreeName = (thread.worktreePath as NSString).lastPathComponent
-            let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
-            let hasBranchWorktreeMismatch = worktreeName != resolvedBranchName
-            if hasDescription, let description = trimmedDescription {
-                let baseTwoRowHeight: CGFloat = 46
-                let descriptionLines = descriptionLineCount(description, for: thread, in: outlineView)
-                if descriptionLines > 1 {
-                    return baseTwoRowHeight + compactTextRowHeightIncrement()
-                }
-                return baseTwoRowHeight
+            if hasDescription {
+                // Keep description rows visually stable across selection and status
+                // marker changes by reserving the two-line description height.
+                return stableDescriptionRowHeight()
             }
-            return hasBranchWorktreeMismatch ? 46 : 26
+            return 26
         }
         return 26
     }
@@ -668,8 +588,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.configure(
                 with: thread,
                 sectionColor: sectionColor,
-                leadingOffset: threadLeadingOffset(for: thread, in: outlineView),
-                preferredTextWidth: availableDescriptionWidth(for: thread, in: outlineView)
+                leadingOffset: threadLeadingOffset(for: thread, in: outlineView)
             )
             cell.onArchive = { [weak self] in
                 self?.triggerArchive(for: thread)

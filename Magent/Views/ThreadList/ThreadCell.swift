@@ -3,21 +3,26 @@ import MagentCore
 
 final class ThreadCell: NSTableCellView {
 
+    private static let jiraMarkerWidth: CGFloat = 10
+    private static let pinMarkerWidth: CGFloat = 12
+    private static let archiveMarkerWidth: CGFloat = 12
+    private static let statusMarkerSlotWidth: CGFloat = 14
+    private static let trailingMarkerSpacing: CGFloat = 4
+
     private var prLabel: NSTextField?
     private var subtitleLabel: NSTextField?
     private var jiraImageView: NSImageView?
     private var primaryDirtyDot: NSImageView?
     private var secondaryDirtyDot: NSImageView?
     private var pinImageView: NSImageView?
-    private var leadingPinImageView: NSImageView?
     private var archiveButton: NSButton?
     private var completionImageView: NSImageView?
     private var rateLimitImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
+    private var statusSlotView: NSView?
     private var trailingStackView: NSStackView?
     private weak var leadingTextStackView: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
-    private var leadingTextWidthConstraint: NSLayoutConstraint?
     private var mainAccentBar: NSView?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
@@ -107,11 +112,6 @@ final class ThreadCell: NSTableCellView {
         verticalStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
         leadingTextStackView = verticalStack
 
-        let textWidthConstraint = verticalStack.widthAnchor.constraint(equalToConstant: 0)
-        textWidthConstraint.priority = .defaultHigh
-        textWidthConstraint.isActive = false
-        leadingTextWidthConstraint = textWidthConstraint
-
         let stack = NSStackView(views: [iv, verticalStack])
         stack.orientation = .horizontal
         stack.spacing = 6
@@ -166,16 +166,6 @@ final class ThreadCell: NSTableCellView {
         leadingStackConstraint?.constant = ThreadListViewController.sidebarHorizontalInset + offset
     }
 
-    private func setPreferredLeadingTextWidth(_ width: CGFloat?) {
-        guard let leadingTextWidthConstraint else { return }
-        guard let width, width > 0 else {
-            leadingTextWidthConstraint.isActive = false
-            return
-        }
-        leadingTextWidthConstraint.constant = width
-        leadingTextWidthConstraint.isActive = true
-    }
-
     private func makeDirtyDot() -> NSImageView {
         let dot = NSImageView()
         dot.translatesAutoresizingMaskIntoConstraints = false
@@ -191,7 +181,7 @@ final class ThreadCell: NSTableCellView {
 
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
-        let completionIndicatorSize: CGFloat = 10
+        let completionIndicatorSize: CGFloat = Self.statusMarkerSlotWidth - 4
 
         let prTF = NSTextField(labelWithString: "")
         prTF.translatesAutoresizingMaskIntoConstraints = false
@@ -209,6 +199,11 @@ final class ThreadCell: NSTableCellView {
         let pinIV = NSImageView()
         pinIV.translatesAutoresizingMaskIntoConstraints = false
         pinIV.setContentHuggingPriority(.required, for: .horizontal)
+
+        let statusSlot = NSView()
+        statusSlot.translatesAutoresizingMaskIntoConstraints = false
+        statusSlot.setContentHuggingPriority(.required, for: .horizontal)
+        statusSlot.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         let completionIV = NSImageView()
         completionIV.translatesAutoresizingMaskIntoConstraints = false
@@ -237,11 +232,16 @@ final class ThreadCell: NSTableCellView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
 
-        let stack = NSStackView(views: [prTF, jiraIV, pinIV, archiveBtn, spinner, rateLimitIV, completionIV])
+        statusSlot.addSubview(spinner)
+        statusSlot.addSubview(rateLimitIV)
+        statusSlot.addSubview(completionIV)
+
+        let stack = NSStackView(views: [prTF, jiraIV, archiveBtn, statusSlot, pinIV])
         stack.orientation = .horizontal
-        stack.spacing = 4
+        stack.spacing = Self.trailingMarkerSpacing
         stack.distribution = .fill
         stack.alignment = .centerY
+        stack.detachesHiddenViews = true
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.setContentHuggingPriority(.required, for: .horizontal)
         stack.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -256,20 +256,29 @@ final class ThreadCell: NSTableCellView {
         NSLayoutConstraint.activate([
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -trailingAlignmentInset),
-            jiraIV.widthAnchor.constraint(equalToConstant: 10),
-            jiraIV.heightAnchor.constraint(equalToConstant: 10),
-            pinIV.widthAnchor.constraint(equalToConstant: 12),
-            pinIV.heightAnchor.constraint(equalToConstant: 12),
-            archiveBtn.widthAnchor.constraint(equalToConstant: 12),
-            archiveBtn.heightAnchor.constraint(equalToConstant: 12),
+            jiraIV.widthAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
+            jiraIV.heightAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
+            pinIV.widthAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
+            pinIV.heightAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
+            archiveBtn.widthAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
+            archiveBtn.heightAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
+            statusSlot.widthAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
+            statusSlot.heightAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
+            spinner.centerXAnchor.constraint(equalTo: statusSlot.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: statusSlot.centerYAnchor),
             completionIV.widthAnchor.constraint(equalToConstant: completionIndicatorSize),
             completionIV.heightAnchor.constraint(equalToConstant: completionIndicatorSize),
-            rateLimitIV.widthAnchor.constraint(equalToConstant: 10),
-            rateLimitIV.heightAnchor.constraint(equalToConstant: 10),
-            spinner.widthAnchor.constraint(equalToConstant: 14),
-            spinner.heightAnchor.constraint(equalToConstant: 14),
+            completionIV.centerXAnchor.constraint(equalTo: statusSlot.centerXAnchor),
+            completionIV.centerYAnchor.constraint(equalTo: statusSlot.centerYAnchor),
+            rateLimitIV.widthAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
+            rateLimitIV.heightAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
+            rateLimitIV.centerXAnchor.constraint(equalTo: statusSlot.centerXAnchor),
+            rateLimitIV.centerYAnchor.constraint(equalTo: statusSlot.centerYAnchor),
+            spinner.widthAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
+            spinner.heightAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
         ])
         trailingStackView = stack
+        statusSlotView = statusSlot
         prLabel = prTF
         jiraImageView = jiraIV
         pinImageView = pinIV
@@ -283,31 +292,10 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
-    private func ensureLeadingPin() {
-        guard leadingPinImageView == nil, let iv = imageView else { return }
-        let pin = NSImageView()
-        pin.translatesAutoresizingMaskIntoConstraints = false
-        pin.setContentHuggingPriority(.required, for: .horizontal)
-        let pinImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")?
-            .withSymbolConfiguration(.init(pointSize: 12, weight: .bold))
-        pin.image = pinImage
-        pin.contentTintColor = .controlAccentColor
-        pin.isHidden = true
-        addSubview(pin)
-        NSLayoutConstraint.activate([
-            pin.trailingAnchor.constraint(equalTo: iv.leadingAnchor, constant: -8),
-            pin.centerYAnchor.constraint(equalTo: iv.centerYAnchor),
-            pin.widthAnchor.constraint(equalToConstant: 12),
-            pin.heightAnchor.constraint(equalToConstant: 12),
-        ])
-        leadingPinImageView = pin
-    }
-
     func configure(
         with thread: MagentThread,
         sectionColor: NSColor?,
-        leadingOffset: CGFloat = 0,
-        preferredTextWidth: CGFloat? = nil
+        leadingOffset: CGFloat = 0
     ) {
         isConfiguredAsMain = false
         ensureTrailingStack()
@@ -334,14 +322,18 @@ final class ThreadCell: NSTableCellView {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let hasDescription = !(trimmedDescription?.isEmpty ?? true)
 
-        textField?.font = thread.hasUnreadAgentCompletion
-            ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-            : .preferredFont(forTextStyle: .body)
+        if hasDescription {
+            // Keep description wrapping stable across selection/unread state changes.
+            textField?.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        } else {
+            textField?.font = thread.hasUnreadAgentCompletion
+                ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+                : .preferredFont(forTextStyle: .body)
+        }
         textField?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .labelColor
         textField?.lineBreakMode = .byTruncatingTail
 
         if hasDescription, let description = trimmedDescription {
-            setPreferredLeadingTextWidth(preferredTextWidth)
             textField?.stringValue = description
             textField?.maximumNumberOfLines = 2
             textField?.lineBreakMode = .byWordWrapping
@@ -350,23 +342,11 @@ final class ThreadCell: NSTableCellView {
             subtitleLabel?.isHidden = false
             setDirtyDot(primaryDirtyDot, visible: false)
             setDirtyDot(secondaryDirtyDot, visible: thread.isDirty)
-        } else if hasBranchWorktreeMismatch {
-            setPreferredLeadingTextWidth(nil)
-            textField?.stringValue = resolvedBranchName
-            textField?.maximumNumberOfLines = 1
-
-            var secondaryLineParts = [worktreeName]
-            if let pr = thread.pullRequestInfo {
-                secondaryLineParts.append(pr.displayLabel)
-            }
-            subtitleLabel?.stringValue = secondaryLineParts.joined(separator: "  ·  ")
-            subtitleLabel?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
-            subtitleLabel?.isHidden = false
-            setDirtyDot(primaryDirtyDot, visible: false)
-            setDirtyDot(secondaryDirtyDot, visible: thread.isDirty)
         } else {
-            setPreferredLeadingTextWidth(nil)
             var singleLineParts = [resolvedBranchName]
+            if hasBranchWorktreeMismatch {
+                singleLineParts.append(worktreeName)
+            }
             if let pr = thread.pullRequestInfo {
                 singleLineParts.append(pr.displayLabel)
             }
@@ -414,12 +394,14 @@ final class ThreadCell: NSTableCellView {
             jiraImageView?.isHidden = true
         }
 
-        // Trailing pin icon — always hidden (replaced by leading pin)
-        pinImageView?.isHidden = true
-
-        // Leading pin icon — appears to the left of the thread icon
-        ensureLeadingPin()
-        leadingPinImageView?.isHidden = !thread.isPinned
+        if thread.isPinned {
+            pinImageView?.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
+            pinImageView?.contentTintColor = .controlAccentColor
+            pinImageView?.isHidden = false
+        } else {
+            pinImageView?.image = nil
+            pinImageView?.isHidden = true
+        }
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
@@ -506,7 +488,6 @@ final class ThreadCell: NSTableCellView {
         ensureLeadingStack()
         ensureMainAccentBar()
         setLeadingOffset(leadingOffset)
-        setPreferredLeadingTextWidth(nil)
         mainAccentBar?.isHidden = false
 
         textField?.stringValue = "Main worktree"
@@ -520,7 +501,6 @@ final class ThreadCell: NSTableCellView {
 
         pinImageView?.isHidden = true
         archiveButton?.isHidden = true
-        leadingPinImageView?.isHidden = true
 
         let resolvedBranch = currentBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let resolvedBranch, !resolvedBranch.isEmpty {
