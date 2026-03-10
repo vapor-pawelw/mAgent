@@ -2,6 +2,7 @@ import Cocoa
 import MagentCore
 
 final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate, NSTableViewDataSource, NSTableViewDelegate {
+    static let sectionColorPanelIdentifier = NSUserInterfaceItemIdentifier("SettingsThreadsSectionColorPanel")
 
     let persistence = PersistenceService.shared
     var settings: AppSettings!
@@ -20,6 +21,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var defaultSectionPopup: NSPopUpButton!
     private var useSectionsCheckbox: NSButton!
     var currentEditingSectionId: UUID?
+    var isUpdatingSectionColorPanel = false
 
     var sortedSections: [ThreadSection] {
         settings.threadSections.sorted { $0.sortOrder < $1.sortOrder }
@@ -246,6 +248,11 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             scrollToTop()
             didInitialScrollToTop = true
         }
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        dismissSectionColorPickerIfNeeded()
     }
 
     override func viewDidLayout() {

@@ -172,15 +172,22 @@ extension SettingsProjectsViewController {
 
     func showProjectColorPicker(for section: ThreadSection) {
         let panel = NSColorPanel.shared
-        panel.color = section.color
+        panel.orderOut(nil)
+        currentEditingSectionId = section.id
+        isUpdatingSectionColorPanel = true
+        panel.identifier = Self.sectionColorPanelIdentifier
+        panel.setTarget(nil)
+        panel.setAction(nil)
         panel.showsAlpha = false
+        panel.color = section.color
         panel.setTarget(self)
         panel.setAction(#selector(projectSectionColorChanged(_:)))
-        currentEditingSectionId = section.id
+        isUpdatingSectionColorPanel = false
         panel.orderFront(nil)
     }
 
     @objc func projectSectionColorChanged(_ sender: NSColorPanel) {
+        guard !isUpdatingSectionColorPanel else { return }
         guard let sectionId = currentEditingSectionId,
               let index = selectedProjectIndex,
               var sections = settings.projects[index].threadSections,
@@ -190,5 +197,17 @@ extension SettingsProjectsViewController {
         settings.projects[index].threadSections = sections
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
+    }
+
+    func dismissProjectSectionColorPickerIfNeeded() {
+        currentEditingSectionId = nil
+        isUpdatingSectionColorPanel = false
+
+        let panel = NSColorPanel.shared
+        guard panel.identifier == Self.sectionColorPanelIdentifier else { return }
+        panel.setTarget(nil)
+        panel.setAction(nil)
+        panel.identifier = nil
+        panel.orderOut(nil)
     }
 }

@@ -4,6 +4,7 @@ import MagentCore
 final class SettingsProjectsViewController: NSViewController {
     static let projectRowPasteboardType = NSPasteboard.PasteboardType("com.magent.settings.project-row")
     static let sectionRowPasteboardType = NSPasteboard.PasteboardType("com.magent.settings.section-row")
+    static let sectionColorPanelIdentifier = NSUserInterfaceItemIdentifier("SettingsProjectsSectionColorPanel")
 
     let persistence = PersistenceService.shared
     var settings: AppSettings!
@@ -38,6 +39,7 @@ final class SettingsProjectsViewController: NSViewController {
     var sectionsContentStack: NSStackView!
     var sectionsTableView: NSTableView!
     var currentEditingSectionId: UUID?
+    var isUpdatingSectionColorPanel = false
 
     var projectSortedSections: [ThreadSection] {
         guard let index = selectedProjectIndex,
@@ -76,6 +78,11 @@ final class SettingsProjectsViewController: NSViewController {
         setupDetailPane()
         setupLayout()
         reloadProjectsAndSelect()
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        dismissProjectSectionColorPickerIfNeeded()
     }
 
     private func setupProjectList() {

@@ -88,21 +88,40 @@ extension SettingsThreadsViewController {
 
     func showColorPicker(for section: ThreadSection) {
         let panel = NSColorPanel.shared
-        panel.color = section.color
+        panel.orderOut(nil)
+        currentEditingSectionId = section.id
+        isUpdatingSectionColorPanel = true
+        panel.identifier = Self.sectionColorPanelIdentifier
+        panel.setTarget(nil)
+        panel.setAction(nil)
         panel.showsAlpha = false
+        panel.color = section.color
         panel.setTarget(self)
         panel.setAction(#selector(colorChanged(_:)))
-        currentEditingSectionId = section.id
+        isUpdatingSectionColorPanel = false
         panel.orderFront(nil)
     }
 
     @objc private func colorChanged(_ sender: NSColorPanel) {
+        guard !isUpdatingSectionColorPanel else { return }
         guard let sectionId = currentEditingSectionId,
               let index = settings.threadSections.firstIndex(where: { $0.id == sectionId }) else { return }
 
         settings.threadSections[index].colorHex = sender.color.hexString
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
+    }
+
+    func dismissSectionColorPickerIfNeeded() {
+        currentEditingSectionId = nil
+        isUpdatingSectionColorPanel = false
+
+        let panel = NSColorPanel.shared
+        guard panel.identifier == Self.sectionColorPanelIdentifier else { return }
+        panel.setTarget(nil)
+        panel.setAction(nil)
+        panel.identifier = nil
+        panel.orderOut(nil)
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
