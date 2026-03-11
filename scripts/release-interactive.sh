@@ -118,9 +118,11 @@ extract_unreleased_notes() {
 
 has_meaningful_changelog_notes() {
   local notes_file="$1"
-  sed '/^[[:space:]]*$/d' "$notes_file" \
+  local count
+  count="$(sed '/^[[:space:]]*$/d' "$notes_file" \
     | grep -Fvx -- "$CHANGELOG_UNRELEASED_PLACEHOLDER" \
-    | grep -q '[^[:space:]]'
+    | grep -c '[^[:space:]]' || true)"
+  [[ "${count:-0}" -gt 0 ]]
 }
 
 promote_unreleased_changelog() {
@@ -175,8 +177,14 @@ promote_unreleased_changelog() {
   mv "$tmp_file" "$changelog_file"
 }
 
+NON_INTERACTIVE=0
+
 confirm() {
   local prompt="$1"
+  if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
+    echo "$prompt [y/N]: y (non-interactive)"
+    return 0
+  fi
   local response
   read -r -p "$prompt [y/N]: " response
   case "$response" in
@@ -278,6 +286,15 @@ wait_for_homebrew_update() {
 }
 
 main() {
+  local version_arg=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --version) version_arg="${2#v}"; shift 2 ;;
+      --yes|-y) NON_INTERACTIVE=1; shift ;;
+      *) echo "Unknown argument: $1" >&2; echo "Usage: $0 [--version X.Y.Z] [--yes]" >&2; exit 1 ;;
+    esac
+  done
+
   require_cmd git
   require_cmd gh
   require_cmd sed
@@ -332,7 +349,10 @@ main() {
     echo "No tags found yet."
   fi
 
-  if [[ -n "$default_version" ]]; then
+  if [[ -n "$version_arg" ]]; then
+    version="$version_arg"
+    echo "Version: $version"
+  elif [[ -n "$default_version" ]]; then
     read -r -p "Version to release (e.g. 1.2.3) [$default_version]: " version
     version="${version:-$default_version}"
   else
