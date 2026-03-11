@@ -100,29 +100,36 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release (from changelog)
-        if: steps.release_notes.outputs.has_notes == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          repository: ${{ env.RELEASE_REPO }}
-          target_commitish: main
-          files: |
-            Magent.dmg
-            Magent.zip
-          body: ${{ steps.release_notes.outputs.body }}
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          NOTES_FILE=$(mktemp)
+          git for-each-ref "refs/tags/${TAG}" --format='%(contents)' > "$NOTES_FILE"
+          HAS_NOTES=false
+          [ -s "$NOTES_FILE" ] && HAS_NOTES=true
 
-      - name: Create GitHub Release (generated fallback)
-        if: steps.release_notes.outputs.has_notes != 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          repository: ${{ env.RELEASE_REPO }}
-          target_commitish: main
-          files: |
-            Magent.dmg
-            Magent.zip
-          generate_release_notes: true
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          if gh release view "$TAG" --repo "$RELEASE_REPO" > /dev/null 2>&1; then
+            # Release already exists — update notes and upload assets
+            if [ "$HAS_NOTES" = "true" ]; then
+              gh release edit "$TAG" --repo "$RELEASE_REPO" --notes-file "$NOTES_FILE"
+            fi
+            gh release upload "$TAG" --repo "$RELEASE_REPO" --clobber Magent.dmg Magent.zip
+          elif [ "$HAS_NOTES" = "true" ]; then
+            gh release create "$TAG" \
+              --repo "$RELEASE_REPO" \
+              --title "$TAG" \
+              --notes-file "$NOTES_FILE" \
+              Magent.dmg Magent.zip
+          else
+            gh release create "$TAG" \
+              --repo "$RELEASE_REPO" \
+              --title "$TAG" \
+              --generate-notes \
+              Magent.dmg Magent.zip
+          fi
+          rm -f "$NOTES_FILE"
 
   update-cask:
     needs: build
