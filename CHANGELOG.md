@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 - Added a dedicated "Recently Archived" toolbar button (archive box icon) next to the Settings gear, opening a compact popover with up to 10 recently archived threads and one-click Restore actions.
+- Recently archived popover rows now include branch/worktree metadata (matching the main thread row style) plus project/archive-date context, so similarly named archived threads are easier to distinguish before restoring.
 
 ### Settings
 - Archived thread rows in `Settings > Threads` now lead with a "Thread archived" caption, show the task description (or thread name) in a larger prominent font, and display branch and worktree folder more prominently.

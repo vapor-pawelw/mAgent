@@ -190,6 +190,21 @@ final class RecentlyArchivedPopoverViewController: NSViewController {
         titleLabel.lineBreakMode = .byTruncatingTail
         textStack.addArrangedSubview(titleLabel)
 
+        let worktreeName = (thread.worktreePath as NSString).lastPathComponent
+        let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
+        let hasBranchWorktreeMismatch = resolvedBranchName != worktreeName
+
+        var branchWorktreeSegments = [resolvedBranchName]
+        if hasBranchWorktreeMismatch {
+            branchWorktreeSegments.append(worktreeName)
+        }
+        let branchWorktreeLabel = NSTextField(labelWithString: branchWorktreeSegments.joined(separator: "  ·  "))
+        branchWorktreeLabel.font = .systemFont(ofSize: 10)
+        branchWorktreeLabel.textColor = NSColor(resource: .textSecondary)
+        branchWorktreeLabel.lineBreakMode = .byTruncatingTail
+        textStack.addArrangedSubview(branchWorktreeLabel)
+
         var metaSegments = [projectName]
         if let archivedAt = thread.archivedAt {
             metaSegments.append(archivedAt.formatted(date: .abbreviated, time: .omitted))
@@ -197,6 +212,7 @@ final class RecentlyArchivedPopoverViewController: NSViewController {
         let metaLabel = NSTextField(labelWithString: metaSegments.joined(separator: " · "))
         metaLabel.font = .systemFont(ofSize: 10)
         metaLabel.textColor = NSColor(resource: .textSecondary)
+        metaLabel.lineBreakMode = .byTruncatingTail
         textStack.addArrangedSubview(metaLabel)
 
         let restoreButton = NSButton(title: "Restore", target: self, action: #selector(restoreButtonTapped(_:)))
@@ -227,7 +243,7 @@ final class RecentlyArchivedPopoverViewController: NSViewController {
             restoreButton.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -pad),
             restoreButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
 
-            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
         ])
 
         return row
