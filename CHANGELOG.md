@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Fixed the terminal wheel-behavior setting not taking effect for already-open embedded Ghostty tabs; switching between scroll-history, app-capture, and Ghostty-global modes now reapplies immediately.
 - Embedded terminals now hide Ghostty's native scrollbar for a cleaner in-app terminal surface while Magent uses its own scroll affordances.
 - Fixed Ghostty surface-level `reload_config` actions being ignored in embedded terminals, so current-terminal wheel-behavior changes now refresh the selected surface instead of only the app-wide setting path working.
+- Fixed mouse-wheel scrolling not working after app restart: terminal history scrolling now works via tmux copy-mode (requires tmux mouse support enabled by Magent). The "Scroll terminal history" mode forces copy-mode on every scroll-up event; "Send wheel input to apps/prompts" restores tmux's default behavior.
 - Unselected tab borders in dark mode are now slightly more visible.
 
 ### Agents
