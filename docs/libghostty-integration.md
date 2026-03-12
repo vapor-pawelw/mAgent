@@ -122,6 +122,7 @@ Magent's embedded terminal should keep Ghostty's global user config, then layer 
 - Load Ghostty defaults/user config first with `ghostty_config_load_default_files(...)`.
 - Apply Magent's explicit overrides afterwards from a generated config file so user Ghostty settings still work for everything else.
 - Keep overrides narrow and intentional. Current embedded overrides are settings-driven behaviors such as wheel capture policy, plus a temporary `scrollbar = never` override so embedded terminals stay chrome-free while Magent relies on its own scroll affordances. Do not blanket-disable user Ghostty config again unless Magent stops exposing those options itself.
+- Keep tmux `pane-scrollbars` disabled in the embedder startup path. Even with Ghostty forced to `scrollbar = never`, tmux's own character-cell scrollbar renders inside the terminal and is visually indistinguishable from a Ghostty scrollbar regression to users.
 
 ## Reference Implementation
 
