@@ -109,7 +109,7 @@ final class TabItemView: NSView, NSMenuDelegate {
 
         wantsLayer = true
         layer?.cornerRadius = 7
-        layer?.borderWidth = 1
+        layer?.borderWidth = 0
         translatesAutoresizingMaskIntoConstraints = false
         setContentHuggingPriority(.defaultHigh, for: .horizontal)
         setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
@@ -268,38 +268,38 @@ final class TabItemView: NSView, NSMenuDelegate {
     }
 
     private func updateAppearance() {
-        let titleColor: NSColor
-        let secondaryColor: NSColor
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
 
+        let titleColor: NSColor
         if isSelected {
             titleColor = NSColor(resource: .textPrimary)
-            secondaryColor = NSColor(resource: .textPrimary).withAlphaComponent(0.78)
             titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        } else {
+        } else if isDark {
             titleColor = NSColor(resource: .textSecondary).withAlphaComponent(0.96)
-            secondaryColor = NSColor(resource: .textSecondary).withAlphaComponent(0.82)
+            titleLabel.font = .systemFont(ofSize: 12, weight: .regular)
+        } else {
+            // Use system secondaryLabelColor in light mode for better contrast
+            titleColor = .secondaryLabelColor
             titleLabel.font = .systemFont(ofSize: 12, weight: .regular)
         }
+
+        // Close/pin icon color is consistent regardless of selection state
+        let secondaryColor = NSColor(resource: .textSecondary).withAlphaComponent(0.82)
 
         // Resolve NSColors into CGColors within the correct appearance context so
         // adaptive colors (Surface, PrimaryBrand, etc.) pick up light-mode values
         // when the window is in light mode.
-        // IMPORTANT: withAlphaComponent on a dynamic catalog color may snapshot the
-        // current drawing context — so the color creation must happen INSIDE the block,
-        // not before it, to avoid capturing the wrong (e.g. dark) variant.
         effectiveAppearance.performAsCurrentDrawingAppearance {
             if self.isSelected {
                 self.layer?.backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.18).cgColor
-                self.layer?.borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.38).cgColor
             } else {
                 self.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.62).cgColor
-                self.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.32).cgColor
             }
         }
         titleLabel.textColor = titleColor
         pinIcon.contentTintColor = secondaryColor
         closeButton.contentTintColor = secondaryColor
-        closeButton.alphaValue = isSelected ? 1.0 : 0.9
+        closeButton.alphaValue = 1.0
     }
 
     // MARK: NSMenuDelegate
