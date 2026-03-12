@@ -234,11 +234,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Apply terminal preferences BEFORE refreshing window appearances so that
         // any viewDidChangeEffectiveAppearance calls triggered by the window refresh
         // see the already-updated embeddedPreferences and resolve the correct color scheme.
+        // Pass the resolved appearance for system mode so the override config can include
+        // correct background/foreground colors when the OS is in light mode.
         GhosttyAppManager.shared.applyEmbeddedPreferences(
             GhosttyEmbeddedPreferences(
                 appearanceMode: terminalAppearance,
                 mouseWheelBehavior: mouseWheelBehavior
-            )
+            ),
+            effectiveAppearance: appAppearance ?? NSApp.effectiveAppearance
         )
 
         refreshWindowAppearances(using: appAppearance)

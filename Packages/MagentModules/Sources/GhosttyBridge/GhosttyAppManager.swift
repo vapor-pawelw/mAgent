@@ -61,7 +61,7 @@ public final class GhosttyAppManager {
         let initResult = ghostty_init(0, nil)
         Self.log("init result: \(initResult), HOME=\(ProcessInfo.processInfo.environment["HOME"] ?? "nil")")
 
-        guard let config = buildConfig(for: embeddedPreferences, logContext: "initial") else {
+        guard let config = buildConfig(for: embeddedPreferences, logContext: "initial", effectiveAppearance: NSApp.effectiveAppearance) else {
             return
         }
         retainedConfigs.append(config)
@@ -163,15 +163,18 @@ public final class GhosttyAppManager {
         registeredSurfaces.removeValue(forKey: Int(bitPattern: surface))
     }
 
-    public func applyEmbeddedPreferences(_ preferences: GhosttyEmbeddedPreferences) {
+    public func applyEmbeddedPreferences(
+        _ preferences: GhosttyEmbeddedPreferences,
+        effectiveAppearance: NSAppearance? = nil
+    ) {
         embeddedPreferences = preferences
         guard let app else { return }
-        guard let config = buildConfig(for: preferences, logContext: "update") else { return }
+        guard let config = buildConfig(for: preferences, logContext: "update", effectiveAppearance: effectiveAppearance) else { return }
         retainedConfigs.append(config)
         ghostty_app_update_config(app, config)
         // Apply color scheme AFTER config update so the API call isn't overridden by
         // whatever window-theme the config resolved (which may default to dark).
-        let colorScheme = resolvedColorScheme()
+        let colorScheme = resolvedColorScheme(for: effectiveAppearance)
         ghostty_app_set_color_scheme(app, colorScheme)
         for surface in registeredSurfaces.values {
             ghostty_surface_update_config(surface, config)
@@ -182,11 +185,14 @@ public final class GhosttyAppManager {
 
     public func refreshAppearanceIfNeeded() {
         // Re-apply full preferences so existing surfaces pick up the updated color scheme.
-        applyEmbeddedPreferences(embeddedPreferences)
+        // Pass NSApp.effectiveAppearance so system mode correctly resolves light vs dark.
+        applyEmbeddedPreferences(embeddedPreferences, effectiveAppearance: NSApp.effectiveAppearance)
     }
 
     public func refreshAppearance(using effectiveAppearance: NSAppearance?) {
-        applyAppearanceMode(using: effectiveAppearance)
+        // Rebuild the full config (not just the color scheme API call) since the override
+        // config may need to change background/foreground for system mode in light OS.
+        applyEmbeddedPreferences(embeddedPreferences, effectiveAppearance: effectiveAppearance)
     }
 
     private func startDisplayLinkIfNeeded() {
@@ -210,7 +216,8 @@ public final class GhosttyAppManager {
 
     private func buildConfig(
         for preferences: GhosttyEmbeddedPreferences,
-        logContext: String
+        logContext: String,
+        effectiveAppearance: NSAppearance? = nil
     ) -> ghostty_config_t? {
         guard let config = ghostty_config_new() else {
             Self.log("\(logContext): config_new returned nil")
@@ -219,7 +226,7 @@ public final class GhosttyAppManager {
 
         Self.log("\(logContext): config created")
         ghostty_config_load_default_files(config)
-        if let overridePath = writeOverrideConfig(for: preferences) {
+        if let overridePath = writeOverrideConfig(for: preferences, effectiveAppearance: effectiveAppearance) {
             overridePath.withCString { path in
                 ghostty_config_load_file(config, path)
             }
@@ -238,18 +245,41 @@ public final class GhosttyAppManager {
         return config
     }
 
-    private func writeOverrideConfig(for preferences: GhosttyEmbeddedPreferences) -> String? {
+    private func writeOverrideConfig(
+        for preferences: GhosttyEmbeddedPreferences,
+        effectiveAppearance: NSAppearance? = nil
+    ) -> String? {
         var lines: [String] = []
 
         // Bake the color scheme into the config so Ghostty uses it when processing
         // app/surface config updates, rather than defaulting to dark.
+        //
+        // NOTE: ghostty_surface_set_color_scheme only triggers a color reload when the
+        // conditional state changes. The conditional state defaults to .light, so calling
+        // set_color_scheme(LIGHT) is always a no-op. Without explicit background/foreground
+        // overrides, the terminal always renders with ghostty's default dark background
+        // (#282c34) unless the user has a paired theme (e.g. theme = OneLight:OneDark).
+        // Writing background/foreground here ensures light mode works out of the box.
+        // Users who prefer different light colors can override background/foreground in
+        // their ~/.config/ghostty/config — our override is loaded after theirs, so to
+        // keep custom colors, users should NOT rely on this default and instead configure
+        // a paired theme (theme = MyLight:MyDark) which works via conditional state.
+        let resolvedScheme = resolvedColorScheme(for: effectiveAppearance)
         switch preferences.appearanceMode {
         case .light:
             lines.append("window-theme = light")
+            lines.append("background = #ffffff")
+            lines.append("foreground = #000000")
         case .dark:
             lines.append("window-theme = dark")
         case .system:
             lines.append("window-theme = auto")
+            // When the OS is in light mode, ghostty's default dark background (#282c34)
+            // would still show dark. Override to match the OS light appearance.
+            if resolvedScheme == GHOSTTY_COLOR_SCHEME_LIGHT {
+                lines.append("background = #ffffff")
+                lines.append("foreground = #000000")
+            }
         }
 
         switch preferences.mouseWheelBehavior {
