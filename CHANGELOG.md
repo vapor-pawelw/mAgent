@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Terminal
-- Fixed Ghostty terminals remaining dark when switching to Light mode: the appearance mode is now written into the Ghostty override config (`window-theme`), the color scheme API is called after config updates (not before), and appearance changes force an immediate draw instead of scheduling a deferred refresh.
+- Fixed Ghostty terminals remaining dark in Light mode: the override config now writes explicit `background`/`foreground` colors for light appearance (white/black) since `window-theme = light` only affects window chrome and `ghostty_surface_set_color_scheme` is a no-op when ghostty's default conditional state is already `.light`. System mode also applies light colors when the OS is in light mode.
 - Unselected tab borders in dark mode are now slightly more visible.
 
 ### Agents
