@@ -814,11 +814,11 @@ extension ThreadManager {
             agentType: agentType,
             resumeSessionID: resumeSessionID
         )
-        // Wrap the agent command in a login shell so user profile files are sourced
-        // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
+        // Use an interactive login shell so zsh loads both login files and `.zshrc`
+        // before resolving the agent binary. Many PATH/custom command setups live in `.zshrc`.
         parts.append(command)
         let innerCmd = parts.joined(separator: " && ") + "; exec \(shell) -l"
-        return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
+        return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -il -c \(ShellExecutor.shellQuote(innerCmd))"
     }
 
     private func agentCommand(

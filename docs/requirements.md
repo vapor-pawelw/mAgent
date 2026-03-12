@@ -32,6 +32,7 @@ Each tab within a thread:
 - Is a separate embedded terminal instance
 - Runs its own tmux session
 - Operates in the same worktree directory as the thread
+- Starts in the thread worktree/repo directory on first session creation, but switching back to an already-running tab must not reset the shell's current directory
 
 ## Configuration (First Run / Settings)
 
@@ -73,6 +74,7 @@ Before the app is usable, the user must complete a configuration step:
 - Agent tabs must preserve their own resolved agent type (for example Claude vs Codex) across relaunches and project-default changes, rather than being reinterpreted from the current project default each time they reopen.
 - While an agent tab is opening, the loading overlay may show a small, low-contrast technical status line only for non-routine recovery work (for example recreating a missing tmux session or replacing one tied to the wrong worktree). Routine agent startup should keep the simple `Starting agent...` message.
 - If a live agent tab has already returned to a normal shell prompt, reopening that tab should skip the `Starting agent...` overlay instead of waiting for agent-ready output that will never arrive.
+- Agent startup must source normal user zsh PATH setup before resolving the agent command, including setups that define `claude`/`codex` from `.zshrc`.
 
 ## UI Structure
 

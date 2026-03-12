@@ -188,6 +188,15 @@ Some features need to stay in the codebase before they are ready to ship. Those 
 - If a feature is visible in debug-only Settings surfaces, annotate it with `Debug builds only` so developers can see immediately that it is not part of release builds.
 - `FEATURE_JIRA` is the current example: Debug builds expose Jira settings/actions, while Release builds hide them and stub out Jira-specific UI/runtime hooks.
 
+### 4.8 Shell Startup and Reattach CWD Contract
+
+Shell startup uses a managed `ZDOTDIR` wrapper so Magent can source the user's shell files and still land in the intended worktree/repo directory afterward.
+
+- Terminal startup should flow through `terminalStartCommand(...)`, which launches a login shell with `MAGENT_START_CWD` and applies the final `cd` from the managed `.zshrc` after user shell config has loaded.
+- Agent startup should flow through `agentStartCommand(...)`, which must use an interactive login zsh shell (`-il`) so `.zshrc` PATH setup is available before resolving agent binaries like `claude` or `codex`.
+- A one-time `cd` in user `.zshrc` is expected and should be overridden by `MAGENT_START_CWD` during session creation.
+- Reattaching to an existing tmux session must not inject `cd` again. Existing terminal state is authoritative once the session is live; only fresh session creation should enforce the starting directory.
+
 ### 5. Persistence Model
 
 Thread state persisted as JSON in app's Application Support directory:
