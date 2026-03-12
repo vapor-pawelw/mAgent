@@ -138,17 +138,31 @@ The correct order in `applyEmbeddedPreferences`:
 2. `ghostty_app_set_color_scheme(app, newColorScheme)` — override scheme at app level
 3. Per registered surface: `ghostty_surface_update_config(surface, config)` then `ghostty_surface_set_color_scheme(surface, newColorScheme)` then `ghostty_surface_draw(surface)`
 
-`refreshAppearanceIfNeeded()` should call `applyEmbeddedPreferences(embeddedPreferences)` rather than just `applyAppearanceMode()` alone, so existing surfaces are explicitly updated and not just the app-level preference.
+`refreshAppearanceIfNeeded()` and `refreshAppearance(using:)` both call `applyEmbeddedPreferences(embeddedPreferences, effectiveAppearance:)` rather than just the color scheme API alone, so the override config (which includes background/foreground) is rebuilt on every appearance change.
 
-## window-theme Must Be Written Into Override Config
+## window-theme Does NOT Change Terminal Colors
 
-`ghostty_surface_set_color_scheme` alone is not always sufficient — Ghostty's `ghostty_app_update_config` / `ghostty_surface_update_config` can reset the resolved color scheme back to dark if the config file doesn't specify an explicit appearance. The fix is to write `window-theme = light/dark/auto` into the Magent override config (generated in `writeOverrideConfig`) matching the configured `appearanceMode`. This way the config update itself carries the correct scheme, and the subsequent API call reinforces it.
+**Critical gotcha**: `window-theme = light/dark` in ghostty config only affects the **window chrome** (title bar appearance, scrollbar style). It does **not** change the terminal background or text colors.
 
+`ghostty_surface_set_color_scheme(LIGHT)` is a **no-op** for newly created surfaces. The reason: ghostty's internal `ConditionalState` defaults to `.light`, so the `colorSchemeCallback` guard (`if current == new: return`) fires immediately and the config is never reloaded. Even when it does fire, without conditional theme blocks in the user's ghostty config (e.g. `[os-theme = light] { background = white }`), there is nothing to reload — ghostty's hardcoded default background is `#282c34` (dark) regardless of the color scheme.
+
+## Background/Foreground Must Be Overridden for Light Mode
+
+**Rule**: Write explicit `background` and `foreground` into the Magent override config whenever the resolved appearance is light. Without this, the terminal always renders dark.
+
+Current override values written by `writeOverrideConfig`:
 ```
-window-theme = light   # for .light mode
-window-theme = dark    # for .dark mode
-window-theme = auto    # for .system mode
+# Light mode (.light or .system when OS is light):
+window-theme = light    # (or auto for system mode)
+background = #ffffff
+foreground = #000000
+
+# Dark mode (.dark or .system when OS is dark):
+window-theme = dark     # (or auto for system mode)
+# no background/foreground override — ghostty's default #282c34 is already dark
 ```
+
+**Users with paired themes**: If a user configures `theme = OneLight:OneDark` in `~/.config/ghostty/config`, Magent's `background = #ffffff` override will still win (the override config is loaded after user config). For users who want to use ghostty's paired theme mechanism, the correct approach is to use `.system` mode in Magent and let the host OS appearance drive the conditional state switch.
 
 ## Existing Surface Refresh Contract
 
@@ -184,7 +198,7 @@ Skipping `update_config` here causes new panes to start dark even when Light mod
 
 Beyond the manual settings toggle, terminals must also react when macOS switches the system appearance (e.g., the user flips Dark/Light in System Settings, or per-window appearance changes).
 
-**Rule**: `TerminalSurfaceView` overrides `viewDidChangeEffectiveAppearance()` and calls `GhosttyAppManager.shared.refreshAppearance(using: effectiveAppearance)`, followed by `ghostty_surface_draw(surface)` on the surface directly. `refreshAppearance` iterates all registered surfaces and updates both the app-level and per-surface color scheme. The explicit `draw` call on the originating surface ensures the change is visually applied immediately, rather than waiting for the next CVDisplayLink tick.
+**Rule**: `TerminalSurfaceView` overrides `viewDidChangeEffectiveAppearance()` and calls `GhosttyAppManager.shared.refreshAppearance(using: effectiveAppearance)`, followed by `ghostty_surface_draw(surface)` on the surface directly. `refreshAppearance` calls `applyEmbeddedPreferences(embeddedPreferences, effectiveAppearance:)` which rebuilds the override config (including background/foreground for light mode) and updates all registered surfaces. The explicit `draw` call on the originating surface ensures the change is visually applied immediately, rather than waiting for the next CVDisplayLink tick.
 
 Without this hook, the terminal stays in the old scheme until the user manually re-toggles the Appearance setting.
 
