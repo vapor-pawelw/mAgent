@@ -4,7 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Terminal
+- Added a terminal mouse-wheel setting so Magent can default wheel input to terminal scrolling, inherit the user's Ghostty config, or let prompts/apps capture wheel input.
+- App appearance can now follow macOS or be forced to Light/Dark, and the embedded terminal stays aligned with that choice.
+
+### Settings
+- Added a dedicated `Terminal` settings category for appearance, wheel behavior, and terminal overlay visibility, keeping terminal controls out of `General`.
 
 ## 1.2.1 - 2026-03-12
 
