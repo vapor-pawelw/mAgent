@@ -505,20 +505,16 @@ final class ThreadDetailViewController: NSViewController {
                 resumeSessionID: resumeSessionID
             )
         } else {
-            startCmd = "\(envExportsWithSocket) && cd \(wd) && exec $SHELL -l"
+            startCmd = threadManager.terminalStartCommand(
+                envExports: envExportsWithSocket,
+                workingDirectory: wd
+            )
         }
 
         let sq = ShellExecutor.shellQuote
         let quotedWd = sq(wd)
         let quotedStartCmd = sq(startCmd)
-
-        if isAgentSession {
-            let tmuxInner = "tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \(quotedWd) \(quotedStartCmd) && tmux attach-session -t \(sessionName); }"
-            return "/bin/sh -c \(sq(tmuxInner))"
-        }
-        // Force cwd on every open for terminal tabs, even if shell init changes it.
-        let quotedCdWd = sq("cd \(wd)")
-        let tmuxInner = "tmux send-keys -t \(sessionName) \(quotedCdWd) Enter 2>/dev/null; tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \(quotedWd) \(quotedStartCmd) && tmux send-keys -t \(sessionName) \(quotedCdWd) Enter && tmux attach-session -t \(sessionName); }"
+        let tmuxInner = "tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \(quotedWd) \(quotedStartCmd) && tmux attach-session -t \(sessionName); }"
         return "/bin/sh -c \(sq(tmuxInner))"
     }
 
