@@ -235,9 +235,8 @@ extension ThreadDetailViewController {
     func ensureLoadingOverlay() {
         guard loadingOverlay == nil else { return }
 
-        let overlay = NSView()
+        let overlay = AppBackgroundView()
         overlay.wantsLayer = true
-        overlay.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
         overlay.translatesAutoresizingMaskIntoConstraints = false
 
         let spinner = NSProgressIndicator()

@@ -6,7 +6,7 @@ import MagentCore
 
 /// NSView that keeps its layer background synced with the .appBackground color asset
 /// across both light and dark appearance changes.
-private final class AppBackgroundView: NSView {
+final class AppBackgroundView: NSView {
     var onEffectiveAppearanceChanged: (() -> Void)?
 
     override func viewDidChangeEffectiveAppearance() {
