@@ -38,9 +38,9 @@ public final class TmuxService: Sendable {
         // Click anywhere to clear selection but stay in copy-mode (preserves scroll position)
         _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode MouseDown1Pane send-keys -X clear-selection")
         _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode-vi MouseDown1Pane send-keys -X clear-selection")
-        // Show tmux's built-in scrollbar while browsing history.
-        _ = try? await ShellExecutor.run("tmux set-option -g pane-scrollbars modal")
-        _ = try? await ShellExecutor.run("tmux set-option -g pane-scrollbars-position right")
+        // Keep tmux scrollbars off; otherwise they reappear inside embedded Ghostty
+        // and look like Ghostty's own scrollbar regressed.
+        _ = try? await ShellExecutor.run("tmux set-option -g pane-scrollbars off")
         await configureBellMonitoring(resetEventLog: true)
     }
 

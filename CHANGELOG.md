@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 ### Terminal
 - `Continue in...` context handoff files now live in a transient worktrees-side cache with unique filenames and automatic cleanup, so transfers no longer dirty the repo and concurrent handoffs do not collide.
 - Prompt TOC "Copy prompt" now copies the full submitted prompt instead of the 3-line TOC preview text.
+- Fixed the terminal scrollbar reappearing during tmux history browsing; Magent now keeps tmux `pane-scrollbars` disabled so embedded Ghostty panes stay chrome-free.
 - Fixed Ghostty terminals remaining dark in Light mode: the override config now writes explicit `background`/`foreground` colors for light appearance (white/black) since `window-theme = light` only affects window chrome and `ghostty_surface_set_color_scheme` is a no-op when ghostty's default conditional state is already `.light`. System mode also applies light colors when the OS is in light mode.
 - Fixed the terminal wheel-behavior setting not taking effect for already-open embedded Ghostty tabs; switching between scroll-history, app-capture, and Ghostty-global modes now reapplies immediately.
 - Embedded terminals now hide Ghostty's native scrollbar for a cleaner in-app terminal surface while Magent uses its own scroll affordances.
