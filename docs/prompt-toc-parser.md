@@ -8,6 +8,7 @@ This document covers the Prompt TOC parsing and jump behavior that was adjusted 
 - Claude Code and Codex sessions can style submitted prompts differently; parser rules must accept both without pulling in placeholder composer content.
 - Selecting a TOC row should jump directly to the chosen prompt without visibly flashing to the very top of terminal history first.
 - When enough lines exist below the selected prompt, the selected prompt should land at the top edge of the terminal viewport.
+- TOC rows may show only a 3-line preview, but prompt actions like `Copy prompt` should use the full submitted prompt text.
 
 ## Implementation details
 
@@ -28,6 +29,7 @@ This document covers the Prompt TOC parsing and jump behavior that was adjusted 
 - Claude prompt parsing now recognizes the dark prompt-row background as a positive submission signal.
 - Bottom-cluster exclusion now includes blank prompt rows and footer divider rows.
 - TOC jump behavior now uses tmux `goto-line` plus `scroll-top` with top-relative to bottom-relative line conversion instead of `history-top` plus a long cursor walk.
+- Prompt TOC entries now keep both preview text and full submitted text so context-menu actions can copy or reuse the complete prompt even when the row UI is limited to a 3-line preview.
 
 ## Auto-rename gate: agent process detection
 
