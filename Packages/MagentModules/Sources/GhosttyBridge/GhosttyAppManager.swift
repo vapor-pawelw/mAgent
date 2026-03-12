@@ -142,12 +142,15 @@ public final class GhosttyAppManager {
         return text
     }
 
-    public func registerSurface(_ surface: ghostty_surface_t?) {
+    public func registerSurface(
+        _ surface: ghostty_surface_t?,
+        effectiveAppearance: NSAppearance? = nil
+    ) {
         guard let surface else { return }
         registeredSurfaces[Int(bitPattern: surface)] = surface
         // Apply the current preferences immediately so the surface doesn't default to dark.
         // Mirrors what applyEmbeddedPreferences does for already-registered surfaces.
-        let colorScheme = resolvedColorScheme()
+        let colorScheme = resolvedColorScheme(for: effectiveAppearance)
         if let config = retainedConfigs.last {
             ghostty_surface_update_config(surface, config)
         }
@@ -179,6 +182,10 @@ public final class GhosttyAppManager {
     public func refreshAppearanceIfNeeded() {
         // Re-apply full preferences so existing surfaces pick up the updated color scheme.
         applyEmbeddedPreferences(embeddedPreferences)
+    }
+
+    public func refreshAppearance(using effectiveAppearance: NSAppearance?) {
+        applyAppearanceMode(using: effectiveAppearance)
     }
 
     private func startDisplayLinkIfNeeded() {
@@ -255,9 +262,9 @@ public final class GhosttyAppManager {
         }
     }
 
-    private func applyAppearanceMode() {
+    private func applyAppearanceMode(using effectiveAppearance: NSAppearance? = nil) {
         guard let app else { return }
-        let colorScheme = resolvedColorScheme()
+        let colorScheme = resolvedColorScheme(for: effectiveAppearance)
         ghostty_app_set_color_scheme(app, colorScheme)
         for surface in registeredSurfaces.values {
             ghostty_surface_set_color_scheme(surface, colorScheme)
@@ -265,10 +272,10 @@ public final class GhosttyAppManager {
         }
     }
 
-    private func resolvedColorScheme() -> ghostty_color_scheme_e {
+    private func resolvedColorScheme(for effectiveAppearance: NSAppearance? = nil) -> ghostty_color_scheme_e {
         switch embeddedPreferences.appearanceMode {
         case .system:
-            return currentSystemColorScheme()
+            return currentSystemColorScheme(for: effectiveAppearance)
         case .light:
             return GHOSTTY_COLOR_SCHEME_LIGHT
         case .dark:
@@ -276,8 +283,8 @@ public final class GhosttyAppManager {
         }
     }
 
-    private func currentSystemColorScheme() -> ghostty_color_scheme_e {
-        let appearance = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
+    private func currentSystemColorScheme(for effectiveAppearance: NSAppearance?) -> ghostty_color_scheme_e {
+        let appearance = (effectiveAppearance ?? NSApp.effectiveAppearance).bestMatch(from: [.darkAqua, .aqua])
         return appearance == .darkAqua ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT
     }
 }

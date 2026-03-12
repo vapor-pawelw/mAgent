@@ -154,10 +154,20 @@ Updating the app-level Ghostty color scheme is not sufficient on its own for alr
 
 **Rule**: `registerSurface` must immediately apply the full current state to the new surface, mirroring what `applyEmbeddedPreferences` does for already-registered surfaces:
 1. `ghostty_surface_update_config(surface, retainedConfigs.last)` — push the current config (mouse-wheel policy etc.)
-2. `ghostty_surface_set_color_scheme(surface, resolvedColorScheme())` — override with the current light/dark scheme
+2. `ghostty_surface_set_color_scheme(surface, resolvedColorScheme(for: effectiveAppearance))` — override with the current light/dark scheme
 3. `ghostty_surface_refresh(surface)` — trigger an immediate redraw
 
 Skipping `update_config` here causes new panes to start dark even when Light mode is active, because the surface only sees the app-level config that was current at `ghostty_surface_new` time.
+
+**`effectiveAppearance` parameter**: `registerSurface` accepts an optional `NSAppearance?` which is the calling view's `effectiveAppearance`. This ensures new surfaces get the correct scheme even in scenarios where the view's effective appearance differs from `NSApp.effectiveAppearance` (e.g., per-window appearance overrides). Always pass `effectiveAppearance` from `TerminalSurfaceView` at surface-creation time.
+
+## System Appearance Change Contract
+
+Beyond the manual settings toggle, terminals must also react when macOS switches the system appearance (e.g., the user flips Dark/Light in System Settings, or per-window appearance changes).
+
+**Rule**: `TerminalSurfaceView` overrides `viewDidChangeEffectiveAppearance()` and calls `GhosttyAppManager.shared.refreshAppearance(using: effectiveAppearance)`. This propagates the view's current effective appearance into `applyAppearanceMode`, which iterates all registered surfaces and updates both the app-level and per-surface color scheme, followed by `ghostty_surface_refresh`.
+
+Without this hook, the terminal stays in the old scheme until the user manually re-toggles the Appearance setting.
 
 ## Overlay Z-Order Contract (mAgent)
 

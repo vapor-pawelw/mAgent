@@ -112,6 +112,8 @@ final class BannerView: NSView {
     private let iconView = NSImageView()
     private let messageLabel = NSTextField(wrappingLabelWithString: "")
     private let closeButton = NSButton()
+    private let leadingAccessoryView = NSView()
+    private let trailingAccessoryView = NSView()
     private var actionButtons: [NSButton] = []
     private var trackingArea: NSTrackingArea?
 
@@ -147,17 +149,19 @@ final class BannerView: NSView {
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rootStack)
 
-        let headerRow = NSStackView()
-        headerRow.orientation = .horizontal
-        headerRow.alignment = .top
-        headerRow.spacing = 10
+        let headerRow = NSView()
         headerRow.translatesAutoresizingMaskIntoConstraints = false
         rootStack.addArrangedSubview(headerRow)
+
+        leadingAccessoryView.translatesAutoresizingMaskIntoConstraints = false
+        trailingAccessoryView.translatesAutoresizingMaskIntoConstraints = false
+        headerRow.addSubview(leadingAccessoryView)
+        headerRow.addSubview(trailingAccessoryView)
 
         iconView.image = config.style.icon
         iconView.contentTintColor = config.style.foregroundColor
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        headerRow.addArrangedSubview(iconView)
+        leadingAccessoryView.addSubview(iconView)
 
         if let attributed = config.attributedMessage {
             messageLabel.attributedStringValue = attributed
@@ -168,13 +172,13 @@ final class BannerView: NSView {
         messageLabel.textColor = config.style.foregroundColor
         messageLabel.lineBreakMode = .byWordWrapping
         messageLabel.maximumNumberOfLines = 0
+        messageLabel.alignment = .center
         messageLabel.isSelectable = true
         messageLabel.isEditable = false
         messageLabel.drawsBackground = false
         messageLabel.isBezeled = false
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
-        messageLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        headerRow.addArrangedSubview(messageLabel)
+        headerRow.addSubview(messageLabel)
 
         closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Dismiss")
         closeButton.bezelStyle = .inline
@@ -184,13 +188,35 @@ final class BannerView: NSView {
         closeButton.action = #selector(closeTapped)
         closeButton.isHidden = !config.isDismissible
         closeButton.translatesAutoresizingMaskIntoConstraints = false
-        headerRow.addArrangedSubview(closeButton)
+        trailingAccessoryView.addSubview(closeButton)
 
         NSLayoutConstraint.activate([
+            leadingAccessoryView.leadingAnchor.constraint(equalTo: headerRow.leadingAnchor),
+            leadingAccessoryView.topAnchor.constraint(equalTo: headerRow.topAnchor),
+            leadingAccessoryView.bottomAnchor.constraint(lessThanOrEqualTo: headerRow.bottomAnchor),
+            leadingAccessoryView.widthAnchor.constraint(equalToConstant: 20),
+
+            trailingAccessoryView.trailingAnchor.constraint(equalTo: headerRow.trailingAnchor),
+            trailingAccessoryView.topAnchor.constraint(equalTo: headerRow.topAnchor),
+            trailingAccessoryView.bottomAnchor.constraint(lessThanOrEqualTo: headerRow.bottomAnchor),
+            trailingAccessoryView.widthAnchor.constraint(equalTo: leadingAccessoryView.widthAnchor),
+
+            iconView.topAnchor.constraint(equalTo: leadingAccessoryView.topAnchor),
+            iconView.centerXAnchor.constraint(equalTo: leadingAccessoryView.centerXAnchor),
             iconView.widthAnchor.constraint(equalToConstant: 18),
             iconView.heightAnchor.constraint(equalToConstant: 18),
+
+            closeButton.topAnchor.constraint(equalTo: trailingAccessoryView.topAnchor),
+            closeButton.centerXAnchor.constraint(equalTo: trailingAccessoryView.centerXAnchor),
             closeButton.widthAnchor.constraint(equalToConstant: 20),
             closeButton.heightAnchor.constraint(equalToConstant: 20),
+
+            messageLabel.topAnchor.constraint(equalTo: headerRow.topAnchor),
+            messageLabel.bottomAnchor.constraint(equalTo: headerRow.bottomAnchor),
+            messageLabel.centerXAnchor.constraint(equalTo: headerRow.centerXAnchor),
+            messageLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAccessoryView.trailingAnchor, constant: 10),
+            messageLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAccessoryView.leadingAnchor, constant: -10),
+            headerRow.heightAnchor.constraint(greaterThanOrEqualToConstant: 20),
         ])
 
         let actionRow = buildActionRow()

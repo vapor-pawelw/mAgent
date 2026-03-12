@@ -10,6 +10,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     let titleLabel: NSTextField
     let closeButton: NSButton
     var isDragging = false
+    private let contentStack: NSStackView
 
     var isSelected = false {
         didSet { updateAppearance() }
@@ -103,10 +104,12 @@ final class TabItemView: NSView, NSMenuDelegate {
         rateLimitIcon = NSImageView()
         titleLabel = NSTextField(labelWithString: title)
         closeButton = NSButton()
+        contentStack = NSStackView()
         super.init(frame: .zero)
 
         wantsLayer = true
-        layer?.cornerRadius = 5
+        layer?.cornerRadius = 7
+        layer?.borderWidth = 1
         translatesAutoresizingMaskIntoConstraints = false
         setContentHuggingPriority(.defaultHigh, for: .horizontal)
         setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
@@ -153,28 +156,34 @@ final class TabItemView: NSView, NSMenuDelegate {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        // Close button — use xmark.circle.fill for visibility
-        closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close Tab")
-        closeButton.contentTintColor = NSColor(resource: .textSecondary)
+        // Use a lighter close glyph so the control reads like tab chrome, not an alert affordance.
+        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Tab")
+        closeButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
         closeButton.bezelStyle = .inline
         closeButton.isBordered = false
+        closeButton.wantsLayer = true
+        closeButton.layer?.cornerRadius = 5
         closeButton.target = self
         closeButton.action = #selector(closeTapped)
         closeButton.translatesAutoresizingMaskIntoConstraints = false
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
+        closeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         // Layout using an internal stack
-        let contentStack = NSStackView(views: [pinIcon, completionDot, busySpinner, rateLimitIcon, titleLabel, closeButton])
         contentStack.orientation = .horizontal
-        contentStack.spacing = 4
         contentStack.alignment = .centerY
+        contentStack.spacing = 5
         contentStack.translatesAutoresizingMaskIntoConstraints = false
+        for view in [pinIcon, completionDot, busySpinner, rateLimitIcon, titleLabel, closeButton] {
+            contentStack.addArrangedSubview(view)
+        }
+        contentStack.orientation = .horizontal
         addSubview(contentStack)
 
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 26),
-            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            heightAnchor.constraint(equalToConstant: 28),
+            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
             contentStack.centerYAnchor.constraint(equalTo: centerYAnchor),
             pinIcon.widthAnchor.constraint(equalToConstant: 12),
             pinIcon.heightAnchor.constraint(equalToConstant: 12),
@@ -184,8 +193,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             busySpinner.heightAnchor.constraint(equalToConstant: 10),
             rateLimitIcon.widthAnchor.constraint(equalToConstant: 10),
             rateLimitIcon.heightAnchor.constraint(equalToConstant: 10),
-            closeButton.widthAnchor.constraint(equalToConstant: 16),
-            closeButton.heightAnchor.constraint(equalToConstant: 16),
+            closeButton.widthAnchor.constraint(equalToConstant: 18),
+            closeButton.heightAnchor.constraint(equalToConstant: 18),
         ])
 
         // Right-click menu
@@ -199,6 +208,11 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         // point is in superview coordinates
@@ -258,10 +272,35 @@ final class TabItemView: NSView, NSMenuDelegate {
     }
 
     private func updateAppearance() {
-        layer?.backgroundColor = isSelected
-            ? NSColor(resource: .primaryBrand).withAlphaComponent(0.2).cgColor
-            : NSColor(resource: .surface).withAlphaComponent(0.5).cgColor
-        titleLabel.textColor = isSelected ? NSColor(resource: .textPrimary) : NSColor(resource: .textSecondary)
+        let backgroundColor: NSColor
+        let borderColor: NSColor
+        let titleColor: NSColor
+        let secondaryColor: NSColor
+        let closeBackgroundColor: NSColor
+
+        if isSelected {
+            backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.18)
+            borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.38)
+            titleColor = NSColor(resource: .textPrimary)
+            secondaryColor = NSColor(resource: .textPrimary).withAlphaComponent(0.78)
+            closeBackgroundColor = NSColor(resource: .textPrimary).withAlphaComponent(0.12)
+            titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        } else {
+            backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.62)
+            borderColor = NSColor.separatorColor.withAlphaComponent(0.55)
+            titleColor = NSColor(resource: .textSecondary).withAlphaComponent(0.96)
+            secondaryColor = NSColor(resource: .textSecondary).withAlphaComponent(0.82)
+            closeBackgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.10)
+            titleLabel.font = .systemFont(ofSize: 12, weight: .regular)
+        }
+
+        layer?.backgroundColor = backgroundColor.cgColor
+        layer?.borderColor = borderColor.cgColor
+        titleLabel.textColor = titleColor
+        pinIcon.contentTintColor = secondaryColor
+        closeButton.contentTintColor = secondaryColor
+        closeButton.layer?.backgroundColor = closeBackgroundColor.cgColor
+        closeButton.alphaValue = isSelected ? 1.0 : 0.9
     }
 
     // MARK: NSMenuDelegate
