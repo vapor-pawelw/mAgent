@@ -40,6 +40,9 @@ final class ThreadDetailViewController: NSViewController {
     var loadingDetailLabel: NSTextField?
     var loadingPollTimer: Timer?
     var loadingOverlaySessionName: String?
+    var preparedSessions: Set<String> = []
+    var sessionPreparationTasks: [String: Task<Void, Never>] = [:]
+    var backgroundSessionPreparationTask: Task<Void, Never>?
     var emptyStateView: NSView?
     var promptTOCView: PromptTableOfContentsView?
     var promptTOCTopConstraint: NSLayoutConstraint?
@@ -116,7 +119,7 @@ final class ThreadDetailViewController: NSViewController {
         refreshJiraButton()
         refreshXcodeButton()
         refreshReviewButtonVisibility()
-        setupLoadingOverlay()
+        ensureLoadingOverlay()
 
         // Observe dead session notifications for mid-use terminal replacement
         NotificationCenter.default.addObserver(
@@ -210,6 +213,8 @@ final class ThreadDetailViewController: NSViewController {
     deinit {
         promptTOCRefreshTask?.cancel()
         scrollFABRefreshTask?.cancel()
+        backgroundSessionPreparationTask?.cancel()
+        sessionPreparationTasks.values.forEach { $0.cancel() }
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -365,47 +370,44 @@ final class ThreadDetailViewController: NSViewController {
         let unpinned = sessions.filter { !pinnedSet.contains($0) }
         let orderedSessions = pinned + unpinned
         pinnedCount = pinned.count
+        let initialIndex: Int
+        let defaults = UserDefaults.standard
+        let defaultsThreadId = defaults
+            .string(forKey: Self.lastOpenedThreadDefaultsKey)
+            .flatMap(UUID.init(uuidString:))
+        let defaultsSession = defaults.string(forKey: Self.lastOpenedSessionDefaultsKey)
 
-        for (i, sessionName) in orderedSessions.enumerated() {
-            // Ensure the session exists and matches this thread context.
-            _ = await threadManager.recreateSessionIfNeeded(
-                sessionName: sessionName,
-                thread: thread,
-                onAction: { [weak self] action in
-                    guard let self,
-                          sessionName == self.loadingOverlaySessionName else { return }
-                    self.updateLoadingOverlayDetail(action?.loadingOverlayDetail)
-                }
-            )
+        if defaultsThreadId == thread.id,
+           let defaultsSession,
+           let savedIndex = orderedSessions.firstIndex(of: defaultsSession) {
+            initialIndex = savedIndex
+        } else if let lastSelected = thread.lastSelectedTmuxSessionName,
+                  let savedIndex = orderedSessions.firstIndex(of: lastSelected) {
+            initialIndex = savedIndex
+        } else {
+            initialIndex = 0
+        }
 
-            await MainActor.run {
+        let initialSessionName = orderedSessions[initialIndex]
+
+        await MainActor.run {
+            preparedSessions.removeAll()
+            sessionPreparationTasks.values.forEach { $0.cancel() }
+            sessionPreparationTasks.removeAll()
+            backgroundSessionPreparationTask?.cancel()
+            backgroundSessionPreparationTask = nil
+
+            startLoadingOverlayTracking(sessionName: initialSessionName, agentType: selectedAgentType)
+
+            for (i, sessionName) in orderedSessions.enumerated() {
                 let title = thread.displayName(for: sessionName, at: i)
                 createTabItem(title: title, closable: true, pinned: i < pinnedCount)
 
                 let terminalView = makeTerminalView(for: sessionName)
                 terminalViews.append(terminalView)
             }
-        }
 
-        await MainActor.run {
             rebuildTabBar()
-            let initialIndex: Int
-            let defaults = UserDefaults.standard
-            let defaultsThreadId = defaults
-                .string(forKey: Self.lastOpenedThreadDefaultsKey)
-                .flatMap(UUID.init(uuidString:))
-            let defaultsSession = defaults.string(forKey: Self.lastOpenedSessionDefaultsKey)
-
-            if defaultsThreadId == thread.id,
-               let defaultsSession,
-               let savedIndex = orderedSessions.firstIndex(of: defaultsSession) {
-                initialIndex = savedIndex
-            } else if let lastSelected = thread.lastSelectedTmuxSessionName,
-                      let savedIndex = orderedSessions.firstIndex(of: lastSelected) {
-                initialIndex = savedIndex
-            } else {
-                initialIndex = 0
-            }
 
             // Initialize indicator dots from thread model
             for (i, sessionName) in orderedSessions.enumerated() where i < tabItems.count {
@@ -415,8 +417,19 @@ final class ThreadDetailViewController: NSViewController {
                 tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
                 tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
             }
+        }
 
-            selectTab(at: initialIndex)
+        await ensureSessionPrepared(sessionName: initialSessionName) { [weak self] action in
+            guard let self,
+                  initialSessionName == self.loadingOverlaySessionName else { return }
+            self.updateLoadingOverlayDetail(action?.loadingOverlayDetail)
+        }
+
+        await MainActor.run {
+            selectPreparedTab(at: initialIndex)
+            prepareSessionsInBackground(orderedSessions.enumerated().compactMap { offset, sessionName in
+                offset == initialIndex ? nil : sessionName
+            })
         }
     }
 

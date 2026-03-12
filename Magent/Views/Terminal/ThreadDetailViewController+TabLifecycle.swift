@@ -232,7 +232,9 @@ extension ThreadDetailViewController {
 
     // MARK: - Loading Overlay
 
-    func setupLoadingOverlay() {
+    func ensureLoadingOverlay() {
+        guard loadingOverlay == nil else { return }
+
         let overlay = NSView()
         overlay.wantsLayer = true
         overlay.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
@@ -281,23 +283,28 @@ extension ThreadDetailViewController {
 
         loadingOverlay = overlay
         loadingDetailLabel = detailLabel
+    }
 
-        let sessionName: String
-        let settings = PersistenceService.shared.loadSettings()
-        let slug = TmuxSessionNaming.repoSlug(from:
-            settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
-        )
-        let overlaySelectedAgentType = threadManager.effectiveAgentType(for: thread.projectId)
-        let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(TmuxSessionNaming.defaultTabDisplayName(for: overlaySelectedAgentType))
-        if thread.isMain {
-            sessionName = thread.tmuxSessionNames.first ?? TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
-        } else {
-            sessionName = thread.tmuxSessionNames.first ?? TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
+    @MainActor
+    func startLoadingOverlayTracking(sessionName: String, agentType: AgentType?) {
+        loadingPollTimer?.invalidate()
+        loadingPollTimer = nil
+
+        ensureLoadingOverlay()
+
+        guard thread.agentTmuxSessions.contains(sessionName) else {
+            dismissLoadingOverlay()
+            return
         }
+
+        loadingOverlay?.alphaValue = 1
+        loadingOverlay?.isHidden = false
+        loadingDetailLabel?.stringValue = ""
+        loadingDetailLabel?.isHidden = true
         loadingOverlaySessionName = sessionName
+
         let startTime = Date()
         let maxWait: TimeInterval = 15
-        let overlayAgentType = threadManager.effectiveAgentType(for: thread.projectId)
 
         loadingPollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
@@ -314,13 +321,24 @@ extension ThreadDetailViewController {
             }
 
             Task {
-                let ready = await self.isAgentReady(sessionName: sessionName, agentType: overlayAgentType)
+                let ready = await self.isAgentReady(sessionName: sessionName, agentType: agentType)
                 if ready {
                     await MainActor.run {
                         self.loadingPollTimer?.invalidate()
                         self.loadingPollTimer = nil
                         self.dismissLoadingOverlay()
                     }
+                }
+            }
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            let ready = await self.isAgentReady(sessionName: sessionName, agentType: agentType)
+            if ready {
+                await MainActor.run {
+                    guard self.loadingOverlaySessionName == sessionName else { return }
+                    self.dismissLoadingOverlay()
                 }
             }
         }
@@ -336,18 +354,13 @@ extension ThreadDetailViewController {
     }
 
     private func dismissLoadingOverlay() {
+        loadingPollTimer?.invalidate()
+        loadingPollTimer = nil
+
         guard let overlay = loadingOverlay else { return }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.3
-            overlay.animator().alphaValue = 0
-        } completionHandler: { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.loadingDetailLabel = nil
-                self?.loadingOverlay?.removeFromSuperview()
-                self?.loadingOverlay = nil
-                self?.loadingOverlaySessionName = nil
-            }
-        }
+        overlay.animator().alphaValue = 0
+        overlay.isHidden = true
+        loadingOverlaySessionName = nil
     }
 
     @MainActor
@@ -356,6 +369,48 @@ extension ThreadDetailViewController {
         let trimmed = detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         label.stringValue = trimmed
         label.isHidden = trimmed.isEmpty
+    }
+
+    @MainActor
+    func ensureSessionPrepared(
+        sessionName: String,
+        onAction: (@MainActor @Sendable (ThreadManager.SessionRecreationAction?) -> Void)? = nil
+    ) async {
+        if preparedSessions.contains(sessionName) { return }
+
+        if let existingTask = sessionPreparationTasks[sessionName] {
+            await existingTask.value
+            return
+        }
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            _ = await self.threadManager.recreateSessionIfNeeded(
+                sessionName: sessionName,
+                thread: self.thread,
+                onAction: onAction
+            )
+        }
+        sessionPreparationTasks[sessionName] = task
+        await task.value
+
+        preparedSessions.insert(sessionName)
+        sessionPreparationTasks.removeValue(forKey: sessionName)
+    }
+
+    @MainActor
+    func prepareSessionsInBackground(_ sessionNames: [String]) {
+        backgroundSessionPreparationTask?.cancel()
+        guard !sessionNames.isEmpty else { return }
+
+        backgroundSessionPreparationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            for sessionName in sessionNames {
+                if Task.isCancelled { break }
+                await self.ensureSessionPrepared(sessionName: sessionName)
+            }
+        }
     }
 
     // MARK: - Pin/Unpin

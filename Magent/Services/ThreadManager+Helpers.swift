@@ -35,7 +35,7 @@ extension ThreadManager {
         case .claude:
             return content.contains("╭") || content.contains("\u{276F}")
         case .codex:
-            return content.contains("\u{276F}") || content.filter({ !$0.isWhitespace }).count > 100
+            return content.contains("\u{203A}") || content.filter({ !$0.isWhitespace }).count > 100
         case .custom, .none:
             return content.filter({ !$0.isWhitespace }).count > 50
         }

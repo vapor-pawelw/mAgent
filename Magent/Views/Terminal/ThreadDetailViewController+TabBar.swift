@@ -60,6 +60,32 @@ extension ThreadDetailViewController {
 
     func selectTab(at index: Int) {
         guard index < terminalViews.count else { return }
+        guard index < thread.tmuxSessionNames.count else { return }
+        let sessionName = thread.tmuxSessionNames[index]
+
+        guard preparedSessions.contains(sessionName) else {
+            let selectedAgentType = threadManager.effectiveAgentType(for: thread.projectId)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.startLoadingOverlayTracking(sessionName: sessionName, agentType: selectedAgentType)
+                await self.ensureSessionPrepared(sessionName: sessionName) { [weak self] action in
+                    guard let self,
+                          sessionName == self.loadingOverlaySessionName else { return }
+                    self.updateLoadingOverlayDetail(action?.loadingOverlayDetail)
+                }
+                guard index < self.terminalViews.count else { return }
+                self.selectPreparedTab(at: index)
+            }
+            return
+        }
+
+        selectPreparedTab(at: index)
+    }
+
+    func selectPreparedTab(at index: Int) {
+        guard index < terminalViews.count else { return }
+        guard index < thread.tmuxSessionNames.count else { return }
+        let sessionName = thread.tmuxSessionNames[index]
 
         for (i, item) in tabItems.enumerated() {
             item.isSelected = (i == index)
@@ -91,24 +117,21 @@ extension ThreadDetailViewController {
         currentTabIndex = index
         updateTerminalScrollControlsState()
 
-        if index < thread.tmuxSessionNames.count {
-            let sessionName = thread.tmuxSessionNames[index]
-            let canShowTOC = thread.agentTmuxSessions.contains(sessionName)
-            promptTOCCanShowForCurrentTab = canShowTOC
-            applyPromptTOCVisibility()
-            if thread.lastSelectedTmuxSessionName != sessionName {
-                thread.lastSelectedTmuxSessionName = sessionName
-                threadManager.updateLastSelectedSession(for: thread.id, sessionName: sessionName)
-            }
-            UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
-            UserDefaults.standard.set(sessionName, forKey: Self.lastOpenedSessionDefaultsKey)
-
-            // Clear unread completion and waiting dots for this tab
-            tabItems[index].hasUnreadCompletion = false
-            tabItems[index].hasWaitingForInput = false
-            threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: sessionName)
-            threadManager.markSessionWaitingSeen(threadId: thread.id, sessionName: sessionName)
+        let canShowTOC = thread.agentTmuxSessions.contains(sessionName)
+        promptTOCCanShowForCurrentTab = canShowTOC
+        applyPromptTOCVisibility()
+        if thread.lastSelectedTmuxSessionName != sessionName {
+            thread.lastSelectedTmuxSessionName = sessionName
+            threadManager.updateLastSelectedSession(for: thread.id, sessionName: sessionName)
         }
+        UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
+        UserDefaults.standard.set(sessionName, forKey: Self.lastOpenedSessionDefaultsKey)
+
+        // Clear unread completion and waiting dots for this tab
+        tabItems[index].hasUnreadCompletion = false
+        tabItems[index].hasWaitingForInput = false
+        threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: sessionName)
+        threadManager.markSessionWaitingSeen(threadId: thread.id, sessionName: sessionName)
 
         schedulePromptTOCRefresh()
     }
