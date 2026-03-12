@@ -155,7 +155,7 @@ public final class GhosttyAppManager {
             ghostty_surface_update_config(surface, config)
         }
         ghostty_surface_set_color_scheme(surface, colorScheme)
-        ghostty_surface_refresh(surface)
+        ghostty_surface_draw(surface)
     }
 
     public func unregisterSurface(_ surface: ghostty_surface_t?) {
@@ -166,16 +166,17 @@ public final class GhosttyAppManager {
     public func applyEmbeddedPreferences(_ preferences: GhosttyEmbeddedPreferences) {
         embeddedPreferences = preferences
         guard let app else { return }
-        // Apply color scheme first so surfaces pick it up when their config is refreshed.
-        applyAppearanceMode()
         guard let config = buildConfig(for: preferences, logContext: "update") else { return }
         retainedConfigs.append(config)
         ghostty_app_update_config(app, config)
+        // Apply color scheme AFTER config update so the API call isn't overridden by
+        // whatever window-theme the config resolved (which may default to dark).
         let colorScheme = resolvedColorScheme()
+        ghostty_app_set_color_scheme(app, colorScheme)
         for surface in registeredSurfaces.values {
             ghostty_surface_update_config(surface, config)
             ghostty_surface_set_color_scheme(surface, colorScheme)
-            ghostty_surface_refresh(surface)
+            ghostty_surface_draw(surface)
         }
     }
 
@@ -240,6 +241,17 @@ public final class GhosttyAppManager {
     private func writeOverrideConfig(for preferences: GhosttyEmbeddedPreferences) -> String? {
         var lines: [String] = []
 
+        // Bake the color scheme into the config so Ghostty uses it when processing
+        // app/surface config updates, rather than defaulting to dark.
+        switch preferences.appearanceMode {
+        case .light:
+            lines.append("window-theme = light")
+        case .dark:
+            lines.append("window-theme = dark")
+        case .system:
+            lines.append("window-theme = auto")
+        }
+
         switch preferences.mouseWheelBehavior {
         case .magentDefaultScroll:
             lines.append("mouse-reporting = false")
@@ -265,10 +277,11 @@ public final class GhosttyAppManager {
     private func applyAppearanceMode(using effectiveAppearance: NSAppearance? = nil) {
         guard let app else { return }
         let colorScheme = resolvedColorScheme(for: effectiveAppearance)
+        Self.log("applyAppearanceMode: scheme=\(colorScheme.rawValue) (0=light,1=dark) mode=\(embeddedPreferences.appearanceMode)")
         ghostty_app_set_color_scheme(app, colorScheme)
         for surface in registeredSurfaces.values {
             ghostty_surface_set_color_scheme(surface, colorScheme)
-            ghostty_surface_refresh(surface)
+            ghostty_surface_draw(surface)
         }
     }
 

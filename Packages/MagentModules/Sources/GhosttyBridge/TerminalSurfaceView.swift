@@ -124,8 +124,11 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        guard surface != nil else { return }
+        guard let surface else { return }
         GhosttyAppManager.shared.refreshAppearance(using: effectiveAppearance)
+        // Force an immediate draw (not just a refresh request) so the color scheme
+        // change is visible without waiting for the next CVDisplayLink tick.
+        ghostty_surface_draw(surface)
     }
 
     override public func viewWillMove(toSuperview newSuperview: NSView?) {

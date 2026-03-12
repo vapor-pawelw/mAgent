@@ -131,21 +131,31 @@ The Ghostty macOS app source is the definitive reference:
 
 ## Color Scheme Update Order
 
-When the user changes the app appearance setting, `GhosttyAppManager.applyEmbeddedPreferences` must call `ghostty_app_set_color_scheme` **before** `ghostty_app_update_config` / `ghostty_surface_update_config`. If the color scheme is set after the surface config updates, surfaces re-render during the config refresh using the old color scheme — meaning the terminal stays dark after switching to Light.
+When the user changes the app appearance setting, `GhosttyAppManager.applyEmbeddedPreferences` must call `ghostty_app_set_color_scheme` and `ghostty_surface_set_color_scheme` **after** `ghostty_app_update_config` / `ghostty_surface_update_config`. The config update can reset the internal color scheme to dark (Ghostty's default when no theme is configured); setting the scheme after overrides that.
 
 The correct order in `applyEmbeddedPreferences`:
-1. `ghostty_app_set_color_scheme(app, newColorScheme)` — set first
-2. `ghostty_app_update_config(app, config)` — then update app config
-3. `ghostty_surface_update_config(surface, config)` for each registered surface — triggers re-render with new scheme
+1. `ghostty_app_update_config(app, config)` — apply new config (may reset scheme to dark)
+2. `ghostty_app_set_color_scheme(app, newColorScheme)` — override scheme at app level
+3. Per registered surface: `ghostty_surface_update_config(surface, config)` then `ghostty_surface_set_color_scheme(surface, newColorScheme)` then `ghostty_surface_draw(surface)`
 
 `refreshAppearanceIfNeeded()` should call `applyEmbeddedPreferences(embeddedPreferences)` rather than just `applyAppearanceMode()` alone, so existing surfaces are explicitly updated and not just the app-level preference.
+
+## window-theme Must Be Written Into Override Config
+
+`ghostty_surface_set_color_scheme` alone is not always sufficient — Ghostty's `ghostty_app_update_config` / `ghostty_surface_update_config` can reset the resolved color scheme back to dark if the config file doesn't specify an explicit appearance. The fix is to write `window-theme = light/dark/auto` into the Magent override config (generated in `writeOverrideConfig`) matching the configured `appearanceMode`. This way the config update itself carries the correct scheme, and the subsequent API call reinforces it.
+
+```
+window-theme = light   # for .light mode
+window-theme = dark    # for .dark mode
+window-theme = auto    # for .system mode
+```
 
 ## Existing Surface Refresh Contract
 
 Updating the app-level Ghostty color scheme is not sufficient on its own for already-open tabs.
 
 - After resolving the new light/dark scheme, also call `ghostty_surface_set_color_scheme(surface, colorScheme)` for every registered surface.
-- Follow that with `ghostty_surface_refresh(surface)` so the visible terminal redraws immediately.
+- Follow that with `ghostty_surface_draw(surface)` (not `ghostty_surface_refresh`) so the terminal redraws immediately rather than waiting for the next CVDisplayLink tick. `refresh` only schedules a redraw; `draw` forces it now.
 - Keep the AppKit side in sync too: when Magent changes `NSApp.appearance`, invalidate existing windows/content views so terminal-adjacent chrome (top bar buttons, overlay pills, TOC panel) re-resolves its dynamic colors in the same turn.
 
 ## New Surface Registration Contract
@@ -153,9 +163,9 @@ Updating the app-level Ghostty color scheme is not sufficient on its own for alr
 `applyEmbeddedPreferences` is called at launch and settings-change time, but surfaces are created lazily — after the first call there are no registered surfaces to iterate. A newly created surface inherits the app's initial (dark) defaults unless explicitly updated.
 
 **Rule**: `registerSurface` must immediately apply the full current state to the new surface, mirroring what `applyEmbeddedPreferences` does for already-registered surfaces:
-1. `ghostty_surface_update_config(surface, retainedConfigs.last)` — push the current config (mouse-wheel policy etc.)
-2. `ghostty_surface_set_color_scheme(surface, resolvedColorScheme(for: effectiveAppearance))` — override with the current light/dark scheme
-3. `ghostty_surface_refresh(surface)` — trigger an immediate redraw
+1. `ghostty_surface_update_config(surface, retainedConfigs.last)` — push the current config (window-theme, mouse-wheel policy etc.)
+2. `ghostty_surface_set_color_scheme(surface, resolvedColorScheme(for: effectiveAppearance))` — override with the current light/dark scheme (after config, not before)
+3. `ghostty_surface_draw(surface)` — trigger an immediate redraw (not `refresh`, which only schedules one)
 
 Skipping `update_config` here causes new panes to start dark even when Light mode is active, because the surface only sees the app-level config that was current at `ghostty_surface_new` time.
 
@@ -174,7 +184,7 @@ Skipping `update_config` here causes new panes to start dark even when Light mod
 
 Beyond the manual settings toggle, terminals must also react when macOS switches the system appearance (e.g., the user flips Dark/Light in System Settings, or per-window appearance changes).
 
-**Rule**: `TerminalSurfaceView` overrides `viewDidChangeEffectiveAppearance()` and calls `GhosttyAppManager.shared.refreshAppearance(using: effectiveAppearance)`. This propagates the view's current effective appearance into `applyAppearanceMode`, which iterates all registered surfaces and updates both the app-level and per-surface color scheme, followed by `ghostty_surface_refresh`.
+**Rule**: `TerminalSurfaceView` overrides `viewDidChangeEffectiveAppearance()` and calls `GhosttyAppManager.shared.refreshAppearance(using: effectiveAppearance)`, followed by `ghostty_surface_draw(surface)` on the surface directly. `refreshAppearance` iterates all registered surfaces and updates both the app-level and per-surface color scheme. The explicit `draw` call on the originating surface ensures the change is visually applied immediately, rather than waiting for the next CVDisplayLink tick.
 
 Without this hook, the terminal stays in the old scheme until the user manually re-toggles the Appearance setting.
 

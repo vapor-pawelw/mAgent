@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Terminal
+- Fixed Ghostty terminals remaining dark when switching to Light mode: the appearance mode is now written into the Ghostty override config (`window-theme`), the color scheme API is called after config updates (not before), and appearance changes force an immediate draw instead of scheduling a deferred refresh.
+- Unselected tab borders in dark mode are now slightly more visible.
+
 ### Agents
 - Fixed Codex failing to launch when a user shell function for `codex` injects `--dangerously-bypass-approvals-and-sandbox`, which conflicts with the equivalent `--yolo` flag in newer Codex versions. Agent binaries are now invoked with the `command` built-in to bypass shell wrappers, and the Codex resume command is updated to use `--yolo`.
 
