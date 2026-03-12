@@ -364,7 +364,24 @@ extension ThreadManager {
             .suffix(15)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        return nonEmpty.contains(where: { $0.localizedCaseInsensitiveContains("esc to interrupt") })
+        return nonEmpty.contains(where: isEscToInterruptStatusLine)
+    }
+
+    private func isEscToInterruptStatusLine(_ line: String) -> Bool {
+        // Only treat status-like lines as busy markers. This avoids false
+        // positives when the phrase appears in normal conversation text.
+        let directStatusMatch = line.range(
+            of: #"^\s*(?:[•⏵]+[[:space:]]*)?esc to interrupt\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+        if directStatusMatch { return true }
+
+        // Claude can render status with leading context, e.g.:
+        // "⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt"
+        return line.range(
+            of: #"\s·\s*esc to interrupt\)?\s*$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 
     private func isAgentIdleAtPrompt(_ paneContent: String) -> Bool {

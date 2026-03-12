@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Agent tabs now remember whether they were created for Claude or Codex, so reopening older tabs keeps the correct startup behavior even after you change the project default agent. If the agent has already exited and the tab is back at a shell, Magent now skips the startup overlay instead of waiting for a timeout.
 - GitLab merge-request actions now open the direct MR page when Magent can resolve the MR, instead of landing on the filtered MR list, and MR badges/details appear sooner after launch or MR creation.
 - Banner notifications now use an almost opaque background for better readability over terminal and sidebar content.
+- Fixed false Claude busy markers when pane content included quoted text like "esc to interrupt" in normal output; busy detection now matches status-line format instead of any substring hit.
 
 ### Agents
 - Claude/Codex agent tabs now launch through an interactive login zsh shell, so agent commands installed via `.zshrc` PATH setup are found correctly instead of dropping into a plain terminal with `command not found`.
