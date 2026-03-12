@@ -38,6 +38,8 @@ All notable changes to this project will be documented in this file.
 - Banner notifications now keep high-contrast text and icons on their fixed tinted backgrounds instead of reusing semantic light/dark text colors.
 - Fixed banner action buttons showing dark text on colored (blue/orange/red) backgrounds; buttons now always render with light text regardless of the system appearance setting.
 - Banner message text is now centered between the icon and dismiss button for a balanced layout.
+- Timed in-app banners now always show a dismiss button and support swipe-to-dismiss in any direction, while long-running progress banners remain pinned until the operation completes.
+- Fixed archive/restore banner text jumping to centered alignment after interaction; banner headlines now stay leading-aligned and no longer enter selectable text-editing mode.
 
 ## 1.2.1 - 2026-03-12
 

@@ -62,6 +62,10 @@ struct BannerConfig {
     let detailsCollapsedTitle: String?
     let detailsExpandedTitle: String?
 
+    var allowsUserDismissal: Bool {
+        isDismissible || duration != nil
+    }
+
     init(
         message: String = "",
         attributedMessage: NSAttributedString? = nil,
@@ -164,7 +168,7 @@ final class BannerView: NSView {
         leadingAccessoryView.addSubview(iconView)
 
         if let attributed = config.attributedMessage {
-            messageLabel.attributedStringValue = attributed
+            messageLabel.attributedStringValue = normalizedAttributedMessage(attributed)
         } else {
             messageLabel.stringValue = config.message
         }
@@ -172,8 +176,8 @@ final class BannerView: NSView {
         messageLabel.textColor = config.style.foregroundColor
         messageLabel.lineBreakMode = .byWordWrapping
         messageLabel.maximumNumberOfLines = 0
-        messageLabel.alignment = .center
-        messageLabel.isSelectable = true
+        messageLabel.alignment = .natural
+        messageLabel.isSelectable = false
         messageLabel.isEditable = false
         messageLabel.drawsBackground = false
         messageLabel.isBezeled = false
@@ -186,7 +190,7 @@ final class BannerView: NSView {
         closeButton.contentTintColor = config.style.secondaryForegroundColor
         closeButton.target = self
         closeButton.action = #selector(closeTapped)
-        closeButton.isHidden = !config.isDismissible
+        closeButton.isHidden = !config.allowsUserDismissal
         closeButton.translatesAutoresizingMaskIntoConstraints = false
         trailingAccessoryView.addSubview(closeButton)
 
@@ -228,7 +232,7 @@ final class BannerView: NSView {
             rootStack.addArrangedSubview(detailsView)
         }
 
-        if config.isDismissible {
+        if config.allowsUserDismissal {
             let pan = NSPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
             addGestureRecognizer(pan)
         }
@@ -241,6 +245,15 @@ final class BannerView: NSView {
             rootStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
             heightAnchor.constraint(greaterThanOrEqualToConstant: 46),
         ])
+    }
+
+    private func normalizedAttributedMessage(_ attributed: NSAttributedString) -> NSAttributedString {
+        let result = NSMutableAttributedString(attributedString: attributed)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .natural
+        paragraphStyle.lineBreakMode = .byWordWrapping
+        result.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: result.length))
+        return result
     }
 
     private func buildActionRow() -> NSView? {
@@ -372,8 +385,11 @@ final class BannerView: NSView {
     }
 
     @objc private func handlePan(_ gesture: NSPanGestureRecognizer) {
+        onUserInteraction?()
         let translation = gesture.translation(in: self)
-        if gesture.state == .ended && translation.y > 0 {
+        let dismissThreshold: CGFloat = 24
+        if gesture.state == .ended,
+           max(abs(translation.x), abs(translation.y)) >= dismissThreshold {
             onDismiss?()
         }
     }

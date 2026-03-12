@@ -21,6 +21,7 @@
 - Restore intentionally does not recreate all previous tmux tabs. The restored thread comes back with clean persisted session state, and the first live session is recreated lazily when the thread is opened.
 - Archived threads now persist `archivedAt`, which is used to sort the Threads-settings history card by actual archive time instead of relying on thread creation order or JSON array order.
 - The archive and restore banners use `NSAttributedString` passed via `BannerManager.show(attributedMessage:...)`. `BannerConfig` accepts an optional `attributedMessage`; `BannerView` applies it to `messageLabel.attributedStringValue` when present, falling back to `stringValue`/`message` for plain-text callers. The attributed layout is: header label (11pt) / title (14pt semibold) / branch · worktree-folder (11pt monospace) / optional warning line (12pt medium). Foreground colors are intentionally omitted from the attributed string so the shared banner renderer can supply its own high-contrast text color for the fixed tinted banner background.
+- Archive/restore banner copy now relies on the shared banner renderer to normalize paragraph style to leading alignment. Keep the banner headline as passive label text rather than selectable text-editing content, otherwise AppKit can flip the multi-line attributed message into centered/selectable behavior after interaction and break timeout/dismiss affordances.
 
 ## What changed in the gastly thread (archive banner emphasis)
 
@@ -45,6 +46,7 @@
 
 - Removed semantic `labelColor`/`secondaryLabelColor` foreground attributes from the archive/restore banner attributed text so the shared banner view can keep consistent contrast in both Light and Dark mode.
 - Banner rendering now owns text/icon contrast for fixed-color banners, which avoids unreadable archive/restore banner text after an appearance switch.
+- Archive/restore banner text now stays leading-aligned after click/hover interaction instead of snapping to centered layout.
 
 ## Gotchas
 
