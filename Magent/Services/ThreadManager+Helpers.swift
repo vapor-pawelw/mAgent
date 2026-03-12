@@ -596,16 +596,22 @@ extension ThreadManager {
         SymlinkManager.createCompatibilitySymlink(from: oldPath, to: newPath)
     }
 
-    // MARK: - Claude Hooks
+    // MARK: - Claude Settings
 
-    /// Path to the Magent-specific Claude Code hooks settings file.
+    /// Path to the Magent-specific Claude Code settings file.
     static let claudeHooksSettingsPath = "/tmp/magent-claude-hooks.json"
 
-    /// Writes (or refreshes) the Claude Code hooks JSON that Magent injects via `--settings`.
-    /// The `Stop` hook writes the tmux session name to the agent-completion event log so
-    /// Magent can detect when Claude finishes responding.
+    /// Writes (or refreshes) the Claude Code settings JSON that Magent injects via `--settings`.
+    /// Includes:
+    /// - Stop hook for completion detection
+    /// - Session-only theme hints derived from Magent appearance settings
     func installClaudeHooksSettings() {
-        let marker = "magent-hooks-v1"
+        let appearanceMode = persistence.loadSettings().appAppearanceMode
+        installClaudeHooksSettings(for: appearanceMode)
+    }
+
+    private func installClaudeHooksSettings(for appearanceMode: AppAppearanceMode) {
+        let marker = "magent-settings-v2-\(appearanceMode.rawValue)"
         let path = Self.claudeHooksSettingsPath
         if let existing = try? String(contentsOfFile: path, encoding: .utf8),
            existing.contains(marker) {
@@ -615,62 +621,48 @@ extension ThreadManager {
         // The Stop hook runs `tmux display-message` to get the session name and
         // appends it to the event log. Guarded by MAGENT_WORKTREE_NAME so it
         // only fires inside Magent-managed sessions.
-        let json = """
-        {
-            "_comment": "\(marker)",
-            "hooks": {
+        var settings: [String: Any] = [
+            "_comment": marker,
+            "hooks": [
                 "Stop": [
-                    {
+                    [
                         "hooks": [
-                            {
+                            [
                                 "type": "command",
-                                "command": "[ -n \\"$MAGENT_WORKTREE_NAME\\" ] && tmux display-message -p '#{session_name}' >> \(eventsPath) || true",
-                                "timeout": 5
-                            }
-                        ]
-                    }
-                ]
-            }
+                                "command": "[ -n \"$MAGENT_WORKTREE_NAME\" ] && tmux display-message -p '#{session_name}' >> \(eventsPath) || true",
+                                "timeout": 5,
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]
+
+        // Keep this scoped to Magent-managed sessions via --settings.
+        switch appearanceMode {
+        case .light:
+            settings["theme"] = "light"
+            settings["terminalTheme"] = "light"
+        case .dark:
+            settings["theme"] = "dark"
+            settings["terminalTheme"] = "dark"
+        case .system:
+            settings["terminalTheme"] = "system"
         }
-        """
+
+        guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else {
+            return
+        }
         try? json.write(toFile: path, atomically: true, encoding: .utf8)
     }
 
     // MARK: - Codex Config
 
-    /// Ensures the Codex CLI config has `tui.notification_method = "bel"` so the
-    /// pipe-pane bell watcher can detect when Codex finishes a turn.
+    /// Legacy no-op. Codex launch behavior is now configured per Magent session
+    /// via command-line overrides, without writing to user-wide `~/.codex/config.toml`.
     func ensureCodexBellNotification() {
-        let configDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex")
-        let configPath = configDir.appendingPathComponent("config.toml").path
-
-        guard let contents = try? String(contentsOfFile: configPath, encoding: .utf8) else {
-            // No config file — create a minimal one with just the tui section.
-            try? FileManager.default.createDirectory(atPath: configDir.path, withIntermediateDirectories: true)
-            let minimal = "\n[tui]\nnotification_method = \"bel\"\n"
-            try? minimal.write(toFile: configPath, atomically: true, encoding: .utf8)
-            return
-        }
-
-        // Already has the setting — nothing to do.
-        if contents.contains("notification_method") {
-            return
-        }
-
-        // Append [tui] section with the bel setting.
-        var updated = contents
-        if !updated.hasSuffix("\n") { updated += "\n" }
-        if contents.contains("[tui]") {
-            // [tui] section exists but without notification_method — insert after it.
-            updated = updated.replacingOccurrences(
-                of: "[tui]",
-                with: "[tui]\nnotification_method = \"bel\""
-            )
-        } else {
-            updated += "\n[tui]\nnotification_method = \"bel\"\n"
-        }
-        try? updated.write(toFile: configPath, atomically: true, encoding: .utf8)
+        // Intentionally left blank.
     }
 
     // MARK: - Codex IPC Instructions
@@ -817,6 +809,7 @@ extension ThreadManager {
 
         var parts = [String]()
         if agentType == .claude {
+            installClaudeHooksSettings(for: settings.appAppearanceMode)
             parts.append("unset CLAUDECODE")
         }
         if !preAgentCommand.isEmpty {
@@ -860,6 +853,8 @@ extension ThreadManager {
             if settings.ipcPromptInjectionEnabled {
                 command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
             }
+        } else if agentType == .codex {
+            command = codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode)
         }
         return command
     }
@@ -884,16 +879,38 @@ extension ThreadManager {
             return command
         case .codex:
             // Use `command codex` to bypass shell function wrappers (same reason as in AppSettings.command(for:)).
+            var command = "command codex resume \(quotedID)"
             if settings.agentSkipPermissions {
-                return "command codex resume \(quotedID) --yolo"
+                command += " --yolo"
+            } else if settings.agentSandboxEnabled {
+                command += " --full-auto"
             }
-            if settings.agentSandboxEnabled {
-                return "command codex resume \(quotedID) --full-auto"
-            }
-            return "command codex resume \(quotedID)"
+            return codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode)
         case .custom:
             return nil
         }
+    }
+
+    private func codexSessionLaunchFlags(for appearanceMode: AppAppearanceMode) -> String {
+        var flags = [
+            "-c \(ShellExecutor.shellQuote("tui.notification_method=\"bel\""))",
+        ]
+        // Keep Codex rendering aligned with the terminal palette in explicit light mode.
+        if appearanceMode == .light {
+            flags.append("-c \(ShellExecutor.shellQuote("tui.theme=\"ansi\""))")
+        }
+        return flags.joined(separator: " ")
+    }
+
+    private func codexSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode) -> String {
+        let prefix = "command codex"
+        guard command.hasPrefix(prefix) else { return command }
+
+        let launchFlags = codexSessionLaunchFlags(for: appearanceMode)
+        guard !launchFlags.isEmpty else { return command }
+
+        let suffix = String(command.dropFirst(prefix.count))
+        return "\(prefix) \(launchFlags)\(suffix)"
     }
 
     private func normalizedResumeID(_ value: String?) -> String? {
