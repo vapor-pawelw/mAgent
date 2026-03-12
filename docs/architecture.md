@@ -138,6 +138,7 @@ Prompt TOC visibility is shared app-scoped UI state:
 Prompt row interaction/visual rules:
 - Row hit target is the full row (not only text), so clicking anywhere in the row triggers navigation.
 - Row labels can wrap up to 3 lines and then truncate.
+- Keep a distinction between row preview text and the submitted prompt payload: UI rows may show a wrapped/truncated preview, but prompt actions like `Copy prompt` and rename-from-prompt must operate on the full submitted prompt text.
 - Apply subtle alternating row backgrounds to improve scanability without dominating the terminal UI.
 - Keep the TOC drag header visually distinct from the body; a slightly darker top band helps communicate that the header is the draggable region without making the whole panel heavier.
 - If the TOC was pinned to the bottom before a same-session append refresh, restore it to the bottom after repopulating rows; do not force-scroll when the user was reading older entries.

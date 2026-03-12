@@ -4,12 +4,14 @@ import MagentCore
 struct PromptTOCEntry: Sendable {
     let lineIndex: Int
     let displayText: String
+    let fullText: String
 }
 
 private struct PromptPaneCandidate {
     let startLineIndex: Int
     let endLineIndex: Int
-    let promptText: String
+    let displayText: String
+    let fullText: String
 }
 
 private struct PromptPaneLine {
@@ -151,7 +153,7 @@ extension ThreadDetailViewController {
         threadManager.replaceSubmittedPromptHistory(
             threadId: thread.id,
             sessionName: sessionName,
-            prompts: entries.map(\.displayText)
+            prompts: entries.map(\.fullText)
         )
         promptTOCSessionName = sessionName
         promptTOCEntries = entries
@@ -161,7 +163,7 @@ extension ThreadDetailViewController {
             // recent one, so multi-prompt batches still name from the triggering prompt.
             let firstNewEntry = entries[previousEntryCount]
             let threadId = thread.id
-            let prompt = firstNewEntry.displayText
+            let prompt = firstNewEntry.fullText
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 // Only rename when an agent process is actually running in the session.
@@ -271,18 +273,19 @@ extension ThreadDetailViewController {
                 continuationIndex += 1
             }
 
-            let promptText = promptLines.joined(separator: " ")
-            guard !promptText.isEmpty else {
+            let displayPromptText = promptLines.joined(separator: " ")
+            guard !displayPromptText.isEmpty else {
                 lineIndex = continuationIndex
                 continue
             }
+            let fullPromptText = promptLines.joined(separator: "\n")
 
             // Skip interactive selector rows (for example: "❯ 1. Continue").
-            if promptText.range(of: #"^\d+\."#, options: .regularExpression) != nil {
+            if displayPromptText.range(of: #"^\d+\."#, options: .regularExpression) != nil {
                 lineIndex = continuationIndex
                 continue
             }
-            let lowerPrompt = promptText.lowercased()
+            let lowerPrompt = displayPromptText.lowercased()
             if lowerPrompt == "yes" || lowerPrompt == "no" {
                 lineIndex = continuationIndex
                 continue
@@ -294,7 +297,7 @@ extension ThreadDetailViewController {
             }
             // Exclude generic suggestion templates (for example: "Implement {feature}")
             // that can appear in the composer area but were not actually submitted.
-            if promptTextStyleLooksPlaceholderLike || isPlaceholderSuggestionPrompt(promptText) {
+            if promptTextStyleLooksPlaceholderLike || isPlaceholderSuggestionPrompt(displayPromptText) {
                 lineIndex = continuationIndex
                 continue
             }
@@ -303,7 +306,8 @@ extension ThreadDetailViewController {
                 PromptPaneCandidate(
                     startLineIndex: lineIndex,
                     endLineIndex: endLineIndex,
-                    promptText: promptText
+                    displayText: displayPromptText,
+                    fullText: fullPromptText
                 )
             )
             lineIndex = continuationIndex
@@ -317,7 +321,8 @@ extension ThreadDetailViewController {
         var entries = candidates.map { candidate in
             PromptTOCEntry(
                 lineIndex: candidate.startLineIndex,
-                displayText: candidate.promptText
+                displayText: candidate.displayText,
+                fullText: candidate.fullText
             )
         }
         if entries.count > 250 {
@@ -730,7 +735,7 @@ extension ThreadDetailViewController {
         let thread = self.thread
         Task {
             do {
-                _ = try await threadManager.renameThreadFromPrompt(thread, prompt: entry.displayText)
+                _ = try await threadManager.renameThreadFromPrompt(thread, prompt: entry.fullText)
             } catch {
                 await MainActor.run {
                     BannerManager.shared.show(
@@ -1507,7 +1512,7 @@ final class PromptTableOfContentsView: NSView {
     @objc private func handleCopyPromptFromContextMenu(_ sender: NSMenuItem) {
         guard let index = (sender.representedObject as? NSNumber)?.intValue,
               index < tocEntries.count else { return }
-        let text = tocEntries[index].displayText
+        let text = tocEntries[index].fullText
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }

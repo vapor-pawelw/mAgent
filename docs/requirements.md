@@ -120,6 +120,7 @@ Before the app is usable, the user must complete a configuration step:
 - TOC visibility is a single app-wide preference: toggling show/hide in one thread panel must immediately apply to other open thread panels and persist across app relaunches.
 - Selecting a TOC row must jump to that prompt and anchor it at the top of the terminal scroll viewport when possible.
 - Prompt rows support up to 3 lines and use subtle alternating background stripes for readability.
+- TOC context-menu actions that operate on prompt text (for example `Copy prompt`) must use the full submitted prompt payload, not the 3-line row preview.
 - When the TOC is visible, it must remain directly clickable; the terminal surface must not intercept pointer events over the panel.
 
 ## Terminal Scrollback
