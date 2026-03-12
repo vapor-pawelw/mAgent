@@ -322,7 +322,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public func command(for agentType: AgentType) -> String {
         switch agentType {
         case .claude:
-            return agentSkipPermissions ? "claude --dangerously-skip-permissions" : "claude"
+            // Use `command claude` to bypass any shell function wrappers (same as codex).
+            return agentSkipPermissions ? "command claude --dangerously-skip-permissions" : "command claude"
         case .codex:
             // Use `command codex` to bypass any shell function wrappers (e.g. ones that
             // inject --dangerously-bypass-approvals-and-sandbox) which would conflict with

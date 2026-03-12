@@ -858,9 +858,10 @@ extension ThreadManager {
         let quotedID = ShellExecutor.shellQuote(sessionID)
         switch agentType {
         case .claude:
+            // Use `command claude` to bypass any shell function wrappers.
             var command = settings.agentSkipPermissions
-                ? "claude --dangerously-skip-permissions"
-                : "claude"
+                ? "command claude --dangerously-skip-permissions"
+                : "command claude"
             command += " --resume \(quotedID)"
             command += " --settings \(Self.claudeHooksSettingsPath)"
             if settings.ipcPromptInjectionEnabled {
