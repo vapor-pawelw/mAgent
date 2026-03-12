@@ -853,6 +853,7 @@ extension ThreadManager {
             if settings.ipcPromptInjectionEnabled {
                 command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
             }
+            command = claudeSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode)
         } else if agentType == .codex {
             command = codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode)
         }
@@ -876,7 +877,7 @@ extension ThreadManager {
             if settings.ipcPromptInjectionEnabled {
                 command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
             }
-            return command
+            return claudeSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode)
         case .codex:
             // Use `command codex` to bypass shell function wrappers (same reason as in AppSettings.command(for:)).
             var command = "command codex resume \(quotedID)"
@@ -911,6 +912,17 @@ extension ThreadManager {
 
         let suffix = String(command.dropFirst(prefix.count))
         return "\(prefix) \(launchFlags)\(suffix)"
+    }
+
+    private func claudeSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode) -> String {
+        guard command.hasPrefix("command claude") else { return command }
+        // Claude's current terminal renderer can keep dark-styled truecolor blocks even when
+        // theme hints are set. In explicit light mode, force a basic ANSI profile for this
+        // process only (instead of disabling color completely).
+        if appearanceMode == .light {
+            return "TERM=screen COLORTERM= \(command)"
+        }
+        return command
     }
 
     private func normalizedResumeID(_ value: String?) -> String? {
