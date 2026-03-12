@@ -233,6 +233,9 @@ final class BannerView: NSView {
             button.bezelStyle = .rounded
             button.controlSize = .small
             button.font = .systemFont(ofSize: 12, weight: .medium)
+            // Banner backgrounds are always dark/saturated — force dark appearance so
+            // AppKit renders button text in white rather than following the system theme.
+            button.appearance = NSAppearance(named: .darkAqua)
             button.tag = actionButtons.count
             button.translatesAutoresizingMaskIntoConstraints = false
             row.addArrangedSubview(button)
@@ -245,6 +248,7 @@ final class BannerView: NSView {
             button.bezelStyle = .rounded
             button.controlSize = .small
             button.font = .systemFont(ofSize: 12, weight: .medium)
+            button.appearance = NSAppearance(named: .darkAqua)
             button.translatesAutoresizingMaskIntoConstraints = false
             row.addArrangedSubview(button)
             detailsToggleButton = button

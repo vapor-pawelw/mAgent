@@ -145,6 +145,14 @@ public final class GhosttyAppManager {
     public func registerSurface(_ surface: ghostty_surface_t?) {
         guard let surface else { return }
         registeredSurfaces[Int(bitPattern: surface)] = surface
+        // Apply the current preferences immediately so the surface doesn't default to dark.
+        // Mirrors what applyEmbeddedPreferences does for already-registered surfaces.
+        let colorScheme = resolvedColorScheme()
+        if let config = retainedConfigs.last {
+            ghostty_surface_update_config(surface, config)
+        }
+        ghostty_surface_set_color_scheme(surface, colorScheme)
+        ghostty_surface_refresh(surface)
     }
 
     public func unregisterSurface(_ surface: ghostty_surface_t?) {

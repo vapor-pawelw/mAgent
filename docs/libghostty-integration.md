@@ -148,6 +148,17 @@ Updating the app-level Ghostty color scheme is not sufficient on its own for alr
 - Follow that with `ghostty_surface_refresh(surface)` so the visible terminal redraws immediately.
 - Keep the AppKit side in sync too: when Magent changes `NSApp.appearance`, invalidate existing windows/content views so terminal-adjacent chrome (top bar buttons, overlay pills, TOC panel) re-resolves its dynamic colors in the same turn.
 
+## New Surface Registration Contract
+
+`applyEmbeddedPreferences` is called at launch and settings-change time, but surfaces are created lazily — after the first call there are no registered surfaces to iterate. A newly created surface inherits the app's initial (dark) defaults unless explicitly updated.
+
+**Rule**: `registerSurface` must immediately apply the full current state to the new surface, mirroring what `applyEmbeddedPreferences` does for already-registered surfaces:
+1. `ghostty_surface_update_config(surface, retainedConfigs.last)` — push the current config (mouse-wheel policy etc.)
+2. `ghostty_surface_set_color_scheme(surface, resolvedColorScheme())` — override with the current light/dark scheme
+3. `ghostty_surface_refresh(surface)` — trigger an immediate redraw
+
+Skipping `update_config` here causes new panes to start dark even when Light mode is active, because the surface only sees the app-level config that was current at `ghostty_surface_new` time.
+
 ## Overlay Z-Order Contract (mAgent)
 
 When terminal overlays are enabled (for example, the prompt Table of Contents or the scroll controls pill), they must remain visible above terminal content during tab switches and session view recreation.

@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Added a terminal mouse-wheel setting so Magent can default wheel input to terminal scrolling, inherit the user's Ghostty config, or let prompts/apps capture wheel input.
 - App appearance can now follow macOS or be forced to Light/Dark, and open terminals now switch immediately along with terminal overlays and the terminal top bar.
 - Fixed terminal overlays and other terminal chrome staying dark after switching to Light mode; open Ghostty surfaces now receive the new color scheme directly during appearance refresh.
+- Fixed newly opened terminal panes always starting in dark mode when Light mode is active; the full current config and color scheme are now applied at surface creation time, matching what the settings-change path does for already-open panes.
 
 ### Sidebar
 - Fixed the main worktree row title being invisible in Light mode (white text on a light background); the text color now adapts to the selection state and the current appearance.
@@ -23,6 +24,7 @@ All notable changes to this project will be documented in this file.
 
 ### General
 - Banner notifications now keep high-contrast text and icons on their fixed tinted backgrounds instead of reusing semantic light/dark text colors.
+- Fixed banner action buttons showing dark text on colored (blue/orange/red) backgrounds; buttons now always render with light text regardless of the system appearance setting.
 
 ## 1.2.1 - 2026-03-12
 
