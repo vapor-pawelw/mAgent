@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Thread
 - Switching threads now restores the selected tab first, prepares other tabs in the background, and ties the `Starting agent...` overlay to the actual selected session so startup no longer waits on the wrong tab.
 - Agent tabs now remember whether they were created for Claude or Codex, so reopening older tabs keeps the correct startup behavior even after you change the project default agent. If the agent has already exited and the tab is back at a shell, Magent now skips the startup overlay instead of waiting for a timeout.
+- GitLab merge-request actions now open the direct MR page when Magent can resolve the MR, instead of landing on the filtered MR list, and MR badges/details appear sooner after launch or MR creation.
 
 ## 1.2.0 - 2026-03-11
 

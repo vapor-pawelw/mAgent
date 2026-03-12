@@ -144,6 +144,7 @@ var dirtyCheckTickCounter: Int = 0
         await refreshDirtyStates()
         await refreshDeliveredStates()
         await refreshBranchStates()
+        await runPRSyncTick()
 
         await MainActor.run {
             updateDockBadge()
