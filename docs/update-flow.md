@@ -13,13 +13,19 @@ Implementation details:
 - Release notes come from the GitHub release `body` and are passed through banner/settings UI as optional details text.
 - Detected update state is kept in memory by `UpdateService` and broadcast with `magentUpdateStateChanged`, which `SettingsGeneralViewController` observes to refresh its update card.
 - Skipped-version persistence lives in `AppSettings.skippedUpdateVersion`.
-- Installing an update still uses the detached shell-script flow: direct app replacement for normal app bundles and `brew upgrade --cask magent` for Homebrew installs, followed by app relaunch.
+- For direct bundle installs, `UpdateService.installUpdate` does all the slow work in-app (download via `URLSession.download(for:)`, then DMG mount+ditto or ZIP unpack), showing progress banners at each phase. Only then is a minimal swap-only shell script launched (`writeSwapScript`), which just waits for the process to exit, `mv`s the prepared bundle into place, and calls `open`. The app terminates after 0.3 s.
+- For Homebrew installs, the original detached-script flow is kept unchanged: `brew upgrade --cask magent` runs after the app exits because Homebrew manages its own download.
 
-What changed in this thread:
+What changed in this thread (original):
 - Reworked update checks so launch detection no longer auto-installs immediately.
 - Added persistent in-app update banners with dismiss/skip/update actions and expandable release notes.
 - Added Settings-side version status, update action, and expandable scrollable changelog display.
 - Added skipped-version persistence and empty-release handling for the new public release-only repository.
+
+What changed in this thread (jumpluff):
+- Moved download + unpack into the app process so users see "Downloading…" / "Preparing update…" / "Installing…" banners instead of the app silently closing and making them wait.
+- The background script is now a thin swap-only script (wait for exit → mv → open) with no network access.
+- Homebrew path is unchanged.
 
 Gotchas for future agents:
 - Do not switch back to GitHub's `/releases/latest` endpoint unless you also handle its `404`-when-empty behavior. An empty public release repo is a valid state during setup.
