@@ -91,6 +91,7 @@ private enum UpdateError: LocalizedError {
     case missingReleaseAsset
     case unwritableInstallLocation(String)
     case failedToStartUpdater(String)
+    case extractionFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -106,6 +107,8 @@ private enum UpdateError: LocalizedError {
             return "Install location is not writable: \(path)."
         case .failedToStartUpdater(let message):
             return "Could not start updater: \(message)"
+        case .extractionFailed(let message):
+            return "Failed to extract update: \(message)"
         }
     }
 }
@@ -336,24 +339,71 @@ final class UpdateService {
         )
     }
 
+    // MARK: - Installation
+
     private func installUpdate(_ update: AvailableUpdate) async {
         guard !isUpdating else { return }
         isUpdating = true
         defer { isUpdating = false }
 
         do {
-            try await startDetachedUpdater(for: update)
-            clearSkippedVersion(matching: update.version.displayString)
-            BannerManager.shared.show(
-                message: "Updating to \(update.version.displayString). Magent will restart...",
-                style: .info,
-                duration: nil,
-                isDismissible: false
-            )
+            let appBundlePath = Bundle.main.bundlePath
+            let strategy = await resolveInstallStrategy(appBundlePath: appBundlePath)
 
-            // Give the background updater process a brief head-start before termination.
-            try? await Task.sleep(nanoseconds: 900_000_000)
-            NSApp.terminate(nil)
+            switch strategy {
+            case .homebrewCask:
+                // Homebrew manages its own download; start it detached and close.
+                let updaterScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
+                try writeHomebrewUpdaterScript(at: updaterScriptPath)
+                let q = ShellExecutor.shellQuote
+                let command = "/usr/bin/nohup /bin/zsh \(q(updaterScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(updaterLogPath)) >/dev/null 2>&1 &"
+                let result = await ShellExecutor.execute(command)
+                guard result.exitCode == 0 else {
+                    let msg = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                    throw UpdateError.failedToStartUpdater(msg.isEmpty ? "unknown error" : msg)
+                }
+                clearSkippedVersion(matching: update.version.displayString)
+                showUpdateProgressBanner("Updating to \(update.version.displayString) via Homebrew. Magent will restart shortly...")
+                try? await Task.sleep(nanoseconds: 900_000_000)
+                NSApp.terminate(nil)
+
+            case .bundleReplacement:
+                let installDirectory = URL(fileURLWithPath: appBundlePath).deletingLastPathComponent().path
+                guard FileManager.default.isWritableFile(atPath: installDirectory) else {
+                    throw UpdateError.unwritableInstallLocation(installDirectory)
+                }
+
+                let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent("magent-update-\(UUID().uuidString)")
+                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+                // Phase 1: Download in-app so user sees progress.
+                showUpdateProgressBanner("Downloading \(update.version.displayString)...")
+                let archiveURL = tempDir.appendingPathComponent("Magent.\(update.assetKind.rawValue)")
+                try await downloadAsset(from: update.assetURL, to: archiveURL)
+
+                // Phase 2: Unpack/prepare in-app.
+                showUpdateProgressBanner("Preparing update...")
+                let preparedAppURL = try await extractApp(from: archiveURL, kind: update.assetKind, in: tempDir)
+
+                // Phase 3: Launch a minimal swap-only script, then terminate.
+                // The swap script just waits for this process to exit, moves the prepared app
+                // into place, and relaunches — all of which is fast since download/unpack is done.
+                let swapScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
+                try writeSwapScript(at: swapScriptPath)
+                let q = ShellExecutor.shellQuote
+                let command = "/usr/bin/nohup /bin/zsh \(q(swapScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(preparedAppURL.path)) \(q(appBundlePath)) \(q(updaterLogPath)) >/dev/null 2>&1 &"
+                let result = await ShellExecutor.execute(command)
+                guard result.exitCode == 0 else {
+                    let msg = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                    throw UpdateError.failedToStartUpdater(msg.isEmpty ? "unknown error" : msg)
+                }
+
+                clearSkippedVersion(matching: update.version.displayString)
+                showUpdateProgressBanner("Installing... Magent will restart in a moment.")
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                NSApp.terminate(nil)
+            }
         } catch {
             BannerManager.shared.show(
                 message: error.localizedDescription,
@@ -363,35 +413,135 @@ final class UpdateService {
         }
     }
 
-    private func startDetachedUpdater(for update: AvailableUpdate) async throws {
-        let appBundlePath = Bundle.main.bundlePath
-        let updaterScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
-        let strategy = await resolveInstallStrategy(appBundlePath: appBundlePath)
+    private func showUpdateProgressBanner(_ message: String) {
+        BannerManager.shared.show(
+            message: message,
+            style: .info,
+            duration: nil,
+            isDismissible: false
+        )
+    }
 
+    // Downloads the release asset to a local file. Runs via URLSession's transfer
+    // infrastructure (off the main thread); suspends this task until complete.
+    private func downloadAsset(from url: URL, to destinationURL: URL) async throws {
+        var request = URLRequest(url: url)
+        request.setValue("Magent-Updater", forHTTPHeaderField: "User-Agent")
+        let (tempURL, urlResponse) = try await URLSession.shared.download(for: request)
+        guard let http = urlResponse as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            try? FileManager.default.removeItem(at: tempURL)
+            throw UpdateError.invalidHTTPStatus((urlResponse as? HTTPURLResponse)?.statusCode ?? -1)
+        }
+        try FileManager.default.moveItem(at: tempURL, to: destinationURL)
+    }
+
+    // Mounts/unpacks the downloaded archive and returns the path to the extracted Magent.app.
+    private func extractApp(from archiveURL: URL, kind: ReleaseAssetKind, in tempDir: URL) async throws -> URL {
         let q = ShellExecutor.shellQuote
-        let command: String
-        switch strategy {
-        case .homebrewCask:
-            try writeHomebrewUpdaterScript(at: updaterScriptPath)
-            command = """
-            /usr/bin/nohup /bin/zsh \(q(updaterScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(updaterLogPath)) >/dev/null 2>&1 &
-            """
-        case .bundleReplacement:
-            let installDirectory = URL(fileURLWithPath: appBundlePath).deletingLastPathComponent().path
-            guard FileManager.default.isWritableFile(atPath: installDirectory) else {
-                throw UpdateError.unwritableInstallLocation(installDirectory)
-            }
-            try writeBundleReplacementUpdaterScript(at: updaterScriptPath)
-            command = """
-            /usr/bin/nohup /bin/zsh \(q(updaterScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(appBundlePath)) \(q(update.assetURL.absoluteString)) \(q(update.assetKind.rawValue)) \(q(updaterLogPath)) >/dev/null 2>&1 &
-            """
-        }
+        switch kind {
+        case .dmg:
+            let mountDir = tempDir.appendingPathComponent("mount")
+            try FileManager.default.createDirectory(at: mountDir, withIntermediateDirectories: true)
 
-        let result = await ShellExecutor.execute(command)
-        guard result.exitCode == 0 else {
-            let message = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw UpdateError.failedToStartUpdater(message.isEmpty ? "unknown error" : message)
+            let attachResult = await ShellExecutor.execute(
+                "/usr/bin/hdiutil attach \(q(archiveURL.path)) -nobrowse -readonly -mountpoint \(q(mountDir.path)) -quiet"
+            )
+            guard attachResult.exitCode == 0 else {
+                throw UpdateError.extractionFailed("Failed to mount DMG (exit \(attachResult.exitCode))")
+            }
+
+            let findResult = await ShellExecutor.execute(
+                "/usr/bin/find \(q(mountDir.path)) -maxdepth 3 -type d -name 'Magent.app' | /usr/bin/head -1"
+            )
+            let mountedApp = findResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !mountedApp.isEmpty else {
+                await ShellExecutor.execute("/usr/bin/hdiutil detach \(q(mountDir.path)) -quiet 2>/dev/null || true")
+                throw UpdateError.extractionFailed("Magent.app not found in DMG")
+            }
+
+            let destApp = tempDir.appendingPathComponent("Magent.app")
+            let copyResult = await ShellExecutor.execute(
+                "/usr/bin/ditto \(q(mountedApp)) \(q(destApp.path))"
+            )
+            await ShellExecutor.execute("/usr/bin/hdiutil detach \(q(mountDir.path)) -quiet 2>/dev/null || true")
+            guard copyResult.exitCode == 0 else {
+                throw UpdateError.extractionFailed("Failed to copy app from DMG (exit \(copyResult.exitCode))")
+            }
+            return destApp
+
+        case .zip:
+            let unpackDir = tempDir.appendingPathComponent("unpacked")
+            try FileManager.default.createDirectory(at: unpackDir, withIntermediateDirectories: true)
+
+            let unpackResult = await ShellExecutor.execute(
+                "/usr/bin/ditto -x -k \(q(archiveURL.path)) \(q(unpackDir.path))"
+            )
+            guard unpackResult.exitCode == 0 else {
+                throw UpdateError.extractionFailed("Failed to unpack ZIP (exit \(unpackResult.exitCode))")
+            }
+
+            let findResult = await ShellExecutor.execute(
+                "/usr/bin/find \(q(unpackDir.path)) -maxdepth 3 -type d -name 'Magent.app' | /usr/bin/head -1"
+            )
+            let appPath = findResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !appPath.isEmpty else {
+                throw UpdateError.extractionFailed("Magent.app not found in archive")
+            }
+            return URL(fileURLWithPath: appPath)
         }
+    }
+
+    // Writes a minimal swap script that only waits for this process to exit,
+    // moves the pre-prepared app bundle into place, and relaunches.
+    private func writeSwapScript(at path: String) throws {
+        let script = """
+        #!/bin/zsh
+        set -euo pipefail
+
+        pid="$1"
+        new_app="$2"
+        target_app="$3"
+        log_path="$4"
+
+        exec >>"$log_path" 2>&1
+        echo "[magent-updater] swap started at $(date)"
+
+        # Wait for Magent to exit before touching the bundle.
+        while /bin/kill -0 "$pid" 2>/dev/null; do
+          /bin/sleep 0.2
+        done
+
+        if [[ ! -d "$new_app" ]]; then
+          echo "[magent-updater] prepared app not found: $new_app"
+          exit 22
+        fi
+
+        if [[ ! -d "$target_app" ]]; then
+          echo "[magent-updater] target path not found: $target_app"
+          exit 23
+        fi
+
+        backup_app="${target_app}.magent-backup"
+        /bin/rm -rf "$backup_app"
+
+        if ! /bin/mv "$target_app" "$backup_app"; then
+          echo "[magent-updater] failed to move current app to backup"
+          exit 30
+        fi
+
+        if ! /bin/mv "$new_app" "$target_app"; then
+          echo "[magent-updater] failed to install new app, restoring backup"
+          /bin/mv "$backup_app" "$target_app" || true
+          exit 31
+        fi
+
+        /bin/rm -rf "$backup_app"
+        /usr/bin/open "$target_app"
+        /bin/rm -f "$0"
+        echo "[magent-updater] update completed"
+        """
+        try script.write(toFile: path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
     }
 
     private func resolveInstallStrategy(appBundlePath: String) async -> InstallStrategy {
@@ -406,101 +556,6 @@ final class UpdateService {
         brew list --cask magent >/dev/null 2>&1
         """)
         return result.exitCode == 0 ? .homebrewCask : .bundleReplacement
-    }
-
-    private func writeBundleReplacementUpdaterScript(at path: String) throws {
-        let script = """
-        #!/bin/zsh
-        set -euo pipefail
-
-        pid="$1"
-        target_app="$2"
-        asset_url="$3"
-        asset_kind="$4"
-        log_path="$5"
-
-        exec >>"$log_path" 2>&1
-
-        echo "[magent-updater] started at $(date)"
-
-        tmp_dir="$(/usr/bin/mktemp -d /tmp/magent-update.XXXXXX)"
-        mount_dir="$tmp_dir/mount"
-        cleanup() {
-          if [[ -d "$mount_dir" ]]; then
-            /usr/bin/hdiutil detach "$mount_dir" -quiet >/dev/null 2>&1 || true
-          fi
-          /bin/rm -rf "$tmp_dir"
-        }
-        trap cleanup EXIT
-
-        archive_path="$tmp_dir/Magent.${asset_kind}"
-        /usr/bin/curl --fail --location --silent --show-error "$asset_url" -o "$archive_path"
-
-        case "$asset_kind" in
-          dmg)
-            /bin/mkdir -p "$mount_dir"
-            /usr/bin/hdiutil attach "$archive_path" -nobrowse -readonly -mountpoint "$mount_dir" -quiet
-            mounted_app="$(
-              /usr/bin/find "$mount_dir" -maxdepth 3 -type d -name "Magent.app" \
-              | /usr/bin/head -n 1
-            )"
-            if [[ -z "$mounted_app" ]]; then
-              echo "[magent-updater] Magent.app not found in disk image"
-              exit 20
-            fi
-            new_app="$tmp_dir/Magent.app"
-            /usr/bin/ditto "$mounted_app" "$new_app"
-            ;;
-          zip)
-            /bin/mkdir -p "$tmp_dir/unpacked"
-            /usr/bin/ditto -x -k "$archive_path" "$tmp_dir/unpacked"
-            new_app="$(
-              /usr/bin/find "$tmp_dir/unpacked" -maxdepth 3 -type d -name "Magent.app" \
-              | /usr/bin/head -n 1
-            )"
-            ;;
-          *)
-            echo "[magent-updater] Unsupported update asset type: $asset_kind"
-            exit 19
-            ;;
-        esac
-
-        if [[ -z "$new_app" ]]; then
-          echo "[magent-updater] Magent.app not found in archive"
-          exit 21
-        fi
-
-        while /bin/kill -0 "$pid" 2>/dev/null; do
-          /bin/sleep 0.2
-        done
-
-        if [[ ! -d "$target_app" ]]; then
-          echo "[magent-updater] Target app path does not exist: $target_app"
-          exit 22
-        fi
-
-        backup_app="${target_app}.magent-backup"
-        /bin/rm -rf "$backup_app"
-
-        if ! /bin/mv "$target_app" "$backup_app"; then
-          echo "[magent-updater] Failed to move current app to backup"
-          exit 30
-        fi
-
-        if ! /bin/mv "$new_app" "$target_app"; then
-          echo "[magent-updater] Failed to install new app, restoring backup"
-          /bin/mv "$backup_app" "$target_app" || true
-          exit 31
-        fi
-
-        /bin/rm -rf "$backup_app"
-        /usr/bin/open "$target_app"
-        /bin/rm -f "$0"
-        echo "[magent-updater] update completed"
-        """
-
-        try script.write(toFile: path, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
     }
 
     private func writeHomebrewUpdaterScript(at path: String) throws {
