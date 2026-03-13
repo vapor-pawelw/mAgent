@@ -417,13 +417,11 @@ public final class TmuxService: Sendable {
             "tmux capture-pane \(attributesFlag)-p -t \(shellQuote(sessionName)) -S - -E -"
         )
         guard result.exitCode == 0, !result.stdout.isEmpty else { return nil }
-        // Right-trim only: trailing newlines are noise, but leading empty lines MUST be preserved
-        // so that split array indexes match tmux copy-mode absolute line numbers (history-top = line 0).
-        // Stripping leading empty lines shifts all line indexes and causes scroll-down to land
-        // short of the target prompt.
-        var output = result.stdout
-        while output.last?.isNewline == true { output.removeLast() }
-        return output
+        // Return raw stdout with NO trimming. Leading empty lines must be preserved so that
+        // split array indexes match tmux copy-mode absolute line numbers (history-top = line 0).
+        // Trailing newlines are harmless: split(omittingEmptySubsequences: false) produces one
+        // trailing empty element which is never matched as a prompt and doesn't affect lineIndex.
+        return result.stdout
     }
 
     /// Scrolls the pane in copy-mode so the specified history line is anchored
