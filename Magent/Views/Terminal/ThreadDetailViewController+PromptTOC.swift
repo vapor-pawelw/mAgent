@@ -1475,6 +1475,11 @@ final class PromptTableOfContentsView: NSView {
         setCollapsedState(true, animated: false)
     }
 
+    private func applyScrollConstraints(collapsed: Bool) {
+        scrollViewCollapseConstraint.isActive = collapsed
+        scrollBottomConstraint.isActive = !collapsed
+    }
+
     private func setCollapsedState(_ collapsed: Bool, animated: Bool) {
         let targetRadius: CGFloat = collapsed ? 18 : 8
 
@@ -1490,8 +1495,7 @@ final class PromptTableOfContentsView: NSView {
             if !collapsed {
                 // Expanding: swap constraints so scroll content is laid out inside the growing
                 // frame, then notify the controller to start the frame animation.
-                scrollViewCollapseConstraint.isActive = false
-                scrollBottomConstraint.isActive = true
+                applyScrollConstraints(collapsed: false)
                 onHoverStateChanged?(true)
 
                 // Delay content reveal until AFTER the frame has finished expanding so rows
@@ -1520,6 +1524,9 @@ final class PromptTableOfContentsView: NSView {
                     cornerHandleViews.forEach { $0.animator().alphaValue = 0 }
                 }, completionHandler: { [weak self] in
                     guard let self else { return }
+                    // Guard against re-hover: if the user entered before this completion fired,
+                    // skip the constraint swap and content hide — the expand path already owns them.
+                    guard !self.isExpanded else { return }
                     self.scrollView.isHidden = true
                     self.headerBackgroundView.isHidden = true
                     self.emptyLabel.isHidden = true
@@ -1527,14 +1534,12 @@ final class PromptTableOfContentsView: NSView {
                     self.scrollView.alphaValue = 1
                     self.headerBackgroundView.alphaValue = 1
                     self.cornerHandleViews.forEach { $0.alphaValue = 1 }
-                    self.scrollViewCollapseConstraint.isActive = true
-                    self.scrollBottomConstraint.isActive = false
+                    self.applyScrollConstraints(collapsed: true)
                     self.onCollapseCompleted?()
                 })
             }
         } else {
-            scrollViewCollapseConstraint.isActive = collapsed
-            scrollBottomConstraint.isActive = !collapsed
+            applyScrollConstraints(collapsed: collapsed)
             scrollView.isHidden = collapsed
             headerBackgroundView.isHidden = collapsed
             if collapsed { emptyLabel.isHidden = true }
