@@ -413,11 +413,16 @@ public final class TmuxService: Sendable {
     /// Captures the full scrollback history of the active pane in a tmux session.
     public func captureFullPane(sessionName: String, includeAttributes: Bool = false) async -> String? {
         let attributesFlag = includeAttributes ? "-e " : ""
-        guard let output = try? await ShellExecutor.run(
+        let result = await ShellExecutor.execute(
             "tmux capture-pane \(attributesFlag)-p -t \(shellQuote(sessionName)) -S - -E -"
-        ) else {
-            return nil
-        }
+        )
+        guard result.exitCode == 0, !result.stdout.isEmpty else { return nil }
+        // Right-trim only: trailing newlines are noise, but leading empty lines MUST be preserved
+        // so that split array indexes match tmux copy-mode absolute line numbers (history-top = line 0).
+        // Stripping leading empty lines shifts all line indexes and causes scroll-down to land
+        // short of the target prompt.
+        var output = result.stdout
+        while output.last?.isNewline == true { output.removeLast() }
         return output
     }
 
