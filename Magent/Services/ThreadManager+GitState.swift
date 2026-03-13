@@ -8,15 +8,13 @@ extension ThreadManager {
     /// Returns the resolved base branch for a thread.
     /// Priority: detected remote branch (cached per current branch) → stored baseBranch → project default → "main".
     func resolveBaseBranch(for thread: MagentThread) -> String {
-        let currentBranch = thread.actualBranch ?? thread.branchName
         let settings = persistence.loadSettings()
         if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
             let cache = persistence.loadWorktreeCache(worktreesBasePath: project.resolvedWorktreesBasePath())
-            let worktreeKey = (thread.worktreePath as NSString).lastPathComponent
-            if let meta = cache.worktrees[worktreeKey],
+            if let meta = cache.worktrees[thread.worktreeKey],
                let detected = meta.detectedBaseBranch,
                let detectedFor = meta.detectedFor,
-               detectedFor == currentBranch {
+               detectedFor == thread.currentBranch {
                 return detected
             }
             if let defaultBranch = project.defaultBranch, !defaultBranch.isEmpty {
@@ -81,24 +79,22 @@ extension ThreadManager {
         for thread in snapshot {
             guard FileManager.default.fileExists(atPath: thread.worktreePath) else { continue }
             guard var projectEntry = cacheByProjectId[thread.projectId] else { continue }
-            let worktreeKey = (thread.worktreePath as NSString).lastPathComponent
-            let currentBranch = thread.actualBranch ?? thread.branchName
 
             // Resolve base branch: use cache if valid, otherwise detect from git.
             let baseBranch: String
-            if let meta = projectEntry.cache.worktrees[worktreeKey],
+            if let meta = projectEntry.cache.worktrees[thread.worktreeKey],
                let detected = meta.detectedBaseBranch,
                let detectedFor = meta.detectedFor,
-               detectedFor == currentBranch {
+               detectedFor == thread.currentBranch {
                 baseBranch = detected
             } else if let detected = await git.detectBaseBranch(
                 worktreePath: thread.worktreePath,
-                currentBranch: currentBranch
+                currentBranch: thread.currentBranch
             ) {
-                var meta = projectEntry.cache.worktrees[worktreeKey] ?? WorktreeMetadata()
+                var meta = projectEntry.cache.worktrees[thread.worktreeKey] ?? WorktreeMetadata()
                 meta.detectedBaseBranch = detected
-                meta.detectedFor = currentBranch
-                projectEntry.cache.worktrees[worktreeKey] = meta
+                meta.detectedFor = thread.currentBranch
+                projectEntry.cache.worktrees[thread.worktreeKey] = meta
                 projectEntry.dirty = true
                 cacheByProjectId[thread.projectId] = projectEntry
                 baseBranch = detected
@@ -111,9 +107,12 @@ extension ThreadManager {
             guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
 
             // Set hasEverDoneWork the first time commits ahead of base are detected.
+            // Track whether we already know commits exist to avoid re-running git log below.
+            var knownHasCommitsAhead = false
             if !threads[i].hasEverDoneWork {
+                // Use -n 1 — we only need to know if any commits exist, not enumerate them.
                 let logResult = await ShellExecutor.execute(
-                    "git log \(baseBranch)..HEAD --oneline",
+                    "git log \(baseBranch)..HEAD --oneline -n 1",
                     workingDirectory: thread.worktreePath
                 )
                 let hasCommitsAhead = logResult.exitCode == 0
@@ -123,10 +122,11 @@ extension ThreadManager {
                     threads[i].hasEverDoneWork = true
                     persistedThreadsChanged = true
                     changed = true
+                    knownHasCommitsAhead = hasCommitsAhead
                 } else {
                     // Migration for existing threads: if HEAD has moved past the stored fork
                     // point, work was done and delivered before this field existed.
-                    let forkPoint = projectEntry.cache.worktrees[worktreeKey]?.forkPointCommit
+                    let forkPoint = projectEntry.cache.worktrees[thread.worktreeKey]?.forkPointCommit
                     if let forkPoint, !forkPoint.isEmpty,
                        let head = await git.currentCommit(worktreePath: thread.worktreePath),
                        head != forkPoint {
@@ -147,6 +147,16 @@ extension ThreadManager {
                 continue
             }
 
+            // If we just detected commits ahead this cycle, delivery is false by definition —
+            // skip the redundant isFullyDelivered call; next cycle will evaluate properly.
+            if knownHasCommitsAhead {
+                if threads[j].isFullyDelivered {
+                    threads[j].isFullyDelivered = false
+                    changed = true
+                }
+                continue
+            }
+
             let delivered = await git.isFullyDelivered(
                 worktreePath: thread.worktreePath,
                 baseBranch: baseBranch
@@ -159,9 +169,8 @@ extension ThreadManager {
         }
 
         // Save mutated caches.
-        for (projectId, entry) in cacheByProjectId where entry.dirty {
+        for (_, entry) in cacheByProjectId where entry.dirty {
             persistence.saveWorktreeCache(entry.cache, worktreesBasePath: entry.basePath)
-            _ = projectId
         }
         if persistedThreadsChanged {
             try? persistence.saveActiveThreads(threads)
@@ -202,7 +211,7 @@ extension ThreadManager {
         let activeNames = Set(
             threads
                 .filter { $0.projectId == project.id && !$0.isArchived && !$0.isMain }
-                .map { ($0.worktreePath as NSString).lastPathComponent }
+                .map { $0.worktreeKey }
         )
         persistence.pruneWorktreeCache(
             worktreesBasePath: project.resolvedWorktreesBasePath(),

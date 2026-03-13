@@ -135,6 +135,18 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     /// untouched worktree is never suggested for archiving.
     public var hasEverDoneWork: Bool
 
+    // MARK: - Computed
+
+    /// The last path component of `worktreePath`, used as the key in per-project worktree caches.
+    public var worktreeKey: String {
+        (worktreePath as NSString).lastPathComponent
+    }
+
+    /// The currently checked-out branch name; prefers the live-detected value over the persisted one.
+    public var currentBranch: String {
+        actualBranch ?? branchName
+    }
+
     // Transient (not persisted) — tracks which agent sessions are currently working
     public var busySessions: Set<String> = []
     // Transient (not persisted) — tracks which agent sessions are waiting for user input
