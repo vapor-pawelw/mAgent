@@ -443,7 +443,7 @@ private func ghosttyReadClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
     _ location: ghostty_clipboard_e,
     _ state: UnsafeMutableRawPointer?
-) {
+) -> Bool {
     let wrappedState = SendableRawPointer(pointer: state)
     Task { @MainActor in
         guard let surface = GhosttyAppManager.shared.focusedSurface else { return }
@@ -454,6 +454,7 @@ private func ghosttyReadClipboardCallback(
             ghostty_surface_complete_clipboard_request(surface, ptr, wrappedState.pointer, true)
         }
     }
+    return true
 }
 
 private func ghosttyConfirmReadClipboardCallback(
