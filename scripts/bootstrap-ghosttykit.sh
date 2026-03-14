@@ -10,7 +10,7 @@ Builds GhosttyKit.xcframework from ghostty-org/ghostty and installs it into:
   Libraries/GhosttyKit.xcframework
 
 Environment overrides:
-  GHOSTTY_REF       Ghostty git ref to build (default: v1.3.0)
+  GHOSTTY_REF       Ghostty git ref to build (default: v1.3.1)
   GHOSTTY_WORK_DIR  Working directory for ghostty checkout (default: .build/ghostty-src)
 EOF
 }
@@ -58,7 +58,7 @@ run_zig() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-GHOSTTY_REF="${GHOSTTY_REF:-v1.3.0}"
+GHOSTTY_REF="${GHOSTTY_REF:-v1.3.1}"
 WORK_DIR="${GHOSTTY_WORK_DIR:-$REPO_ROOT/.build/ghostty-src}"
 
 while [[ $# -gt 0 ]]; do

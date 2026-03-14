@@ -424,6 +424,7 @@ private func ghosttyActionCallback(
 ) -> Bool {
     switch action.tag {
     case GHOSTTY_ACTION_SET_TITLE,
+         GHOSTTY_ACTION_SET_TAB_TITLE,
          GHOSTTY_ACTION_CELL_SIZE,
          GHOSTTY_ACTION_RENDERER_HEALTH,
          GHOSTTY_ACTION_MOUSE_SHAPE,
@@ -497,7 +498,7 @@ private func ghosttyReadClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
     _ location: ghostty_clipboard_e,
     _ state: UnsafeMutableRawPointer?
-) {
+) -> Bool {
     let wrappedState = SendableRawPointer(pointer: state)
     Task { @MainActor in
         guard let surface = GhosttyAppManager.shared.focusedSurface else { return }
@@ -508,6 +509,7 @@ private func ghosttyReadClipboardCallback(
             ghostty_surface_complete_clipboard_request(surface, ptr, wrappedState.pointer, true)
         }
     }
+    return true
 }
 
 private func ghosttyConfirmReadClipboardCallback(
