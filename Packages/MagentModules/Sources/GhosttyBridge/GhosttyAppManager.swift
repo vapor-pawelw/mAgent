@@ -96,9 +96,20 @@ public final class GhosttyAppManager {
     }
 
     private var tickCount = 0
+    private var lastTickAt: TimeInterval = 0
+    // Set from background threads (CVDisplayLink / Ghostty wakeup callback).
+    // nonisolated(unsafe) is intentional — worst-case a duplicate tick task is
+    // scheduled, which is harmless and far better than thousands queuing up.
+    nonisolated(unsafe) var wakeupTickPending = false
 
     public func tick() {
         guard let app else { return }
+        // Rate-limit: discard redundant queued ticks so a burst of pending tasks
+        // (from wakeup callbacks or display link accumulation) doesn't flood the
+        // main actor with back-to-back ghostty_app_tick() calls.
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastTickAt >= 1.0 / 65.0 else { return }
+        lastTickAt = now
         ghostty_app_tick(app)
         tickCount += 1
         if tickCount <= 3 || tickCount == 60 {
@@ -412,8 +423,17 @@ private func copiedGhosttyString(_ pointer: UnsafePointer<CChar>?, length: Int) 
 }
 
 private func ghosttyWakeupCallback(_ userdata: UnsafeMutableRawPointer?) {
+    let mgr = GhosttyAppManager.shared
+    // Coalesce: only queue one wakeup tick task at a time. The display link
+    // already drives rendering at 60fps; the wakeup callback can fire hundreds
+    // of times per second (on every terminal event / mouse move). Without
+    // coalescing, thousands of Task { @MainActor in tick() } pile up on the
+    // main actor queue and execute in a burst, burning CPU and starving UI events.
+    guard !mgr.wakeupTickPending else { return }
+    mgr.wakeupTickPending = true
     Task { @MainActor in
-        GhosttyAppManager.shared.tick()
+        mgr.wakeupTickPending = false
+        mgr.tick()
     }
 }
 
