@@ -610,8 +610,9 @@ extension ThreadManager {
         installClaudeHooksSettings(for: appearanceMode)
     }
 
-    private func installClaudeHooksSettings(for appearanceMode: AppAppearanceMode) {
-        let marker = "magent-settings-v2-\(appearanceMode.rawValue)"
+    private func installClaudeHooksSettings(for appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) {
+        let themeSuffix = preserveAgentColorTheme ? "-notheme" : ""
+        let marker = "magent-settings-v2-\(appearanceMode.rawValue)\(themeSuffix)"
         let path = Self.claudeHooksSettingsPath
         if let existing = try? String(contentsOfFile: path, encoding: .utf8),
            existing.contains(marker) {
@@ -639,15 +640,18 @@ extension ThreadManager {
         ]
 
         // Keep this scoped to Magent-managed sessions via --settings.
-        switch appearanceMode {
-        case .light:
-            settings["theme"] = "light"
-            settings["terminalTheme"] = "light"
-        case .dark:
-            settings["theme"] = "dark"
-            settings["terminalTheme"] = "dark"
-        case .system:
-            settings["terminalTheme"] = "system"
+        // Skip theme hints when the user wants to preserve the agent's own default theme.
+        if !preserveAgentColorTheme {
+            switch appearanceMode {
+            case .light:
+                settings["theme"] = "light"
+                settings["terminalTheme"] = "light"
+            case .dark:
+                settings["theme"] = "dark"
+                settings["terminalTheme"] = "dark"
+            case .system:
+                settings["terminalTheme"] = "system"
+            }
         }
 
         guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys]),
@@ -809,7 +813,7 @@ extension ThreadManager {
 
         var parts = [String]()
         if agentType == .claude {
-            installClaudeHooksSettings(for: settings.appAppearanceMode)
+            installClaudeHooksSettings(for: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
             parts.append("unset CLAUDECODE")
         }
         if !preAgentCommand.isEmpty {
@@ -853,9 +857,9 @@ extension ThreadManager {
             if settings.ipcPromptInjectionEnabled {
                 command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
             }
-            command = claudeSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode)
+            command = claudeSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
         } else if agentType == .codex {
-            command = codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode)
+            command = codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
         }
         return command
     }
@@ -877,7 +881,7 @@ extension ThreadManager {
             if settings.ipcPromptInjectionEnabled {
                 command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
             }
-            return claudeSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode)
+            return claudeSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
         case .codex:
             // Use `command codex` to bypass shell function wrappers (same reason as in AppSettings.command(for:)).
             var command = "command codex resume \(quotedID)"
@@ -886,40 +890,40 @@ extension ThreadManager {
             } else if settings.agentSandboxEnabled {
                 command += " --full-auto"
             }
-            return codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode)
+            return codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
         case .custom:
             return nil
         }
     }
 
-    private func codexSessionLaunchFlags(for appearanceMode: AppAppearanceMode) -> String {
+    private func codexSessionLaunchFlags(for appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {
         var flags = [
             "-c \(ShellExecutor.shellQuote("tui.notification_method=\"bel\""))",
         ]
         // Keep Codex rendering aligned with the terminal palette in explicit light mode.
-        if appearanceMode == .light {
+        if !preserveAgentColorTheme && appearanceMode == .light {
             flags.append("-c \(ShellExecutor.shellQuote("tui.theme=\"ansi\""))")
         }
         return flags.joined(separator: " ")
     }
 
-    private func codexSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode) -> String {
+    private func codexSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {
         let prefix = "command codex"
         guard command.hasPrefix(prefix) else { return command }
 
-        let launchFlags = codexSessionLaunchFlags(for: appearanceMode)
+        let launchFlags = codexSessionLaunchFlags(for: appearanceMode, preserveAgentColorTheme: preserveAgentColorTheme)
         guard !launchFlags.isEmpty else { return command }
 
         let suffix = String(command.dropFirst(prefix.count))
         return "\(prefix) \(launchFlags)\(suffix)"
     }
 
-    private func claudeSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode) -> String {
+    private func claudeSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {
         guard command.hasPrefix("command claude") else { return command }
         // Claude's current terminal renderer can keep dark-styled truecolor blocks even when
         // theme hints are set. In explicit light mode, force a basic ANSI profile for this
         // process only (instead of disabling color completely).
-        if appearanceMode == .light {
+        if !preserveAgentColorTheme && appearanceMode == .light {
             return "TERM=screen COLORTERM= \(command)"
         }
         return command
