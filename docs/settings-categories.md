@@ -6,7 +6,7 @@
 - Terminal-specific preferences now live in `Settings > Terminal`.
 - Thread-focused preferences now live in `Settings > Threads`.
 - `General` currently owns update controls, archive defaults, and the environment-variable reference used by startup injection settings.
-- `Terminal` owns app/terminal light-dark appearance, Ghostty mouse-wheel override behavior, and terminal overlay visibility toggles.
+- `Terminal` owns app/terminal light-dark appearance, the "Don't override agent color theme" toggle, Ghostty mouse-wheel override behavior, and terminal overlay visibility toggles.
 - `Threads` owns thread naming defaults, thread sections, recently archived thread restore history, startup injection fields, and the review prompt.
 - Section color editing now reuses a single system color picker per settings screen, so switching to another section keeps the earlier section's custom dot color intact instead of resetting it.
 - Debug-only features may still appear in Settings during local development, but they should be clearly annotated with `Debug builds only` and fully hidden from release builds.
@@ -57,3 +57,4 @@ For views whose appearance cannot be caught via `viewDidChangeEffectiveAppearanc
 - `NSColorPanel.shared` is process-wide. Programmatically setting its color can synchronously fire the current action, so if you do not clear/rebind the target around that assignment, the previously edited section can absorb the new color change.
 - When a feature is release-gated behind a `FEATURE_*` flag, hide its sidebar category/card entirely in release builds instead of showing disabled controls that cannot work.
 - The app appearance selector is the source of truth for both AppKit and the embedded terminal. Do not add a separate terminal-only light/dark selector unless the product deliberately supports mixed chrome/terminal appearance.
+- The "Don't override agent color theme" checkbox (`AppSettings.preserveAgentColorTheme`) gates three things: (1) the Claude settings JSON (`/tmp/magent-claude-hooks.json`) won't include `theme`/`terminalTheme` keys, (2) Claude won't get `TERM=screen COLORTERM=` prepended in light mode, and (3) Codex won't get `-c tui.theme="ansi"` in light mode. The Claude hooks settings cache key includes a `-notheme` suffix when the toggle is on, so the file is regenerated correctly when the setting changes between sessions.

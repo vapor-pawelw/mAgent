@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Appearance
+- New "Don't override agent color theme" checkbox in Appearance settings: when enabled, Magent won't force a color theme on Claude or Codex at startup, letting agents use their own default theme.
+
 ### Updates
 - Update progress is now shown inside the app: tapping Update downloads and unpacks the new version in-app (with "Downloading…" / "Preparing update…" banners), so the app only closes at the very end to swap the binary and relaunch — eliminating the long invisible wait.
 

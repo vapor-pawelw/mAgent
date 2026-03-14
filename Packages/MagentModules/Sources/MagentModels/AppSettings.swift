@@ -71,6 +71,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var showScrollToBottomIndicator: Bool
     public var showTerminalScrollOverlay: Bool
     public var showPromptTOCOverlay: Bool
+    public var preserveAgentColorTheme: Bool
 
     public init(
         projects: [Project] = [],
@@ -111,7 +112,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         terminalMouseWheelBehavior: TerminalMouseWheelBehavior = .magentDefaultScroll,
         showScrollToBottomIndicator: Bool = true,
         showTerminalScrollOverlay: Bool = true,
-        showPromptTOCOverlay: Bool = true
+        showPromptTOCOverlay: Bool = true,
+        preserveAgentColorTheme: Bool = false
     ) {
         self.projects = projects
         self.activeAgents = activeAgents
@@ -152,6 +154,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.showScrollToBottomIndicator = showScrollToBottomIndicator
         self.showTerminalScrollOverlay = showTerminalScrollOverlay
         self.showPromptTOCOverlay = showPromptTOCOverlay
+        self.preserveAgentColorTheme = preserveAgentColorTheme
     }
 
     public init(from decoder: Decoder) throws {
@@ -198,6 +201,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showScrollToBottomIndicator = try container.decodeIfPresent(Bool.self, forKey: .showScrollToBottomIndicator) ?? true
         showTerminalScrollOverlay = try container.decodeIfPresent(Bool.self, forKey: .showTerminalScrollOverlay) ?? true
         showPromptTOCOverlay = try container.decodeIfPresent(Bool.self, forKey: .showPromptTOCOverlay) ?? true
+        preserveAgentColorTheme = try container.decodeIfPresent(Bool.self, forKey: .preserveAgentColorTheme) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -243,6 +247,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(showScrollToBottomIndicator, forKey: .showScrollToBottomIndicator)
         try container.encode(showTerminalScrollOverlay, forKey: .showTerminalScrollOverlay)
         try container.encode(showPromptTOCOverlay, forKey: .showPromptTOCOverlay)
+        try container.encode(preserveAgentColorTheme, forKey: .preserveAgentColorTheme)
     }
 
     public var visibleSections: [ThreadSection] {
@@ -382,6 +387,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case showScrollToBottomIndicator
         case showTerminalScrollOverlay
         case showPromptTOCOverlay
+        case preserveAgentColorTheme
 
         // Legacy keys kept for migration.
         case agentCommand

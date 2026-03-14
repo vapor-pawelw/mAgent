@@ -8,6 +8,7 @@ final class SettingsAppearanceViewController: NSViewController {
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
     private var appearancePopup: NSPopUpButton!
+    private var preserveAgentColorThemeCheckbox: NSButton!
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
@@ -56,6 +57,18 @@ final class SettingsAppearanceViewController: NSViewController {
         appearanceNote.textColor = NSColor(resource: .textSecondary)
         appearanceSection.addArrangedSubview(appearanceNote)
 
+        preserveAgentColorThemeCheckbox = NSButton(checkboxWithTitle: "Don't override agent color theme", target: self, action: #selector(preserveAgentColorThemeChanged))
+        preserveAgentColorThemeCheckbox.font = .systemFont(ofSize: 12)
+        preserveAgentColorThemeCheckbox.state = settings.preserveAgentColorTheme ? .on : .off
+        appearanceSection.addArrangedSubview(preserveAgentColorThemeCheckbox)
+
+        let agentThemeNote = NSTextField(
+            wrappingLabelWithString: "When checked, Magent won't force a color theme on Claude or Codex at startup. Useful if you prefer the agent's own default theme regardless of the app appearance setting."
+        )
+        agentThemeNote.font = .systemFont(ofSize: 11)
+        agentThemeNote.textColor = NSColor(resource: .textSecondary)
+        appearanceSection.addArrangedSubview(agentThemeNote)
+
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stackView)
@@ -78,6 +91,12 @@ final class SettingsAppearanceViewController: NSViewController {
             appearanceCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             appearanceNote.widthAnchor.constraint(equalTo: appearanceSection.widthAnchor),
         ])
+
+        if let agentThemeNote = appearanceSection.arrangedSubviews.last as? NSTextField {
+            NSLayoutConstraint.activate([
+                agentThemeNote.widthAnchor.constraint(equalTo: appearanceSection.widthAnchor),
+            ])
+        }
     }
 
     override func viewDidAppear() {
@@ -159,6 +178,11 @@ final class SettingsAppearanceViewController: NSViewController {
         let index = appearancePopup.indexOfSelectedItem
         guard AppAppearanceMode.allCases.indices.contains(index) else { return }
         settings.appAppearanceMode = AppAppearanceMode.allCases[index]
+        saveSettingsAndNotify()
+    }
+
+    @objc private func preserveAgentColorThemeChanged() {
+        settings.preserveAgentColorTheme = preserveAgentColorThemeCheckbox.state == .on
         saveSettingsAndNotify()
     }
 }
