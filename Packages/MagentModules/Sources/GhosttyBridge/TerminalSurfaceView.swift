@@ -709,11 +709,16 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             guard !Task.isCancelled else { return }
 
             // Rendered-word check on the main actor (Ghostty surface access + NSDataDetector).
-            let renderedWordURL = await MainActor.run { [weak self] () -> String? in
-                guard let self, self.hoverProbeSerial == probeSerial else { return nil }
-                return self.renderedWordOpenableURL()
+            // If Ghostty already owns the hover state, skip all probes — no C API, no tmux.
+            // Returns (url: nil, skipTmux: true) on serial mismatch or Ghostty ownership.
+            let probeResult: (url: String?, skipTmux: Bool) = await MainActor.run { [weak self] in
+                guard let self, self.hoverProbeSerial == probeSerial else { return (nil, true) }
+                if self.hoveredLinkSource == .ghostty { return (nil, true) }
+                return (self.renderedWordOpenableURL(), false)
             }
-            if let renderedWordURL {
+            guard !probeResult.skipTmux else { return }
+
+            if let renderedWordURL = probeResult.url {
                 await MainActor.run { [weak self] in
                     guard let self, self.hoverProbeSerial == probeSerial,
                           self.hoveredLinkSource != .ghostty else { return }
