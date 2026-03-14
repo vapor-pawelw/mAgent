@@ -32,7 +32,7 @@ The thread also stores a snapshot of that normalized path list at creation time.
 
 ## Manual Resync Into Thread
 
-Non-main threads expose a top-bar `Resync Local Sync Paths` action that copies the thread's eligible local sync paths from the main repo worktree into the thread again.
+Non-main threads expose a top-bar `Resync Local Sync Paths` action that copies the thread's eligible local sync paths from the main repo worktree into the thread again. The button is hidden when the project has no Local Sync Paths configured (it re-evaluates whenever settings change, so it appears automatically after paths are added).
 
 - Uses the thread's snapshotted path list, filtered to paths that are still configured on the project
 - Prompts before overwriting conflicting files/directories already present in the thread worktree

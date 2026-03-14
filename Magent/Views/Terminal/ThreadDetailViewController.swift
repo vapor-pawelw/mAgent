@@ -300,7 +300,7 @@ final class ThreadDetailViewController: NSViewController {
         resyncLocalPathsButton.target = self
         resyncLocalPathsButton.action = #selector(resyncLocalPathsTapped)
         resyncLocalPathsButton.toolTip = "Resync Local Sync Paths from the main repo"
-        resyncLocalPathsButton.isHidden = thread.isMain
+        resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
 
         archiveThreadButton.bezelStyle = .texturedRounded
         archiveThreadButton.image = NSImage(
@@ -703,6 +703,7 @@ final class ThreadDetailViewController: NSViewController {
             )
             reloadTerminalViewsForUpdatedTerminalPreferences()
         }
+        resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
         refreshOverlayVisibilitySettings()
         updateTerminalScrollControlsState()
     }
@@ -722,6 +723,13 @@ final class ThreadDetailViewController: NSViewController {
         if sessionNames.indices.contains(selectedIndex) {
             selectTab(at: selectedIndex)
         }
+    }
+
+    private func resyncLocalPathsButtonShouldBeHidden() -> Bool {
+        guard !thread.isMain else { return true }
+        let settings = PersistenceService.shared.loadSettings()
+        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        return project?.normalizedLocalFileSyncPaths.isEmpty ?? true
     }
 
     private var topBarButtons: [NSButton] {
