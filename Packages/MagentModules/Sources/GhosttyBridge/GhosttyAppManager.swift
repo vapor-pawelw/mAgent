@@ -41,6 +41,7 @@ public final class GhosttyAppManager {
     private var retainedConfigs: [ghostty_config_t] = []
     private var registeredSurfaces: [Int: ghostty_surface_t] = [:]
     private var embeddedPreferences = GhosttyEmbeddedPreferences()
+    private var lastWrittenOverrideConfig: String? = nil
 
     // MARK: - Initialization
 
@@ -343,8 +344,18 @@ public final class GhosttyAppManager {
 
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("magent-ghostty-overrides.config")
         let contents = lines.joined(separator: "\n") + "\n"
+
+        // Only write if content changed. ghostty v1.3.1 watches loaded config files;
+        // writing on every buildConfig call (including RELOAD_CONFIG handler calls)
+        // would trigger an infinite reload loop: write → watcher fires → RELOAD_CONFIG
+        // → buildConfig → write → watcher fires → ...
+        if contents == lastWrittenOverrideConfig, FileManager.default.fileExists(atPath: url.path) {
+            return url.path
+        }
+
         do {
             try contents.write(to: url, atomically: true, encoding: .utf8)
+            lastWrittenOverrideConfig = contents
             return url.path
         } catch {
             Self.log("failed to write override config: \(error.localizedDescription)")
@@ -424,14 +435,16 @@ private func copiedGhosttyString(_ pointer: UnsafePointer<CChar>?, length: Int) 
 
 private func ghosttyWakeupCallback(_ userdata: UnsafeMutableRawPointer?) {
     let mgr = GhosttyAppManager.shared
-    // Coalesce: only queue one wakeup tick task at a time. The display link
-    // already drives rendering at 60fps; the wakeup callback can fire hundreds
-    // of times per second (on every terminal event / mouse move). Without
-    // coalescing, thousands of Task { @MainActor in tick() } pile up on the
-    // main actor queue and execute in a burst, burning CPU and starving UI events.
+    // Coalesce: only queue one wakeup tick at a time. The display link already
+    // drives rendering at 60fps; the wakeup callback can fire hundreds of times
+    // per second (on every terminal event / mouse move). Without coalescing,
+    // many main-queue blocks pile up and execute in a burst, starving UI events.
+    //
+    // Use DispatchQueue.main.async (not Task { @MainActor in }) to match the
+    // standalone Ghostty approach and avoid Swift Task allocation overhead.
     guard !mgr.wakeupTickPending else { return }
     mgr.wakeupTickPending = true
-    Task { @MainActor in
+    DispatchQueue.main.async {
         mgr.wakeupTickPending = false
         mgr.tick()
     }
@@ -460,7 +473,7 @@ private func ghosttyActionCallback(
             action.action.mouse_over_link.url,
             length: action.action.mouse_over_link.len
         )
-        Task { @MainActor in
+        DispatchQueue.main.async {
             GhosttyAppManager.shared.setHoveredLink(hoveredURL, surfaceAddress: surfaceAddr)
         }
         return true
@@ -469,7 +482,7 @@ private func ghosttyActionCallback(
             action.action.open_url.url,
             length: Int(action.action.open_url.len)
         ) ?? ""
-        Task { @MainActor in
+        DispatchQueue.main.async {
             GhosttyAppManager.shared.openURL(openedURL)
         }
         return true
@@ -477,7 +490,7 @@ private func ghosttyActionCallback(
         guard target.tag == GHOSTTY_TARGET_SURFACE else { return false }
         let surfaceAddr = Int(bitPattern: target.target.surface)
         let scrollbar = action.action.scrollbar
-        Task { @MainActor in
+        DispatchQueue.main.async {
             NotificationCenter.default.post(
                 name: GhosttyAppManager.ghosttyScrollbarUpdated,
                 object: nil,
@@ -491,22 +504,13 @@ private func ghosttyActionCallback(
         }
         return true
     case GHOSTTY_ACTION_RELOAD_CONFIG:
-        let soft = action.action.reload_config.soft
-        switch target.tag {
-        case GHOSTTY_TARGET_APP:
-            Task { @MainActor in
-                GhosttyAppManager.shared.reloadEmbeddedConfig(soft: soft)
-            }
-            return true
-        case GHOSTTY_TARGET_SURFACE:
-            guard let surface = target.target.surface else { return false }
-            Task { @MainActor in
-                GhosttyAppManager.shared.reloadEmbeddedConfig(soft: soft, for: surface)
-            }
-            return true
-        default:
-            return false
-        }
+        // Acknowledge but do NOT respond by calling back into ghostty's config
+        // machinery. In v1.3.1, ghostty fires RELOAD_CONFIG as a side effect of
+        // ghostty_surface_update_config / ghostty_app_update_config calls. If we
+        // respond by rebuilding and re-applying config, it triggers another
+        // RELOAD_CONFIG → infinite loop that freezes the main thread.
+        // Magent manages its own config lifecycle via applyEmbeddedPreferences.
+        return true
     case GHOSTTY_ACTION_CONFIG_CHANGE:
         return true
     default:
@@ -520,7 +524,7 @@ private func ghosttyReadClipboardCallback(
     _ state: UnsafeMutableRawPointer?
 ) -> Bool {
     let wrappedState = SendableRawPointer(pointer: state)
-    Task { @MainActor in
+    DispatchQueue.main.async {
         guard let surface = GhosttyAppManager.shared.focusedSurface else { return }
         let string = GhosttyAppManager.shared.consumeSyntheticPasteText()
             ?? NSPasteboard.general.string(forType: .string)
@@ -540,7 +544,7 @@ private func ghosttyConfirmReadClipboardCallback(
 ) {
     let copiedStr: String? = str.map { String(cString: $0) }
     let wrappedState = SendableRawPointer(pointer: state)
-    Task { @MainActor in
+    DispatchQueue.main.async {
         guard let surface = GhosttyAppManager.shared.focusedSurface else { return }
         if let copiedStr {
             copiedStr.withCString { ptr in
@@ -572,7 +576,7 @@ private func ghosttyWriteClipboardCallback(
           let dataPtr = selectedEntry.data else { return }
 
     let text = String(cString: dataPtr)
-    Task { @MainActor in
+    DispatchQueue.main.async {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         if confirm {
@@ -585,7 +589,7 @@ private func ghosttyCloseSurfaceCallback(
     _ userdata: UnsafeMutableRawPointer?,
     _ processAlive: Bool
 ) {
-    Task { @MainActor in
+    DispatchQueue.main.async {
         NotificationCenter.default.post(
             name: GhosttyAppManager.ghosttySurfaceClosed,
             object: nil,
@@ -603,7 +607,9 @@ private func displayLinkCallback(
     _ userdata: UnsafeMutableRawPointer?
 ) -> CVReturn {
     let mgr = Unmanaged<GhosttyAppManager>.fromOpaque(userdata!).takeUnretainedValue()
-    Task { @MainActor in
+    // Use DispatchQueue.main.async to match standalone Ghostty's wakeup approach
+    // and avoid Swift Task allocation overhead at 60fps.
+    DispatchQueue.main.async {
         mgr.tick()
     }
     return kCVReturnSuccess

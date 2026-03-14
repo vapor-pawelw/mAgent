@@ -208,14 +208,23 @@ Skipping `update_config` here causes new panes to start dark even when Light mod
 
 ## `reload_config` Callback Contract
 
-Ghostty's embedded runtime sends `GHOSTTY_ACTION_RELOAD_CONFIG` to the host when a terminal or the app needs its config reapplied (for example after current-terminal settings changes or conditional-state refreshes). Ignoring this callback means app-wide settings changes can still work through Magent's own settings path, but Ghostty-initiated surface reloads become no-ops.
+**Do NOT respond to `GHOSTTY_ACTION_RELOAD_CONFIG` by calling back into Ghostty's config machinery.** Just return `true` to acknowledge it.
 
-**Rule**:
-- For app targets, rebuild Magent's layered config (`ghostty_config_load_default_files` plus Magent overrides) and reapply it through `ghostty_app_update_config`, followed by the usual color-scheme refresh.
-- For surface targets, rebuild that same layered config and call `ghostty_surface_update_config` for the specific surface, then reapply the resolved color scheme and force a draw.
-- Resolve the surface target's `effectiveAppearance` from the `TerminalSurfaceView` stored in `ghostty_surface_userdata(...)`, so surface-local reloads keep the right light/dark scheme.
+### Why ignoring it is correct
 
-Treat `GHOSTTY_ACTION_CONFIG_CHANGE` as handled as well, even if Magent does not currently need to react to the notification, so Ghostty's surface-level config workflow is not dropped on the floor by the embedder.
+In v1.3.1, Ghostty fires `GHOSTTY_ACTION_RELOAD_CONFIG` as a side effect of `ghostty_surface_update_config` and `ghostty_app_update_config` — i.e. every time we apply a config update. If we respond to RELOAD_CONFIG by rebuilding and re-applying the config (which calls `ghostty_surface_update_config` again), it immediately fires another RELOAD_CONFIG. This creates an infinite feedback loop that saturates the main thread with config rebuilds and completely freezes the app.
+
+This was the root cause of the severe performance regression introduced by the v1.3.1 binary. The loop produced hundreds of `reload-config-surface` calls per second, all on the main thread.
+
+Magent manages its own config lifecycle explicitly: config is applied via `applyEmbeddedPreferences` (on settings change, appearance change, or launch). There is no need to re-apply config in response to a Ghostty-initiated reload signal.
+
+Treat `GHOSTTY_ACTION_CONFIG_CHANGE` as handled (return `true`) as well, without acting on it.
+
+### Override config file watcher gotcha
+
+Ghostty v1.3.1 also watches every file loaded via `ghostty_config_load_file`. Since `writeOverrideConfig` writes to a temp file that was loaded at surface creation, **do not overwrite the file on every `buildConfig` call** — this triggers the file watcher, which fires RELOAD_CONFIG, which (if we were naively handling it) would rewrite the file again.
+
+Mitigation: `writeOverrideConfig` memoizes the last-written content and skips the write when content is unchanged. Combined with ignoring RELOAD_CONFIG, this eliminates the loop entirely.
 
 ## Appearance Update Ordering in AppDelegate
 
