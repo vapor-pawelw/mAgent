@@ -4,7 +4,7 @@
 
 Source: https://github.com/ghostty-org/ghostty
 
-Pinned default ref for this repo bootstrap script: `v1.3.0`.
+Pinned default ref for this repo bootstrap script: `v1.3.1`.
 
 **Zig version requirements (strict):**
 - Ghostty 1.0.x / 1.1.x: Zig 0.13.0
@@ -18,7 +18,7 @@ Pinned default ref for this repo bootstrap script: `v1.3.0`.
 
 To build a different Ghostty ref:
 ```bash
-GHOSTTY_REF=v1.3.0 ./scripts/bootstrap-ghosttykit.sh
+GHOSTTY_REF=v1.3.1 ./scripts/bootstrap-ghosttykit.sh
 ```
 
 **Build command used by bootstrap script:**
@@ -95,12 +95,14 @@ typedef struct {
   bool supports_selection_clipboard;
   wakeup_cb          // Signal to pump event loop
   action_cb          // Handle ~60 action types
-  read_clipboard_cb
+  read_clipboard_cb  // returns bool (since v1.3.1; was void in v1.3.0)
   confirm_read_clipboard_cb
   write_clipboard_cb
   close_surface_cb
 } ghostty_runtime_config_s;
 ```
+
+**`read_clipboard_cb` return type** (changed in v1.3.1): The callback must return `bool` — return `true` if the clipboard read was accepted/initiated, `false` to decline. Magent always returns `true` since we always dispatch the async read.
 
 ### Metal Rendering
 libghostty manages Metal rendering internally. The host app only:
