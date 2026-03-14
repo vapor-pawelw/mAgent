@@ -261,18 +261,24 @@ public final class GitService: Sendable {
         guard _ghAvailable == true else { return nil }
 
         let repo = "\(remote.host)/\(remote.repoPath)"
-        let cmd = "gh pr list --repo \(ShellExecutor.shellQuote(repo)) --head \(ShellExecutor.shellQuote(branch)) --json number,url --state open --limit 1"
-        let result = await ShellExecutor.execute(cmd)
-        guard result.exitCode == 0 else { return nil }
+        let quotedRepo = ShellExecutor.shellQuote(repo)
+        let quotedBranch = ShellExecutor.shellQuote(branch)
 
-        let data = Data(result.stdout.utf8)
-        guard let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-              let first = array.first,
-              let number = first["number"] as? Int,
-              let urlString = first["url"] as? String,
-              let url = URL(string: urlString) else { return nil }
+        for (state, isMerged) in [("open", false), ("merged", true)] {
+            let cmd = "gh pr list --repo \(quotedRepo) --head \(quotedBranch) --json number,url --state \(state) --limit 1"
+            let result = await ShellExecutor.execute(cmd)
+            guard result.exitCode == 0 else { continue }
 
-        return PullRequestInfo(number: number, url: url, provider: remote.provider)
+            let data = Data(result.stdout.utf8)
+            guard let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                  let first = array.first,
+                  let number = first["number"] as? Int,
+                  let urlString = first["url"] as? String,
+                  let url = URL(string: urlString) else { continue }
+
+            return PullRequestInfo(number: number, url: url, provider: remote.provider, isMerged: isMerged)
+        }
+        return nil
     }
 
     private func fetchGitLabMR(remote: GitRemote, branch: String) async -> PullRequestInfo? {
@@ -283,18 +289,24 @@ public final class GitService: Sendable {
         guard _glabAvailable == true else { return nil }
 
         let repo = "\(remote.host)/\(remote.repoPath)"
-        let cmd = "glab mr list --repo \(ShellExecutor.shellQuote(repo)) --source-branch \(ShellExecutor.shellQuote(branch)) --output json --per-page 1"
-        let result = await ShellExecutor.execute(cmd)
-        guard result.exitCode == 0 else { return nil }
+        let quotedRepo = ShellExecutor.shellQuote(repo)
+        let quotedBranch = ShellExecutor.shellQuote(branch)
 
-        let data = Data(result.stdout.utf8)
-        guard let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-              let first = array.first,
-              let number = first["iid"] as? Int else { return nil }
+        for (state, isMerged) in [("opened", false), ("merged", true)] {
+            let cmd = "glab mr list --repo \(quotedRepo) --source-branch \(quotedBranch) --state \(state) --output json --per-page 1"
+            let result = await ShellExecutor.execute(cmd)
+            guard result.exitCode == 0 else { continue }
 
-        let url = remote.directPullRequestURL(number: number)
-            ?? URL(string: "https://\(remote.host)/\(remote.repoPath)/-/merge_requests/\(number)")!
-        return PullRequestInfo(number: number, url: url, provider: remote.provider)
+            let data = Data(result.stdout.utf8)
+            guard let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                  let first = array.first,
+                  let number = first["iid"] as? Int else { continue }
+
+            let url = remote.directPullRequestURL(number: number)
+                ?? URL(string: "https://\(remote.host)/\(remote.repoPath)/-/merge_requests/\(number)")!
+            return PullRequestInfo(number: number, url: url, provider: remote.provider, isMerged: isMerged)
+        }
+        return nil
     }
 
     public func getCurrentBranch(workingDirectory: String) async -> String? {
