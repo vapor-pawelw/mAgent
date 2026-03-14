@@ -302,6 +302,13 @@ final class DiffPanelView: NSView {
             stackView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
         ])
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDiffViewerScrolledToFile(_:)),
+            name: .magentDiffViewerScrolledToFile,
+            object: nil
+        )
+
         clear()
     }
 
@@ -421,6 +428,23 @@ final class DiffPanelView: NSView {
             name: .magentHideDiffViewer,
             object: nil
         )
+    }
+
+    @objc private func handleDiffViewerScrolledToFile(_ notification: Notification) {
+        guard let filePath = notification.userInfo?["filePath"] as? String else { return }
+        syncSelectionFromDiffViewer(filePath: filePath)
+    }
+
+    /// Updates selection to match the diff viewer's sticky header without re-triggering the diff viewer.
+    private func syncSelectionFromDiffViewer(filePath: String) {
+        guard activeTab == .changes, selectedFilePath != filePath else { return }
+        let previousPath = selectedFilePath
+        selectedFilePath = filePath
+        // Only touch the two affected rows instead of all rows.
+        for case let row as DiffFileRowView in stackView.arrangedSubviews
+            where row.filePath == filePath || row.filePath == previousPath {
+            row.isFileSelected = (row.filePath == filePath)
+        }
     }
 
     private func selectFileForContextMenu(_ filePath: String) {

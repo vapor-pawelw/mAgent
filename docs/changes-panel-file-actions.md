@@ -22,6 +22,14 @@
 - Image zoom is implemented as a separate overlay in `ThreadDetailViewController+DiffViewer.swift`, not by resizing the inline diff section. `InlineDiffViewController` only forwards click events from image views upward.
 - The legend popover in `DiffPanelView.makeLegendViewController()` should use explicit container-to-stack inset constraints for padding. Relying on `NSStackView.edgeInsets` alone can render inconsistently in AppKit popovers.
 
+## Scroll-sync: CHANGES tab follows diff viewer
+
+When the inline diff viewer is open, the CHANGES tab selection automatically tracks the file shown in the sticky header as the user scrolls. This is one-directional: scrolling the diff updates the sidebar selection; clicking a file in the sidebar still scrolls the diff to that file as before.
+
+**Implementation**: `InlineDiffViewController.applyStickyHeader(_:)` posts `magentDiffViewerScrolledToFile` (with `filePath` in userInfo) only when the sticky section actually changes (identity comparison on `currentStickySection`). `DiffPanelView` observes this via a selector-based `addObserver` and calls `syncSelectionFromDiffViewer(filePath:)`, which only updates the two affected rows (deselect previous, select new) rather than iterating all rows — avoiding layer thrashing on large diffs. `scrollToVisible` is intentionally not called from this path because triggering file-list scroll during diff scroll causes layout jank.
+
+**Gotcha**: Use the selector-based `addObserver(_:selector:name:object:)` form rather than the closure-based `addObserver(forName:object:queue:using:)` form. The closure form stores a non-Sendable `NSObjectProtocol` token that cannot be accessed from a nonisolated `deinit`, and the closure itself requires `MainActor.assumeIsolated` to call `@MainActor`-isolated methods. The selector form sidesteps both issues.
+
 ## Gotcha
 
 - Right-click selection must not call the same path as left-click selection. Left-click posts `magentShowDiffViewer`, while right-click should only update row highlight and show the menu. This avoids unexpectedly opening/changing the inline diff while using context actions.
