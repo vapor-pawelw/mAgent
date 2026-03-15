@@ -192,6 +192,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
+        // Thread menu
+        let threadMenuItem = NSMenuItem()
+        let threadMenu = NSMenu(title: "Thread")
+        threadMenu.addItem(withTitle: "New Thread", action: #selector(SplitViewController.requestNewThread), keyEquivalent: "n")
+        threadMenuItem.submenu = threadMenu
+        mainMenu.addItem(threadMenuItem)
+
         // Edit menu (enables Cut/Copy/Paste/Select All in text fields)
         let editMenuItem = NSMenuItem()
         let editMenu = NSMenu(title: String(localized: .AppStrings.appMenuEdit))
