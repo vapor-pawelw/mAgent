@@ -27,6 +27,7 @@ All notable changes to this project will be documented in this file.
 - Links in the terminal are now clickable: Cmd+click opens URLs in the default browser. Hovering over a link shows an animated URL pill at the bottom of the terminal and changes the cursor to a pointing hand. Link detection combines ghostty-native OSC 8 hyperlinks and tmux pane content.
 
 ### Thread
+- Fixed: closing a tab no longer crashes the app. The session monitor was posting a dead-session notification from a background thread; the UI handler then accessed terminal views and tab state off the main thread, causing a data race. Notification is now dispatched on the main actor, and tab-array access in the close path has additional bounds guards.
 - Creating a thread no longer blocks the app with a modal spinner: the thread appears in the sidebar immediately and setup progress is shown as an overlay in the thread detail area instead.
 - Fixed: Claude sessions were not showing as busy when the status bar included trailing context after "esc to interrupt" (e.g. `7% until auto-compact`); the busy-detection regex now matches regardless of trailing content.
 - The "Resync Local Sync Paths" top-bar button is now hidden when the parent project has no Local Sync Paths configured; it reappears automatically once paths are added in Settings.

@@ -29,15 +29,20 @@ extension ThreadManager {
                 )
             }
 
-            // Notify UI so terminal views can be replaced
-            NotificationCenter.default.post(
-                name: .magentDeadSessionsDetected,
-                object: self,
-                userInfo: [
-                    "deadSessions": deadSessions,
-                    "threadId": thread.id
-                ]
-            )
+            // Notify UI so terminal views can be replaced.
+            // Must post on MainActor: the observer accesses terminalViews/tabItems (UI state).
+            let deadSessionsCopy = deadSessions
+            let threadId = thread.id
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: .magentDeadSessionsDetected,
+                    object: self,
+                    userInfo: [
+                        "deadSessions": deadSessionsCopy,
+                        "threadId": threadId
+                    ]
+                )
+            }
         }
     }
 
