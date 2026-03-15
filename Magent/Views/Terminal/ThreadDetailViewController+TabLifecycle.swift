@@ -11,9 +11,11 @@ extension ThreadDetailViewController {
     }
 
     func closeTab(at index: Int) {
+        GhosttyAppManager.log("closeTab: start index=\(index) sessions=\(thread.tmuxSessionNames.count) views=\(terminalViews.count)")
         guard index < thread.tmuxSessionNames.count else { return }
 
         let sessionName = thread.tmuxSessionNames[index]
+        GhosttyAppManager.log("closeTab: sessionName=\(sessionName)")
 
         let alert = NSAlert()
         alert.messageText = String(localized: .ThreadStrings.tabCloseTitle)
@@ -23,18 +25,30 @@ extension ThreadDetailViewController {
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
         let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
+        guard response == .alertFirstButtonReturn else {
+            GhosttyAppManager.log("closeTab: cancelled")
+            return
+        }
+        GhosttyAppManager.log("closeTab: confirmed, starting Task")
 
         Task {
+            GhosttyAppManager.log("closeTab: Task started, calling removeTab")
             do {
                 try await threadManager.removeTab(from: thread, sessionName: sessionName)
+                GhosttyAppManager.log("closeTab: removeTab returned, entering MainActor.run")
                 await MainActor.run {
+                    GhosttyAppManager.log("closeTab: MainActor.run start, views=\(self.terminalViews.count) tabs=\(self.tabItems.count)")
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated
                     }
 
-                    guard index < self.terminalViews.count, index < self.tabItems.count else { return }
+                    guard index < self.terminalViews.count, index < self.tabItems.count else {
+                        GhosttyAppManager.log("closeTab: index \(index) out of bounds (views=\(self.terminalViews.count) tabs=\(self.tabItems.count)), returning")
+                        return
+                    }
+                    GhosttyAppManager.log("closeTab: calling removeFromSuperview on view at \(index)")
                     self.terminalViews[index].removeFromSuperview()
+                    GhosttyAppManager.log("closeTab: removeFromSuperview done")
                     self.terminalViews.remove(at: index)
 
                     self.tabItems.remove(at: index)
@@ -53,14 +67,17 @@ extension ThreadDetailViewController {
                     self.rebindTabActions()
                     self.rebuildTabBar()
 
+                    GhosttyAppManager.log("closeTab: selecting next tab, tabItems.count=\(self.tabItems.count)")
                     if self.tabItems.isEmpty {
                         self.showEmptyState()
                     } else {
                         let newIndex = min(index, self.tabItems.count - 1)
                         self.selectTab(at: newIndex)
                     }
+                    GhosttyAppManager.log("closeTab: done")
                 }
             } catch {
+                GhosttyAppManager.log("closeTab: removeTab threw error: \(error)")
                 await MainActor.run {
                     let alert = NSAlert()
                     alert.messageText = String(localized: .CommonStrings.commonError)

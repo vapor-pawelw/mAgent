@@ -6,7 +6,7 @@ import MagentCore
 struct CachedRenameResult {
     /// Generated slug. `nil` means the agent classified the prompt as a question — no rename applies.
     let slug: String?
-    let taskDescription: GeneratedTaskDescription?
+    let taskDescription: ThreadManager.GeneratedTaskDescription?
 }
 
 extension ThreadManager {
@@ -697,7 +697,7 @@ extension ThreadManager {
     private static let knownWorkTypeNames = Set(ThreadIcon.allCases.map(\.rawValue))
     private static let maxTaskDescriptionWords = 8
 
-    private struct GeneratedTaskDescription {
+    struct GeneratedTaskDescription {
         let description: String
         let suggestedIcon: ThreadIcon
     }

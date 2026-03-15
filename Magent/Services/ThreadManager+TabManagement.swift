@@ -279,11 +279,16 @@ extension ThreadManager {
 
     @MainActor
     private func removeTabBySessionName(threadIndex index: Int, sessionName: String) async throws {
+        NSLog("[TabClose] removeTabBySessionName start: index=\(index) session=\(sessionName)")
         try? await tmux.killSession(name: sessionName)
+        NSLog("[TabClose] removeTabBySessionName: killSession done")
 
         // Guard re-checked after the async killSession suspension: another concurrent close
         // might have shifted or removed indices while killSession was running.
-        guard index < threads.count else { return }
+        guard index < threads.count else {
+            NSLog("[TabClose] removeTabBySessionName: index \(index) out of bounds (threads.count=\(threads.count)), returning")
+            return
+        }
 
         // Also remove from pinned, agent, unread completion, waiting, and custom tab names if present
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
@@ -301,8 +306,10 @@ extension ThreadManager {
         if threads[index].lastSelectedTmuxSessionName == sessionName {
             threads[index].lastSelectedTmuxSessionName = threads[index].tmuxSessionNames.first
         }
+        NSLog("[TabClose] removeTabBySessionName: saving threads")
         try persistence.saveActiveThreads(threads)
-
+        NSLog("[TabClose] removeTabBySessionName: calling delegate")
         delegate?.threadManager(self, didUpdateThreads: threads)
+        NSLog("[TabClose] removeTabBySessionName: done")
     }
 }
