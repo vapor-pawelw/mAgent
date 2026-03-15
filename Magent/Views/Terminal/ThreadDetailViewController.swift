@@ -61,6 +61,7 @@ final class ThreadDetailViewController: NSViewController {
     var primaryTabIndex = 0
     var pinnedCount = 0
     var loadingOverlay: NSView?
+    var loadingLabel: NSTextField?
     var loadingDetailLabel: NSTextField?
     var loadingPollTimer: Timer?
     var loadingOverlaySessionName: String?
@@ -233,6 +234,13 @@ final class ThreadDetailViewController: NSViewController {
             object: nil
         )
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleThreadCreationFinished(_:)),
+            name: .magentThreadCreationFinished,
+            object: nil
+        )
+
         Task {
             await setupTabs()
         }
@@ -385,6 +393,13 @@ final class ThreadDetailViewController: NSViewController {
     // MARK: - Tab Setup
 
     private func setupTabs() async {
+        // If the thread is still being created (worktree + tmux setup in progress),
+        // show the creation overlay and wait for the magentThreadCreationFinished notification.
+        if threadManager.pendingThreadIds.contains(thread.id) {
+            await MainActor.run { showCreationOverlay() }
+            return
+        }
+
         if let latest = threadManager.threads.first(where: { $0.id == thread.id }) {
             thread = latest
         }
@@ -672,6 +687,28 @@ final class ThreadDetailViewController: NSViewController {
             tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
             tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
         }
+    }
+
+    @objc private func handleThreadCreationFinished(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID,
+              threadId == thread.id else { return }
+
+        dismissLoadingOverlay()
+
+        guard notification.userInfo?["error"] == nil else {
+            // Thread creation failed; the pending thread will be removed from the sidebar.
+            return
+        }
+
+        // Thread is ready — reload tabs now that sessions exist.
+        Task { await setupTabs() }
+    }
+
+    func showCreationOverlay() {
+        ensureLoadingOverlay()
+        loadingLabel?.stringValue = "Creating thread..."
+        loadingOverlay?.alphaValue = 1
+        loadingOverlay?.isHidden = false
     }
 
     @objc private func handlePullRequestInfoChanged() {

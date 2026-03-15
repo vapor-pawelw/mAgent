@@ -22,6 +22,7 @@ final class ThreadManager {
     let tmux = TmuxService.shared
 
     var threads: [MagentThread] = []
+    var pendingThreadIds: Set<UUID> = []
     var activeThreadId: UUID?
     var recentBellBySession: [String: Date] = [:]
     var autoRenameInProgress: Set<UUID> = []

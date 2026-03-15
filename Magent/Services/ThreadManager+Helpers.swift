@@ -1019,6 +1019,7 @@ extension Notification.Name {
     static let magentPromptTOCVisibilityChanged = Notification.Name("magentPromptTOCVisibilityChanged")
     static let magentSettingsDidChange = Notification.Name("magentSettingsDidChange")
     static let magentUpdateStateChanged = Notification.Name("magentUpdateStateChanged")
+    static let magentThreadCreationFinished = Notification.Name("magentThreadCreationFinished")
 }
 
 // MARK: - Errors

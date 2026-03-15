@@ -195,6 +195,13 @@ final class SplitViewController: NSSplitViewController {
         // Skip if already showing this thread (preserves terminal scrollback)
         if currentDetailVC?.thread.id == resolvedThread.id { return }
 
+        // Pending threads have no worktree yet — show directly so the detail view
+        // can display the creation progress overlay while setup completes in background.
+        if ThreadManager.shared.pendingThreadIds.contains(resolvedThread.id) {
+            presentThread(resolvedThread)
+            return
+        }
+
         // Check if worktree exists on disk
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: resolvedThread.worktreePath, isDirectory: &isDir) && isDir.boolValue

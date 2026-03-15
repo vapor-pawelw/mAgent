@@ -51,11 +51,12 @@ Before the app is usable, the user must complete a configuration step:
 1. User taps **"+"** button
 2. If **1 project** is configured → immediately create thread for that project
 3. If **multiple projects** → show a project selection menu first
-4. A new git worktree is created for the selected project
-5. If the project has local sync paths configured, those repo-relative files/directories are copied from the repo root into the new worktree and snapshotted onto the thread
-6. A tmux session is started in the worktree directory
-7. The configured agent is launched inside tmux
-8. The terminal is displayed in the main pane
+4. The thread appears in the sidebar immediately and is auto-selected; a "Creating thread..." overlay is shown in the detail area while background setup runs
+5. A new git worktree is created for the selected project (background)
+6. If the project has local sync paths configured, those repo-relative files/directories are copied from the repo root into the new worktree and snapshotted onto the thread (background)
+7. A tmux session is started in the worktree directory (background)
+8. The configured agent is launched inside tmux (background)
+9. The creation overlay is dismissed and the terminal is displayed; normal "Starting agent..." overlay takes over until the agent is ready
 
 ### Archiving a Thread
 
