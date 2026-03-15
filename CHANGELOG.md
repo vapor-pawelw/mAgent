@@ -31,6 +31,9 @@ All notable changes to this project will be documented in this file.
 - Fixed: threads can no longer be dragged across projects when sections are enabled.
 
 ### Thread
+- Creating a new thread or tab now opens a prompt sheet where you can write the initial message, choose an agent, and (for threads) set a description and branch name — all before creation starts. Option-click the + button to skip the sheet and create immediately with the project default.
+- If the app crashes between accepting the prompt sheet and the agent receiving your message, the prompt is recovered on next launch with a banner offering to reopen the sheet or discard.
+- ⌘N now appears in the Thread menu in the menu bar (previously it was only handled by a key monitor).
 - Fixed: the branch name in the sidebar row now updates immediately after a manual branch rename, instead of waiting for the next background poll (~30 s).
 - Removed the extra separator between "Close Tabs to the Left/Right" and "Close This Tab" in the tab context menu.
 - Fixed: "Close Tabs to the Right" / "Close Tabs to the Left" context menu items were missing on initial load; `setupTabs` now calls `rebindTabActions()` so tab indices and counts are set before the first right-click.
