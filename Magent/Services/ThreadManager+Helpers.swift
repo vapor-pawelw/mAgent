@@ -60,26 +60,37 @@ extension ThreadManager {
         return command
     }
 
-    func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, agentType: AgentType? = nil) {
-        let hasPrompt = initialPrompt != nil && !initialPrompt!.isEmpty
+    func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, shouldSubmitInitialPrompt: Bool = true, agentType: AgentType? = nil) {
+        let hasPrompt = shouldSubmitInitialPrompt && initialPrompt != nil && !initialPrompt!.isEmpty
         guard !terminalCommand.isEmpty || !agentContext.isEmpty || hasPrompt else { return }
         Task {
             // Wait for tmux session to start
             try? await Task.sleep(nanoseconds: 500_000_000)
             if !terminalCommand.isEmpty {
                 try? await tmux.sendKeys(sessionName: sessionName, keys: terminalCommand)
+                NotificationCenter.default.post(
+                    name: .magentAgentKeysInjected,
+                    object: nil,
+                    userInfo: ["sessionName": sessionName]
+                )
             }
             if hasPrompt {
                 // When an initial prompt is provided, skip the agent context injection
                 // and send only the prompt. The agent context would race with the prompt —
                 // submitting as a first prompt that blocks the real one.
                 // Wait for the agent TUI to be ready before sending the prompt.
+                NotificationCenter.default.post(name: .magentAgentInjectionStarted, object: nil, userInfo: ["sessionName": sessionName])
                 _ = await waitForAgentReady(sessionName: sessionName, agentType: agentType)
                 // Send text and Enter separately — the Enter key gets lost if sent in the
                 // same send-keys call while the TUI is still processing buffered input.
                 try? await tmux.sendText(sessionName: sessionName, text: initialPrompt!)
                 try? await Task.sleep(nanoseconds: 200_000_000)
                 try? await tmux.sendEnter(sessionName: sessionName)
+                NotificationCenter.default.post(
+                    name: .magentAgentKeysInjected,
+                    object: nil,
+                    userInfo: ["sessionName": sessionName]
+                )
             } else if !agentContext.isEmpty {
                 // No initial prompt — send agent context as usual
                 if !terminalCommand.isEmpty {
@@ -1020,6 +1031,11 @@ extension Notification.Name {
     static let magentSettingsDidChange = Notification.Name("magentSettingsDidChange")
     static let magentUpdateStateChanged = Notification.Name("magentUpdateStateChanged")
     static let magentThreadCreationFinished = Notification.Name("magentThreadCreationFinished")
+    /// Posted by `injectAfterStart` just before it begins waiting for the agent TUI
+    /// so that the loading overlay knows to suppress poll-timer dismissal.
+    static let magentAgentInjectionStarted = Notification.Name("magentAgentInjectionStarted")
+    /// Posted by `injectAfterStart` after all tmux keys (including Enter) are sent.
+    static let magentAgentKeysInjected = Notification.Name("magentAgentKeysInjected")
 }
 
 // MARK: - Errors
