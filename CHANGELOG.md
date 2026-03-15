@@ -31,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - Fixed: threads can no longer be dragged across projects when sections are enabled.
 
 ### Thread
+- The new thread prompt sheet now shows a project picker when you have more than one project, so you can switch the target project before creating the thread.
 - Creating a new thread or tab now opens a prompt sheet where you can write the initial message, choose an agent, and (for threads) set a description and branch name — all before creation starts. Option-click the + button to skip the sheet and create immediately with the project default.
 - Fixed: selecting Terminal in the prompt sheet now works correctly — the Accept button was silently doing nothing because the separator menu item caused an off-by-one index mismatch between the popup and the internal picker list. The label now also correctly shows "Initial command" instead of "Initial prompt" when Terminal is selected.
 - If the app crashes between accepting the prompt sheet and the agent receiving your message, the prompt is recovered on next launch with a banner offering to reopen the sheet or discard.

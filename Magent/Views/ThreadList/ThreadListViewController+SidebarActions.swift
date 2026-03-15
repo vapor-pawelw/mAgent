@@ -230,6 +230,7 @@ extension ThreadListViewController {
             availableAgents: settings.availableActiveAgents,
             defaultAgentType: threadManager.effectiveAgentType(for: project.id),
             subtitle: "Project: \(project.name)",
+            availableProjects: settings.projects,
             showDescriptionAndBranchFields: true,
             autoGenerateHint: autoGenerateHint,
             terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
@@ -238,8 +239,9 @@ extension ThreadListViewController {
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
             guard let self, let result else { return }
+            let targetProject = result.selectedProject ?? project
             self.createThread(
-                for: project,
+                for: targetProject,
                 requestedAgentType: result.agentType,
                 useAgentCommand: result.useAgentCommand,
                 baseBranch: baseBranch,

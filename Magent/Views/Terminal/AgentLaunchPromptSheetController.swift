@@ -178,7 +178,10 @@ struct AgentLaunchSheetConfig {
     let availableAgents: [AgentType]
     let defaultAgentType: AgentType?
     /// Secondary label shown below the window title (e.g. "Project: MyProject").
+    /// Ignored when `availableProjects` has more than one entry (picker is shown instead).
     let subtitle: String?
+    /// When more than one project is provided, a project picker is shown instead of the static subtitle chip.
+    let availableProjects: [Project]
     /// When true, Description and Branch text fields are shown below the prompt.
     let showDescriptionAndBranchFields: Bool
     /// When non-nil, a subtle auto-generate hint is shown near the description/branch fields.
@@ -197,6 +200,7 @@ struct AgentLaunchSheetConfig {
         availableAgents: [AgentType],
         defaultAgentType: AgentType?,
         subtitle: String?,
+        availableProjects: [Project] = [],
         showDescriptionAndBranchFields: Bool,
         autoGenerateHint: String?,
         terminalInjectionPrefill: String?,
@@ -209,6 +213,7 @@ struct AgentLaunchSheetConfig {
         self.availableAgents = availableAgents
         self.defaultAgentType = defaultAgentType
         self.subtitle = subtitle
+        self.availableProjects = availableProjects
         self.showDescriptionAndBranchFields = showDescriptionAndBranchFields
         self.autoGenerateHint = autoGenerateHint
         self.terminalInjectionPrefill = terminalInjectionPrefill
@@ -226,6 +231,8 @@ struct AgentLaunchSheetResult {
     /// Temp file holding the submitted prompt for crash recovery.
     /// Exists only when `prompt` is non-nil; deleted once injection is confirmed.
     let pendingPromptFileURL: URL?
+    /// The project selected by the user. Non-nil when the project picker was shown.
+    let selectedProject: Project?
 }
 
 /// A rounded chip view that shows accent-tinted background, adapting correctly to light/dark mode.
@@ -261,6 +268,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     /// Tracks the mode we were in before the last picker change, so we save to the right draft on switch.
     private var previousMode: String = "agent"
 
+    // Project picker — present when config.availableProjects has more than one entry.
+    private var projectPickerItems: [Project] = []
+    private var projectPicker: NSPopUpButton?
+    /// Draft scope that tracks the currently selected project; starts as config.draftScope.
+    private var currentDraftScope: AgentLaunchPromptDraftScope
+
     private enum PickerItem {
         case agent(AgentType, isDefault: Bool)
         case terminal
@@ -276,6 +289,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     init(config: AgentLaunchSheetConfig) {
         self.config = config
         self.acceptButton = NSButton(title: config.acceptButtonTitle, target: nil, action: nil)
+        self.currentDraftScope = config.draftScope
+        self.projectPickerItems = config.availableProjects
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 540, height: 1),
@@ -415,9 +430,15 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         stack.addArrangedSubview(titleLabel)
         stack.setCustomSpacing(8, after: titleLabel)
 
-        // Subtitle (project context) — shown as a prominent context chip
+        // Project picker (when multiple projects) or static context chip (single project)
         var contextChip: NSView?
-        if let subtitle = config.subtitle {
+        var projectPickerRow: NSView?
+        if projectPickerItems.count > 1, case .newThread = config.draftScope {
+            let row = makeProjectPickerRow()
+            stack.addArrangedSubview(row)
+            stack.setCustomSpacing(10, after: row)
+            projectPickerRow = row
+        } else if let subtitle = config.subtitle {
             let chip = makeContextChip(subtitle)
             stack.addArrangedSubview(chip)
             stack.setCustomSpacing(10, after: chip)
@@ -453,7 +474,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         rememberCheckbox.action = #selector(rememberCheckboxToggled)
         rememberCheckbox.state = PersistenceService.shared.loadSettings().rememberLastTypeSelection ? .on : .off
         rememberCheckbox.font = .systemFont(ofSize: 11)
-        rememberCheckbox.contentTintColor = NSColor(resource: .textSecondary)
+        rememberCheckbox.contentTintColor = NSColor.systemPink
         stack.addArrangedSubview(rememberCheckbox)
         stack.setCustomSpacing(12, after: rememberCheckbox)
 
@@ -556,7 +577,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             promptScrollView.heightAnchor.constraint(equalToConstant: promptHeight),
             optionalNotice.widthAnchor.constraint(equalTo: stack.widthAnchor),
             buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
-        ] + (contextChip.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
+        ] + (contextChip.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
+          + (projectPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
 
         if let descRow, let branchRow {
             NSLayoutConstraint.activate([
@@ -670,6 +692,48 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         return container
     }
 
+    private func makeProjectPickerRow() -> NSStackView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = makeFormLabel("Project")
+        row.addArrangedSubview(label)
+
+        let picker = NSPopUpButton()
+        for (i, project) in projectPickerItems.enumerated() {
+            picker.addItem(withTitle: project.name)
+            picker.lastItem?.tag = i
+        }
+        if case .newThread(let projectId) = config.draftScope,
+           let idx = projectPickerItems.firstIndex(where: { $0.id == projectId }) {
+            picker.selectItem(at: idx)
+        }
+        picker.target = self
+        picker.action = #selector(projectPickerChanged)
+        picker.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        row.addArrangedSubview(picker)
+
+        self.projectPicker = picker
+        return row
+    }
+
+    @objc private func projectPickerChanged() {
+        guard let picker = projectPicker else { return }
+        let idx = picker.indexOfSelectedItem
+        guard idx >= 0, idx < projectPickerItems.count else { return }
+        let newProject = projectPickerItems[idx]
+        let newScope = AgentLaunchPromptDraftScope.newThread(projectId: newProject.id)
+        guard case .newThread(let oldId) = currentDraftScope, oldId != newProject.id else { return }
+
+        // Save draft for the project we're leaving, then switch scope and load the new draft.
+        persistDraft()
+        currentDraftScope = newScope
+        loadDraft(mode: currentMode)
+    }
+
     private func makeNoticeBox(icon symbolName: String, text: String, color: NSColor) -> NSView {
         let container = NSView()
         container.wantsLayer = true
@@ -717,7 +781,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func loadDraft(mode: String) {
-        let draft = AgentLaunchPromptDraftStore.draft(for: config.draftScope, mode: mode)
+        let draft = AgentLaunchPromptDraftStore.draft(for: currentDraftScope, mode: mode)
         promptTextView.string = draft.prompt
         if config.showDescriptionAndBranchFields && mode == "agent" {
             descriptionField.stringValue = draft.description
@@ -733,7 +797,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 description: mode == "agent" && config.showDescriptionAndBranchFields ? descriptionField.stringValue : "",
                 branchName: mode == "agent" && config.showDescriptionAndBranchFields ? branchField.stringValue : ""
             ),
-            for: config.draftScope,
+            for: currentDraftScope,
             mode: mode
         )
     }
@@ -834,7 +898,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             ? branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
 
-        AgentLastSelectionStore.save(item.storageRaw, for: config.draftScope)
+        AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
 
         // Write crash-recovery temp file before clearing the draft, so the submitted
         // content is safe even if the app crashes during thread/tab creation.
@@ -847,12 +911,25 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             description: rawDesc.isEmpty ? nil : rawDesc,
             branchName: rawBranch.isEmpty ? nil : rawBranch,
             agentType: agentType,
-            scope: config.draftScope
+            scope: currentDraftScope
         )
 
         // Clear draft immediately — the modal is now clean if the user opens it again
         // while the thread/tab is still being created in the background.
-        AgentLaunchPromptDraftStore.clearAll(for: config.draftScope)
+        AgentLaunchPromptDraftStore.clearAll(for: currentDraftScope)
+        // Also clear the initial scope if the user switched projects.
+        if case .newThread(let initId) = config.draftScope,
+           case .newThread(let curId) = currentDraftScope,
+           initId != curId {
+            AgentLaunchPromptDraftStore.clearAll(for: config.draftScope)
+        }
+
+        let selectedProject: Project? = {
+            guard let picker = projectPicker else { return nil }
+            let idx = picker.indexOfSelectedItem
+            guard idx >= 0, idx < projectPickerItems.count else { return nil }
+            return projectPickerItems[idx]
+        }()
 
         switch item {
         case .terminal:
@@ -862,7 +939,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: nil,
                 branchName: nil,
-                pendingPromptFileURL: pendingPromptFileURL
+                pendingPromptFileURL: pendingPromptFileURL,
+                selectedProject: selectedProject
             ))
         case .agent(let type, _):
             finish(with: AgentLaunchSheetResult(
@@ -871,7 +949,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: rawDesc.isEmpty ? nil : rawDesc,
                 branchName: rawBranch.isEmpty ? nil : rawBranch,
-                pendingPromptFileURL: pendingPromptFileURL
+                pendingPromptFileURL: pendingPromptFileURL,
+                selectedProject: selectedProject
             ))
         }
     }

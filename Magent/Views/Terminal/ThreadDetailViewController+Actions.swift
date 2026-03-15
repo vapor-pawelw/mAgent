@@ -248,7 +248,7 @@ extension ThreadDetailViewController {
             draftScope: .newTab(threadId: thread.id),
             availableAgents: settings.availableActiveAgents,
             defaultAgentType: threadManager.effectiveAgentType(for: thread.projectId),
-            subtitle: "Thread: \(thread.name)",
+            subtitle: "Thread: \(thread.taskDescription.map { "\($0) (\(thread.branchName))" } ?? thread.branchName)",
             showDescriptionAndBranchFields: false,
             autoGenerateHint: nil,
             terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
