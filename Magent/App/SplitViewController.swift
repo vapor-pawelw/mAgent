@@ -104,9 +104,6 @@ final class SplitViewController: NSSplitViewController {
             guard event.modifierFlags.contains(.command) else { return event }
 
             switch event.charactersIgnoringModifiers {
-            case "n":
-                self.threadListVC.requestNewThread()
-                return nil
             case "t":
                 self.newTabShortcut()
                 return nil
@@ -117,6 +114,11 @@ final class SplitViewController: NSSplitViewController {
                 return event
             }
         }
+    }
+
+    /// Forwarded from the main menu's "New Thread" item (⌘N).
+    @objc func requestNewThread() {
+        threadListVC.requestNewThread()
     }
 
     private func applyInitialSidebarWidthIfNeeded() {

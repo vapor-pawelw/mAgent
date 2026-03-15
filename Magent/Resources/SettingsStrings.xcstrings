@@ -133,6 +133,28 @@
         }
       }
     },
+    "settingsAgentsRememberLastType": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remember last selected type"
+          }
+        }
+      }
+    },
+    "settingsAgentsRememberLastTypeDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When opening a new thread or tab, pre-select the last used type (agent or terminal) instead of always defaulting to the configured default."
+          }
+        }
+      }
+    },
     "settingsAgentsTrackRateLimitsDescription": {
       "extractionState": "manual",
       "localizations": {

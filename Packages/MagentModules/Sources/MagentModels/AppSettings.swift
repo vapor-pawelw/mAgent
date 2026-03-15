@@ -28,6 +28,17 @@ public enum TerminalMouseWheelBehavior: String, Codable, Sendable, CaseIterable 
     }
 }
 
+public nonisolated struct AgentLaunchPromptDraft: Codable, Sendable, Equatable {
+    public var prompt: String
+    public var description: String
+    public var branchName: String
+
+    public init(prompt: String = "", description: String = "", branchName: String = "") {
+        self.prompt = prompt
+        self.description = description
+        self.branchName = branchName
+    }
+}
 public nonisolated struct AppSettings: Codable, Sendable {
     public static let defaultSlugPrompt = "Generate a short kebab-case slug (2-4 words) for a git branch name. Extract the core concept or feature — ignore filler words like 'I want', 'how do I', 'can you', etc. Bug reports, observations about broken behavior, and feature requests are all actionable — generate a slug for them."
     public static let defaultReviewPrompt = "Review the changes on this branch compared to {baseBranch}. Run `git diff $(git merge-base {baseBranch} HEAD)` to see all changes (committed and uncommitted) since this branch diverged. Also run `git log HEAD..{baseBranch} --oneline` to check if {baseBranch} has moved ahead, and flag any likely merge conflicts. Provide a thorough code review covering correctness, potential bugs, code style, and any suggestions for improvement."
@@ -72,6 +83,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var showTerminalScrollOverlay: Bool
     public var showPromptTOCOverlay: Bool
     public var preserveAgentColorTheme: Bool
+    public var rememberLastTypeSelection: Bool
 
     public init(
         projects: [Project] = [],
@@ -113,7 +125,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showScrollToBottomIndicator: Bool = true,
         showTerminalScrollOverlay: Bool = true,
         showPromptTOCOverlay: Bool = true,
-        preserveAgentColorTheme: Bool = false
+        preserveAgentColorTheme: Bool = false,
+        rememberLastTypeSelection: Bool = true
     ) {
         self.projects = projects
         self.activeAgents = activeAgents
@@ -155,6 +168,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.showTerminalScrollOverlay = showTerminalScrollOverlay
         self.showPromptTOCOverlay = showPromptTOCOverlay
         self.preserveAgentColorTheme = preserveAgentColorTheme
+        self.rememberLastTypeSelection = rememberLastTypeSelection
     }
 
     public init(from decoder: Decoder) throws {
@@ -202,6 +216,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showTerminalScrollOverlay = try container.decodeIfPresent(Bool.self, forKey: .showTerminalScrollOverlay) ?? true
         showPromptTOCOverlay = try container.decodeIfPresent(Bool.self, forKey: .showPromptTOCOverlay) ?? true
         preserveAgentColorTheme = try container.decodeIfPresent(Bool.self, forKey: .preserveAgentColorTheme) ?? false
+        rememberLastTypeSelection = try container.decodeIfPresent(Bool.self, forKey: .rememberLastTypeSelection) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -248,6 +263,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(showTerminalScrollOverlay, forKey: .showTerminalScrollOverlay)
         try container.encode(showPromptTOCOverlay, forKey: .showPromptTOCOverlay)
         try container.encode(preserveAgentColorTheme, forKey: .preserveAgentColorTheme)
+        try container.encode(rememberLastTypeSelection, forKey: .rememberLastTypeSelection)
     }
 
     public var visibleSections: [ThreadSection] {
@@ -388,6 +404,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case showTerminalScrollOverlay
         case showPromptTOCOverlay
         case preserveAgentColorTheme
+        case rememberLastTypeSelection
 
         // Legacy keys kept for migration.
         case agentCommand
