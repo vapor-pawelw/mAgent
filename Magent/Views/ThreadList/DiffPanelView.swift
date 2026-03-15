@@ -533,11 +533,17 @@ final class DiffPanelView: NSView {
         self.hasMoreCommits = hasMoreCommits
         self.forceVisible = forceVisible
 
-        // Preserve current commit selection and tab if the selected commit still exists in new data
+        // Preserve current commit selection and tab if requested
         let hashStillExists = preserveSelection && selectedCommitHash != nil
             && newCommits.contains(where: { $0.shortHash == selectedCommitHash })
         if hashStillExists {
             // Keep selectedCommitHash and activeTab; clear only the loaded entry list so it reloads
+            commitEntries = []
+            selectedFilePath = nil
+        } else if preserveSelection {
+            // No specific commit selected (e.g. "Unreleased"/CHANGES tab), but still preserve the
+            // current tab so a background refresh doesn't yank the user back to COMMITS
+            selectedCommitHash = nil
             commitEntries = []
             selectedFilePath = nil
         } else {
