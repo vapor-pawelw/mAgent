@@ -562,6 +562,7 @@ extension ThreadListViewController {
         Task {
             let current = self.threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
             let entries: [FileDiffEntry]
+            let branchDiffEntries: [FileDiffEntry]
             let commits: [BranchCommit]
             let hasMoreCommits: Bool
             let baseBranch: String?
@@ -574,19 +575,23 @@ extension ThreadListViewController {
                     limit: commitLimit + 1
                 )
                 entries = await entriesTask
+                branchDiffEntries = []
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
             } else {
                 let resolvedBaseBranch = self.threadManager.resolveBaseBranch(for: current)
                 baseBranch = resolvedBaseBranch
-                async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
+                // Fetch uncommitted (working tree vs HEAD) and full branch diff (vs merge-base) in parallel
+                async let uncommittedTask = GitService.shared.workingTreeDiffStats(worktreePath: current.worktreePath)
+                async let branchDiffTask = threadManager.refreshDiffStats(for: thread.id)
                 async let commitsTask = GitService.shared.commitLog(
                     worktreePath: current.worktreePath,
                     baseBranch: resolvedBaseBranch,
                     limit: commitLimit + 1
                 )
-                entries = await entriesTask
+                entries = await uncommittedTask
+                branchDiffEntries = await branchDiffTask
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
@@ -598,6 +603,7 @@ extension ThreadListViewController {
                 guard (self.diffPanelRefreshGeneration[current.id] ?? 0) == generation else { return }
                 self.diffPanelView.update(
                     with: entries,
+                    branchDiffEntries: branchDiffEntries,
                     commits: commits,
                     hasMoreCommits: hasMoreCommits,
                     forceVisible: current.isMain,

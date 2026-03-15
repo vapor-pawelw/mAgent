@@ -100,6 +100,7 @@ private final class CommitRowView: NSView {
 private enum DiffPanelTab {
     case commits
     case changes
+    case branchDiff
 }
 
 final class DiffPanelView: NSView {
@@ -109,14 +110,17 @@ final class DiffPanelView: NSView {
     private let tabBarStack = NSStackView()
     private let commitsTabButton = NSButton()
     private let changesTabButton = NSButton()
+    private let branchDiffTabButton = NSButton()
     private let infoButton = NSButton()
     private let commitContextLabel = NSTextField(labelWithString: "")
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private let branchInfoLabel = NSTextField(labelWithString: "")
 
-    // Working-tree entries (always loaded from git status)
+    // Working-tree entries — actual uncommitted changes (vs HEAD)
     private var uncommittedEntries: [FileDiffEntry] = []
+    // Branch diff entries — all changes on the branch vs merge-base (committed + uncommitted)
+    private var branchDiffEntries: [FileDiffEntry] = []
     // Entries for the currently selected commit (populated on commit selection)
     private var commitEntries: [FileDiffEntry] = []
     private var commits: [BranchCommit] = []
@@ -143,9 +147,10 @@ final class DiffPanelView: NSView {
     /// Called when the user selects a commit (nil = "Uncommitted").
     var onCommitSelected: ((String?) -> Void)?
 
-    /// The entries currently shown in the CHANGES tab.
+    /// The entries currently shown in the CHANGES / BRANCH DIFF tab.
     private var activeEntries: [FileDiffEntry] {
-        selectedCommitHash == nil ? uncommittedEntries : commitEntries
+        if activeTab == .branchDiff { return branchDiffEntries }
+        return selectedCommitHash == nil ? uncommittedEntries : commitEntries
     }
 
     override init(frame frameRect: NSRect) {
@@ -200,6 +205,20 @@ final class DiffPanelView: NSView {
         changesBtn.action = #selector(changesTabTapped)
         changesBtn.translatesAutoresizingMaskIntoConstraints = false
 
+        let branchDiffBtn = branchDiffTabButton
+        branchDiffBtn.title = "BRANCH DIFF"
+        branchDiffBtn.font = .systemFont(ofSize: 11, weight: .semibold)
+        branchDiffBtn.contentTintColor = NSColor(resource: .textSecondary)
+        branchDiffBtn.isBordered = false
+        branchDiffBtn.alignment = .left
+        branchDiffBtn.lineBreakMode = .byTruncatingTail
+        branchDiffBtn.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        branchDiffBtn.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        branchDiffBtn.target = self
+        branchDiffBtn.action = #selector(branchDiffTabTapped)
+        branchDiffBtn.translatesAutoresizingMaskIntoConstraints = false
+        branchDiffBtn.isHidden = true
+
         tabBarStack.orientation = .horizontal
         tabBarStack.spacing = 12
         tabBarStack.alignment = .centerY
@@ -207,6 +226,7 @@ final class DiffPanelView: NSView {
         tabBarStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         tabBarStack.addArrangedSubview(commitsBtn)
         tabBarStack.addArrangedSubview(changesBtn)
+        tabBarStack.addArrangedSubview(branchDiffBtn)
         tabBarStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(tabBarStack)
 
@@ -411,6 +431,8 @@ final class DiffPanelView: NSView {
         var userInfo: [String: Any] = ["filePath": filePath]
         if let hash = selectedCommitHash {
             userInfo["commitHash"] = hash
+        } else {
+            userInfo["mode"] = activeTab == .branchDiff ? "branchDiff" : "uncommitted"
         }
         NotificationCenter.default.post(
             name: .magentShowDiffViewer,
@@ -519,6 +541,7 @@ final class DiffPanelView: NSView {
 
     func update(
         with newEntries: [FileDiffEntry],
+        branchDiffEntries newBranchDiffEntries: [FileDiffEntry] = [],
         commits newCommits: [BranchCommit] = [],
         hasMoreCommits: Bool = false,
         forceVisible: Bool = false,
@@ -528,6 +551,7 @@ final class DiffPanelView: NSView {
         preserveSelection: Bool = false
     ) {
         uncommittedEntries = newEntries
+        branchDiffEntries = newBranchDiffEntries
         commits = newCommits
         self.worktreePath = worktreePath
         self.hasMoreCommits = hasMoreCommits
@@ -555,12 +579,12 @@ final class DiffPanelView: NSView {
         }
 
         // Show COMMITS tab if there are any commits to browse
-        commitsTabButton.isHidden = newCommits.isEmpty && newEntries.isEmpty && !forceVisible
+        commitsTabButton.isHidden = newCommits.isEmpty && newEntries.isEmpty && newBranchDiffEntries.isEmpty && !forceVisible
 
         updateTabTitles()
 
         // Hide panel only when there's nothing to show
-        if newEntries.isEmpty && newCommits.isEmpty && !forceVisible {
+        if newEntries.isEmpty && newBranchDiffEntries.isEmpty && newCommits.isEmpty && !forceVisible {
             branchInfoLabel.isHidden = true
             setPanelVisible(false)
             return
@@ -588,7 +612,7 @@ final class DiffPanelView: NSView {
     }
 
     func updateBranchInfo(branchName: String?, baseBranch: String?) {
-        guard !uncommittedEntries.isEmpty else {
+        guard !uncommittedEntries.isEmpty || !branchDiffEntries.isEmpty else {
             branchInfoLabel.isHidden = true
             return
         }
@@ -604,6 +628,7 @@ final class DiffPanelView: NSView {
 
     func clear() {
         uncommittedEntries = []
+        branchDiffEntries = []
         commitEntries = []
         commits = []
         activeTab = .commits
@@ -630,10 +655,15 @@ final class DiffPanelView: NSView {
         let totalChanges = uncommittedEntries.count
         changesTabButton.title = totalChanges == 0 ? "CHANGES" : "CHANGES (\(totalChanges))"
 
+        let branchDiffCount = branchDiffEntries.count
+        branchDiffTabButton.title = branchDiffCount == 0 ? "BRANCH DIFF" : "BRANCH DIFF (\(branchDiffCount))"
+        branchDiffTabButton.isHidden = branchDiffEntries.isEmpty
+
         let activeColor = NSColor.labelColor
         let inactiveColor = NSColor(resource: .textSecondary)
         commitsTabButton.contentTintColor = activeTab == .commits ? activeColor : inactiveColor
         changesTabButton.contentTintColor = activeTab == .changes ? activeColor : inactiveColor
+        branchDiffTabButton.contentTintColor = activeTab == .branchDiff ? activeColor : inactiveColor
         infoButton.isHidden = activeTab == .commits
     }
 
@@ -643,6 +673,8 @@ final class DiffPanelView: NSView {
         case .commits:
             rebuildCommitsRows()
         case .changes:
+            rebuildChangesRows()
+        case .branchDiff:
             rebuildChangesRows()
         }
     }
@@ -683,7 +715,15 @@ final class DiffPanelView: NSView {
         }
 
         if entries.isEmpty {
-            let row = makeEmptyStateRow(message: selectedCommitHash == nil ? "No uncommitted changes" : "No changes in this commit")
+            let emptyMessage: String
+            if activeTab == .branchDiff {
+                emptyMessage = "No branch changes"
+            } else if selectedCommitHash == nil {
+                emptyMessage = "No uncommitted changes"
+            } else {
+                emptyMessage = "No changes in this commit"
+            }
+            let row = makeEmptyStateRow(message: emptyMessage)
             stackView.addArrangedSubview(row)
             row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
             row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
@@ -705,12 +745,14 @@ final class DiffPanelView: NSView {
     }
 
     private func makeLegendViewController() -> NSViewController {
-        let items: [(NSColor, String)] = [
+        var items: [(NSColor, String)] = [
             (NSColor(red: 0.35, green: 0.65, blue: 0.35, alpha: 1.0), "Staged — changes staged for commit"),
             (NSColor(red: 0.78, green: 0.3, blue: 0.3, alpha: 1.0),   "Unstaged — modified, not yet staged"),
             (NSColor(red: 0.76, green: 0.65, blue: 0.42, alpha: 1.0), "Untracked — new file"),
-            (.secondaryLabelColor,                                      "Committed — part of branch diff"),
         ]
+        if activeTab == .branchDiff {
+            items.append((.secondaryLabelColor, "Committed — committed on this branch"))
+        }
 
         let contentInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 16)
 
@@ -760,6 +802,7 @@ final class DiffPanelView: NSView {
         guard activeTab != .commits else { return }
         activeTab = .commits
         commitContextLabel.isHidden = true
+        selectedFilePath = nil
         updateTabTitles()
         rebuildRows()
     }
@@ -768,14 +811,35 @@ final class DiffPanelView: NSView {
         guard activeTab != .changes else {
             // Tapping active Changes tab opens the full diff viewer
             guard !activeEntries.isEmpty else { return }
-            var userInfo: [String: Any]? = nil
+            var userInfo: [String: Any] = ["mode": "uncommitted"]
             if let hash = selectedCommitHash {
-                userInfo = ["commitHash": hash]
+                userInfo["commitHash"] = hash
             }
             NotificationCenter.default.post(name: .magentShowDiffViewer, object: nil, userInfo: userInfo)
             return
         }
         activeTab = .changes
+        selectedCommitHash = nil
+        commitEntries = []
+        updateTabTitles()
+        rebuildRows()
+    }
+
+    @objc private func branchDiffTabTapped() {
+        guard activeTab != .branchDiff else {
+            // Tapping active Branch Diff tab opens the full diff viewer
+            guard !branchDiffEntries.isEmpty else { return }
+            NotificationCenter.default.post(
+                name: .magentShowDiffViewer,
+                object: nil,
+                userInfo: ["mode": "branchDiff"]
+            )
+            return
+        }
+        activeTab = .branchDiff
+        selectedCommitHash = nil
+        commitEntries = []
+        selectedFilePath = nil
         updateTabTitles()
         rebuildRows()
     }
