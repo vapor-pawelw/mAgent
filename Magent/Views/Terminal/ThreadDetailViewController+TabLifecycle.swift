@@ -33,6 +33,7 @@ extension ThreadDetailViewController {
                         self.thread = updated
                     }
 
+                    guard index < self.terminalViews.count, index < self.tabItems.count else { return }
                     self.terminalViews[index].removeFromSuperview()
                     self.terminalViews.remove(at: index)
 
