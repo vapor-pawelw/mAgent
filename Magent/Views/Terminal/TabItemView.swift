@@ -394,7 +394,6 @@ final class TabItemView: NSView, NSMenuDelegate {
         }
 
         // "Close this tab" — always at the bottom
-        menu.addItem(.separator())
         let closeThisItem = NSMenuItem(title: "Close This Tab", action: #selector(closeTapped), keyEquivalent: "")
         closeThisItem.target = self
         menu.addItem(closeThisItem)
