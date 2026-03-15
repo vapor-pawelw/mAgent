@@ -285,9 +285,9 @@ extension ThreadListViewController {
         isCreatingThread = true
         reloadData()
 
-        performWithSpinner(message: "Creating thread...", errorTitle: "Creation Failed") {
+        Task {
             do {
-                let thread = try await self.threadManager.createThread(
+                _ = try await self.threadManager.createThread(
                     project: project,
                     requestedAgentType: requestedAgentType,
                     useAgentCommand: useAgentCommand,
@@ -296,15 +296,17 @@ extension ThreadListViewController {
                 await MainActor.run {
                     self.isCreatingThread = false
                     self.reloadData()
-                    let resolved = self.recordSelectedThread(thread)
-                    self.delegate?.threadList(self, didSelectThread: resolved)
                 }
             } catch {
                 await MainActor.run {
                     self.isCreatingThread = false
                     self.reloadData()
+                    BannerManager.shared.show(
+                        message: "Failed to create thread: \(error.localizedDescription)",
+                        style: .error,
+                        duration: 8.0
+                    )
                 }
-                throw error
             }
         }
     }

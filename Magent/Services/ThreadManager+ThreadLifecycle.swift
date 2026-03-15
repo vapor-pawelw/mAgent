@@ -76,165 +76,204 @@ extension ThreadManager {
         let worktreePath = "\(project.resolvedWorktreesBasePath())/\(name)"
         let repoSlug = Self.repoSlug(from: project.name)
 
-        // Create git worktree branching off the requested base branch, or the
-        // project's default branch when no explicit base is provided.
-        let explicitBaseBranch = requestedBaseBranch?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseBranch: String?
-        if let explicitBaseBranch, !explicitBaseBranch.isEmpty {
-            baseBranch = explicitBaseBranch
-        } else if let projectDefault = project.defaultBranch?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-                  !projectDefault.isEmpty {
-            baseBranch = projectDefault
-        } else {
-            baseBranch = nil
-        }
-        _ = try await git.createWorktree(
-            repoPath: project.repoPath,
-            branchName: branchName,
-            worktreePath: worktreePath,
-            baseBranch: baseBranch
-        )
-
-        let localFileSyncPathsSnapshot = project.normalizedLocalFileSyncPaths
-        let missingLocalSyncPaths: [String]
-        do {
-            missingLocalSyncPaths = try await syncConfiguredLocalPathsIntoWorktree(
-                project: project,
-                worktreePath: worktreePath,
-                syncPaths: localFileSyncPathsSnapshot
-            )
-        } catch {
-            try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: worktreePath)
-            throw error
-        }
-
-        // Record fork-point commit in the worktree metadata cache
-        let forkPointResult = await ShellExecutor.execute("git rev-parse HEAD", workingDirectory: worktreePath)
-        let forkPoint = forkPointResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        if forkPointResult.exitCode == 0, !forkPoint.isEmpty {
-            let basePath = project.resolvedWorktreesBasePath()
-            var cache = persistence.loadWorktreeCache(worktreesBasePath: basePath)
-            cache.worktrees[name] = WorktreeMetadata(forkPointCommit: forkPoint, createdAt: Date())
-            persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
-        }
-
-        let settings = persistence.loadSettings()
-        let selectedAgentType: AgentType?
-        if useAgentCommand {
-            selectedAgentType = resolveAgentType(
-                for: project.id,
-                requestedAgentType: requestedAgentType,
-                settings: settings
-            )
-        } else {
-            selectedAgentType = nil
-        }
-
+        // Phase 1: Register the thread in the sidebar immediately so the app stays responsive.
+        // The thread has no tmux sessions yet; those are created in phase 2 below.
         let threadID = UUID()
-        let firstTabDisplayName = useAgentCommand
-            ? TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
-            : "Terminal"
-        let firstTabSlug = Self.sanitizeForTmux(firstTabDisplayName)
-        let tmuxSessionName = Self.buildSessionName(repoSlug: repoSlug, threadName: name, tabSlug: firstTabSlug)
-
-        // Pre-trust the worktree directory so the selected agent doesn't show a trust dialog
-        trustDirectoryIfNeeded(worktreePath, agentType: selectedAgentType)
-
-        // Create tmux session with selected agent command (or shell if no active agents)
-        let envExports = "export MAGENT_WORKTREE_PATH=\(worktreePath) && export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=\(name) && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_THREAD_ID=\(threadID.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
-        let startCmd: String
-        if useAgentCommand {
-            startCmd = agentStartCommand(
-                settings: settings,
-                projectId: project.id,
-                agentType: selectedAgentType,
-                envExports: envExports,
-                workingDirectory: worktreePath
-            )
-        } else {
-            startCmd = terminalStartCommand(
-                envExports: envExports,
-                workingDirectory: worktreePath
-            )
-        }
-        try await tmux.createSession(
-            name: tmuxSessionName,
-            workingDirectory: worktreePath,
-            command: startCmd
-        )
-
-        // Also set on the tmux session so new panes/windows inherit them
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_PATH", value: worktreePath)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: name)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_THREAD_ID", value: threadID.uuidString)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
-        if let selectedAgentType {
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
-        }
-
-        let thread = MagentThread(
+        let settings = persistence.loadSettings()
+        let pendingThread = MagentThread(
             id: threadID,
             projectId: project.id,
             name: name,
             worktreePath: worktreePath,
             branchName: branchName,
-            tmuxSessionNames: [tmuxSessionName],
-            agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
-            sessionAgentTypes: selectedAgentType.map { [tmuxSessionName: $0] } ?? [:],
-            sectionId: settings.defaultSection(for: project.id)?.id,
-            lastSelectedTmuxSessionName: tmuxSessionName,
-            customTabNames: [tmuxSessionName: firstTabDisplayName],
-            baseBranch: baseBranch,
-            submittedPromptsBySession: {
-                guard useAgentCommand,
-                      let initialPrompt,
-                      !initialPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    return [:]
-                }
-                return [tmuxSessionName: [
-                    initialPrompt
-                        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                ]]
-            }(),
-            localFileSyncPathsSnapshot: localFileSyncPathsSnapshot
+            tmuxSessionNames: [],
+            sectionId: settings.defaultSection(for: project.id)?.id
         )
-
-        threads.append(thread)
-
-        // Place at the bottom of the default section's visible group.
+        pendingThreadIds.insert(threadID)
+        threads.append(pendingThread)
         if let lastIndex = threads.indices.last {
             placeThreadAtBottomOfSidebarGroup(threadId: threads[lastIndex].id)
         }
-
-        try persistence.saveActiveThreads(threads)
         await MainActor.run {
-            delegate?.threadManager(self, didCreateThread: thread)
-            if !missingLocalSyncPaths.isEmpty {
-                let noun = missingLocalSyncPaths.count == 1 ? "path" : "paths"
-                BannerManager.shared.show(
-                    message: "Thread created, but \(missingLocalSyncPaths.count) local sync \(noun) were missing in the source repo.",
-                    style: .warning,
-                    duration: 8.0,
-                    details: missingLocalSyncPaths.joined(separator: "\n"),
-                    detailsCollapsedTitle: "Show missing paths",
-                    detailsExpandedTitle: "Hide missing paths"
+            delegate?.threadManager(self, didCreateThread: pendingThread)
+        }
+
+        // Phase 2: Perform git and tmux setup. On failure, clean up the pending thread.
+        do {
+            // Create git worktree branching off the requested base branch, or the
+            // project's default branch when no explicit base is provided.
+            let explicitBaseBranch = requestedBaseBranch?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let baseBranch: String?
+            if let explicitBaseBranch, !explicitBaseBranch.isEmpty {
+                baseBranch = explicitBaseBranch
+            } else if let projectDefault = project.defaultBranch?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                      !projectDefault.isEmpty {
+                baseBranch = projectDefault
+            } else {
+                baseBranch = nil
+            }
+            _ = try await git.createWorktree(
+                repoPath: project.repoPath,
+                branchName: branchName,
+                worktreePath: worktreePath,
+                baseBranch: baseBranch
+            )
+
+            let localFileSyncPathsSnapshot = project.normalizedLocalFileSyncPaths
+            let missingLocalSyncPaths: [String]
+            do {
+                missingLocalSyncPaths = try await syncConfiguredLocalPathsIntoWorktree(
+                    project: project,
+                    worktreePath: worktreePath,
+                    syncPaths: localFileSyncPathsSnapshot
+                )
+            } catch {
+                try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: worktreePath)
+                throw error
+            }
+
+            // Record fork-point commit in the worktree metadata cache
+            let forkPointResult = await ShellExecutor.execute("git rev-parse HEAD", workingDirectory: worktreePath)
+            let forkPoint = forkPointResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            if forkPointResult.exitCode == 0, !forkPoint.isEmpty {
+                let basePath = project.resolvedWorktreesBasePath()
+                var cache = persistence.loadWorktreeCache(worktreesBasePath: basePath)
+                cache.worktrees[name] = WorktreeMetadata(forkPointCommit: forkPoint, createdAt: Date())
+                persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
+            }
+
+            let selectedAgentType: AgentType?
+            if useAgentCommand {
+                selectedAgentType = resolveAgentType(
+                    for: project.id,
+                    requestedAgentType: requestedAgentType,
+                    settings: settings
+                )
+            } else {
+                selectedAgentType = nil
+            }
+
+            let firstTabDisplayName = useAgentCommand
+                ? TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
+                : "Terminal"
+            let firstTabSlug = Self.sanitizeForTmux(firstTabDisplayName)
+            let tmuxSessionName = Self.buildSessionName(repoSlug: repoSlug, threadName: name, tabSlug: firstTabSlug)
+
+            // Pre-trust the worktree directory so the selected agent doesn't show a trust dialog
+            trustDirectoryIfNeeded(worktreePath, agentType: selectedAgentType)
+
+            // Create tmux session with selected agent command (or shell if no active agents)
+            let envExports = "export MAGENT_WORKTREE_PATH=\(worktreePath) && export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=\(name) && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_THREAD_ID=\(threadID.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
+            let startCmd: String
+            if useAgentCommand {
+                startCmd = agentStartCommand(
+                    settings: settings,
+                    projectId: project.id,
+                    agentType: selectedAgentType,
+                    envExports: envExports,
+                    workingDirectory: worktreePath
+                )
+            } else {
+                startCmd = terminalStartCommand(
+                    envExports: envExports,
+                    workingDirectory: worktreePath
                 )
             }
-        }
+            try await tmux.createSession(
+                name: tmuxSessionName,
+                workingDirectory: worktreePath,
+                command: startCmd
+            )
 
-        // Inject terminal command and agent context
-        let injection = effectiveInjection(for: project.id)
-        injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext, initialPrompt: initialPrompt, agentType: selectedAgentType)
-        if initialPrompt?.isEmpty == false, useAgentCommand {
-            scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: tmuxSessionName)
-        }
+            // Also set on the tmux session so new panes/windows inherit them
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_PATH", value: worktreePath)
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: name)
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_THREAD_ID", value: threadID.uuidString)
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
+            if let selectedAgentType {
+                try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
+            }
 
-        return thread
+            let thread = MagentThread(
+                id: threadID,
+                projectId: project.id,
+                name: name,
+                worktreePath: worktreePath,
+                branchName: branchName,
+                tmuxSessionNames: [tmuxSessionName],
+                agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
+                sessionAgentTypes: selectedAgentType.map { [tmuxSessionName: $0] } ?? [:],
+                sectionId: settings.defaultSection(for: project.id)?.id,
+                lastSelectedTmuxSessionName: tmuxSessionName,
+                customTabNames: [tmuxSessionName: firstTabDisplayName],
+                baseBranch: baseBranch,
+                submittedPromptsBySession: {
+                    guard useAgentCommand,
+                          let initialPrompt,
+                          !initialPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        return [:]
+                    }
+                    return [tmuxSessionName: [
+                        initialPrompt
+                            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                    ]]
+                }(),
+                localFileSyncPathsSnapshot: localFileSyncPathsSnapshot
+            )
+
+            pendingThreadIds.remove(threadID)
+            if let idx = threads.firstIndex(where: { $0.id == threadID }) {
+                threads[idx] = thread
+            }
+
+            try persistence.saveActiveThreads(threads)
+            await MainActor.run {
+                delegate?.threadManager(self, didUpdateThreads: threads)
+                NotificationCenter.default.post(
+                    name: .magentThreadCreationFinished,
+                    object: nil,
+                    userInfo: ["threadId": threadID]
+                )
+                if !missingLocalSyncPaths.isEmpty {
+                    let noun = missingLocalSyncPaths.count == 1 ? "path" : "paths"
+                    BannerManager.shared.show(
+                        message: "Thread created, but \(missingLocalSyncPaths.count) local sync \(noun) were missing in the source repo.",
+                        style: .warning,
+                        duration: 8.0,
+                        details: missingLocalSyncPaths.joined(separator: "\n"),
+                        detailsCollapsedTitle: "Show missing paths",
+                        detailsExpandedTitle: "Hide missing paths"
+                    )
+                }
+            }
+
+            // Inject terminal command and agent context
+            let injection = effectiveInjection(for: project.id)
+            injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext, initialPrompt: initialPrompt, agentType: selectedAgentType)
+            if initialPrompt?.isEmpty == false, useAgentCommand {
+                scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: tmuxSessionName)
+            }
+
+            return thread
+        } catch {
+            // Clean up the pending thread from in-memory state; it was never persisted.
+            pendingThreadIds.remove(threadID)
+            threads.removeAll { $0.id == threadID }
+            await MainActor.run {
+                delegate?.threadManager(self, didDeleteThread: pendingThread)
+                NotificationCenter.default.post(
+                    name: .magentThreadCreationFinished,
+                    object: nil,
+                    userInfo: ["threadId": threadID, "error": error.localizedDescription]
+                )
+            }
+            throw error
+        }
     }
 
     // MARK: - Main Thread

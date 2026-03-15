@@ -249,6 +249,7 @@ extension ThreadDetailViewController {
         label.font = .systemFont(ofSize: 13)
         label.textColor = NSColor(resource: .textSecondary)
         label.translatesAutoresizingMaskIntoConstraints = false
+        loadingLabel = label
 
         let detailLabel = NSTextField(labelWithString: "")
         detailLabel.font = .systemFont(ofSize: 11)
@@ -290,6 +291,7 @@ extension ThreadDetailViewController {
         loadingPollTimer = nil
 
         ensureLoadingOverlay()
+        loadingLabel?.stringValue = String(localized: .ThreadStrings.tabStartingAgent)
 
         guard thread.agentTmuxSessions.contains(sessionName), let agentType else {
             dismissLoadingOverlay()
@@ -352,7 +354,7 @@ extension ThreadDetailViewController {
         return ThreadManager.shared.isAgentContentReady(output, agentType: agentType)
     }
 
-    private func dismissLoadingOverlay() {
+    func dismissLoadingOverlay() {
         loadingPollTimer?.invalidate()
         loadingPollTimer = nil
 
