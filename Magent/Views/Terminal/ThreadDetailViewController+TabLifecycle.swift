@@ -208,7 +208,7 @@ extension ThreadDetailViewController {
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated
                         // Update tab label
-                        if index < self.tabItems.count {
+                        if index < self.tabItems.count, index < updated.tmuxSessionNames.count {
                             self.tabItems[index].titleLabel.stringValue = updated.displayName(
                                 for: updated.tmuxSessionNames[index],
                                 at: index

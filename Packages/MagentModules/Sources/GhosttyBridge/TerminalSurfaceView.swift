@@ -164,6 +164,12 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     private func destroySurface() {
         if let surface {
             GhosttyAppManager.shared.unregisterSurface(surface)
+            // Clear the focused-surface reference before freeing so that any
+            // DispatchQueue.main.async callbacks that use focusedSurface (e.g.
+            // clipboard completion) cannot pass a freed pointer to Ghostty.
+            if GhosttyAppManager.shared.focusedSurface == surface {
+                GhosttyAppManager.shared.focusedSurface = nil
+            }
             ghostty_surface_free(surface)
             self.surface = nil
         }
