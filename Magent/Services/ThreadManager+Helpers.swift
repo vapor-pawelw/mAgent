@@ -28,6 +28,35 @@ extension ThreadManager {
         return false
     }
 
+    /// Polls the tmux pane until the last ~20 characters of `prompt` are visible,
+    /// confirming the TUI has finished processing the paste before Enter is sent.
+    /// This replaces the old fixed sleep and avoids the race between paste-buffer
+    /// delivery and the Enter key arriving while the TUI event loop is still consuming
+    /// buffered input.
+    /// Returns `true` when the fingerprint is found, `false` on timeout (graceful
+    /// fallback — Enter is sent anyway).
+    func waitForPromptToAppear(
+        sessionName: String,
+        prompt: String,
+        timeout: TimeInterval = 3.0,
+        interval: TimeInterval = 0.15
+    ) async -> Bool {
+        // Use the last 20 characters of the trimmed prompt as a fingerprint.
+        // Resilient to line-wrapping and any cursor character the TUI appends.
+        let fingerprint = String(prompt.trimmingCharacters(in: .whitespacesAndNewlines).suffix(20))
+        guard !fingerprint.isEmpty else { return true }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let content = await tmux.capturePane(sessionName: sessionName, lastLines: 50),
+               content.contains(fingerprint) {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        return false
+    }
+
     /// Checks whether captured pane content indicates the agent is ready,
     /// using agent-specific signals.
     func isAgentContentReady(_ content: String, agentType: AgentType?) -> Bool {
@@ -83,8 +112,11 @@ extension ThreadManager {
                 _ = await waitForAgentReady(sessionName: sessionName, agentType: agentType)
                 // Send text and Enter separately — the Enter key gets lost if sent in the
                 // same send-keys call while the TUI is still processing buffered input.
+                // Poll until the pasted text is visible in the pane instead of using a
+                // fixed sleep, so Enter only arrives after the TUI event loop has fully
+                // consumed the paste. Falls back gracefully on timeout.
                 try? await tmux.sendText(sessionName: sessionName, text: initialPrompt!)
-                try? await Task.sleep(nanoseconds: 200_000_000)
+                _ = await waitForPromptToAppear(sessionName: sessionName, prompt: initialPrompt!)
                 try? await tmux.sendEnter(sessionName: sessionName)
                 NotificationCenter.default.post(
                     name: .magentAgentKeysInjected,
