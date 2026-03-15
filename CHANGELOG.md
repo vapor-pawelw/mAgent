@@ -28,6 +28,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Creating a thread no longer blocks the app with a modal spinner: the thread appears in the sidebar immediately and setup progress is shown as an overlay in the thread detail area instead.
+- Fixed: Claude sessions were not showing as busy when the status bar included trailing context after "esc to interrupt" (e.g. `7% until auto-compact`); the busy-detection regex now matches regardless of trailing content.
 - The "Resync Local Sync Paths" top-bar button is now hidden when the parent project has no Local Sync Paths configured; it reappears automatically once paths are added in Settings.
 - Archive suggestion now also appears when the thread's PR or MR has been merged — even before the local base branch is fetched — so the archivebox shows up as soon as GitHub or GitLab confirms the merge.
 - Merged PRs and MRs are now detected and shown alongside open ones: the sidebar row, top-right button, tooltip, and context menu all display the PR/MR number with a "(✅ Merged)" suffix so you can see at a glance that the branch has landed.
