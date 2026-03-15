@@ -688,8 +688,9 @@ final class ThreadListViewController: NSViewController {
         if let threadId = lastOpenedThreadId {
             for row in 0..<outlineView.numberOfRows {
                 if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
+                    let isNewThread = selectedThreadID != thread.id
                     let resolved = recordSelectedThread(thread)
-                    delegate?.threadList(self, didSelectThread: resolved)
+                    if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
                     outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                     return
                 }
@@ -703,8 +704,9 @@ final class ThreadListViewController: NSViewController {
                 for row in 0..<outlineView.numberOfRows {
                     if let thread = outlineView.item(atRow: row) as? MagentThread,
                        thread.projectId == fallbackProjectId {
+                        let isNewThread = selectedThreadID != thread.id
                         let resolved = recordSelectedThread(thread)
-                        delegate?.threadList(self, didSelectThread: resolved)
+                        if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
                         outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                         return
                     }
@@ -714,8 +716,9 @@ final class ThreadListViewController: NSViewController {
             for row in 0..<outlineView.numberOfRows {
                 if let thread = outlineView.item(atRow: row) as? MagentThread,
                    thread.projectId == lastOpenedProjectId {
+                    let isNewThread = selectedThreadID != thread.id
                     let resolved = recordSelectedThread(thread)
-                    delegate?.threadList(self, didSelectThread: resolved)
+                    if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
                     outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                     return
                 }
@@ -725,8 +728,9 @@ final class ThreadListViewController: NSViewController {
         // Find the first selectable thread item
         for row in 0..<outlineView.numberOfRows {
             if let thread = outlineView.item(atRow: row) as? MagentThread {
+                let isNewThread = selectedThreadID != thread.id
                 let resolved = recordSelectedThread(thread)
-                delegate?.threadList(self, didSelectThread: resolved)
+                if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
                 outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                 return
             }
@@ -738,8 +742,9 @@ final class ThreadListViewController: NSViewController {
     func selectThread(byId threadId: UUID) {
         for row in 0..<outlineView.numberOfRows {
             if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
+                let isNewThread = selectedThreadID != thread.id
                 let resolved = recordSelectedThread(thread)
-                delegate?.threadList(self, didSelectThread: resolved)
+                if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
                 outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                 return
             }
