@@ -26,6 +26,10 @@ All notable changes to this project will be documented in this file.
 - Fixed significant UI lag introduced with link hover detection: the Ghostty C API call and URL checks were running synchronously on the main thread for every mouse-move event; both are now behind a 45 ms debounce and skipped entirely when Ghostty already owns the hover state via OSC 8.
 - Links in the terminal are now clickable: Cmd+click opens URLs in the default browser. Hovering over a link shows an animated URL pill at the bottom of the terminal and changes the cursor to a pointing hand. Link detection combines ghostty-native OSC 8 hyperlinks and tmux pane content.
 
+### Sidebar
+- Fixed: sections no longer flash expand/collapse while dragging a thread — background state updates no longer trigger a full sidebar reload mid-drag; the reload is deferred until the drag ends.
+- Fixed: threads can no longer be dragged across projects when sections are enabled.
+
 ### Thread
 - Fixed: the branch name in the sidebar row now updates immediately after a manual branch rename, instead of waiting for the next background poll (~30 s).
 - Removed the extra separator between "Close Tabs to the Left/Right" and "Close This Tab" in the tab context menu.

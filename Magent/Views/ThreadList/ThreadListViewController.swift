@@ -115,6 +115,11 @@ final class ThreadListViewController: NSViewController {
     private var currentScrollTopOffset: CGFloat = 0
     var currentSettings = AppSettings()
     var allowsProgrammaticOutlineDisclosureChanges = false
+    /// Set to true inside acceptDrop so reloadData() is not suppressed during a live drag.
+    var isInsideAcceptDrop = false
+    /// Set to true when reloadData() was skipped due to an active drag; reloadData() will
+    /// be called once the drag session ends.
+    var pendingReloadAfterDrag = false
     var diffPanelCommitLimitByThreadId: [UUID: Int] = [:]
     let diffPanelCommitPageSize = 10
     /// Monotonically-increasing generation per thread. Incremented each time refreshDiffPanel is called.
@@ -453,6 +458,16 @@ final class ThreadListViewController: NSViewController {
     // MARK: - Data
 
     func reloadData() {
+        // Skip structural reloads while a drag is in progress to prevent section
+        // expand/collapse animations from firing on background state updates. Allow
+        // reloads that originate from acceptDrop itself (isInsideAcceptDrop).
+        if (outlineView as? SidebarOutlineView)?.isDragInteractionActive == true,
+           !isInsideAcceptDrop {
+            pendingReloadAfterDrag = true
+            return
+        }
+        pendingReloadAfterDrag = false
+
         isReloadingData = true
         defer { isReloadingData = false }
 

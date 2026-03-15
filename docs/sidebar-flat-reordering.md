@@ -25,11 +25,14 @@ This thread changed flat-sidebar behavior so projects whose section grouping is 
 - `ThreadListViewController+DataSource.swift` handles flat-list drops on `SidebarProject` by computing the insertion index within the visible pin group and calling `reorderThreadInVisibleProjectList(...)`.
 - `SidebarOutlineView` tracks local/destination drag state so `shouldSelectItem`, `shouldExpandItem`, and `shouldCollapseItem` can suppress header disclosure while a drag is active.
 - Persistence still uses the existing `displayOrder` field; there is still no separate flat-order storage model.
+- **Drag-time reload deferral**: `reloadData()` checks `SidebarOutlineView.isDragInteractionActive` at the top and returns early (setting `pendingReloadAfterDrag = true`) for background-triggered reloads that fire during a drag (e.g. tmux state polling, busy-state changes). The `draggingSession endedAt` delegate flushes the pending reload after the drag ends. Reloads triggered by `acceptDrop` itself are allowed through via the `isInsideAcceptDrop` flag, which is set for the duration of the accept-drop call.
+- **Cross-project drop blocking in sectioned mode**: `validateDrop` guards section drops with `section.projectId == thread.projectId` in addition to the existing check in `validateFlatProjectDrop`. `acceptDrop` has the same guard so a malformed drop cannot move a thread across projects.
 
 ## Gotchas
 
 - In flat mode, treat "ordering scope" and "stored section" as separate concepts. Ordering is project-wide, but `sectionId` must stay untouched unless the user explicitly moves the thread between visible sections.
-- Keep flat drag validation project-scoped. Cross-project drops are not supported in the sidebar.
+- Keep flat drag validation project-scoped. Cross-project drops are not supported in the sidebar — both `validateFlatProjectDrop` (flat mode) and `validateDrop` (sectioned mode) enforce same-project checks.
 - Preserve the pinned/unpinned boundary in both validation and accept-drop handling, otherwise the visible flat list and persisted `displayOrder` groups diverge.
 - Do not reintroduce hover-driven disclosure while a mouse drag is active. Header expand/collapse is intentionally click-only so drag reordering does not mutate sidebar structure mid-gesture.
 - If you reintroduce section-order flattening for hidden sections, creation/completion/manual reorder behavior will disagree again because lifecycle code now assumes flat mode is one combined section.
+- Do not call `reloadData()` unconditionally in response to `ThreadManagerDelegate` callbacks during a drag. The drag-deferral mechanism (`pendingReloadAfterDrag` / `isInsideAcceptDrop`) must stay in place — bypassing it causes visible section expand/collapse flicker. The accept-drop path uses `isInsideAcceptDrop = true` to force through exactly the one reload it needs.

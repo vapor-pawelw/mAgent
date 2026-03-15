@@ -196,7 +196,8 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             return validateFlatProjectDrop(for: thread, in: project, childIndex: index)
         }
 
-        guard let section = item as? SidebarSection else { return [] }
+        guard let section = item as? SidebarSection,
+              section.projectId == thread.projectId else { return [] }
 
         // Drop "on" section header → cross-section move (always allowed)
         if index == NSOutlineViewDropOnItemIndex {
@@ -221,13 +222,17 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             return false
         }
 
+        isInsideAcceptDrop = true
+        defer { isInsideAcceptDrop = false }
+
         if let project = item as? SidebarProject {
             let settings = persistence.loadSettings()
             guard !settings.shouldUseThreadSections(for: project.projectId) else { return false }
             return acceptFlatProjectDrop(for: thread, in: project, childIndex: index)
         }
 
-        guard let section = item as? SidebarSection else { return false }
+        guard let section = item as? SidebarSection,
+              section.projectId == thread.projectId else { return false }
 
         if index == NSOutlineViewDropOnItemIndex {
             // Cross-section move (drop on section header)
@@ -267,6 +272,9 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         operation: NSDragOperation
     ) {
         (outlineView as? SidebarOutlineView)?.noteLocalDragDidEnd()
+        if pendingReloadAfterDrag {
+            reloadData()
+        }
     }
 }
 
