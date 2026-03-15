@@ -843,6 +843,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
+        // Suppress intermediate selection events fired by NSOutlineView during reloadData().
+        // The structural reload path in threadManager(didUpdateThreads:) calls refreshDiffPanel
+        // directly with preserveSelection:true after reloadData() completes.
+        guard !isReloadingData else { return }
+
         let row = outlineView.selectedRow
         guard row >= 0,
               let thread = outlineView.item(atRow: row) as? MagentThread else {
@@ -891,7 +896,8 @@ extension ThreadListViewController: ThreadManagerDelegate {
         // added/removed/reordered/re-sectioned). For metadata-only updates (busy state,
         // rate limits, dirty flag, PR info, etc.), update cells in-place — this avoids
         // the scroll-position flash that reloadData() + expand/collapse causes.
-        if sidebarNeedsStructuralReload(for: threads) {
+        let didStructuralReload = sidebarNeedsStructuralReload(for: threads)
+        if didStructuralReload {
             reloadData()
         } else {
             updateSidebarInPlace(with: threads)
@@ -902,10 +908,17 @@ extension ThreadListViewController: ThreadManagerDelegate {
             autoSelectFirst()
         }
 
-        // Refresh branch mismatch view for currently selected thread
+        // Refresh branch mismatch view and diff panel for currently selected thread.
+        // After a structural reload, outlineViewSelectionDidChange is suppressed (isReloadingData),
+        // so we must explicitly refresh the diff panel here — with preserveSelection:true so the
+        // active tab and selected commit are not reset by the background refresh.
         if let selected = selectedThreadFromState() {
             refreshBranchMismatchView(for: selected)
-            refreshDiffPanelContext(for: selected)
+            if didStructuralReload {
+                refreshDiffPanel(for: selected, preserveSelection: true)
+            } else {
+                refreshDiffPanelContext(for: selected)
+            }
         } else if outlineView.selectedRow < 0 {
             clearSelectedThreadState()
         }
