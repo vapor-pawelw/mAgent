@@ -857,7 +857,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if selectionChanged {
             delegate?.threadList(self, didSelectThread: resolved)
         }
-        refreshDiffPanel(for: resolved)
+        // Preserve the current tab/selection when the same thread is re-selected (e.g. during
+        // a structural reload where reloadData() programmatically restores the outline selection).
+        refreshDiffPanel(for: resolved, preserveSelection: !selectionChanged)
     }
 }
 
