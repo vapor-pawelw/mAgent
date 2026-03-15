@@ -248,6 +248,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let promptTextView = NSTextView()
     private let descriptionField = NSTextField()
     private let branchField = NSTextField()
+    private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     private let acceptButton: NSButton
     private var promptScrollView: NSScrollView!
@@ -367,6 +368,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func applyLastSelection() {
+        guard PersistenceService.shared.loadSettings().rememberLastTypeSelection else { return }
         guard let raw = AgentLastSelectionStore.lastSelection(for: config.draftScope),
               let index = pickerItems.firstIndex(where: { $0.storageRaw == raw }) else {
             return
@@ -445,6 +447,15 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         agentPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
         agentRow.addArrangedSubview(agentPicker)
         stack.addArrangedSubview(agentRow)
+
+        // Remember type selection checkbox
+        rememberCheckbox.target = self
+        rememberCheckbox.action = #selector(rememberCheckboxToggled)
+        rememberCheckbox.state = PersistenceService.shared.loadSettings().rememberLastTypeSelection ? .on : .off
+        rememberCheckbox.font = .systemFont(ofSize: 11)
+        rememberCheckbox.contentTintColor = NSColor(resource: .textSecondary)
+        stack.addArrangedSubview(rememberCheckbox)
+        stack.setCustomSpacing(12, after: rememberCheckbox)
 
         // Prompt label
         promptLabel = makeFormLabel(promptLabelText)
@@ -537,6 +548,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
             titleLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             agentRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            rememberCheckbox.widthAnchor.constraint(equalTo: stack.widthAnchor),
             agentPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
             promptLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             promptScrollView.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -791,6 +803,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     // MARK: - Actions
+
+    @objc private func rememberCheckboxToggled() {
+        var settings = PersistenceService.shared.loadSettings()
+        settings.rememberLastTypeSelection = rememberCheckbox.state == .on
+        try? PersistenceService.shared.saveSettings(settings)
+    }
 
     @objc private func cancelTapped() {
         finish(with: nil)

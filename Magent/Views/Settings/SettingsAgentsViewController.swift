@@ -16,6 +16,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     private var skipPermissionsCheckbox: NSButton!
     private var sandboxCheckbox: NSButton!
     private var ipcInjectionCheckbox: NSButton!
+    private var rememberLastTypeCheckbox: NSButton!
     private var rateLimitDetectionCheckbox: NSButton!
     private var fdaStatusLabel: NSTextField!
     private var contentScrollView: NSScrollView!
@@ -97,6 +98,25 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
             defaultAgentPopup.widthAnchor.constraint(equalTo: defaultAgentSection.widthAnchor),
         ])
         refreshDefaultAgentSection()
+
+        // Remember last type selection
+        rememberLastTypeCheckbox = NSButton(
+            checkboxWithTitle: String(localized: .SettingsStrings.settingsAgentsRememberLastType),
+            target: self,
+            action: #selector(rememberLastTypeToggled)
+        )
+        rememberLastTypeCheckbox.state = settings.rememberLastTypeSelection ? .on : .off
+        selectionStack.addArrangedSubview(rememberLastTypeCheckbox)
+
+        let rememberLastTypeDesc = NSTextField(
+            wrappingLabelWithString: String(localized: .SettingsStrings.settingsAgentsRememberLastTypeDescription)
+        )
+        rememberLastTypeDesc.font = .systemFont(ofSize: 11)
+        rememberLastTypeDesc.textColor = NSColor(resource: .textSecondary)
+        selectionStack.addArrangedSubview(rememberLastTypeDesc)
+        NSLayoutConstraint.activate([
+            rememberLastTypeDesc.widthAnchor.constraint(equalTo: selectionStack.widthAnchor),
+        ])
 
         // Agent Permissions
         let (permissionsCard, permissionsSection) = createSectionCard(
@@ -415,6 +435,11 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         settings.agentSkipPermissions = skipPermissionsCheckbox.state == .on
         settings.agentSandboxEnabled = sandboxCheckbox.state == .on
         settings.ipcPromptInjectionEnabled = ipcInjectionCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func rememberLastTypeToggled() {
+        settings.rememberLastTypeSelection = rememberLastTypeCheckbox.state == .on
         try? persistence.saveSettings(settings)
     }
 

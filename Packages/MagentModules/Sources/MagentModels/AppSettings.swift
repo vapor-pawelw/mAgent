@@ -83,6 +83,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var showTerminalScrollOverlay: Bool
     public var showPromptTOCOverlay: Bool
     public var preserveAgentColorTheme: Bool
+    public var rememberLastTypeSelection: Bool
 
     public init(
         projects: [Project] = [],
@@ -124,7 +125,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showScrollToBottomIndicator: Bool = true,
         showTerminalScrollOverlay: Bool = true,
         showPromptTOCOverlay: Bool = true,
-        preserveAgentColorTheme: Bool = false
+        preserveAgentColorTheme: Bool = false,
+        rememberLastTypeSelection: Bool = true
     ) {
         self.projects = projects
         self.activeAgents = activeAgents
@@ -166,6 +168,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.showTerminalScrollOverlay = showTerminalScrollOverlay
         self.showPromptTOCOverlay = showPromptTOCOverlay
         self.preserveAgentColorTheme = preserveAgentColorTheme
+        self.rememberLastTypeSelection = rememberLastTypeSelection
     }
 
     public init(from decoder: Decoder) throws {
@@ -213,6 +216,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showTerminalScrollOverlay = try container.decodeIfPresent(Bool.self, forKey: .showTerminalScrollOverlay) ?? true
         showPromptTOCOverlay = try container.decodeIfPresent(Bool.self, forKey: .showPromptTOCOverlay) ?? true
         preserveAgentColorTheme = try container.decodeIfPresent(Bool.self, forKey: .preserveAgentColorTheme) ?? false
+        rememberLastTypeSelection = try container.decodeIfPresent(Bool.self, forKey: .rememberLastTypeSelection) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -259,6 +263,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(showTerminalScrollOverlay, forKey: .showTerminalScrollOverlay)
         try container.encode(showPromptTOCOverlay, forKey: .showPromptTOCOverlay)
         try container.encode(preserveAgentColorTheme, forKey: .preserveAgentColorTheme)
+        try container.encode(rememberLastTypeSelection, forKey: .rememberLastTypeSelection)
     }
 
     public var visibleSections: [ThreadSection] {
@@ -399,6 +404,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case showTerminalScrollOverlay
         case showPromptTOCOverlay
         case preserveAgentColorTheme
+        case rememberLastTypeSelection
 
         // Legacy keys kept for migration.
         case agentCommand
