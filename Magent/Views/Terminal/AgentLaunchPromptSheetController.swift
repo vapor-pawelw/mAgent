@@ -389,7 +389,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
               let index = pickerItems.firstIndex(where: { $0.storageRaw == raw }) else {
             return
         }
-        agentPicker.selectItem(at: index)
+        agentPicker.selectItem(withTag: index)
     }
 
     private func applyRecoveryAgentSelection(_ prefill: AgentLaunchSheetPrefill) {
@@ -398,7 +398,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                   if case .agent(let t, _) = $0 { return t == agentType }
                   return false
               }) else { return }
-        agentPicker.selectItem(at: index)
+        agentPicker.selectItem(withTag: index)
     }
 
     private func applyRecoveryPrefill(_ prefill: AgentLaunchSheetPrefill) {
@@ -479,14 +479,16 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         stack.addArrangedSubview(rememberCheckbox)
         stack.setCustomSpacing(4, after: rememberCheckbox)
 
-        // Switch to new thread checkbox
-        switchToNewThreadCheckbox.target = self
-        switchToNewThreadCheckbox.action = #selector(switchToNewThreadCheckboxToggled)
-        switchToNewThreadCheckbox.state = PersistenceService.shared.loadSettings().switchToNewlyCreatedThread ? .on : .off
-        switchToNewThreadCheckbox.font = .systemFont(ofSize: 11)
-        switchToNewThreadCheckbox.contentTintColor = .controlAccentColor
-        stack.addArrangedSubview(switchToNewThreadCheckbox)
-        stack.setCustomSpacing(12, after: switchToNewThreadCheckbox)
+        // Switch to new thread checkbox — only relevant when creating a new thread, not a tab
+        if case .newThread = config.draftScope {
+            switchToNewThreadCheckbox.target = self
+            switchToNewThreadCheckbox.action = #selector(switchToNewThreadCheckboxToggled)
+            switchToNewThreadCheckbox.state = PersistenceService.shared.loadSettings().switchToNewlyCreatedThread ? .on : .off
+            switchToNewThreadCheckbox.font = .systemFont(ofSize: 11)
+            switchToNewThreadCheckbox.contentTintColor = .controlAccentColor
+            stack.addArrangedSubview(switchToNewThreadCheckbox)
+            stack.setCustomSpacing(12, after: switchToNewThreadCheckbox)
+        }
 
         // Prompt label
         promptLabel = makeFormLabel(promptLabelText)
