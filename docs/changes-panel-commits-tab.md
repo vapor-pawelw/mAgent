@@ -10,7 +10,7 @@
   - **Commit subject** — right side, wraps up to 3 lines
   - Tooltip with full `hash subject\nauthor · date`
 - When more commits exist beyond the current page, the list ends with `Load More Commits` (+10 per tap).
-- **Single-clicking "Uncommitted"** selects it (highlighted); the CHANGES tab shows the branch diff file list.
+- **Single-clicking "Uncommitted"** selects it (highlighted); the CHANGES tab shows the working-tree diff file list (vs HEAD, uncommitted only).
 - **Single-clicking a commit** selects it and loads that commit's files in the CHANGES tab (subtitle: `from <hash> · <subject>`).
 - **Double-tapping "Uncommitted" or any commit row** enters **commit detail mode** (see below).
 - Clicking a file in the CHANGES tab opens the inline diff viewer:
@@ -43,7 +43,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 
 ### DiffPanelView
 - `activeTab: DiffPanelTab` — `.commits` (default, left) or `.changes` (right). Tab enum order was flipped from the original: COMMITS is now first.
-- `uncommittedEntries: [FileDiffEntry]` — always the working-tree/branch entries loaded on thread selection.
+- `uncommittedEntries: [FileDiffEntry]` — working-tree entries loaded on thread selection (vs HEAD, uncommitted only). For non-main threads this is fetched via `workingTreeDiffStats`; for the main thread via the same API.
 - `commitEntries: [FileDiffEntry]` — populated by `updateCommitEntries(hash:entries:subject:)` after async load.
 - `selectedCommitHash: String?` — `nil` = "Uncommitted" selected; non-nil = a commit hash. Reset to `nil` on `update()` unless `preserveSelection: true` is passed. `activeTab` is also preserved whenever `preserveSelection: true`, regardless of whether a commit hash is selected.
 - `activeEntries` computed property returns `uncommittedEntries` or `commitEntries` depending on selection.
@@ -83,7 +83,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - **`autoSelectFirst()` and `selectThread(byId:)` must not call the delegate for the same thread**: These methods call `recordSelectedThread` (sets `selectedThreadID`) then `outlineView.selectRowIndexes`, which fires `outlineViewSelectionDidChange` with `selectionChanged = false` → preserve Task B. If the delegate is also called unconditionally (→ no-preserve Task A), and Task A completes after Task B, the panel resets. Fix: check `isNewThread = selectedThreadID != thread.id` before `recordSelectedThread`, and only call the delegate when `isNewThread`.
 - **`commitContextLabel` must be hidden in `rebuildCommitsRows()`**: the label is set in `rebuildChangesRows()` but only explicitly hidden in `commitsTabTapped()` and `clear()`. Adding `commitContextLabel.isHidden = true` at the top of `rebuildCommitsRows()` prevents the label from lingering when a background refresh switches the panel back to the COMMITS tab.
 
-- **Uncommitted detail mode uses `workingTreeDiffStats`, not `uncommittedEntries`**: `uncommittedEntries` holds the branch-wide diff (all files vs. merge-base). The "Uncommitted" detail view intentionally loads `workingTreeDiffStats` (HEAD vs. working tree) separately so it shows only truly uncommitted files, matching user expectation.
+- **`uncommittedEntries` holds working-tree diff only (vs HEAD)**: both the "Uncommitted" row count and the CHANGES tab file list reflect only files not yet committed. For "all branch changes" users can open the diff viewer via the ⓘ button (which uses `diffContent(baseBranch:)`) or browse individual commits in the COMMITS tab.
 - **`forceWorkingTreeDiff` must reload viewer when it changes**: The viewer reload guard checks both `currentDiffCommitHash` and `currentDiffForceWorkingTree`. Without the latter, switching between "Uncommitted" detail mode (force working-tree) and normal CHANGES tab (branch diff) would reuse the wrong diff content.
 - **`resetCommitDetailMode()` does not post `magentHideDiffViewer`**: Cleanup on thread change (via `update()` / `clear()`) must not post hide-viewer — the thread-switch flow handles diff viewer lifecycle separately. Only `backButtonTapped()` posts the hide notification explicitly.
 - **`selectCommit` closes the diff viewer softly**: `deselectFileWithoutHidingViewer()` updates the file row highlight but does not post `magentHideDiffViewer`. The viewer stays visible but its content becomes stale until the user clicks a file. This is intentional — force-closing the viewer on every commit tap would be jarring.
