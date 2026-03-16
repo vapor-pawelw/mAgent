@@ -13,6 +13,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var autoSetDescriptionCheckbox: NSButton!
     private var autoSetIconFromWorkTypeCheckbox: NSButton!
     private var narrowThreadsCheckbox: NSButton!
+    private var autoReorderOnCompletionCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
     var agentContextTextView: NSTextView!
@@ -211,6 +212,21 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         narrowThreadsDesc.font = .systemFont(ofSize: 11)
         narrowThreadsDesc.textColor = NSColor(resource: .textSecondary)
         sidebarSection.addArrangedSubview(narrowThreadsDesc)
+
+        autoReorderOnCompletionCheckbox = NSButton(
+            checkboxWithTitle: "Move completed threads to top",
+            target: self,
+            action: #selector(autoReorderOnCompletionToggled)
+        )
+        autoReorderOnCompletionCheckbox.state = settings.autoReorderThreadsOnAgentCompletion ? .on : .off
+        sidebarSection.addArrangedSubview(autoReorderOnCompletionCheckbox)
+
+        let autoReorderDesc = NSTextField(
+            wrappingLabelWithString: "When an agent finishes, bump the thread to the top of its section."
+        )
+        autoReorderDesc.font = .systemFont(ofSize: 11)
+        autoReorderDesc.textColor = NSColor(resource: .textSecondary)
+        sidebarSection.addArrangedSubview(autoReorderDesc)
 
         let (injectionCard, injectionSection) = createSectionCard(
             title: "Startup Injection",
@@ -640,6 +656,11 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     @objc private func narrowThreadsToggled() {
         settings.narrowThreads = narrowThreadsCheckbox.state == .on
         persistSettings(notify: true)
+    }
+
+    @objc private func autoReorderOnCompletionToggled() {
+        settings.autoReorderThreadsOnAgentCompletion = autoReorderOnCompletionCheckbox.state == .on
+        persistSettings()
     }
 
     func textDidChange(_ notification: Notification) {

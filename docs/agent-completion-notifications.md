@@ -9,6 +9,7 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 - The Dock badge shows the number of non-archived threads that currently have unread completions.
 - Waiting-for-input state does not contribute to the Dock badge.
 - Users can disable the Dock bounce and badge behavior in `Settings > Notifications` without disabling completion banners, sounds, or auto-reorder.
+- The "Move completed threads to top" toggle appears in both `Settings > Notifications` (Agent Completion card) and `Settings > Threads` (Sidebar card).
 
 ## Implementation details
 
