@@ -4,8 +4,8 @@
 
 ### User-Facing Behavior
 
-- Users can delete any non-default section from Settings.
-- The current default section does not show a trash icon.
+- Users can delete any non-default section from Settings **or from the sidebar right-click context menu**.
+- The current default section does not show a trash icon in Settings and is rejected in the sidebar menu with a banner.
 - Changing the default section on the same screen updates which row can be deleted immediately.
 - Deleting a section no longer requires it to be empty first.
 - The confirmation alert warns that threads in the deleted section will be moved to the current default section and shows the number of affected threads.
@@ -15,6 +15,7 @@
 
 - Global section deletion is handled in `SettingsGeneralViewController+Sections.swift`.
 - Project override deletion is handled in `SettingsProjectsViewController+Sections.swift`.
+- **Sidebar deletion** is handled by `deleteSectionFromMenu(_:)` in `ThreadListViewController+ContextMenu.swift`. It reads fresh settings from disk, applies the same guard (count > 1, not default), reassigns threads, then writes back to either project override or global sections depending on which is active.
 - The trash icon visibility is table-row state, not static setup. Row rendering must compare each row against the effective default section every reload.
 - `defaultSectionChanged()` now reloads the sections table in both settings screens so the default row's delete affordance updates immediately.
 - Thread reassignment uses shared helpers in `ThreadManager+SectionOrdering.swift`:
@@ -27,6 +28,31 @@
 - Global section deletion must not sweep up threads from projects that use custom section overrides. Those projects are out of scope for global section membership and reassignment.
 - Effective membership matters more than stored `thread.sectionId`. A thread with an unknown section ID may still currently belong to the default section and therefore count toward the move warning.
 - For project overrides, the undeletable row is the effective default returned by `settings.defaultSection(for:)`, not only `project.defaultSectionId`. When the project inherits global default, the inherited row must still hide the trash icon and reject deletion.
+- **Sidebar deletion must route to the correct section store**: check `settings.projects[i].threadSections != nil` to determine whether to write to the project override or to `settings.threadSections`. Writing to the project index unconditionally when the project has no override would silently create a per-project copy of global sections.
+
+---
+
+## Adding & Color
+
+### User-Facing Behavior
+
+- **Sidebar**: Right-click any section header → "Add Section…" prompts for a name and adds the section with a random color from the predefined palette.
+- **Sidebar**: Right-click any section header → "Change Color…" opens the system NSColorPanel. The color updates live as the slider moves (applied on each `projectSectionColorChanged` callback).
+- **Settings → Projects**: Color dot button in the sections table opens NSColorPanel for the same live-update flow.
+- New sections from the sidebar are always appended at the bottom (highest `sortOrder + 1`).
+- Duplicate names (case-insensitive) are rejected with a banner.
+
+### Implementation Notes
+
+- `addSectionFromMenu(_:)` in `ThreadListViewController+ContextMenu.swift` detects project-vs-global routing the same way as delete: `settings.projects[i].threadSections != nil`.
+- `changeSectionColorFromMenu(_:)` stores the target in `contextMenuSectionColorTarget: (projectId, sectionId)?` on `ThreadListViewController`, sets `self` as NSColorPanel target/action, then brings the panel forward.
+- `sectionContextMenuColorChanged(_:)` handles incremental color panel callbacks and calls `reloadData()` so the sidebar dot updates live.
+- `ThreadSection.randomColorHex()` picks from `ThreadSection.colorPalette` (10 Apple system colors).
+
+### Gotchas
+
+- NSColorPanel is a shared singleton. Always call `panel.setTarget(nil); panel.setAction(nil)` before reassigning target/action to avoid stale callbacks firing on the wrong controller.
+- `contextMenuSectionColorTarget` is never explicitly cleared — it is harmless if stale since `sectionContextMenuColorChanged` does nothing if the section is not found. But if the Settings color picker is opened after the sidebar picker, the Settings controller replaces the panel's target/action, so sidebar color callbacks naturally stop.
 
 ---
 
