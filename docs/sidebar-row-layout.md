@@ -13,7 +13,7 @@ This thread refined the left-rail and spacing rules for project headers, section
   - line 1 (primary): task description when set; otherwise the branch name
   - line 2 (secondary / `subtitleLabel`): branch · worktree when a description is shown; worktree only when no description and the worktree name differs from the branch; hidden otherwise
   - line 3 (PR / `prSubtitleLabel`): PR/MR display label when a pull request is linked; hidden otherwise
-- All thread rows have the same uniform height regardless of whether secondary/PR lines are populated; the three-row vertical stack is center-aligned in the row and rows without content on lower lines will have a little extra vertical padding.
+- All thread rows have the same uniform height regardless of whether secondary/PR lines are populated; the three-row vertical stack is center-aligned in the row. The icon vertically aligns to the visible lines only — when only a single line is shown, the icon is centered on that line.
 - Section headers and the main-thread labels share the same leading text rail.
 - Threads inside sections keep their extra indentation level relative to top-level rows.
 - Project separators sit closer to the following repo name, while the first repo still keeps a visible gap from the very top of the sidebar.
@@ -36,6 +36,6 @@ This thread refined the left-rail and spacing rules for project headers, section
 - Keep the main-row accent bar aligned to `sidebarRowLeadingInset - outlineIndentationPerLevel`; otherwise it drifts away from the section-dot rail.
 - If you change the main-row copy again, preserve the two-line structure unless you also revisit `heightOfRowByItem`.
 - The uniform row height formula in `ThreadCell.uniformSidebarRowHeight` reserves space for `maxDescriptionLines` of description font plus **2** metadata lines (secondary + PR). If you add a fourth line you must update that formula accordingly.
-- `prSubtitleLabel` lives inside `prRow` (a horizontal `NSStackView` with a fixed-width transparent spacer matching the dirty-dot width, to align its text with `subtitleLabel`). Hiding `prSubtitleLabel` does not collapse `prRow` because `verticalStack.detachesHiddenViews` is false — the row simply shows invisible content. This is intentional: the uniform height already budgets for the line.
+- `prSubtitleLabel` lives inside `prRow` (a horizontal `NSStackView` with a fixed-width transparent spacer matching the dirty-dot width, to align its text with `subtitleLabel`). `verticalStack.detachesHiddenViews` is `true`, and `ThreadCell.syncRowVisibility()` hides `prRow`/`secondaryRow` directly when their content is empty. This lets the vertical stack collapse to only the visible lines so the icon centers correctly on single-line rows.
 - Never merge branch/worktree and PR into one secondary line. The PR label belongs exclusively on line 3 (`prSubtitleLabel`).
 - Top spacing before the first repo row is driven by `scrollViewTopConstraint` / `sidebarTopInset`, not by `NSScrollView.contentInsets`.

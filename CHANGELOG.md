@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Thread Settings › Sidebar now has a "Move completed threads to top" checkbox, letting you disable auto-reorder on agent completion without leaving the Threads tab.
 
 ### Sidebar
+- Fixed: the thread icon is now properly vertically centered when a thread row shows only a single line (no subtitle or PR).
 - Sections can now be reordered by drag and drop directly in the sidebar, just like in Settings.
 - "Add Section…" from a section's context menu now inserts the new section immediately below the right-clicked one instead of at the end.
 - Right-clicking the + button next to a project header now shows an agent picker menu to create a thread immediately, without the prompt sheet. Left-click still opens the full sheet.
