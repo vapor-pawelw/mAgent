@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Sidebar
+- Thread rows now show PR/MR info on its own dedicated line below the branch/worktree line, making it easier to scan at a glance. When there's no task description, the branch name is the primary label and the worktree (if different) appears on the secondary line; when a description is set, branch and worktree move to the secondary line and PR stays on its own third line.
 - Fixed: collapsing a section no longer jumps focus to the Main thread. Previously, when the selected thread was inside a just-collapsed section, the sidebar lost the selection and the next background refresh picked the Main thread automatically.
 - Fixed: clicking a section name to trigger a delayed collapse no longer fires if the user selects a thread before the double-click window expires.
 

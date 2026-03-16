@@ -15,6 +15,7 @@ final class ThreadCell: NSTableCellView {
 
     private var prLabel: NSTextField?
     private var subtitleLabel: NSTextField?
+    private var prSubtitleLabel: NSTextField?
     private var jiraImageView: NSImageView?
     private var primaryDirtyDot: NSImageView?
     private var secondaryDirtyDot: NSImageView?
@@ -48,7 +49,7 @@ final class ThreadCell: NSTableCellView {
     static func uniformSidebarRowHeight(maxDescriptionLines: Int) -> CGFloat {
         let clampedDescriptionLines = max(1, maxDescriptionLines)
         let titleBlockHeight = (lineHeight(for: descriptionFont()) * CGFloat(clampedDescriptionLines))
-            + lineHeight(for: metadataFont())
+            + (lineHeight(for: metadataFont()) * 2)
             + primarySecondaryRowSpacing
         let contentHeight = max(
             leadingIconSize,
@@ -109,6 +110,17 @@ final class ThreadCell: NSTableCellView {
         subtitle.isHidden = true
         subtitleLabel = subtitle
 
+        let prSubtitle = NSTextField(labelWithString: "")
+        prSubtitle.translatesAutoresizingMaskIntoConstraints = false
+        prSubtitle.font = Self.metadataFont()
+        prSubtitle.textColor = .secondaryLabelColor
+        prSubtitle.lineBreakMode = .byTruncatingTail
+        prSubtitle.maximumNumberOfLines = 1
+        prSubtitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        prSubtitle.setContentHuggingPriority(.defaultHigh, for: .vertical)
+        prSubtitle.isHidden = true
+        prSubtitleLabel = prSubtitle
+
         iv.removeFromSuperview()
         tf.removeFromSuperview()
 
@@ -133,7 +145,20 @@ final class ThreadCell: NSTableCellView {
         secondaryRow.spacing = 4
         secondaryRow.translatesAutoresizingMaskIntoConstraints = false
 
-        let verticalStack = NSStackView(views: [primaryRow, secondaryRow])
+        // PR row: spacer aligns it with the subtitle text (matching dirty-dot offset).
+        let prDotSpacer = NSView()
+        prDotSpacer.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            prDotSpacer.widthAnchor.constraint(equalToConstant: Self.dirtyDotSize),
+            prDotSpacer.heightAnchor.constraint(equalToConstant: Self.dirtyDotSize),
+        ])
+        let prRow = NSStackView(views: [prDotSpacer, prSubtitle])
+        prRow.orientation = .horizontal
+        prRow.alignment = .centerY
+        prRow.spacing = 4
+        prRow.translatesAutoresizingMaskIntoConstraints = false
+
+        let verticalStack = NSStackView(views: [primaryRow, secondaryRow, prRow])
         verticalStack.orientation = .vertical
         verticalStack.alignment = .leading
         verticalStack.spacing = Self.primarySecondaryRowSpacing
@@ -342,14 +367,12 @@ final class ThreadCell: NSTableCellView {
         let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
         let hasBranchWorktreeMismatch = worktreeName != resolvedBranchName
 
-        var fullSecondaryLineParts = [resolvedBranchName]
+        // Secondary line 1: branch + worktree (no PR).
+        var branchWorktreeParts = [resolvedBranchName]
         if hasBranchWorktreeMismatch {
-            fullSecondaryLineParts.append(worktreeName)
+            branchWorktreeParts.append(worktreeName)
         }
-        if let pr = thread.pullRequestInfo {
-            fullSecondaryLineParts.append(pr.displayLabel)
-        }
-        let fullSecondaryLine = fullSecondaryLineParts.joined(separator: "  ·  ")
+        let branchWorktreeLine = branchWorktreeParts.joined(separator: "  ·  ")
 
         let trimmedDescription = thread.taskDescription?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -368,28 +391,42 @@ final class ThreadCell: NSTableCellView {
         textField?.textColor = showsJiraState && thread.jiraUnassigned ? .tertiaryLabelColor : .labelColor
         textField?.lineBreakMode = .byTruncatingTail
 
+        let prDisplayLabel = thread.pullRequestInfo?.displayLabel
+
         if hasDescription, let description = trimmedDescription {
+            // With description: primary = description, secondary = branch · worktree.
             textField?.stringValue = description
             textField?.maximumNumberOfLines = clampedDescriptionLines
             textField?.lineBreakMode = clampedDescriptionLines > 1 ? .byWordWrapping : .byTruncatingTail
-            subtitleLabel?.stringValue = fullSecondaryLine
+            subtitleLabel?.stringValue = branchWorktreeLine
             subtitleLabel?.textColor = showsJiraState && thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
             subtitleLabel?.isHidden = false
             setDirtyDot(primaryDirtyDot, visible: false)
             setDirtyDot(secondaryDirtyDot, visible: thread.isDirty)
         } else {
-            var singleLineParts = [resolvedBranchName]
-            if hasBranchWorktreeMismatch {
-                singleLineParts.append(worktreeName)
-            }
-            if let pr = thread.pullRequestInfo {
-                singleLineParts.append(pr.displayLabel)
-            }
-            textField?.stringValue = singleLineParts.joined(separator: "  ·  ")
+            // Without description: primary = branch, secondary = worktree only (if different).
+            textField?.stringValue = resolvedBranchName
             textField?.maximumNumberOfLines = 1
-            subtitleLabel?.isHidden = true
+            if hasBranchWorktreeMismatch {
+                subtitleLabel?.stringValue = worktreeName
+                subtitleLabel?.textColor = .secondaryLabelColor
+                subtitleLabel?.isHidden = false
+            } else {
+                subtitleLabel?.stringValue = ""
+                subtitleLabel?.isHidden = true
+            }
             setDirtyDot(primaryDirtyDot, visible: thread.isDirty)
             setDirtyDot(secondaryDirtyDot, visible: false)
+        }
+
+        // Secondary line 2 (PR row): always on its own line when present.
+        if let prLabel = prDisplayLabel {
+            prSubtitleLabel?.stringValue = prLabel
+            prSubtitleLabel?.textColor = .secondaryLabelColor
+            prSubtitleLabel?.isHidden = false
+        } else {
+            prSubtitleLabel?.stringValue = ""
+            prSubtitleLabel?.isHidden = true
         }
 
         let detailedTooltip = buildDetailedTooltip(
@@ -403,6 +440,7 @@ final class ThreadCell: NSTableCellView {
         imageView?.toolTip = detailedTooltip
         textField?.toolTip = detailedTooltip
         subtitleLabel?.toolTip = detailedTooltip
+        prSubtitleLabel?.toolTip = detailedTooltip
         primaryDirtyDot?.toolTip = detailedTooltip
         secondaryDirtyDot?.toolTip = detailedTooltip
 
@@ -569,6 +607,9 @@ final class ThreadCell: NSTableCellView {
                 isUnreadCompletion: isUnreadCompletion
             )
         )
+        prSubtitleLabel?.stringValue = ""
+        prSubtitleLabel?.isHidden = true
+
         toolTip = detailedTooltip
         imageView?.toolTip = detailedTooltip
         textField?.toolTip = detailedTooltip
