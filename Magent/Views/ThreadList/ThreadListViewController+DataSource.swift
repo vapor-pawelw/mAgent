@@ -1036,6 +1036,13 @@ extension ThreadListViewController: ThreadManagerDelegate {
     private func updateSidebarInPlace(with updatedThreads: [MagentThread]) {
         let threadById = Dictionary(uniqueKeysWithValues: updatedThreads.map { ($0.id, $0) })
 
+        // reloadItem(_:reloadChildren:true) calls shouldExpandItem for any currently-expanded
+        // sections so NSOutlineView can decide whether to keep them open. The strict guard
+        // in shouldExpandItem returns false unless allowsProgrammaticOutlineDisclosureChanges
+        // is set, which would silently collapse expanded sections on every in-place refresh.
+        allowsProgrammaticOutlineDisclosureChanges = true
+        defer { allowsProgrammaticOutlineDisclosureChanges = false }
+
         for project in sidebarProjects {
             for i in project.children.indices {
                 if let thread = project.children[i] as? MagentThread,
