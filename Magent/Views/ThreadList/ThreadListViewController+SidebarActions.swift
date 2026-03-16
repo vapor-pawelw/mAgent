@@ -611,6 +611,25 @@ extension ThreadListViewController {
         refreshBranchMismatchView(for: thread)
     }
 
+    // MARK: - Commit Detail Mode
+
+    func handleCommitDoubleTapped(_ commitHash: String?, title: String) {
+        guard let thread = selectedThreadFromState() else { return }
+        let worktreePath = thread.worktreePath
+        Task {
+            let entries: [FileDiffEntry]
+            if let hash = commitHash {
+                entries = await GitService.shared.commitDiffStats(worktreePath: worktreePath, commitHash: hash)
+            } else {
+                entries = await GitService.shared.workingTreeDiffStats(worktreePath: worktreePath)
+            }
+            await MainActor.run {
+                guard self.selectedThreadID == thread.id else { return }
+                self.diffPanelView.enterCommitDetailMode(hash: commitHash, title: title, entries: entries)
+            }
+        }
+    }
+
     // MARK: - Branch Mismatch
 
     func refreshBranchMismatchView(for thread: MagentThread) {
