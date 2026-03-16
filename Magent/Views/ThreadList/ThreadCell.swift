@@ -27,6 +27,8 @@ final class ThreadCell: NSTableCellView {
     private var statusSlotView: NSView?
     private var trailingStackView: NSStackView?
     private weak var leadingTextStackView: NSStackView?
+    private weak var secondaryRowStack: NSStackView?
+    private weak var prRowStack: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
     private var mainAccentBar: NSView?
     private var hasInstalledTextTrailingConstraint = false
@@ -164,9 +166,12 @@ final class ThreadCell: NSTableCellView {
         verticalStack.orientation = .vertical
         verticalStack.alignment = .leading
         verticalStack.spacing = Self.primarySecondaryRowSpacing
+        verticalStack.detachesHiddenViews = true
         verticalStack.translatesAutoresizingMaskIntoConstraints = false
         verticalStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         verticalStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        secondaryRowStack = secondaryRow
+        prRowStack = prRow
         leadingTextStackView = verticalStack
 
         let stack = NSStackView(views: [iv, verticalStack])
@@ -570,6 +575,7 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.isHidden = true
         }
 
+        syncRowVisibility()
         showsRenamePulse = isAutoRenaming
         applyRenamePulse(isAutoRenaming)
     }
@@ -711,6 +717,17 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
         }
+
+        syncRowVisibility()
+    }
+
+    private func syncRowVisibility() {
+        let subtitleVisible = !(subtitleLabel?.isHidden ?? true)
+        let secondaryDotVisible = !(secondaryDirtyDot?.isHidden ?? true)
+        secondaryRowStack?.isHidden = !subtitleVisible && !secondaryDotVisible
+
+        let prVisible = !(prSubtitleLabel?.isHidden ?? true)
+        prRowStack?.isHidden = !prVisible
     }
 
     private func setDirtyDot(_ dot: NSImageView?, visible: Bool) {
