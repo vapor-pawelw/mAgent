@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Fixed: clicking a section name to trigger a delayed collapse no longer fires if the user selects a thread before the double-click window expires.
 
 ### Thread
+- Fixed: "Rename with AI" from the prompt TOC and context menu no longer fails when the preferred agent is rate-limited; it now falls back to the next available agent automatically.
 - New "Switch to new thread" checkbox in the new-thread sheet (default: on): uncheck it to create a thread in the background without switching focus to it. The preference is remembered across sessions. The CLI gains a matching `--no-select` flag for `create-thread`.
 - Fixed: "Switch to new thread" checkbox no longer appears in the Add Tab sheet, where it has no effect.
 - Fixed: selecting Terminal in the agent picker was not remembered correctly on next open due to a separator item offset; the saved selection now restores reliably.
