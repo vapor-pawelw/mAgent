@@ -30,6 +30,9 @@ final class ThreadCell: NSTableCellView {
     private var mainAccentBar: NSView?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
+    private var showsRenamePulse = false
+
+    private static let renamePulseAnimationKey = "rename-label-pulse"
 
     var onArchive: (() -> Void)?
 
@@ -85,6 +88,9 @@ final class ThreadCell: NSTableCellView {
         if window != nil, let spinner = busySpinner, !spinner.isHidden {
             spinner.startAnimation(nil)
         }
+        if window != nil, showsRenamePulse {
+            applyRenamePulse(true)
+        }
     }
 
     /// Reparents imageView and textField into a horizontal stack.
@@ -117,6 +123,7 @@ final class ThreadCell: NSTableCellView {
             iv.heightAnchor.constraint(equalToConstant: Self.leadingIconSize),
         ])
 
+        tf.wantsLayer = true
         tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         tf.lineBreakMode = .byTruncatingTail
         tf.maximumNumberOfLines = 1
@@ -211,6 +218,29 @@ final class ThreadCell: NSTableCellView {
 
     private func setSidebarHiddenAppearance(_ isHiddenInSidebar: Bool) {
         alphaValue = isHiddenInSidebar ? 0.5 : 1.0
+    }
+
+    private func applyRenamePulse(_ active: Bool) {
+        guard let tf = textField else { return }
+        tf.layer?.removeAnimation(forKey: Self.renamePulseAnimationKey)
+        if active {
+            tf.textColor = .controlAccentColor
+            guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                  window != nil else {
+                tf.layer?.opacity = 1.0
+                return
+            }
+            let anim = CABasicAnimation(keyPath: "opacity")
+            anim.fromValue = 1.0
+            anim.toValue = 0.3
+            anim.autoreverses = true
+            anim.duration = 1.2
+            anim.repeatCount = .infinity
+            anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            tf.layer?.add(anim, forKey: Self.renamePulseAnimationKey)
+        } else {
+            tf.layer?.opacity = 1.0
+        }
     }
 
     private func ensureTrailingStack() {
@@ -327,7 +357,8 @@ final class ThreadCell: NSTableCellView {
         with thread: MagentThread,
         sectionColor: NSColor?,
         leadingOffset: CGFloat = 0,
-        maxDescriptionLines: Int = 2
+        maxDescriptionLines: Int = 2,
+        isAutoRenaming: Bool = false
     ) {
         isConfiguredAsMain = false
         ensureTrailingStack()
@@ -505,6 +536,9 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
         }
+
+        showsRenamePulse = isAutoRenaming
+        applyRenamePulse(isAutoRenaming)
     }
 
     func configureAsMain(

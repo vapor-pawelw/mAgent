@@ -853,7 +853,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 with: thread,
                 sectionColor: sectionColor,
                 leadingOffset: threadLeadingOffset(for: thread, in: outlineView),
-                maxDescriptionLines: settings.sidebarDescriptionLineLimit
+                maxDescriptionLines: settings.sidebarDescriptionLineLimit,
+                isAutoRenaming: threadManager.autoRenameInProgress.contains(thread.id)
             )
             cell.onArchive = { [weak self] in
                 self?.triggerArchive(for: thread)
