@@ -31,11 +31,26 @@ extension ThreadManager {
 
     func refreshDirtyStates() async {
         let snapshot = threads.filter { !$0.isArchived }
+        // Run all git-status checks concurrently — sequential per-thread awaits add up fast
+        // with many threads. GitService is Sendable so safe to call from child tasks.
+        var dirtyById: [UUID: Bool] = [:]
+        await withTaskGroup(of: (UUID, Bool).self) { group in
+            for thread in snapshot {
+                let path = thread.worktreePath
+                let id = thread.id
+                group.addTask {
+                    let dirty = await self.git.isDirty(worktreePath: path)
+                    return (id, dirty)
+                }
+            }
+            for await (id, dirty) in group {
+                dirtyById[id] = dirty
+            }
+        }
         var changed = false
         var persistedChanged = false
-        for thread in snapshot {
-            let dirty = await git.isDirty(worktreePath: thread.worktreePath)
-            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
+        for (id, dirty) in dirtyById {
+            guard let i = threads.firstIndex(where: { $0.id == id }) else { continue }
             if threads[i].isDirty != dirty {
                 threads[i].isDirty = dirty
                 changed = true
@@ -55,6 +70,27 @@ extension ThreadManager {
                 delegate?.threadManager(self, didUpdateThreads: threads)
             }
         }
+    }
+
+    /// Refreshes the dirty state for a single thread. Returns true if the value changed.
+    @discardableResult
+    func refreshDirtyState(for threadId: UUID) async -> Bool {
+        guard let idx = threads.firstIndex(where: { $0.id == threadId }),
+              !threads[idx].isArchived else { return false }
+        let thread = threads[idx]
+        let dirty = await git.isDirty(worktreePath: thread.worktreePath)
+        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { return false }
+        var changed = false
+        if threads[i].isDirty != dirty {
+            threads[i].isDirty = dirty
+            changed = true
+        }
+        if dirty && !threads[i].isMain && !threads[i].hasEverDoneWork {
+            threads[i].hasEverDoneWork = true
+            try? persistence.saveActiveThreads(threads)
+            changed = true
+        }
+        return changed
     }
 
     // MARK: - Delivered State
@@ -224,33 +260,56 @@ extension ThreadManager {
     func refreshBranchStates() async {
         let settings = persistence.loadSettings()
         let snapshot = threads.filter { !$0.isArchived }
+
+        struct BranchResult {
+            let id: UUID
+            let actual: String?
+            let detectedDefault: String?  // only set for main threads without a configured default
+        }
+
+        // Run all getCurrentBranch (and detectDefaultBranch for main threads) concurrently.
+        var results: [BranchResult] = []
+        await withTaskGroup(of: BranchResult?.self) { group in
+            for thread in snapshot {
+                let worktreePath = thread.worktreePath
+                guard FileManager.default.fileExists(atPath: worktreePath) else { continue }
+                let id = thread.id
+                let isMain = thread.isMain
+                let projectDefault = settings.projects
+                    .first(where: { $0.id == thread.projectId })?.defaultBranch
+                group.addTask {
+                    let actual = await self.git.getCurrentBranch(workingDirectory: worktreePath)
+                    var detectedDefault: String? = nil
+                    if isMain && (projectDefault == nil || projectDefault!.isEmpty) {
+                        detectedDefault = await self.git.detectDefaultBranch(repoPath: worktreePath)
+                    }
+                    return BranchResult(id: id, actual: actual, detectedDefault: detectedDefault)
+                }
+            }
+            for await result in group {
+                if let result { results.append(result) }
+            }
+        }
+
         var changed = false
         var persistedChanged = false
-        for thread in snapshot {
-            let worktreePath = thread.worktreePath
-            guard FileManager.default.fileExists(atPath: worktreePath) else { continue }
-
-            let actual = await git.getCurrentBranch(workingDirectory: worktreePath)
+        for result in results {
+            guard let i = threads.firstIndex(where: { $0.id == result.id }) else { continue }
 
             let expected: String?
-            if thread.isMain {
-                if let project = settings.projects.first(where: { $0.id == thread.projectId }),
+            if threads[i].isMain {
+                if let project = settings.projects.first(where: { $0.id == threads[i].projectId }),
                    let defaultBranch = project.defaultBranch, !defaultBranch.isEmpty {
                     expected = defaultBranch
-                } else if let detected = await git.detectDefaultBranch(repoPath: worktreePath) {
-                    expected = detected
                 } else {
-                    expected = nil
+                    expected = result.detectedDefault
                 }
             } else {
-                expected = thread.branchName
+                expected = threads[i].branchName
             }
 
-            // Re-lookup after await — the thread may have been removed
-            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
             if !threads[i].isMain,
-               let actual,
-               !actual.isEmpty,
+               let actual = result.actual, !actual.isEmpty,
                threads[i].branchName != actual {
                 threads[i].branchName = actual
                 persistedChanged = true
@@ -258,16 +317,16 @@ extension ThreadManager {
 
             let resolvedExpected = threads[i].isMain ? expected : threads[i].branchName
             let mismatch: Bool
-            if threads[i].isMain, let resolvedExpected, let actual {
+            if threads[i].isMain, let resolvedExpected, let actual = result.actual {
                 mismatch = actual != resolvedExpected
             } else {
                 mismatch = false
             }
 
-            if threads[i].actualBranch != actual
+            if threads[i].actualBranch != result.actual
                 || threads[i].expectedBranch != resolvedExpected
                 || threads[i].hasBranchMismatch != mismatch {
-                threads[i].actualBranch = actual
+                threads[i].actualBranch = result.actual
                 threads[i].expectedBranch = resolvedExpected
                 threads[i].hasBranchMismatch = mismatch
                 changed = true
