@@ -57,6 +57,16 @@ extension ThreadManager {
         return false
     }
 
+    /// Checks whether captured pane content contains an interactive shell blocker
+    /// (e.g. an oh-my-zsh update prompt, homebrew yes/no, "press any key" pause).
+    /// Used to distinguish a timed-out agent-readiness wait from a blocked shell.
+    func detectsInteractiveShellBlocker(_ content: String) -> Bool {
+        let blockerPatterns = ["[Y/n]", "[y/N]", "[y/n]", "[N/y]", "[n/Y]",
+                               "(Y/n)", "(y/N)", "(y/n)", "(N/y)",
+                               "Press any key", "press any key"]
+        return blockerPatterns.contains { content.contains($0) }
+    }
+
     /// Checks whether captured pane content indicates the agent is ready,
     /// using agent-specific signals.
     func isAgentContentReady(_ content: String, agentType: AgentType?) -> Bool {
@@ -109,7 +119,37 @@ extension ThreadManager {
                 // submitting as a first prompt that blocks the real one.
                 // Wait for the agent TUI to be ready before sending the prompt.
                 NotificationCenter.default.post(name: .magentAgentInjectionStarted, object: nil, userInfo: ["sessionName": sessionName])
-                _ = await waitForAgentReady(sessionName: sessionName, agentType: agentType)
+                let agentReady = await waitForAgentReady(sessionName: sessionName, agentType: agentType)
+                if !agentReady {
+                    // Timed out — check whether an interactive shell prompt is blocking startup
+                    // (e.g. an oh-my-zsh update prompt, homebrew yes/no, "press any key").
+                    // If so, abort injection and let the user know rather than sending the
+                    // prompt text into the wrong context.
+                    let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
+                    if detectsInteractiveShellBlocker(paneContent) {
+                        let prompt = initialPrompt!
+                        await MainActor.run {
+                            BannerManager.shared.show(
+                                message: "Initial prompt not sent — shell is waiting for user input. Answer the prompt in the terminal, then retry.",
+                                style: .warning,
+                                duration: nil,
+                                isDismissible: true,
+                                actions: [BannerAction(title: "Retry") { [weak self] in
+                                    // Re-inject without re-running the terminal command
+                                    self?.injectAfterStart(
+                                        sessionName: sessionName,
+                                        terminalCommand: "",
+                                        agentContext: agentContext,
+                                        initialPrompt: prompt,
+                                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                                        agentType: agentType
+                                    )
+                                }]
+                            )
+                        }
+                        return
+                    }
+                }
                 // Send text and Enter separately — the Enter key gets lost if sent in the
                 // same send-keys call while the TUI is still processing buffered input.
                 // Poll until the pasted text is visible in the pane instead of using a

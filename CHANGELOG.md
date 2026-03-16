@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Thread
+- Initial prompts are now protected against interactive shell blockers (e.g. an oh-my-zsh update prompt): if the agent doesn't become ready within the timeout and the pane shows a yes/no prompt, Magent aborts injection and shows a warning banner with a Retry button instead of sending the text into the wrong context.
+
 ### Onboarding
 - Missing dependencies (git, tmux) now show an "Install..." button: clicking it triggers the Xcode Command Line Tools installer for git, or opens a Terminal window running `brew install tmux` for tmux. A "Re-check" button appears below the list to re-verify after installing.
 - The "Add Project" step now includes a brief explanation of how git worktrees work and how Magent uses them — one isolated checkout per branch per thread.
