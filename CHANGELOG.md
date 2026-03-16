@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
 - Fixed: clicking a section name to trigger a delayed collapse no longer fires if the user selects a thread before the double-click window expires.
 
 ### Thread
+- Auto-rename AI calls now wait up to 30 seconds per agent (previously 15 s), giving slower models more headroom before timing out.
 - Right-clicking the + button next to tabs now shows an agent picker menu (project default, individual agents, terminal) to create a tab immediately without the prompt sheet. Left-click still opens the full sheet.
 
 - Undo (⌘Z) and redo (⌘⇧Z) now work reliably in the initial prompt text field.
