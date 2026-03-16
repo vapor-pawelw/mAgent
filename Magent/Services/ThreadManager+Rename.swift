@@ -193,7 +193,7 @@ extension ThreadManager {
                 return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
                 return nil
             }
             // Return whichever finishes first
@@ -259,7 +259,7 @@ extension ThreadManager {
                 return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
                 return nil
             }
             let first = await group.next() ?? nil
@@ -836,7 +836,7 @@ extension ThreadManager {
                 return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
                 return nil
             }
             let first = await group.next() ?? nil
