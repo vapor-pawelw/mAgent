@@ -611,7 +611,13 @@ final class ThreadListViewController: NSViewController {
             }
         }
         if let selectedThreadId, !restoredSelection, self.selectedThreadID == selectedThreadId {
-            self.selectedThreadID = nil
+            // Only clear the selection if the thread is truly gone (archived/deleted).
+            // If it's just hidden inside a collapsed section it's still valid — keep the
+            // controller's selection pointer so the next reload can restore it.
+            let threadStillExists = threadManager.threads.contains { $0.id == selectedThreadId }
+            if !threadStillExists {
+                self.selectedThreadID = nil
+            }
         }
 
         restoreSidebarScrollSnapshot(scrollSnapshot)

@@ -893,6 +893,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         // directly with preserveSelection:true after reloadData() completes.
         guard !isReloadingData else { return }
 
+        // Cancel any pending single-click section-name toggle. If the user clicked a section
+        // name and then immediately selected a thread, the scheduled toggle would fire ~0.5 s
+        // later and unexpectedly collapse/expand the section.
+        cancelPendingSectionNameToggle()
+
         let row = outlineView.selectedRow
         guard row >= 0,
               let thread = outlineView.item(atRow: row) as? MagentThread else {
@@ -958,8 +963,11 @@ extension ThreadListViewController: ThreadManagerDelegate {
             updateSidebarInPlace(with: threads)
         }
 
-        // If nothing is selected after reload (e.g. first launch), pick the first thread
-        if outlineView.selectedRow < 0 {
+        // If nothing is selected after reload (e.g. first launch), pick the first thread.
+        // Guard against calling autoSelectFirst() when the selected thread is merely hidden
+        // inside a collapsed section — outlineView.selectedRow is -1 in that case too, but
+        // selectedThreadFromState() still returns the thread (it exists in threadManager.threads).
+        if outlineView.selectedRow < 0, selectedThreadFromState() == nil {
             autoSelectFirst()
         }
 
