@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Thread
+- New "Switch to new thread" checkbox in the new-thread sheet (default: on): uncheck it to create a thread in the background without switching focus to it. The preference is remembered across sessions. The CLI gains a matching `--no-select` flag for `create-thread`.
 - Initial prompts are now protected against interactive shell blockers (e.g. an oh-my-zsh update prompt): if the agent doesn't become ready within the timeout and the pane shows a yes/no prompt, Magent aborts injection and shows a warning banner with a Retry button instead of sending the text into the wrong context.
 
 ### Onboarding
