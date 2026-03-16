@@ -353,20 +353,31 @@ extension ThreadManager {
             throw ThreadManagerError.invalidPrompt
         }
 
-        let selectedAgent = preferredAgent ?? effectiveAgentType(for: currentThread.projectId)
+        let resolvedPreferred = preferredAgent ?? effectiveAgentType(for: currentThread.projectId)
+        let agentOrder = slugGenerationAgentOrder(preferred: resolvedPreferred, projectId: currentThread.projectId)
         let cKey = promptCacheKey(for: trimmedPrompt)
-        let payloadResult: FirstPromptRenameAttemptResult
+        var payloadResult: FirstPromptRenameAttemptResult = .failed
         if let cached = promptRenameResultCache[currentThread.id]?[cKey] {
             // Cache hit — reuse previous AI result without another agent call.
             payloadResult = cached.slug.map { .generated(slug: $0, taskDescription: cached.taskDescription) } ?? .question
         } else {
-            let result = await generateFirstPromptRenamePayloadViaAgent(
-                from: trimmedPrompt,
-                agentType: selectedAgent,
-                projectId: currentThread.projectId
-            )
-            cacheRenameResult(result, threadId: currentThread.id, cacheKey: cKey)
-            payloadResult = result
+            for candidateAgent in agentOrder.available {
+                let result = await generateFirstPromptRenamePayloadViaAgent(
+                    from: trimmedPrompt,
+                    agentType: candidateAgent,
+                    projectId: currentThread.projectId
+                )
+                cacheRenameResult(result, threadId: currentThread.id, cacheKey: cKey)
+                switch result {
+                case .generated:
+                    payloadResult = result
+                case .question:
+                    payloadResult = result
+                case .failed:
+                    continue
+                }
+                break
+            }
         }
 
         let slug: String
