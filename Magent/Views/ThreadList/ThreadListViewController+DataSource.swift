@@ -1040,5 +1040,17 @@ extension ThreadListViewController: ThreadManagerDelegate {
             }
             outlineView.reloadItem(project, reloadChildren: true)
         }
+
+        // reloadItem(_:reloadChildren:true) clears NSOutlineView's visual selection.
+        // The outlineViewSelectionDidChange guard bails early (selectedThreadFromState()
+        // is still set), so the controller state is intact — just re-sync the highlight.
+        if outlineView.selectedRow < 0, let selectedId = selectedThreadID {
+            for row in 0..<outlineView.numberOfRows {
+                if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == selectedId {
+                    outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                    break
+                }
+            }
+        }
     }
 }
