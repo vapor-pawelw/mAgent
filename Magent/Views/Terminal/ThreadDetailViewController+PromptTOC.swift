@@ -279,14 +279,30 @@ extension ThreadDetailViewController {
             var endLineIndex = lineIndex
             var continuationIndex = lineIndex + 1
 
-            while continuationIndex < lines.count,
-                  let continuation = promptContinuationText(from: lines[continuationIndex], markers: markers) {
-                promptLines.append(continuation)
-                endLineIndex = continuationIndex
-                continuationIndex += 1
+            while continuationIndex < lines.count {
+                let contLine = lines[continuationIndex]
+                if let continuation = promptContinuationText(from: contLine, markers: markers) {
+                    promptLines.append(continuation)
+                    endLineIndex = continuationIndex
+                    continuationIndex += 1
+                } else if contLine.plainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // Blank line between paragraphs — look ahead: keep going only if the next
+                    // non-blank line would still be a valid continuation (2+ spaces, no marker).
+                    let peekIndex = continuationIndex + 1
+                    if peekIndex < lines.count,
+                       promptContinuationText(from: lines[peekIndex], markers: markers) != nil {
+                        promptLines.append("")
+                        endLineIndex = continuationIndex
+                        continuationIndex += 1
+                    } else {
+                        break
+                    }
+                } else {
+                    break
+                }
             }
 
-            let displayPromptText = promptLines.joined(separator: " ")
+            let displayPromptText = promptLines.filter { !$0.isEmpty }.joined(separator: " ")
             guard !displayPromptText.isEmpty else {
                 lineIndex = continuationIndex
                 continue
@@ -676,7 +692,6 @@ extension ThreadDetailViewController {
         let trimmed = plainText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         guard !isBottomPinnedAuxiliaryLine(trimmed) else { return nil }
-        guard !line.rawText.contains("\u{001B}") else { return nil }
 
         let leftTrimmed = plainText.drop(while: { $0.isWhitespace })
         let leftTrimmedText = String(leftTrimmed)

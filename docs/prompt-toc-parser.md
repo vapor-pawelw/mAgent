@@ -52,6 +52,21 @@ Position is always normalized relative to `promptTOCExpandedSize` (not the curre
 - TOC navigation uses `history-top` + `scroll-down lineIndex`. `scroll-down` moves the viewport 1 line toward newer content regardless of cursor position. After `history-top` (viewport top = 0) + `lineIndex` scroll-downs, viewport top = `lineIndex`. ✓ This is race-condition-free (depends only on `lineIndex`, which is stable — lines above it never shift) and doesn't require querying `history_size` or `pane_height`. All commands are chained with tmux's `\;` separator in a single IPC message so the server processes them atomically — preventing a visible intermediate flash to the top of history.
 - `captureFullPane` must return the **raw, untrimmed** stdout. Leading empty lines are part of the copy-mode coordinate space (history-top = line 0) and must not be stripped. Trailing newlines produce one harmless trailing empty element in the split that no prompt marker can match. Any trimming of leading content shifts all split array indexes and causes `scroll-down` to land at the wrong position.
 
+## Multi-line prompt capture
+
+When a user submits a multi-line prompt (e.g. a context-setting block with separate paragraphs), Claude's TUI renders the continuation lines with ANSI color codes and separates paragraphs with bare blank lines (`\n\n` — no ANSI). The parser collects continuation lines via `promptContinuationText` and the surrounding loop in `parsePromptCandidates`.
+
+**Two gotchas fixed:**
+
+1. **Continuation lines have ANSI.** Claude's TUI wraps every line of a submitted prompt in `\e[38;2;255;255;255m…\e[39m` (bright-white foreground/reset). The original `guard !rawText.contains("\u{001B}")` in `promptContinuationText` rejected every one of them. Removed: `plainText` (already ANSI-stripped) is used for all structural checks; the indentation requirement (≥2 leading spaces) is the guard against accidentally capturing agent output, which starts at column 0.
+
+2. **Blank paragraph separators.** Multi-paragraph prompts separate blocks with bare `\n\n`. In the parsed line array these become entries whose `plainText.trimmed` is empty → the old loop exited immediately. The continuation loop now does a one-step lookahead when it hits a blank line: if the next line would be a valid continuation (2+ spaces, no marker), the blank is bridged (stored as `""`) and collection continues; otherwise the loop exits. The `""` entries are filtered out for `displayPromptText` but kept in `fullPromptText` (joined with `"\n"`) so the slug-generation agent receives the full paragraph structure.
+
+**Why this is safe against false positives:**
+- Agent response lines (`⏺ …`) start at column 0 → fail the ≥2-space guard → break the chain immediately.
+- Tool result lines (`  ⎿ …`) have 2+ spaces but always follow a `⏺` line which already broke the chain.
+- A blank line is only bridged if the line after it also passes the continuation check. If the blank is followed by a column-0 agent line, the lookahead fails and the loop exits.
+
 ## Claude Code gotchas
 
 - Current Claude Code sessions can render real submitted prompt text as dim white. Do not reject Claude prompts just because the text is dim.
