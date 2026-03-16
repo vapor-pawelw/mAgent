@@ -182,8 +182,12 @@ extension ThreadManager {
             command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
         default:
             // Use claude for .claude, .custom, and nil (claude is a prerequisite for this app)
+            // --tools "" prevents any tool invocations, keeping the response purely textual.
+            // --setting-sources "" skips loading CLAUDE.md/AGENTS.md entirely so the system
+            // prompt stays minimal — large workspace instruction files were the primary cause
+            // of slug-generation calls timing out.
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence"
+            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\""
         }
 
         let result: String? = await withTaskGroup(of: String?.self) { group in
@@ -193,7 +197,9 @@ extension ThreadManager {
                 return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                // 60 s budget: when the project has a large CLAUDE.md/AGENTS.md the haiku API
+                // call can easily exceed 30 s due to the increased system-prompt context size.
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
                 return nil
             }
             // Return whichever finishes first
@@ -249,7 +255,7 @@ extension ThreadManager {
             command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
         default:
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence"
+            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\""
         }
 
         let result: String? = await withTaskGroup(of: String?.self) { group in
@@ -259,7 +265,7 @@ extension ThreadManager {
                 return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
                 return nil
             }
             let first = await group.next() ?? nil
@@ -826,7 +832,7 @@ extension ThreadManager {
             command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
         default:
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence"
+            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\""
         }
 
         let result: String? = await withTaskGroup(of: String?.self) { group in
@@ -836,7 +842,7 @@ extension ThreadManager {
                 return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
                 return nil
             }
             let first = await group.next() ?? nil
