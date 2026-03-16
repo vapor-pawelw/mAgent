@@ -602,8 +602,12 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 addButton.image = plusImage ?? NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Thread")
                 addButton.contentTintColor = .controlAccentColor
                 addButton.objectValue = project.projectId.uuidString
-                addButton.toolTip = "Add thread to \(project.name). Option-click to use project default (or Terminal if no agent is active)."
+                addButton.toolTip = "Add thread to \(project.name). Right-click for agent options. Option-click to use project default."
                 addButton.isEnabled = !isCreatingThread
+                let settings = persistence.loadSettings()
+                if let fullProject = settings.projects.first(where: { $0.id == project.projectId }) {
+                    addButton.menu = buildAgentSubmenu(for: fullProject)
+                }
             }
             if project.isPinned {
                 cell.imageView?.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")

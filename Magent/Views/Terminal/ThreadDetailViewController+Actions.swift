@@ -569,3 +569,35 @@ extension ThreadDetailViewController {
     }
 
 }
+
+// MARK: - Add Tab Context Menu
+
+extension ThreadDetailViewController: NSMenuDelegate {
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === addTabButton.menu else { return }
+        menu.removeAllItems()
+        let settings = PersistenceService.shared.loadSettings()
+        AgentMenuBuilder.populate(
+            menu: menu,
+            menuTitle: "New Tab",
+            defaultAgentName: threadManager.effectiveAgentType(for: thread.projectId)?.displayName,
+            activeAgents: settings.availableActiveAgents,
+            target: self,
+            action: #selector(addTabContextMenuItemSelected(_:))
+        )
+    }
+
+    @objc private func addTabContextMenuItemSelected(_ sender: NSMenuItem) {
+        guard let selection = AgentMenuBuilder.parseSelection(from: sender) else { return }
+        switch selection.mode {
+        case .terminal:
+            addTab(using: nil, useAgentCommand: false)
+        case .agent(let agentType):
+            addTab(using: agentType, useAgentCommand: true)
+        case .projectDefault:
+            addTab(using: nil, useAgentCommand: true)
+        }
+    }
+
+}

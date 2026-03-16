@@ -347,6 +347,9 @@ final class ThreadDetailViewController: NSViewController {
         addTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Tab")
         addTabButton.target = self
         addTabButton.action = #selector(addTabTapped)
+        let addTabContextMenu = NSMenu()
+        addTabContextMenu.delegate = self
+        addTabButton.menu = addTabContextMenu
         updatePromptTOCToggleButtonState(canShow: false)
 
         let separator = VerticalSeparatorView()

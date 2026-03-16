@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Sidebar
+- Right-clicking the + button next to a project header now shows an agent picker menu to create a thread immediately, without the prompt sheet. Left-click still opens the full sheet.
 - Right-clicking a section header now shows a context menu to add a new section, delete the section, or change its color. New sections get a random color from the palette. Color changes are reflected immediately via the system color picker.
 - Fixed: the selected thread no longer loses its highlight every few seconds due to background metadata refreshes (git status, branch state, busy state).
 - Thread rows now show PR/MR info on its own dedicated line below the branch/worktree line, making it easier to scan at a glance. When there's no task description, the branch name is the primary label and the worktree (if different) appears on the secondary line; when a description is set, branch and worktree move to the secondary line and PR stays on its own third line.
@@ -15,6 +16,8 @@ All notable changes to this project will be documented in this file.
 - Fixed: clicking a section name to trigger a delayed collapse no longer fires if the user selects a thread before the double-click window expires.
 
 ### Thread
+- Right-clicking the + button next to tabs now shows an agent picker menu (project default, individual agents, terminal) to create a tab immediately without the prompt sheet. Left-click still opens the full sheet.
+
 - Undo (⌘Z) and redo (⌘⇧Z) now work reliably in the initial prompt text field.
 - The Review button (eye icon) is now always visible on non-main threads, including those marked as fully delivered.
 - Fixed: "Rename with AI" from the prompt TOC and context menu no longer fails when the preferred agent is rate-limited; it now falls back to the next available agent automatically.
