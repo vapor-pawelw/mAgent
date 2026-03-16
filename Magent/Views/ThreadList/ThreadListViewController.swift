@@ -109,6 +109,7 @@ final class ThreadListViewController: NSViewController {
     var activeSectionRename: (projectId: UUID, sectionId: UUID, originalName: String)?
     var pendingSectionNameToggleWorkItem: DispatchWorkItem?
     var pendingSectionNameToggleKey: String?
+    var contextMenuSectionColorTarget: (projectId: UUID, sectionId: UUID)?
     /// Project IDs that have at least one recognized git hosting remote (GitHub/GitLab/Bitbucket).
     var projectsWithValidRemotes: Set<UUID> = []
     private var lastFittedOutlineWidth: CGFloat = 0

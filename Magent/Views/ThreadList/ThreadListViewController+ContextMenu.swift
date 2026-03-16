@@ -379,15 +379,37 @@ extension ThreadListViewController {
     private func buildSectionContextMenu(for section: SidebarSection) -> NSMenu {
         let menu = NSMenu()
 
-        let renameItem = NSMenuItem(title: "Rename Section", action: #selector(renameSectionFromMenu(_:)), keyEquivalent: "")
-        renameItem.target = self
-        renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
-        renameItem.representedObject = [
+        let sectionInfo: [String: String] = [
             "projectId": section.projectId.uuidString,
             "sectionId": section.sectionId.uuidString,
             "sectionName": section.name,
         ]
+
+        let renameItem = NSMenuItem(title: "Rename Section", action: #selector(renameSectionFromMenu(_:)), keyEquivalent: "")
+        renameItem.target = self
+        renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
+        renameItem.representedObject = sectionInfo
         menu.addItem(renameItem)
+
+        let colorItem = NSMenuItem(title: "Change Color…", action: #selector(changeSectionColorFromMenu(_:)), keyEquivalent: "")
+        colorItem.target = self
+        colorItem.image = NSImage(systemSymbolName: "paintpalette", accessibilityDescription: nil)
+        colorItem.representedObject = sectionInfo
+        menu.addItem(colorItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let addItem = NSMenuItem(title: "Add Section…", action: #selector(addSectionFromMenu(_:)), keyEquivalent: "")
+        addItem.target = self
+        addItem.image = NSImage(systemSymbolName: "plus.circle", accessibilityDescription: nil)
+        addItem.representedObject = sectionInfo
+        menu.addItem(addItem)
+
+        let deleteItem = NSMenuItem(title: "Delete Section…", action: #selector(deleteSectionFromMenu(_:)), keyEquivalent: "")
+        deleteItem.target = self
+        deleteItem.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
+        deleteItem.representedObject = sectionInfo
+        menu.addItem(deleteItem)
 
         return menu
     }
@@ -426,6 +448,158 @@ extension ThreadListViewController {
               let projectId = UUID(uuidString: projectIdRaw),
               let sectionId = UUID(uuidString: sectionIdRaw) else { return }
         beginRenamingSection(projectId: projectId, sectionId: sectionId, fallbackName: info["sectionName"])
+    }
+
+    @objc private func addSectionFromMenu(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: String],
+              let projectIdRaw = info["projectId"],
+              let projectId = UUID(uuidString: projectIdRaw) else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "New Section"
+        alert.informativeText = "Enter section name"
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+        textField.placeholderString = "Section name"
+        alert.accessoryView = textField
+        alert.window.initialFirstResponder = textField
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let name = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+
+        var settings = persistence.loadSettings()
+        guard let projectIndex = settings.projects.firstIndex(where: { $0.id == projectId }) else { return }
+
+        let isProjectOverride = settings.projects[projectIndex].threadSections != nil
+        var sections = isProjectOverride ? settings.projects[projectIndex].threadSections! : settings.threadSections
+        guard !sections.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else {
+            BannerManager.shared.show(
+                message: "A section named \"\(name)\" already exists.",
+                style: .warning
+            )
+            return
+        }
+
+        let maxOrder = sections.map(\.sortOrder).max() ?? -1
+        let newSection = ThreadSection(
+            name: name,
+            colorHex: ThreadSection.randomColorHex(),
+            sortOrder: maxOrder + 1
+        )
+        sections.append(newSection)
+        if isProjectOverride {
+            settings.projects[projectIndex].threadSections = sections
+        } else {
+            settings.threadSections = sections
+        }
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+    }
+
+    @objc private func changeSectionColorFromMenu(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: String],
+              let projectIdRaw = info["projectId"],
+              let sectionIdRaw = info["sectionId"],
+              let projectId = UUID(uuidString: projectIdRaw),
+              let sectionId = UUID(uuidString: sectionIdRaw) else { return }
+
+        let settings = persistence.loadSettings()
+        guard let section = settings.sections(for: projectId).first(where: { $0.id == sectionId }) else { return }
+
+        contextMenuSectionColorTarget = (projectId: projectId, sectionId: sectionId)
+        let panel = NSColorPanel.shared
+        panel.orderOut(nil)
+        panel.setTarget(nil)
+        panel.setAction(nil)
+        panel.showsAlpha = false
+        panel.color = section.color
+        panel.setTarget(self)
+        panel.setAction(#selector(sectionContextMenuColorChanged(_:)))
+        panel.orderFront(nil)
+    }
+
+    @objc private func sectionContextMenuColorChanged(_ sender: NSColorPanel) {
+        guard let target = contextMenuSectionColorTarget else { return }
+        var settings = persistence.loadSettings()
+        if let projectIndex = settings.projects.firstIndex(where: { $0.id == target.projectId }),
+           settings.projects[projectIndex].threadSections != nil {
+            guard let sectionIndex = settings.projects[projectIndex].threadSections!.firstIndex(where: { $0.id == target.sectionId }) else { return }
+            settings.projects[projectIndex].threadSections![sectionIndex].colorHex = sender.color.hexString
+        } else {
+            guard let sectionIndex = settings.threadSections.firstIndex(where: { $0.id == target.sectionId }) else { return }
+            settings.threadSections[sectionIndex].colorHex = sender.color.hexString
+        }
+        try? persistence.saveSettings(settings)
+        reloadData()
+    }
+
+    @objc private func deleteSectionFromMenu(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: String],
+              let projectIdRaw = info["projectId"],
+              let sectionIdRaw = info["sectionId"],
+              let projectId = UUID(uuidString: projectIdRaw),
+              let sectionId = UUID(uuidString: sectionIdRaw) else { return }
+
+        var settings = persistence.loadSettings()
+        guard let projectIndex = settings.projects.firstIndex(where: { $0.id == projectId }) else { return }
+
+        let sections = settings.sections(for: projectId)
+        guard let section = sections.first(where: { $0.id == sectionId }) else { return }
+        guard let defaultSection = settings.defaultSection(for: projectId) else { return }
+
+        guard sections.count > 1 else {
+            let alert = NSAlert()
+            alert.messageText = "Cannot Delete Section"
+            alert.informativeText = "At least one section is required."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+
+        guard defaultSection.id != section.id else {
+            BannerManager.shared.show(
+                message: "Cannot delete the default section. Change the default section first.",
+                style: .warning
+            )
+            return
+        }
+
+        let threadCount = ThreadManager.shared.threadsAssigned(
+            toSection: sectionId,
+            projectId: projectId,
+            settings: settings
+        ).count
+        let infoText = threadCount == 1
+            ? "Delete \"\(section.name)\"? 1 thread will be moved to \"\(defaultSection.name)\"."
+            : "Delete \"\(section.name)\"? \(threadCount) threads will be moved to \"\(defaultSection.name)\"."
+        let alert = NSAlert()
+        alert.messageText = "Delete Section?"
+        alert.informativeText = infoText
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        ThreadManager.shared.reassignThreadsAssigned(
+            toSection: sectionId,
+            toSection: defaultSection.id,
+            projectId: projectId,
+            settings: settings
+        )
+
+        let isProjectOverride = settings.projects[projectIndex].threadSections != nil
+        if isProjectOverride {
+            settings.projects[projectIndex].threadSections = sections.filter { $0.id != sectionId }
+        } else {
+            settings.threadSections = settings.threadSections.filter { $0.id != sectionId }
+        }
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
     @objc private func setThreadIcon(_ sender: NSMenuItem) {
