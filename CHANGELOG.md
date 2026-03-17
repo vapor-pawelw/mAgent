@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Thread
+- The resync button (↺) now shows a menu to choose sync direction: "Project → Worktree" copies files from the main repo into the worktree; "Worktree → Project" pushes changes back to the main repo. A spinner replaces the button while sync is in progress.
 - The "New Thread" sheet now includes a Section picker, pre-selected to the project's default section. The picker shows each section's color dot, matching how sections appear in the sidebar. Different projects can have different section settings. The "All fields are optional" hint has moved below the form fields, just above the checkboxes.
 - Fixed: the "Rename branch" dialog now pre-fills with the current branch name instead of the worktree name.
 - Fixed: multi-line prompts are now captured in full in the Prompt TOC and used in full for auto-rename. Previously only the first line was captured because continuation lines are ANSI-styled by Claude's TUI and blank paragraph separators broke the collection loop.
