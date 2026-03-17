@@ -163,7 +163,7 @@ extension ThreadDetailViewController {
             draftScope: .newTab(threadId: thread.id),
             availableAgents: settings.availableActiveAgents,
             defaultAgentType: threadManager.effectiveAgentType(for: thread.projectId),
-            subtitle: "Thread: \(thread.taskDescription.map { "\($0) (\(thread.branchName))" } ?? thread.branchName)",
+            subtitle: "Thread: \(thread.isMain ? "Main" : (thread.taskDescription.map { "\($0) (\(thread.branchName))" } ?? thread.branchName))",
             showDescriptionAndBranchFields: false,
             showTitleField: true,
             autoGenerateHint: nil,
