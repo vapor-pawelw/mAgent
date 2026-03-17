@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Thread
+- Fixed: the New Tab sheet subtitle now shows "Thread: Main" for the main project thread instead of "Thread:" with no label.
 - The "New Thread" sheet now includes a Section picker, pre-selected to the project's default section. The picker shows each section's color dot, matching how sections appear in the sidebar. Different projects can have different section settings. The "All fields are optional" hint has moved below the form fields, just above the checkboxes.
 - Fixed: the "Rename branch" dialog now pre-fills with the current branch name instead of the worktree name.
 - Fixed: multi-line prompts are now captured in full in the Prompt TOC and used in full for auto-rename. Previously only the first line was captured because continuation lines are ANSI-styled by Claude's TUI and blank paragraph separators broke the collection loop.
