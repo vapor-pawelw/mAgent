@@ -14,6 +14,7 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 ## Implementation details
 
 - Completion detection still enters through `ThreadManager.checkForAgentCompletions()`.
+- After processing bell events, `checkForAgentCompletions` also triggers auto-rename for threads that haven't been renamed yet (`!didAutoRenameFromFirstPrompt`). This covers threads not currently displayed (no `ThreadDetailViewController`). See `prompt-toc-parser.md` § "Three auto-rename trigger paths" for details.
 - A Dock bounce is requested only when a thread transitions from `hasUnreadAgentCompletion == false` to `true`, which avoids repeated bounces for additional unread tabs in the same thread.
 - Dock badge updates are centralized in `ThreadManager.updateDockBadge()`.
 - The Dock badge uses thread count, not unread session count, so it matches the sidebar's thread-level completion affordance.

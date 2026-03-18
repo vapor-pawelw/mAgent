@@ -463,9 +463,16 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             titleLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
         ])
 
-        // Branch + worktree folder (prominent)
+        // Branch + worktree folder (prominent, skip worktree if same as branch)
         let worktreeFolder = URL(fileURLWithPath: thread.worktreePath).lastPathComponent
-        let branchWorktreeLabel = NSTextField(labelWithString: "\(thread.branchName)  ·  \(worktreeFolder)")
+        let resolvedBranch = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let branchWorktreeText: String
+        if resolvedBranch == worktreeFolder {
+            branchWorktreeText = resolvedBranch
+        } else {
+            branchWorktreeText = "\(resolvedBranch)  ·  \(worktreeFolder)"
+        }
+        let branchWorktreeLabel = NSTextField(labelWithString: branchWorktreeText)
         branchWorktreeLabel.font = .systemFont(ofSize: 12, weight: .medium)
         branchWorktreeLabel.textColor = NSColor(resource: .textPrimary)
         textStack.addArrangedSubview(branchWorktreeLabel)

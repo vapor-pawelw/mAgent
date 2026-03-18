@@ -1120,4 +1120,99 @@ extension ThreadManager {
         return nil
     }
 
+    // MARK: - Bell-triggered auto-rename for non-visible threads
+
+    /// Extracts the first user prompt from raw pane content by looking for `❯` or `›` prompt markers.
+    /// This is a lightweight version of the TOC parser, sufficient for first-prompt auto-rename
+    /// when the thread is not displayed (no ThreadDetailViewController).
+    /// Supports multiline prompts: continuation lines are indented with 2+ spaces.
+    func extractFirstPromptFromPane(_ paneContent: String) -> String? {
+        let codexMarker: Character = "\u{203A}" // ›
+        let claudeMarker: Character = "\u{276F}" // ❯
+        let markers: [Character] = [claudeMarker, codexMarker]
+
+        let lines = paneContent.components(separatedBy: .newlines)
+        var lineIndex = 0
+        while lineIndex < lines.count {
+            let line = lines[lineIndex]
+            let trimmed = line.drop(while: { $0.isWhitespace })
+            guard let first = trimmed.first, markers.contains(first) else {
+                lineIndex += 1
+                continue
+            }
+            let firstLine = String(trimmed.dropFirst())
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !firstLine.isEmpty else {
+                lineIndex += 1
+                continue
+            }
+
+            // Collect continuation lines (2+ leading spaces, no prompt marker).
+            var promptLines = [firstLine]
+            var continuationIndex = lineIndex + 1
+            while continuationIndex < lines.count {
+                let contLine = lines[continuationIndex]
+                let contTrimmed = contLine.drop(while: { $0.isWhitespace })
+                let contText = String(contTrimmed).trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if contText.isEmpty {
+                    // Blank line — look ahead: keep going only if next non-blank
+                    // line is still a continuation (2+ spaces, no marker).
+                    let peekIndex = continuationIndex + 1
+                    if peekIndex < lines.count {
+                        let peekLine = lines[peekIndex]
+                        let peekLeading = peekLine.prefix(while: { $0.isWhitespace }).count
+                        let peekTrimmed = peekLine.drop(while: { $0.isWhitespace })
+                        if peekLeading >= 2,
+                           let peekFirst = peekTrimmed.first,
+                           !markers.contains(peekFirst) {
+                            promptLines.append("")
+                            continuationIndex += 1
+                            continue
+                        }
+                    }
+                    break
+                }
+
+                let leadingSpaces = contLine.prefix(while: { $0.isWhitespace }).count
+                guard leadingSpaces >= 2 else { break }
+                // Must not start with a prompt marker (that would be the next prompt).
+                if let contFirst = contTrimmed.first, markers.contains(contFirst) { break }
+
+                promptLines.append(contText)
+                continuationIndex += 1
+            }
+
+            let fullPrompt = promptLines.joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !fullPrompt.isEmpty {
+                return fullPrompt
+            }
+            lineIndex = continuationIndex
+        }
+        return nil
+    }
+
+    /// Called from `checkForAgentCompletions` when a bell fires for a thread that
+    /// hasn't been auto-renamed yet. Captures pane content, extracts the first prompt,
+    /// and triggers auto-rename — no ThreadDetailViewController required.
+    func triggerAutoRenameFromBellIfNeeded(threadId: UUID, sessionName: String) async {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        let thread = threads[index]
+        guard !thread.isMain, !thread.didAutoRenameFromFirstPrompt else { return }
+        guard persistence.loadSettings().autoRenameBranches else { return }
+
+        // Capture enough pane history to find the first prompt.
+        guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 200) else { return }
+        guard let prompt = extractFirstPromptFromPane(paneContent) else { return }
+
+        // Verify an agent is actually running (same guard as TOC path).
+        guard await detectedAgentTypeInSession(sessionName) != nil else { return }
+
+        _ = await autoRenameThreadAfterFirstPromptIfNeeded(
+            threadId: threadId,
+            sessionName: sessionName,
+            prompt: prompt
+        )
+    }
 }

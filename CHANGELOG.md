@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.
 ### Terminal
 - Fixed: clicking on the terminal surface no longer shows a "returned 127" error after a reboot. The mouse-click URL capture script in `/tmp` had its shebang on the wrong line, causing the OS to fail to find the interpreter.
 ### Thread
+- Auto-rename now triggers for non-visible threads: when a thread completes its first agent turn in the background (not selected in the sidebar), the bell-based completion handler extracts the first prompt from pane content and triggers auto-rename immediately, instead of waiting until the thread is selected.
 - PR and Jira buttons are now the leftmost action buttons in the toolbar, separated from utility buttons by a divider.
 - The PR button is now hidden on non-main threads when no PR has been detected. Main worktree always shows it.
 - PR info is now cached persistently so PR indicators appear immediately on app launch instead of waiting for the first background sync.
