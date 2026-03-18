@@ -34,6 +34,7 @@ This thread refined the left-rail and spacing rules for project headers, section
 
 ## Gotchas
 
+- When displaying branch and worktree names together (e.g. `branch · worktree`), always check for equality first — if they are the same, show the name once. `ThreadCell` and `RecentlyArchivedPopoverViewController` already do this; `SettingsThreadsViewController` was fixed to match.
 - Do not treat AppKit outline indentation as the final visual layout. `NSOutlineView` still applies its own level offset before the cell's constraints run, so top-level rows need explicit compensation.
 - Keep the main-row accent bar aligned to `sidebarRowLeadingInset - outlineIndentationPerLevel`; otherwise it drifts away from the section-dot rail.
 - If you change the main-row copy again, preserve the two-line structure unless you also revisit `heightOfRowByItem`.

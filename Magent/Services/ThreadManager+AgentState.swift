@@ -110,6 +110,22 @@ extension ThreadManager {
             await refreshDeliveredState(for: threadId)
         }
 
+        // Trigger auto-rename for threads that haven't been renamed yet.
+        // This covers the case where a thread is not currently displayed
+        // (no ThreadDetailViewController), so the TOC-based rename path
+        // never fires. We spawn these as fire-and-forget tasks to avoid
+        // blocking the completion notification flow.
+        for session in orderedUniqueSessions {
+            if let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }),
+               !threads[index].didAutoRenameFromFirstPrompt,
+               !threads[index].isMain {
+                let threadId = threads[index].id
+                Task {
+                    await triggerAutoRenameFromBellIfNeeded(threadId: threadId, sessionName: session)
+                }
+            }
+        }
+
         await MainActor.run {
             updateDockBadge()
             if !newlyUnreadThreadIds.isEmpty {

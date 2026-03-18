@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - CLI docs now explicitly instruct agents to always provide `--description` and `--prompt` when creating threads for specific tasks, so new threads get proper sidebar descriptions and the spawned agent receives its initial instructions.
 
 ### Thread
+- Auto-rename now triggers for non-visible threads: when a thread completes its first agent turn in the background (not selected in the sidebar), the bell-based completion handler extracts the first prompt from pane content and triggers auto-rename immediately, instead of waiting until the thread is selected.
 - The resync button (↺) now shows a menu to choose sync direction: "Project → Worktree" copies files from the main repo into the worktree; "Worktree → Project" pushes changes back to the main repo. A spinner replaces the button while sync is in progress.
 - Fixed: the New Tab sheet subtitle now shows "Thread: Main" for the main project thread instead of "Thread:" with no label.
 - The "New Thread" sheet now includes a Section picker, pre-selected to the project's default section. The picker shows each section's color dot, matching how sections appear in the sidebar. Different projects can have different section settings. The "All fields are optional" hint has moved below the form fields, just above the checkboxes.
