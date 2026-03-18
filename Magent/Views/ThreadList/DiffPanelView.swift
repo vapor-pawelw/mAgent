@@ -158,9 +158,11 @@ final class DiffPanelView: NSView {
     /// Called when the user double-taps a commit row (nil = "Uncommitted"). Second arg is display title.
     var onCommitDoubleTapped: ((String?, String) -> Void)?
 
-    /// The entries currently shown in the CHANGES tab.
+    private var allBranchEntries: [FileDiffEntry] = []
+
+    /// The entries currently shown in the ALL CHANGES tab.
     private var activeEntries: [FileDiffEntry] {
-        selectedCommitHash == nil ? uncommittedEntries : commitEntries
+        allBranchEntries
     }
 
     override init(frame frameRect: NSRect) {
@@ -203,7 +205,7 @@ final class DiffPanelView: NSView {
         commitsBtn.isHidden = true
 
         let changesBtn = changesTabButton
-        changesBtn.title = "CHANGES"
+        changesBtn.title = "ALL CHANGES"
         changesBtn.font = .systemFont(ofSize: 11, weight: .semibold)
         changesBtn.contentTintColor = NSColor(resource: .textSecondary)
         changesBtn.isBordered = false
@@ -578,6 +580,7 @@ final class DiffPanelView: NSView {
 
     func update(
         with newEntries: [FileDiffEntry],
+        allBranchEntries newAllBranchEntries: [FileDiffEntry] = [],
         commits newCommits: [BranchCommit] = [],
         hasMoreCommits: Bool = false,
         forceVisible: Bool = false,
@@ -587,6 +590,7 @@ final class DiffPanelView: NSView {
         preserveSelection: Bool = false
     ) {
         uncommittedEntries = newEntries
+        allBranchEntries = newAllBranchEntries
         commits = newCommits
         self.worktreePath = worktreePath
         self.hasMoreCommits = hasMoreCommits
@@ -616,13 +620,14 @@ final class DiffPanelView: NSView {
             activeTab = .commits
         }
 
-        // Show COMMITS tab if there are any commits to browse
-        commitsTabButton.isHidden = newCommits.isEmpty && newEntries.isEmpty && !forceVisible
+        let hasContent = !newEntries.isEmpty || !newAllBranchEntries.isEmpty || !newCommits.isEmpty
+        // Show tab bar if there are any commits to browse
+        commitsTabButton.isHidden = !hasContent && !forceVisible
 
         updateTabTitles()
 
         // Hide panel only when there's nothing to show
-        if newEntries.isEmpty && newCommits.isEmpty && !forceVisible {
+        if !hasContent && !forceVisible {
             branchInfoLabel.isHidden = true
             setPanelVisible(false)
             return
@@ -667,6 +672,7 @@ final class DiffPanelView: NSView {
     func clear() {
         resetCommitDetailMode()
         uncommittedEntries = []
+        allBranchEntries = []
         commitEntries = []
         commits = []
         activeTab = .commits
@@ -690,8 +696,8 @@ final class DiffPanelView: NSView {
             commitsTabButton.title = hasMoreCommits ? "COMMITS (\(commits.count)+)" : "COMMITS (\(commits.count))"
         }
 
-        let totalChanges = uncommittedEntries.count
-        changesTabButton.title = totalChanges == 0 ? "CHANGES" : "CHANGES (\(totalChanges))"
+        let totalChanges = allBranchEntries.count
+        changesTabButton.title = totalChanges == 0 ? "ALL CHANGES" : "ALL CHANGES (\(totalChanges))"
 
         let activeColor = NSColor.labelColor
         let inactiveColor = NSColor(resource: .textSecondary)
@@ -716,11 +722,13 @@ final class DiffPanelView: NSView {
 
     private func rebuildCommitsRows() {
         commitContextLabel.isHidden = true
-        // "Uncommitted" row — always present at top
-        let uncommittedRow = makeUncommittedRow()
-        stackView.addArrangedSubview(uncommittedRow)
-        uncommittedRow.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
-        uncommittedRow.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+        // "Uncommitted" row — only shown when there are uncommitted changes
+        if !uncommittedEntries.isEmpty {
+            let uncommittedRow = makeUncommittedRow()
+            stackView.addArrangedSubview(uncommittedRow)
+            uncommittedRow.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+            uncommittedRow.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+        }
 
         for commit in commits {
             let row = makeCommitRow(commit)
@@ -738,19 +746,10 @@ final class DiffPanelView: NSView {
 
     private func rebuildChangesRows() {
         let entries = activeEntries
-
-        // Update context label
-        if let hash = selectedCommitHash,
-           let commit = commits.first(where: { $0.shortHash == hash }) {
-            commitContextLabel.stringValue = "from \(commit.shortHash) · \(commit.subject)"
-            commitContextLabel.toolTip = "\(commit.shortHash) · \(commit.subject)\n\(commit.authorName) · \(commit.date)"
-            commitContextLabel.isHidden = false
-        } else {
-            commitContextLabel.isHidden = true
-        }
+        commitContextLabel.isHidden = true
 
         if entries.isEmpty {
-            let row = makeEmptyStateRow(message: selectedCommitHash == nil ? "No uncommitted changes" : "No changes in this commit")
+            let row = makeEmptyStateRow(message: "No changes in this branch")
             stackView.addArrangedSubview(row)
             row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
             row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true

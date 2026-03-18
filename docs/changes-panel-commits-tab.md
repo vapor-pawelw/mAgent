@@ -4,18 +4,16 @@
 
 - The selected main thread always keeps the bottom-left sidebar panel visible, even when there are no dirty files.
 - For non-main threads, the panel is shown only when there are dirty files or branch commits; clean branches with no commits ahead of base hide the panel entirely.
-- **COMMITS is the left-most (default) tab.** It always contains an "Uncommitted" row at the top (when the panel is visible), regardless of whether the working tree is dirty. The "Uncommitted" row is pre-selected.
-- Below "Uncommitted", the COMMITS tab lists branch commits newest-first. Each row shows:
+- **COMMITS is the left-most (default) tab.** It contains an "Uncommitted" row at the top only when the working tree has uncommitted changes; when clean, the row is hidden entirely. If uncommitted changes exist, the "Uncommitted" row is pre-selected.
+- Below "Uncommitted" (or at the top when clean), the COMMITS tab lists branch commits newest-first. Each row shows:
   - **Short hash** (monospaced, dimmed) — left side
   - **Commit subject** — right side, wraps up to 3 lines
   - Tooltip with full `hash subject\nauthor · date`
 - When more commits exist beyond the current page, the list ends with `Load More Commits` (+10 per tap).
-- **Single-clicking "Uncommitted"** selects it (highlighted); the CHANGES tab shows the working-tree diff file list (vs HEAD, uncommitted only).
-- **Single-clicking a commit** selects it and loads that commit's files in the CHANGES tab (subtitle: `from <hash> · <subject>`).
+- **Single-clicking "Uncommitted"** selects it (highlighted). The ALL CHANGES tab is independent and always shows the full branch diff.
+- **Single-clicking a commit** selects it (highlighted). The ALL CHANGES tab is independent and unaffected by commit selection.
 - **Double-tapping "Uncommitted" or any commit row** enters **commit detail mode** (see below).
-- Clicking a file in the CHANGES tab opens the inline diff viewer:
-  - For "Uncommitted": shows the branch diff vs. base.
-  - For a selected commit: shows `git show <hash>` diff for that commit. If the viewer is already open with a different commit's diff, it is closed and reloaded.
+- The **ALL CHANGES** tab (right tab) always shows all files changed in the branch (merge-base to working tree, including both committed and uncommitted changes). It is independent of which commit is selected in the COMMITS tab. Clicking a file opens the inline diff viewer showing the branch diff vs. base.
 - The `ⓘ` color-legend button is hidden while the COMMITS tab is active.
 
 ### Commit Detail Mode
@@ -43,10 +41,11 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 
 ### DiffPanelView
 - `activeTab: DiffPanelTab` — `.commits` (default, left) or `.changes` (right). Tab enum order was flipped from the original: COMMITS is now first.
-- `uncommittedEntries: [FileDiffEntry]` — working-tree entries loaded on thread selection (vs HEAD, uncommitted only). For non-main threads this is fetched via `workingTreeDiffStats`; for the main thread via the same API.
-- `commitEntries: [FileDiffEntry]` — populated by `updateCommitEntries(hash:entries:subject:)` after async load.
+- `uncommittedEntries: [FileDiffEntry]` — working-tree entries loaded on thread selection (vs HEAD, uncommitted only). Used to decide whether the "Uncommitted" row is shown and its file count.
+- `allBranchEntries: [FileDiffEntry]` — full branch diff (merge-base to working tree, including committed + uncommitted changes). Fetched via `GitService.diffStats(worktreePath:baseBranch:)` for non-main threads; for main threads, equals `uncommittedEntries`.
+- `commitEntries: [FileDiffEntry]` — populated by `updateCommitEntries(hash:entries:subject:)` after async load. Used only for commit detail mode.
 - `selectedCommitHash: String?` — `nil` = "Uncommitted" selected; non-nil = a commit hash. Reset to `nil` on `update()` unless `preserveSelection: true` is passed. `activeTab` is also preserved whenever `preserveSelection: true`, regardless of whether a commit hash is selected.
-- `activeEntries` computed property returns `uncommittedEntries` or `commitEntries` depending on selection.
+- `activeEntries` computed property returns `allBranchEntries` (always the full branch diff, independent of commit selection).
 - `onCommitSelected: ((String?) -> Void)?` — fires on single-click; nil = Uncommitted.
 - `onCommitDoubleTapped: ((String?, String) -> Void)?` — fires on double-click; args are (hash or nil, display title). Controller loads entries and calls `enterCommitDetailMode`.
 - `updateCommitEntries(hash:entries:subject:)` — called by controller; only applies if `selectedCommitHash == hash` to avoid stale updates from cancelled async loads.
@@ -54,9 +53,9 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - `resetCommitDetailMode()` — private; restores tab bar, clears detail state. Called from `clear()`, `update()`, and `backButtonTapped()`.
 - `rebuildCommitDetailRows()` — builds file rows from `commitDetailEntries`; called by `rebuildRows()` when `isInCommitDetailMode`.
 - `isInCommitDetailMode`, `commitDetailHash`, `commitDetailEntries`, `commitDetailHeaderView`, `backButton`, `commitDetailTitleLabel` — detail-mode state and UI.
-- `rebuildCommitsRows()` — always hides `commitContextLabel`, then adds the "Uncommitted" `CommitRowView` first, then commits, then "Load More".
-- `update(preserveSelection:)` — when `true`, always preserves `activeTab`. If a commit hash is selected and still exists in the new commit list, also preserves `selectedCommitHash`, clears `commitEntries`, and fires `onCommitSelected` to reload them. If `selectedCommitHash` is `nil` (user is on CHANGES tab with "Uncommitted" selected), the tab is still preserved so a background refresh doesn't yank the user back to COMMITS. Hides `commitContextLabel` via `rebuildCommitsRows()`. Used by background/polling refreshes (agent completion, load-more); thread-switch calls pass `false`.
-- `rebuildChangesRows()` — shows `commitContextLabel` when `selectedCommitHash != nil`, then file rows or empty state.
+- `rebuildCommitsRows()` — always hides `commitContextLabel`, then adds the "Uncommitted" `CommitRowView` only if `uncommittedEntries` is non-empty, then commits, then "Load More".
+- `update(preserveSelection:)` — when `true`, always preserves `activeTab`. If a commit hash is selected and still exists in the new commit list, also preserves `selectedCommitHash`, clears `commitEntries`, and fires `onCommitSelected` to reload them. If `selectedCommitHash` is `nil` (user is on ALL CHANGES tab), the tab is still preserved so a background refresh doesn't yank the user back to COMMITS. Hides `commitContextLabel` via `rebuildCommitsRows()`. Used by background/polling refreshes (agent completion, load-more); thread-switch calls pass `false`.
+- `rebuildChangesRows()` — always hides `commitContextLabel`, shows `allBranchEntries` file rows or "No changes in this branch" empty state. Independent of commit selection.
 - `CommitRowView` — selectable NSView subclass (like `DiffFileRowView`) with `isSelected` highlight. Uses `"__uncommitted__"` as a sentinel hash for the Uncommitted row's `updateCommitRowSelectionAppearance`.
 
 ### Controller Layer
@@ -83,7 +82,8 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - **`autoSelectFirst()` and `selectThread(byId:)` must not call the delegate for the same thread**: These methods call `recordSelectedThread` (sets `selectedThreadID`) then `outlineView.selectRowIndexes`, which fires `outlineViewSelectionDidChange` with `selectionChanged = false` → preserve Task B. If the delegate is also called unconditionally (→ no-preserve Task A), and Task A completes after Task B, the panel resets. Fix: check `isNewThread = selectedThreadID != thread.id` before `recordSelectedThread`, and only call the delegate when `isNewThread`.
 - **`commitContextLabel` must be hidden in `rebuildCommitsRows()`**: the label is set in `rebuildChangesRows()` but only explicitly hidden in `commitsTabTapped()` and `clear()`. Adding `commitContextLabel.isHidden = true` at the top of `rebuildCommitsRows()` prevents the label from lingering when a background refresh switches the panel back to the COMMITS tab.
 
-- **`uncommittedEntries` holds working-tree diff only (vs HEAD)**: both the "Uncommitted" row count and the CHANGES tab file list reflect only files not yet committed. For "all branch changes" users can open the diff viewer via the ⓘ button (which uses `diffContent(baseBranch:)`) or browse individual commits in the COMMITS tab.
+- **`uncommittedEntries` holds working-tree diff only (vs HEAD)**: the "Uncommitted" row count reflects only files not yet committed. The ALL CHANGES tab uses `allBranchEntries` (full branch diff from merge-base) which is a separate data source.
+- **"Uncommitted" row is conditionally hidden**: When `uncommittedEntries` is empty (clean working tree), the row is not rendered. This is purely visual — `uncommittedEntries` is still stored and used for the count badge when non-empty.
 - **`forceWorkingTreeDiff` must reload viewer when it changes**: The viewer reload guard checks both `currentDiffCommitHash` and `currentDiffForceWorkingTree`. Without the latter, switching between "Uncommitted" detail mode (force working-tree) and normal CHANGES tab (branch diff) would reuse the wrong diff content.
 - **`resetCommitDetailMode()` does not post `magentHideDiffViewer`**: Cleanup on thread change (via `update()` / `clear()`) must not post hide-viewer — the thread-switch flow handles diff viewer lifecycle separately. Only `backButtonTapped()` posts the hide notification explicitly.
 - **`selectCommit` closes the diff viewer softly**: `deselectFileWithoutHidingViewer()` updates the file row highlight but does not post `magentHideDiffViewer`. The viewer stays visible but its content becomes stale until the user clicks a file. This is intentional — force-closing the viewer on every commit tap would be jarring.
@@ -91,7 +91,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - **`commitDiffStats` passes an empty `statusMap`**: files in a committed diff are always `.committed` status (gray). There is no working-tree status to overlay.
 - **`commitDiffContent` includes the commit message header**: `git show` output starts with the commit message block before the diff. `InlineDiffViewController` ignores non-diff lines gracefully, so no special stripping is needed.
 - **Tab ordering**: `DiffPanelTab` enum now lists `.commits` before `.changes`. COMMITS is added to `tabBarStack` first. Tab-bar buttons use low hugging/compression resistance to prevent widening the sidebar.
-- **`commitsTabButton.isHidden`**: set to `true` only when both entries and commits are empty and `forceVisible` is false (i.e., the panel itself is hidden). When the panel is visible, COMMITS is always shown even if there are no branch commits yet (the "Uncommitted" row is always present).
+- **`commitsTabButton.isHidden`**: set to `true` only when all entry sources (uncommitted, all-branch, commits) are empty and `forceVisible` is false (i.e., the panel itself is hidden). When the panel is visible, COMMITS is always shown even if the "Uncommitted" row is hidden (clean working tree).
 - Keyboard navigation (`↑`/`↓`) is guarded to the CHANGES tab; the key event passes through to super from COMMITS.
 - `BranchCommit`, `commitLog`, and new `commitDiffStats`/`commitDiffContent` must be `public` because `GitCore` and `MagentModels` are separate Swift package targets.
 - **Task generation counter prevents stale no-preserve tasks from overwriting preserve tasks**: `refreshDiffPanel` increments `diffPanelRefreshGeneration[thread.id]` before each `Task` spawn and captures the current value. The `Task` checks `diffPanelRefreshGeneration[thread.id] == capturedGeneration` inside `MainActor.run` before calling `update()`. If a newer call arrived while the git I/O was in-flight, the result is discarded. Without this, a slow initial-selection task (no-preserve, resets `activeTab`) could complete after a faster background-refresh task (preserve, keeps `activeTab`), causing the tab to reset.
