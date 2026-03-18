@@ -128,7 +128,7 @@ extension ThreadDetailViewController {
             openPRButton.isHidden = false
             openPRButton.title = pr.shortLabel
             openPRButton.imagePosition = .imageLeading
-            openPRButton.toolTip = "\(pr.displayLabel)\nClick: open in browser · Middle-click: open in tab"
+            openPRButton.toolTip = "\(pr.displayLabel) (\(pr.statusText))\nClick: open in browser · Middle-click: open in tab"
         } else if thread.isMain {
             // Main worktree: always show PR button (opens PR list)
             openPRButton.isHidden = false

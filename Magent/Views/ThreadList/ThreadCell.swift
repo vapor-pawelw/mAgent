@@ -57,7 +57,11 @@ final class ThreadCell: NSTableCellView {
 
     private var prLabel: NSTextField?
     private var subtitleLabel: NSTextField?
-    private var prSubtitleLabel: NSTextField?
+    private var jiraTicketLabel: NSTextField?
+    private var jiraStatusBadge: StatusBadgeView?
+    private var prDotSeparator: NSTextField?
+    private var prNumberLabel: NSTextField?
+    private var prStatusBadge: StatusBadgeView?
     private var jiraImageView: NSImageView?
     private var primaryDirtyDot: NSImageView?
     private var secondaryDirtyDot: NSImageView?
@@ -161,16 +165,44 @@ final class ThreadCell: NSTableCellView {
         subtitle.isHidden = true
         subtitleLabel = subtitle
 
-        let prSubtitle = NSTextField(labelWithString: "")
-        prSubtitle.translatesAutoresizingMaskIntoConstraints = false
-        prSubtitle.font = Self.metadataFont()
-        prSubtitle.textColor = .secondaryLabelColor
-        prSubtitle.lineBreakMode = .byTruncatingTail
-        prSubtitle.maximumNumberOfLines = 1
-        prSubtitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        prSubtitle.setContentHuggingPriority(.defaultHigh, for: .vertical)
-        prSubtitle.isHidden = true
-        prSubtitleLabel = prSubtitle
+        let jiraTicketTF = NSTextField(labelWithString: "")
+        jiraTicketTF.translatesAutoresizingMaskIntoConstraints = false
+        jiraTicketTF.font = Self.metadataFont()
+        jiraTicketTF.textColor = .controlAccentColor
+        jiraTicketTF.lineBreakMode = .byClipping
+        jiraTicketTF.maximumNumberOfLines = 1
+        jiraTicketTF.setContentHuggingPriority(.required, for: .horizontal)
+        jiraTicketTF.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        jiraTicketTF.isHidden = true
+        jiraTicketLabel = jiraTicketTF
+
+        let jiraBadge = StatusBadgeView()
+        jiraBadge.isHidden = true
+        jiraStatusBadge = jiraBadge
+
+        let dotSep = NSTextField(labelWithString: " · ")
+        dotSep.translatesAutoresizingMaskIntoConstraints = false
+        dotSep.font = Self.metadataFont()
+        dotSep.textColor = .controlAccentColor
+        dotSep.setContentHuggingPriority(.required, for: .horizontal)
+        dotSep.setContentCompressionResistancePriority(.required, for: .horizontal)
+        dotSep.isHidden = true
+        prDotSeparator = dotSep
+
+        let prNumTF = NSTextField(labelWithString: "")
+        prNumTF.translatesAutoresizingMaskIntoConstraints = false
+        prNumTF.font = Self.metadataFont()
+        prNumTF.textColor = .controlAccentColor
+        prNumTF.lineBreakMode = .byClipping
+        prNumTF.maximumNumberOfLines = 1
+        prNumTF.setContentHuggingPriority(.required, for: .horizontal)
+        prNumTF.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        prNumTF.isHidden = true
+        prNumberLabel = prNumTF
+
+        let prBadge = StatusBadgeView()
+        prBadge.isHidden = true
+        prStatusBadge = prBadge
 
         iv.removeFromSuperview()
         tf.removeFromSuperview()
@@ -197,12 +229,12 @@ final class ThreadCell: NSTableCellView {
         secondaryRow.spacing = 4
         secondaryRow.translatesAutoresizingMaskIntoConstraints = false
 
-        // PR row: no spacer — secondary dot detaches when hidden, so aligning via spacer
-        // would indent PR text relative to the branch/worktree line above it.
-        let prRow = NSStackView(views: [prSubtitle])
+        // PR row: badge-aware composition. Individual labels + badges for Jira and PR.
+        let prRow = NSStackView(views: [jiraTicketTF, jiraBadge, dotSep, prNumTF, prBadge])
         prRow.orientation = .horizontal
         prRow.alignment = .centerY
-        prRow.spacing = 4
+        prRow.spacing = 3
+        prRow.detachesHiddenViews = true
         prRow.translatesAutoresizingMaskIntoConstraints = false
 
         let verticalStack = NSStackView(views: [primaryRow, secondaryRow, prRow])
@@ -464,8 +496,6 @@ final class ThreadCell: NSTableCellView {
         textField?.textColor = showsJiraState && thread.jiraUnassigned ? .tertiaryLabelColor : .labelColor
         textField?.lineBreakMode = .byTruncatingTail
 
-        let prDisplayLabel = thread.pullRequestInfo?.displayLabel
-
         if hasDescription, let description = trimmedDescription {
             // With description: primary = description, secondary = branch · worktree.
             textField?.stringValue = description
@@ -492,34 +522,68 @@ final class ThreadCell: NSTableCellView {
             setDirtyDot(secondaryDirtyDot, visible: false)
         }
 
-        // Secondary line 2 (PR/ticket row): ticket key and PR label on the same line.
-        let jiraDetectionEnabled = PersistenceService.shared.loadSettings().jiraTicketDetectionEnabled
+        // Secondary line 2 (PR/ticket row): ticket key with status badge, PR number with status badge.
+        let cellSettings = PersistenceService.shared.loadSettings()
+        let jiraDetectionEnabled = cellSettings.jiraTicketDetectionEnabled
         let ticketKey = jiraDetectionEnabled ? thread.effectiveJiraTicketKey : nil
-        var prTicketParts: [String] = []
-        if let ticketKey { prTicketParts.append(ticketKey) }
-        if let prLabel = prDisplayLabel { prTicketParts.append(prLabel) }
+        let badgeFontSize: CGFloat = 8
+        let showJiraBadges = cellSettings.showJiraStatusBadges
+        let showPRBadges = cellSettings.showPRStatusBadges
 
-        if !prTicketParts.isEmpty {
-            prSubtitleLabel?.stringValue = prTicketParts.joined(separator: "  ·  ")
-            prSubtitleLabel?.textColor = .controlAccentColor
-            prSubtitleLabel?.isHidden = false
+        let hasTicket = ticketKey != nil
+        let hasPR = thread.pullRequestInfo != nil
+
+        if let ticketKey {
+            jiraTicketLabel?.stringValue = ticketKey
+            jiraTicketLabel?.isHidden = false
+            if showJiraBadges, let verified = thread.verifiedJiraTicket, !verified.status.isEmpty {
+                jiraStatusBadge?.configure(
+                    text: verified.status,
+                    style: StatusBadgeView.jiraStyle(forCategoryKey: verified.statusCategoryKey),
+                    fontSize: badgeFontSize
+                )
+                jiraStatusBadge?.isHidden = false
+            } else {
+                jiraStatusBadge?.isHidden = true
+            }
         } else {
-            prSubtitleLabel?.stringValue = ""
-            prSubtitleLabel?.isHidden = true
+            jiraTicketLabel?.stringValue = ""
+            jiraTicketLabel?.isHidden = true
+            jiraStatusBadge?.isHidden = true
+        }
+
+        prDotSeparator?.isHidden = !(hasTicket && hasPR)
+
+        if let pr = thread.pullRequestInfo {
+            prNumberLabel?.stringValue = pr.displayLabel
+            prNumberLabel?.isHidden = false
+            if showPRBadges {
+                prStatusBadge?.configure(
+                    text: pr.statusText,
+                    style: StatusBadgeView.prStyle(isMerged: pr.isMerged, isDraft: pr.isDraft),
+                    fontSize: badgeFontSize
+                )
+                prStatusBadge?.isHidden = false
+            } else {
+                prStatusBadge?.isHidden = true
+            }
+        } else {
+            prNumberLabel?.stringValue = ""
+            prNumberLabel?.isHidden = true
+            prStatusBadge?.isHidden = true
         }
 
         let detailedTooltip = buildDetailedTooltip(
             description: trimmedDescription,
             branchName: resolvedBranchName,
             worktreeName: worktreeName,
-            prLabel: thread.pullRequestInfo?.displayLabel,
+            prLabel: thread.pullRequestInfo.map { "\($0.displayLabel) (\($0.statusText))" },
             statuses: statusDescriptions(for: thread)
         )
         toolTip = detailedTooltip
         imageView?.toolTip = detailedTooltip
         textField?.toolTip = detailedTooltip
         subtitleLabel?.toolTip = detailedTooltip
-        prSubtitleLabel?.toolTip = detailedTooltip
         primaryDirtyDot?.toolTip = detailedTooltip
         secondaryDirtyDot?.toolTip = detailedTooltip
 
@@ -697,9 +761,6 @@ final class ThreadCell: NSTableCellView {
                 isUnreadCompletion: isUnreadCompletion
             )
         )
-        prSubtitleLabel?.stringValue = ""
-        prSubtitleLabel?.isHidden = true
-
         toolTip = detailedTooltip
         imageView?.toolTip = detailedTooltip
         textField?.toolTip = detailedTooltip
@@ -829,8 +890,9 @@ final class ThreadCell: NSTableCellView {
         let secondaryDotVisible = !(secondaryDirtyDot?.isHidden ?? true)
         secondaryRowStack?.isHidden = !subtitleVisible && !secondaryDotVisible
 
-        let prVisible = !(prSubtitleLabel?.isHidden ?? true)
-        prRowStack?.isHidden = !prVisible
+        let hasJira = !(jiraTicketLabel?.isHidden ?? true)
+        let hasPR = !(prNumberLabel?.isHidden ?? true)
+        prRowStack?.isHidden = !hasJira && !hasPR
     }
 
     private func setDirtyDot(_ dot: NSImageView?, visible: Bool) {

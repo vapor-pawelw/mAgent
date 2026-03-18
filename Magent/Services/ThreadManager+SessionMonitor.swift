@@ -46,6 +46,8 @@ extension ThreadManager {
             await self.ensureBellPipes()
             await self.checkTmuxZombieHealth()
 
+            var didRunStatusSync = false
+
             // Refresh dirty and delivered states every 10th tick (~30 seconds)
             dirtyCheckTickCounter += 1
             if dirtyCheckTickCounter >= 10 {
@@ -55,18 +57,45 @@ extension ThreadManager {
                 await refreshBranchStates()
             }
 
-            // Jira sync every 20th tick (~60 seconds)
+            // Jira sync every 60th tick (~5 minutes)
             _jiraSyncTickCounter += 1
-            if _jiraSyncTickCounter >= 20 {
+            if _jiraSyncTickCounter >= 60 {
                 _jiraSyncTickCounter = 0
                 await runJiraSyncTick()
+                didRunStatusSync = true
             }
 
-            // PR sync roughly every 30 seconds after the initial startup sync.
+            // PR sync every 60th tick (~5 minutes).
+            // Runs with yields between threads to avoid blocking.
             _prSyncTickCounter += 1
-            if _prSyncTickCounter >= 6 {
+            if _prSyncTickCounter >= 60 {
                 _prSyncTickCounter = 0
                 await runPRSyncTick()
+                didRunStatusSync = true
+            }
+
+            if didRunStatusSync {
+                lastStatusSyncAt = Date()
+                await MainActor.run {
+                    NotificationCenter.default.post(name: .magentStatusSyncCompleted, object: nil)
+                }
+            }
+        }
+    }
+
+    /// Force-refreshes PR and Jira statuses for all threads immediately.
+    /// Skips if a sync pass is already in progress.
+    func forceRefreshStatuses() {
+        Task {
+            await runPRSyncTick()
+            await runJiraSyncTick()
+            await verifyDetectedJiraTickets()
+            lastStatusSyncAt = Date()
+            // Reset counters so the next periodic tick doesn't re-run immediately.
+            _prSyncTickCounter = 0
+            _jiraSyncTickCounter = 0
+            await MainActor.run {
+                NotificationCenter.default.post(name: .magentStatusSyncCompleted, object: nil)
             }
         }
     }

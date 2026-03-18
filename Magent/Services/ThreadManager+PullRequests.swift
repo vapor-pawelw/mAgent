@@ -58,6 +58,10 @@ extension ThreadManager {
     }
 
     func runPRSyncTick() async {
+        guard !isPRSyncRunning else { return }
+        isPRSyncRunning = true
+        defer { isPRSyncRunning = false }
+
         let settings = persistence.loadSettings()
         for project in settings.projects where _cachedRemoteByProjectId[project.id] == nil {
             _ = await cachedPullRequestRemote(for: project.id, repoPath: project.repoPath)
@@ -87,6 +91,9 @@ extension ThreadManager {
                 savePRInfoToCache(info: info, thread: threads[i])
                 changed = true
             }
+
+            // Yield between threads so the background pass doesn't starve other work.
+            await Task.yield()
         }
 
         if changed {
@@ -97,6 +104,25 @@ extension ThreadManager {
         }
 
         prunePRCache()
+    }
+
+    /// Refreshes PR status for a single thread (called on thread selection).
+    func refreshPRForSelectedThread(_ thread: MagentThread) {
+        guard !thread.isMain else { return }
+        Task {
+            // Skip if a bulk sync is already running — it will cover this thread.
+            guard !isPRSyncRunning else { return }
+
+            let settings = persistence.loadSettings()
+            guard let project = settings.projects.first(where: { $0.id == thread.projectId }),
+                  let remote = await cachedPullRequestRemote(for: project.id, repoPath: project.repoPath) else {
+                return
+            }
+
+            let branch = thread.actualBranch ?? thread.branchName
+            let info = await git.fetchPullRequest(remote: remote, branch: branch)
+            await updatePullRequestInfo(info, forThreadId: thread.id)
+        }
     }
 
     // MARK: - PR Cache

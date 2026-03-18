@@ -194,8 +194,9 @@ final class SplitViewController: NSSplitViewController {
         // Sidebar items can be stale snapshots; always resolve the latest thread model.
         let resolvedThread = ThreadManager.shared.threads.first(where: { $0.id == thread.id }) ?? thread
 
-        // Refresh Jira ticket title/status in the background
+        // Refresh Jira ticket title/status and PR status in the background
         ThreadManager.shared.refreshJiraTicketForSelectedThread(resolvedThread)
+        ThreadManager.shared.refreshPRForSelectedThread(resolvedThread)
 
         // Skip if already showing this thread (preserves terminal scrollback)
         if currentDetailVC?.thread.id == resolvedThread.id { return }

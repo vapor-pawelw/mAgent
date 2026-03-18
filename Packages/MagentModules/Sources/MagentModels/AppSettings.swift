@@ -56,6 +56,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var autoSetThreadDescription: Bool
     public var autoSetThreadIconFromWorkType: Bool
     public var narrowThreads: Bool
+    public var showPRStatusBadges: Bool
+    public var showJiraStatusBadges: Bool
     public var autoRenameSlugPrompt: String
     public var useThreadSections: Bool
     public var isConfigured: Bool
@@ -101,6 +103,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoSetThreadDescription: Bool = true,
         autoSetThreadIconFromWorkType: Bool = true,
         narrowThreads: Bool = false,
+        showPRStatusBadges: Bool = true,
+        showJiraStatusBadges: Bool = true,
         autoRenameSlugPrompt: String = AppSettings.defaultSlugPrompt,
         useThreadSections: Bool = true,
         isConfigured: Bool = false,
@@ -145,6 +149,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.autoSetThreadDescription = autoSetThreadDescription
         self.autoSetThreadIconFromWorkType = autoSetThreadIconFromWorkType
         self.narrowThreads = narrowThreads
+        self.showPRStatusBadges = showPRStatusBadges
+        self.showJiraStatusBadges = showJiraStatusBadges
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.useThreadSections = useThreadSections
         self.isConfigured = isConfigured
@@ -195,6 +201,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoSetThreadDescription = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadDescription) ?? legacyAutoRename ?? true
         autoSetThreadIconFromWorkType = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadIconFromWorkType) ?? true
         narrowThreads = try container.decodeIfPresent(Bool.self, forKey: .narrowThreads) ?? false
+        showPRStatusBadges = try container.decodeIfPresent(Bool.self, forKey: .showPRStatusBadges) ?? true
+        showJiraStatusBadges = try container.decodeIfPresent(Bool.self, forKey: .showJiraStatusBadges) ?? true
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt) ?? Self.defaultSlugPrompt
         useThreadSections = try container.decodeIfPresent(Bool.self, forKey: .useThreadSections) ?? true
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
@@ -242,6 +250,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoSetThreadDescription, forKey: .autoSetThreadDescription)
         try container.encode(autoSetThreadIconFromWorkType, forKey: .autoSetThreadIconFromWorkType)
         try container.encode(narrowThreads, forKey: .narrowThreads)
+        try container.encode(showPRStatusBadges, forKey: .showPRStatusBadges)
+        try container.encode(showJiraStatusBadges, forKey: .showJiraStatusBadges)
         // Keep writing the legacy key for backward compatibility with older builds.
         try container.encode(autoRenameBranches, forKey: .autoRenameWorktrees)
         try container.encode(autoRenameSlugPrompt, forKey: .autoRenameSlugPrompt)
@@ -386,6 +396,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case autoSetThreadDescription
         case autoSetThreadIconFromWorkType
         case narrowThreads
+        case showPRStatusBadges
+        case showJiraStatusBadges
         case autoRenameWorktrees
         case autoRenameSlugPrompt
         case useThreadSections

@@ -20,6 +20,8 @@ public nonisolated struct JiraTicket: Codable, Sendable {
     public let key: String
     public let summary: String
     public let status: String
+    /// The Jira status category key: "new", "indeterminate", or "done".
+    public let statusCategoryKey: String?
     public let assigneeAccountId: String?
     public let issueId: Int?
 }
@@ -321,10 +323,27 @@ public final class JiraService: Sendable {
             issueId = nil
         }
 
+        // Extract statusCategory.key from nested status object or fields.status object
+        let statusCategoryKey: String? = {
+            if let statusObj = dict["status"] as? [String: Any],
+               let cat = statusObj["statusCategory"] as? [String: Any],
+               let catKey = cat["key"] as? String {
+                return catKey
+            }
+            if let fields = dict["fields"] as? [String: Any],
+               let statusObj = fields["status"] as? [String: Any],
+               let cat = statusObj["statusCategory"] as? [String: Any],
+               let catKey = cat["key"] as? String {
+                return catKey
+            }
+            return nil
+        }()
+
         return JiraTicket(
             key: key,
             summary: summary,
             status: status,
+            statusCategoryKey: statusCategoryKey,
             assigneeAccountId: assigneeAccountId,
             issueId: issueId
         )

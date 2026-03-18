@@ -13,6 +13,8 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var autoSetDescriptionCheckbox: NSButton!
     private var autoSetIconFromWorkTypeCheckbox: NSButton!
     private var narrowThreadsCheckbox: NSButton!
+    private var showPRStatusBadgesCheckbox: NSButton!
+    private var showJiraStatusBadgesCheckbox: NSButton!
     private var autoReorderOnCompletionCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
@@ -227,6 +229,29 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         autoReorderDesc.font = .systemFont(ofSize: 11)
         autoReorderDesc.textColor = NSColor(resource: .textSecondary)
         sidebarSection.addArrangedSubview(autoReorderDesc)
+
+        showPRStatusBadgesCheckbox = NSButton(
+            checkboxWithTitle: "Show PR status badges",
+            target: self,
+            action: #selector(showPRStatusBadgesToggled)
+        )
+        showPRStatusBadgesCheckbox.state = settings.showPRStatusBadges ? .on : .off
+        sidebarSection.addArrangedSubview(showPRStatusBadgesCheckbox)
+
+        showJiraStatusBadgesCheckbox = NSButton(
+            checkboxWithTitle: "Show Jira status badges",
+            target: self,
+            action: #selector(showJiraStatusBadgesToggled)
+        )
+        showJiraStatusBadgesCheckbox.state = settings.showJiraStatusBadges ? .on : .off
+        sidebarSection.addArrangedSubview(showJiraStatusBadgesCheckbox)
+
+        let statusBadgesDesc = NSTextField(
+            wrappingLabelWithString: "Display colored status pills next to PR numbers and Jira ticket keys in the sidebar and top bar."
+        )
+        statusBadgesDesc.font = .systemFont(ofSize: 11)
+        statusBadgesDesc.textColor = NSColor(resource: .textSecondary)
+        sidebarSection.addArrangedSubview(statusBadgesDesc)
 
         let (injectionCard, injectionSection) = createSectionCard(
             title: "Startup Injection",
@@ -668,6 +693,16 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     @objc private func autoReorderOnCompletionToggled() {
         settings.autoReorderThreadsOnAgentCompletion = autoReorderOnCompletionCheckbox.state == .on
         persistSettings()
+    }
+
+    @objc private func showPRStatusBadgesToggled() {
+        settings.showPRStatusBadges = showPRStatusBadgesCheckbox.state == .on
+        persistSettings(notify: true)
+    }
+
+    @objc private func showJiraStatusBadgesToggled() {
+        settings.showJiraStatusBadges = showJiraStatusBadgesCheckbox.state == .on
+        persistSettings(notify: true)
     }
 
     func textDidChange(_ notification: Notification) {

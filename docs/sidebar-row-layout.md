@@ -12,7 +12,7 @@ This thread refined the left-rail and spacing rules for project headers, section
 - Regular thread rows use a three-line vertical stack:
   - line 1 (primary): task description when set; otherwise the branch name
   - line 2 (secondary / `subtitleLabel`): branch · worktree when a description is shown; worktree only when no description and the worktree name differs from the branch; hidden otherwise
-  - line 3 (PR/ticket / `prSubtitleLabel`): detected Jira ticket key and/or PR/MR display label, dot-separated when both are present (e.g. `IP-1234  ·  PR #305`); hidden when neither is available. Ticket display is gated by `AppSettings.jiraTicketDetectionEnabled`.
+  - line 3 (PR/ticket row): individual `jiraTicketLabel` + `jiraStatusBadge` + dot separator + `prNumberLabel` + `prStatusBadge`, composed in a horizontal stack with `detachesHiddenViews`. Each element is independently hideable. Status badges are `StatusBadgeView` pills showing Jira status (color from API `statusCategory.key`) and PR status (Open/Draft/Merged). Badges gated by `AppSettings.showJiraStatusBadges` / `showPRStatusBadges`. Ticket display gated by `AppSettings.jiraTicketDetectionEnabled`.
 - All thread rows have the same uniform height regardless of whether secondary/PR lines are populated; the three-row vertical stack is center-aligned in the row. The icon vertically aligns to the visible lines only — when only a single line is shown, the icon is centered on that line.
 - Section headers and the main-thread labels share the same leading text rail.
 - Threads inside sections keep their extra indentation level relative to top-level rows.
@@ -40,7 +40,7 @@ This thread refined the left-rail and spacing rules for project headers, section
 - Keep the main-row accent bar aligned to `sidebarRowLeadingInset - outlineIndentationPerLevel`; otherwise it drifts away from the section-dot rail.
 - If you change the main-row copy again, preserve the two-line structure unless you also revisit `heightOfRowByItem`.
 - The uniform row height formula in `ThreadCell.uniformSidebarRowHeight` reserves space for `maxDescriptionLines` of description font plus **2** metadata lines (secondary + PR). If you add a fourth line you must update that formula accordingly.
-- `prSubtitleLabel` lives inside `prRow` (a horizontal `NSStackView` with no leading spacer). Do **not** add a spacer to align it with `subtitleLabel`: `subtitleLabel`'s leading dot detaches when hidden, so a fixed-width spacer in `prRow` would indent PR text relative to the branch/worktree line whenever the dirty dot is hidden. `verticalStack.detachesHiddenViews` is `true`, and `ThreadCell.syncRowVisibility()` hides `prRow`/`secondaryRow` directly when their content is empty, so the icon centers correctly on single-line rows.
-- `prSubtitleLabel` uses `.controlAccentColor` so the PR/MR label stands out from secondary metadata text.
-- Never merge branch/worktree and PR/ticket into one secondary line. Ticket and PR info belongs exclusively on line 3 (`prSubtitleLabel`).
+- The PR/ticket row (`prRow`) contains `[jiraTicketTF, jiraBadge, dotSep, prNumTF, prBadge]` with `detachesHiddenViews = true` and `spacing = 3`. Each element is independently hidden based on data availability and settings. `syncRowVisibility()` hides the entire row when both Jira and PR labels are hidden.
+- `jiraTicketLabel` and `prNumberLabel` use `.controlAccentColor` so they stand out from secondary metadata text. Status badges use `StatusBadgeView` (8pt font in sidebar) with darkened colors for white-text legibility.
+- Never merge branch/worktree and PR/ticket into one secondary line. Ticket and PR info belongs exclusively on line 3 (the PR row).
 - Top spacing before the first repo row is driven by `scrollViewTopConstraint` / `sidebarTopInset`, not by `NSScrollView.contentInsets`.

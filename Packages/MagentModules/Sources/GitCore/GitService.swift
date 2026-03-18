@@ -265,7 +265,7 @@ public final class GitService: Sendable {
         let quotedBranch = ShellExecutor.shellQuote(branch)
 
         for (state, isMerged) in [("open", false), ("merged", true)] {
-            let cmd = "gh pr list --repo \(quotedRepo) --head \(quotedBranch) --json number,url --state \(state) --limit 1"
+            let cmd = "gh pr list --repo \(quotedRepo) --head \(quotedBranch) --json number,url,isDraft --state \(state) --limit 1"
             let result = await ShellExecutor.execute(cmd)
             guard result.exitCode == 0 else { continue }
 
@@ -276,7 +276,8 @@ public final class GitService: Sendable {
                   let urlString = first["url"] as? String,
                   let url = URL(string: urlString) else { continue }
 
-            return PullRequestInfo(number: number, url: url, provider: remote.provider, isMerged: isMerged)
+            let isDraft = first["isDraft"] as? Bool ?? false
+            return PullRequestInfo(number: number, url: url, provider: remote.provider, isMerged: isMerged, isDraft: isDraft)
         }
         return nil
     }

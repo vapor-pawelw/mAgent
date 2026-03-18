@@ -4,7 +4,9 @@ import MagentCore
 extension ThreadManager {
 
     /// How long a cache entry is considered fresh before re-verification.
-    private static let jiraTicketCacheTTL: TimeInterval = 24 * 60 * 60
+    /// Slightly above the 5-minute polling cadence so mid-cycle refreshes
+    /// (e.g. on thread selection) survive until the next periodic tick.
+    private static let jiraTicketCacheTTL: TimeInterval = 6 * 60
 
     // MARK: - Cache Loading
 
@@ -108,6 +110,7 @@ extension ThreadManager {
                     key: ticket.key,
                     summary: ticket.summary,
                     status: ticket.status,
+                    statusCategoryKey: ticket.statusCategoryKey,
                     verifiedAt: now
                 )
                 jiraTicketCache[ticket.key] = entry
@@ -194,6 +197,7 @@ extension ThreadManager {
                 key: ticket.key,
                 summary: ticket.summary,
                 status: ticket.status,
+                statusCategoryKey: ticket.statusCategoryKey,
                 verifiedAt: Date()
             )
 

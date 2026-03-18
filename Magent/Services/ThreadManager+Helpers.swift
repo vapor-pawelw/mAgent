@@ -1134,6 +1134,7 @@ extension Notification.Name {
     static let magentNavigateToThread = Notification.Name("magentNavigateToThread")
     static let magentPullRequestInfoChanged = Notification.Name("magentPullRequestInfoChanged")
     static let magentJiraTicketInfoChanged = Notification.Name("magentJiraTicketInfoChanged")
+    static let magentStatusSyncCompleted = Notification.Name("magentStatusSyncCompleted")
     static let magentPromptTOCVisibilityChanged = Notification.Name("magentPromptTOCVisibilityChanged")
     static let magentSettingsDidChange = Notification.Name("magentSettingsDidChange")
     static let magentUpdateStateChanged = Notification.Name("magentUpdateStateChanged")

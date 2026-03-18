@@ -96,6 +96,13 @@ final class ThreadListViewController: NSViewController {
     private var rateLimitStatusContainer: NSStackView!
     private var rateLimitStatusIconView: NSImageView!
     private var rateLimitStatusLabel: NSTextField!
+    private var sidebarHeaderStack: NSStackView!
+    private var syncStatusContainer: NSStackView!
+    private var syncStatusLabel: NSTextField!
+    private var syncRefreshButton: NSButton!
+    /// Repeating timer for updating the "Synced X ago" label. Uses `[weak self]` closure.
+    /// Not invalidated on deinit — this VC lives for the app's lifetime.
+    private var syncStatusTimer: Timer?
     private var scrollViewTopConstraint: NSLayoutConstraint?
     var diffPanelView: DiffPanelView!
     var branchMismatchView: BranchMismatchView!
@@ -194,7 +201,15 @@ final class ThreadListViewController: NSViewController {
             name: .magentSettingsDidChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(statusSyncCompleted),
+            name: .magentStatusSyncCompleted,
+            object: nil
+        )
         updateGlobalRateLimitSummary()
+        updateSyncStatusLabel()
+        startSyncStatusTimer()
         checkForPendingPromptRecovery()
     }
 
@@ -253,6 +268,42 @@ final class ThreadListViewController: NSViewController {
         updateGlobalRateLimitSummary()
     }
 
+    @objc private func statusSyncCompleted() {
+        updateSyncStatusLabel()
+    }
+
+    @objc private func syncRefreshTapped() {
+        threadManager.forceRefreshStatuses()
+        syncStatusLabel.stringValue = "Syncing…"
+    }
+
+    private func updateSyncStatusLabel() {
+        guard let lastSync = threadManager.lastStatusSyncAt else {
+            syncStatusContainer.isHidden = true
+            recalculateSidebarHeaderInset()
+            return
+        }
+        syncStatusLabel.stringValue = "Synced \(Self.relativeTimeString(from: lastSync))"
+        syncStatusContainer.isHidden = false
+        recalculateSidebarHeaderInset()
+    }
+
+    private func startSyncStatusTimer() {
+        syncStatusTimer?.invalidate()
+        syncStatusTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.updateSyncStatusLabel()
+        }
+    }
+
+    private static func relativeTimeString(from date: Date) -> String {
+        let seconds = Int(Date().timeIntervalSince(date))
+        if seconds < 60 { return "just now" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
+        return "\(hours)h ago"
+    }
+
     @objc private func settingsDidChange() {
         // Debounce: settings can be saved many times in quick succession (e.g. typing in a
         // text field, or multiple observers firing back-to-back). Coalesce into one reload
@@ -291,14 +342,55 @@ final class ThreadListViewController: NSViewController {
         rateLimitStatusContainer.spacing = 4
         rateLimitStatusContainer.isHidden = true
         rateLimitStatusContainer.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(rateLimitStatusContainer)
+
+        // Sync status row
+        let syncSymbolConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
+        syncStatusLabel = NSTextField(labelWithString: "")
+        syncStatusLabel.font = .systemFont(ofSize: 9, weight: .medium)
+        syncStatusLabel.textColor = .tertiaryLabelColor
+        syncStatusLabel.lineBreakMode = .byTruncatingTail
+        syncStatusLabel.maximumNumberOfLines = 1
+        syncStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        syncRefreshButton = NSButton()
+        syncRefreshButton.bezelStyle = .inline
+        syncRefreshButton.isBordered = false
+        syncRefreshButton.image = NSImage(
+            systemSymbolName: "arrow.clockwise",
+            accessibilityDescription: "Refresh"
+        )?.withSymbolConfiguration(syncSymbolConfig)
+        syncRefreshButton.contentTintColor = .tertiaryLabelColor
+        syncRefreshButton.target = self
+        syncRefreshButton.action = #selector(syncRefreshTapped)
+        syncRefreshButton.toolTip = "Refresh PR and Jira statuses now"
+        syncRefreshButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            syncRefreshButton.widthAnchor.constraint(equalToConstant: 14),
+            syncRefreshButton.heightAnchor.constraint(equalToConstant: 14),
+        ])
+
+        syncStatusContainer = NSStackView(views: [syncStatusLabel, syncRefreshButton])
+        syncStatusContainer.orientation = .horizontal
+        syncStatusContainer.alignment = .centerY
+        syncStatusContainer.spacing = 3
+        syncStatusContainer.isHidden = true
+        syncStatusContainer.translatesAutoresizingMaskIntoConstraints = false
+
+        // Vertical header stack holding rate limit + sync status
+        sidebarHeaderStack = NSStackView(views: [rateLimitStatusContainer, syncStatusContainer])
+        sidebarHeaderStack.orientation = .vertical
+        sidebarHeaderStack.alignment = .leading
+        sidebarHeaderStack.spacing = 2
+        sidebarHeaderStack.detachesHiddenViews = true
+        sidebarHeaderStack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(sidebarHeaderStack)
 
         rebuildRateLimitStatusMenu()
 
         NSLayoutConstraint.activate([
-            rateLimitStatusContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.rateLimitStatusTopInset),
-            rateLimitStatusContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            rateLimitStatusContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -8),
+            sidebarHeaderStack.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.rateLimitStatusTopInset),
+            sidebarHeaderStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+            sidebarHeaderStack.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -8),
         ])
     }
 
@@ -307,22 +399,30 @@ final class ThreadListViewController: NSViewController {
         rateLimitStatusLabel.stringValue = summary ?? ""
         rateLimitStatusContainer.isHidden = (summary == nil)
         rateLimitStatusLabel.toolTip = summary
+        recalculateSidebarHeaderInset()
+        rebuildRateLimitStatusMenu()
+    }
+
+    private func recalculateSidebarHeaderInset() {
+        let hasRateLimit = !rateLimitStatusContainer.isHidden
+        let hasSyncStatus = !syncStatusContainer.isHidden
+        let hasAnyHeader = hasRateLimit || hasSyncStatus
+
         let topInset: CGFloat
-        if summary == nil {
+        if !hasAnyHeader {
             topInset = Self.sidebarTopInset
         } else {
             view.layoutSubtreeIfNeeded()
-            let summaryHeight = ceil(rateLimitStatusContainer.fittingSize.height)
+            let headerHeight = ceil(sidebarHeaderStack.fittingSize.height)
             topInset = Self.sidebarTopInset
                 + Self.rateLimitStatusTopInset
-                + summaryHeight
+                + headerHeight
                 + Self.rateLimitStatusListSpacing
         }
         if abs(topInset - currentScrollTopOffset) > 0.5 {
             currentScrollTopOffset = topInset
             scrollViewTopConstraint?.constant = topInset
         }
-        rebuildRateLimitStatusMenu()
     }
 
     private func rebuildRateLimitStatusMenu() {
@@ -440,8 +540,8 @@ final class ThreadListViewController: NSViewController {
         scrollView.scrollerInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 
         view.addSubview(scrollView)
-        if rateLimitStatusContainer.superview === view {
-            view.addSubview(rateLimitStatusContainer, positioned: .above, relativeTo: scrollView)
+        if sidebarHeaderStack.superview === view {
+            view.addSubview(sidebarHeaderStack, positioned: .above, relativeTo: scrollView)
         }
 
         // Diff panel at the bottom of sidebar

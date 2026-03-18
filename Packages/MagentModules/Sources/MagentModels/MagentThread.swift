@@ -107,21 +107,33 @@ public nonisolated struct PullRequestInfo: Sendable, Equatable {
     public let url: URL
     public let provider: GitHostingProvider
     public let isMerged: Bool
+    public let isDraft: Bool
 
-    public init(number: Int, url: URL, provider: GitHostingProvider, isMerged: Bool = false) {
+    public init(number: Int, url: URL, provider: GitHostingProvider, isMerged: Bool = false, isDraft: Bool = false) {
         self.number = number
         self.url = url
         self.provider = provider
         self.isMerged = isMerged
+        self.isDraft = isDraft
+    }
+
+    public var numberLabel: String {
+        provider == .gitlab ? "!\(number)" : "#\(number)"
     }
 
     public var displayLabel: String {
-        let base = provider == .gitlab ? "MR !\(number)" : "PR #\(number)"
-        return isMerged ? "\(base) (✅ Merged)" : base
+        let prefix = provider == .gitlab ? "MR" : "PR"
+        return "\(prefix) \(numberLabel)"
     }
+
     public var shortLabel: String {
-        let base = provider == .gitlab ? "!\(number)" : "#\(number)"
-        return isMerged ? "\(base) (✅ Merged)" : base
+        numberLabel
+    }
+
+    public var statusText: String {
+        if isMerged { return "Merged" }
+        if isDraft { return "Draft" }
+        return "Open"
     }
 }
 
