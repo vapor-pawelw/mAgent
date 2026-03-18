@@ -18,6 +18,10 @@ All notable changes to this project will be documented in this file.
 
 ### Terminal
 - Fixed: clicking on the terminal surface no longer shows a "returned 127" error after a reboot. The mouse-click URL capture script in `/tmp` had its shebang on the wrong line, causing the OS to fail to find the interpreter.
+### Sidebar
+- The diff panel's CHANGES tab is now ALL CHANGES and always shows the full branch diff (all committed + uncommitted changes since the merge base), instead of switching between uncommitted and per-commit views on selection.
+- The "Uncommitted" row in the COMMITS tab is now hidden when the working tree is clean.
+
 ### Thread
 - Auto-rename now triggers for non-visible threads: when a thread completes its first agent turn in the background (not selected in the sidebar), the bell-based completion handler extracts the first prompt from pane content and triggers auto-rename immediately, instead of waiting until the thread is selected.
 - PR and Jira buttons are now the leftmost action buttons in the toolbar, separated from utility buttons by a divider.

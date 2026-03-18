@@ -577,6 +577,7 @@ extension ThreadListViewController {
         Task {
             let current = self.threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
             let entries: [FileDiffEntry]
+            let allBranchEntries: [FileDiffEntry]
             let commits: [BranchCommit]
             let hasMoreCommits: Bool
             let baseBranch: String?
@@ -589,6 +590,7 @@ extension ThreadListViewController {
                     limit: commitLimit + 1
                 )
                 entries = await entriesTask
+                allBranchEntries = entries // main thread: all changes = uncommitted
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
@@ -596,12 +598,14 @@ extension ThreadListViewController {
                 let resolvedBaseBranch = self.threadManager.resolveBaseBranch(for: current)
                 baseBranch = resolvedBaseBranch
                 async let entriesTask = GitService.shared.workingTreeDiffStats(worktreePath: current.worktreePath)
+                async let allBranchTask = GitService.shared.diffStats(worktreePath: current.worktreePath, baseBranch: resolvedBaseBranch)
                 async let commitsTask = GitService.shared.commitLog(
                     worktreePath: current.worktreePath,
                     baseBranch: resolvedBaseBranch,
                     limit: commitLimit + 1
                 )
                 entries = await entriesTask
+                allBranchEntries = await allBranchTask
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
@@ -613,6 +617,7 @@ extension ThreadListViewController {
                 guard (self.diffPanelRefreshGeneration[current.id] ?? 0) == generation else { return }
                 self.diffPanelView.update(
                     with: entries,
+                    allBranchEntries: allBranchEntries,
                     commits: commits,
                     hasMoreCommits: hasMoreCommits,
                     forceVisible: current.isMain,
