@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - Jira sync features (board config, section sync, auto-thread creation) remain debug-only behind the renamed `FEATURE_JIRA_SYNC` flag.
 
 ### Terminal
+- Fixed: selecting a thread with pinned web tabs could leave no tab selected, because web tab restoration shifted tab indices after the initial selection index was computed.
 - Scroll overlay arrows now scroll half a page per click instead of a full page, making it easier to browse terminal output incrementally.
 - Mouse wheel now scrolls 6 lines per tick instead of 1, for faster scrolling without jumping a full page.
 - Fixed: clicking on the terminal surface no longer shows a "returned 127" error after a reboot. The mouse-click URL capture script in `/tmp` had its shebang on the wrong line, causing the OS to fail to find the interpreter.

@@ -556,7 +556,10 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         await MainActor.run {
-            selectPreparedTab(at: initialIndex)
+            // Resolve the display index from session name — web tab restoration may have
+            // shifted indices since initialIndex was computed.
+            let resolvedIndex = displayIndex(forSession: initialSessionName) ?? initialIndex
+            selectPreparedTab(at: resolvedIndex)
             prepareSessionsInBackground(orderedSessions.enumerated().compactMap { offset, sessionName in
                 offset == initialIndex ? nil : sessionName
             })
