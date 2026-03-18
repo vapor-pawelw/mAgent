@@ -41,8 +41,8 @@ final class ThreadDetailViewController: NSViewController {
     let tabBarStack = NSStackView()
     let terminalContainer: NSView = AppBackgroundView()
     let topBar = NSStackView()
-    let openPRButton = NSButton()
-    let openInJiraButton = NSButton()
+    let openPRButton = MiddleClickButton()
+    let openInJiraButton = MiddleClickButton()
     let openInXcodeButton = NSButton()
     let openInFinderButton = NSButton()
     let resyncLocalPathsButton = NSButton()
@@ -54,8 +54,19 @@ final class ThreadDetailViewController: NSViewController {
     let addTabButton = NSButton()
     let floatingScrollToBottomButton = TerminalScrollToBottomPillButton()
 
+    // MARK: - Tab Slot Model
+    /// Display-order mapping: `tabSlots[i]` tells what content `tabItems[i]` shows.
+    enum TabSlot: Equatable {
+        case terminal(sessionName: String)
+        case web(identifier: String)
+    }
     var tabItems: [TabItemView] = []
+    var tabSlots: [TabSlot] = []
+    /// Terminal views indexed by `thread.tmuxSessionNames` (creation order, NOT display order).
     var terminalViews: [TerminalSurfaceView] = []
+    /// Web tab entries in creation order (NOT display order).
+    var webTabs: [WebTabEntry] = []
+    var activeWebTabId: String?
     var currentTabIndex = 0
     /// Index of the non-closable "primary" tab. -1 means all tabs are closable (main threads).
     var primaryTabIndex = 0
@@ -293,15 +304,17 @@ final class ThreadDetailViewController: NSViewController {
         openPRButton.imageScaling = .scaleProportionallyDown
         openPRButton.target = self
         openPRButton.action = #selector(openPRTapped(_:))
-        openPRButton.toolTip = "Open Pull Request in Browser"
+        openPRButton.toolTip = "Open Pull Request in Browser\nMiddle-click: open in tab"
+        openPRButton.onMiddleClick = { [weak self] in self?.openPRInWebTab() }
 
         openInJiraButton.bezelStyle = .texturedRounded
         openInJiraButton.image = jiraButtonImage()
         openInJiraButton.imageScaling = .scaleProportionallyDown
         openInJiraButton.target = self
         openInJiraButton.action = #selector(openInJiraTapped)
-        openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenInJira)
+        openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenInJira) + "\nMiddle-click: open in tab"
         openInJiraButton.isHidden = true
+        openInJiraButton.onMiddleClick = { [weak self] in self?.openJiraInWebTab() }
 
         openInXcodeButton.bezelStyle = .texturedRounded
         openInXcodeButton.imageScaling = .scaleProportionallyDown
@@ -500,26 +513,39 @@ final class ThreadDetailViewController: NSViewController {
             backgroundSessionPreparationTask?.cancel()
             backgroundSessionPreparationTask = nil
 
+            // Clear any existing web tabs from a previous setupTabs call
+            for wt in webTabs { wt.view?.removeFromSuperview() }
+            webTabs.removeAll()
+            tabSlots.removeAll()
+            activeWebTabId = nil
+
             startLoadingOverlayTracking(sessionName: initialSessionName, agentType: initialAgentType)
 
             for (i, sessionName) in orderedSessions.enumerated() {
                 let title = thread.displayName(for: sessionName, at: i)
                 createTabItem(title: title, closable: true, pinned: i < pinnedCount)
+                tabSlots.append(.terminal(sessionName: sessionName))
 
                 let terminalView = makeTerminalView(for: sessionName)
                 terminalViews.append(terminalView)
             }
 
+            // Restore persisted web tabs (pages load lazily on selection).
+            // Pinned web tabs are inserted into the pinned section; unpinned appended at end.
+            restoreWebTabItems()
+
             rebuildTabBar()
-            rebindTabActions()
+            rebindAllTabActions()
 
             // Initialize indicator dots from thread model
-            for (i, sessionName) in orderedSessions.enumerated() where i < tabItems.count {
-                tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
-                tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
-                tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
-                tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
-                tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
+            for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
+                if case .terminal(let sessionName) = slot {
+                    tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
+                    tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
+                    tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
+                    tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
+                    tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
+                }
             }
         }
 
@@ -538,8 +564,37 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func currentSessionName() -> String? {
-        guard currentTabIndex >= 0, currentTabIndex < thread.tmuxSessionNames.count else { return nil }
-        return thread.tmuxSessionNames[currentTabIndex]
+        guard currentTabIndex >= 0, currentTabIndex < tabSlots.count else { return nil }
+        if case .terminal(let name) = tabSlots[currentTabIndex] { return name }
+        return nil
+    }
+
+    func currentSlot() -> TabSlot? {
+        guard currentTabIndex >= 0, currentTabIndex < tabSlots.count else { return nil }
+        return tabSlots[currentTabIndex]
+    }
+
+    /// Look up a terminal view by tmux session name (not display index).
+    func terminalView(forSession name: String) -> TerminalSurfaceView? {
+        guard let idx = thread.tmuxSessionNames.firstIndex(of: name) else { return nil }
+        guard idx < terminalViews.count else { return nil }
+        return terminalViews[idx]
+    }
+
+    /// The terminal view for the currently selected tab, or nil if it's a web tab.
+    func currentTerminalView() -> TerminalSurfaceView? {
+        guard let name = currentSessionName() else { return nil }
+        return terminalView(forSession: name)
+    }
+
+    /// Display index for a given terminal session name, or nil.
+    func displayIndex(forSession name: String) -> Int? {
+        tabSlots.firstIndex(of: .terminal(sessionName: name))
+    }
+
+    /// Display index for a given web tab identifier, or nil.
+    func displayIndex(forWebIdentifier id: String) -> Int? {
+        tabSlots.firstIndex(of: .web(identifier: id))
     }
 
     func updateTerminalScrollControlsState() {
@@ -659,28 +714,31 @@ final class ThreadDetailViewController: NSViewController {
               threadId == thread.id,
               let sessionName = userInfo["sessionName"] as? String else { return }
 
-        // Find the view index in our local (potentially stale) tmuxSessionNames copy.
-        // We look in thread.tmuxSessionNames rather than the model because removeTabBySessionName
-        // posts this notification *before* mutating threads[], so both copies still have the session.
-        guard let tabIndex = thread.tmuxSessionNames.firstIndex(of: sessionName) else { return }
-        guard tabIndex < terminalViews.count else { return }
+        // Find display index via tabSlots.
+        guard let displayIndex = tabSlots.firstIndex(of: .terminal(sessionName: sessionName)) else { return }
+        // Find terminal array index.
+        guard let termIdx = thread.tmuxSessionNames.firstIndex(of: sessionName),
+              termIdx < terminalViews.count else { return }
 
-        GhosttyAppManager.log("handleTabWillClose: threadId=\(threadId) session=\(sessionName) tabIndex=\(tabIndex)")
+        GhosttyAppManager.log("handleTabWillClose: threadId=\(threadId) session=\(sessionName) displayIndex=\(displayIndex)")
 
         // Remove the surface view.  This triggers viewDidMoveToWindow(nil) → destroySurface()
         // → ghostty_surface_free, preventing the zombie-surface crash.
-        terminalViews[tabIndex].removeFromSuperview()
-        terminalViews.remove(at: tabIndex)
+        terminalViews[termIdx].removeFromSuperview()
+        terminalViews.remove(at: termIdx)
 
-        if tabIndex < tabItems.count {
-            tabItems.remove(at: tabIndex)
+        if displayIndex < tabItems.count {
+            tabItems.remove(at: displayIndex)
+        }
+        if displayIndex < tabSlots.count {
+            tabSlots.remove(at: displayIndex)
         }
 
         // Keep pinnedCount / primaryTabIndex in sync.
-        if tabIndex < pinnedCount { pinnedCount -= 1 }
-        if tabIndex == primaryTabIndex {
+        if displayIndex < pinnedCount { pinnedCount -= 1 }
+        if displayIndex == primaryTabIndex {
             primaryTabIndex = 0
-        } else if primaryTabIndex > tabIndex {
+        } else if primaryTabIndex > displayIndex {
             primaryTabIndex -= 1
         }
 
@@ -693,16 +751,14 @@ final class ThreadDetailViewController: NSViewController {
         thread.busySessions.remove(sessionName)
         thread.waitingForInputSessions.remove(sessionName)
 
-        rebindTabActions()
+        rebindAllTabActions()
         rebuildTabBar()
 
         if tabItems.isEmpty {
             showEmptyState()
         } else {
-            let newIndex = min(tabIndex, tabItems.count - 1)
-            if newIndex != currentTabIndex || tabItems.count == terminalViews.count {
-                selectTab(at: newIndex)
-            }
+            let newIndex = min(displayIndex, tabItems.count - 1)
+            selectTab(at: newIndex)
         }
     }
 
@@ -715,18 +771,19 @@ final class ThreadDetailViewController: NSViewController {
         // The monitor already recreated the tmux sessions.
         // Replace the terminal views that were attached to the old (dead) sessions.
         for sessionName in deadSessions {
-            guard let i = thread.tmuxSessionNames.firstIndex(of: sessionName),
-                  i < terminalViews.count else { continue }
+            guard let termIdx = thread.tmuxSessionNames.firstIndex(of: sessionName),
+                  termIdx < terminalViews.count else { continue }
 
-            let wasSelected = (i == currentTabIndex)
-            let oldView = terminalViews[i]
+            let displayIdx = displayIndex(forSession: sessionName)
+            let wasSelected = displayIdx == currentTabIndex
+            let oldView = terminalViews[termIdx]
             oldView.removeFromSuperview()
 
             let newView = makeTerminalView(for: sessionName)
-            terminalViews[i] = newView
+            terminalViews[termIdx] = newView
 
-            if wasSelected {
-                selectTab(at: i)
+            if wasSelected, let displayIdx {
+                selectTab(at: displayIdx)
             }
         }
     }
@@ -738,8 +795,10 @@ final class ThreadDetailViewController: NSViewController {
               let unreadSessions = userInfo["unreadSessions"] as? Set<String> else { return }
 
         thread.unreadCompletionSessions = unreadSessions
-        for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
-            tabItems[i].hasUnreadCompletion = unreadSessions.contains(sessionName)
+        for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
+            if case .terminal(let sessionName) = slot {
+                tabItems[i].hasUnreadCompletion = unreadSessions.contains(sessionName)
+            }
         }
         refreshDiffViewerIfVisible()
         syncTransientState()
@@ -753,8 +812,10 @@ final class ThreadDetailViewController: NSViewController {
               let waitingSessions = userInfo["waitingSessions"] as? Set<String> else { return }
 
         thread.waitingForInputSessions = waitingSessions
-        for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
-            tabItems[i].hasWaitingForInput = waitingSessions.contains(sessionName)
+        for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
+            if case .terminal(let sessionName) = slot {
+                tabItems[i].hasWaitingForInput = waitingSessions.contains(sessionName)
+            }
         }
         syncTransientState()
     }
@@ -766,8 +827,10 @@ final class ThreadDetailViewController: NSViewController {
               let busySessions = userInfo["busySessions"] as? Set<String> else { return }
 
         thread.busySessions = busySessions
-        for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
-            tabItems[i].hasBusy = busySessions.contains(sessionName)
+        for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
+            if case .terminal(let sessionName) = slot {
+                tabItems[i].hasBusy = busySessions.contains(sessionName)
+            }
         }
         syncTransientState()
     }
@@ -778,9 +841,11 @@ final class ThreadDetailViewController: NSViewController {
               let latest = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
 
         thread.rateLimitedSessions = latest.rateLimitedSessions
-        for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
-            tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
-            tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
+        for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
+            if case .terminal(let sessionName) = slot {
+                tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
+                tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
+            }
         }
     }
 
@@ -852,18 +917,14 @@ final class ThreadDetailViewController: NSViewController {
     private func reloadTerminalViewsForUpdatedTerminalPreferences() {
         guard !terminalViews.isEmpty else { return }
 
-        let selectedIndex = min(currentTabIndex, terminalViews.count - 1)
-        let sessionNames = thread.tmuxSessionNames
-
         for terminalView in terminalViews {
             terminalView.removeFromSuperview()
         }
 
-        terminalViews = sessionNames.map(makeTerminalView(for:))
+        terminalViews = thread.tmuxSessionNames.map(makeTerminalView(for:))
 
-        if sessionNames.indices.contains(selectedIndex) {
-            selectTab(at: selectedIndex)
-        }
+        let selectedIndex = min(currentTabIndex, tabSlots.count - 1)
+        selectTab(at: selectedIndex)
     }
 
     func resyncLocalPathsButtonShouldBeHidden() -> Bool {

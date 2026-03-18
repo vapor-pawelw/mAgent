@@ -35,6 +35,17 @@ Each tab within a thread:
 - Starts in the thread worktree/repo directory on first session creation, but switching back to an already-running tab must not reset the shell's current directory
 - `Continue in...` context handoff must not create tracked or untracked files in the repo/worktree root; any transient handoff file should live outside the repo, use a unique filename so concurrent transfers do not collide, and expire automatically after a short retention window
 
+### Web Tabs
+
+Tabs can also display in-app web content (WKWebView) alongside terminal tabs:
+
+- **Middle-click** on the Jira or PR toolbar button opens the page in a web tab instead of the external browser
+- Web tabs show a permanent type icon (Jira/PR) in the tab bar, with back/forward/refresh navigation controls
+- Deduplication: opening the same URL again focuses the existing tab instead of creating a new one
+- Web tabs are persisted across app restarts but load lazily — the WKWebView is only created when the tab is first selected
+- Web tabs participate in the same tab bar as terminal tabs: they can be pinned, renamed, drag-reordered, and freely mixed with terminal tabs in both the pinned and unpinned sections
+- Display order is decoupled from content arrays via a `TabSlot` indirection layer, allowing free mixing of terminal and web tabs without breaking terminal view indexing
+
 ## Configuration (First Run / Settings)
 
 Before the app is usable, the user must complete a configuration step:

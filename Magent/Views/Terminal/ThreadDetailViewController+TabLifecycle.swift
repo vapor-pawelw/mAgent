@@ -11,50 +11,47 @@ extension ThreadDetailViewController {
     }
 
     func closeTab(at index: Int) {
-        GhosttyAppManager.log("closeTab: start index=\(index) sessions=\(thread.tmuxSessionNames.count) views=\(terminalViews.count)")
-        guard index < thread.tmuxSessionNames.count else { return }
+        guard index < tabSlots.count else { return }
 
-        let sessionName = thread.tmuxSessionNames[index]
-        GhosttyAppManager.log("closeTab: sessionName=\(sessionName)")
+        switch tabSlots[index] {
+        case .terminal(let sessionName):
+            GhosttyAppManager.log("closeTab: terminal session=\(sessionName) displayIndex=\(index)")
 
-        let alert = NSAlert()
-        alert.messageText = String(localized: .ThreadStrings.tabCloseTitle)
-        alert.informativeText = String(localized: .ThreadStrings.tabCloseMessage)
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: String(localized: .CommonStrings.commonClose))
-        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+            let alert = NSAlert()
+            alert.messageText = String(localized: .ThreadStrings.tabCloseTitle)
+            alert.informativeText = String(localized: .ThreadStrings.tabCloseMessage)
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: String(localized: .CommonStrings.commonClose))
+            alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else {
-            GhosttyAppManager.log("closeTab: cancelled")
-            return
-        }
-        GhosttyAppManager.log("closeTab: confirmed, starting Task")
+            let response = alert.runModal()
+            guard response == .alertFirstButtonReturn else { return }
 
-        Task {
-            do {
-                try await threadManager.removeTab(from: thread, sessionName: sessionName)
-                // UI cleanup (removeFromSuperview, tab bar rebuild, tab selection) is handled
-                // synchronously by handleTabWillCloseNotification, which fires inside
-                // removeTabBySessionName before this Task resumes.  Just sync our thread copy.
-                if let updated = threadManager.threads.first(where: { $0.id == thread.id }) {
-                    thread = updated
+            Task {
+                do {
+                    try await threadManager.removeTab(from: thread, sessionName: sessionName)
+                    if let updated = threadManager.threads.first(where: { $0.id == thread.id }) {
+                        thread = updated
+                    }
+                } catch {
+                    let alert = NSAlert()
+                    alert.messageText = String(localized: .CommonStrings.commonError)
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
+                    alert.runModal()
                 }
-            } catch {
-                let alert = NSAlert()
-                alert.messageText = String(localized: .CommonStrings.commonError)
-                alert.informativeText = error.localizedDescription
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
-                alert.runModal()
             }
+
+        case .web(let identifier):
+            closeWebTab(identifier: identifier)
         }
     }
 
     // MARK: - Close Multiple Tabs
 
     func closeTabsToTheRight(of index: Int) {
-        let count = tabItems.count
+        let count = tabSlots.count
         guard index < count - 1 else { return }
         let tabCount = count - index - 1
 
@@ -66,42 +63,52 @@ extension ThreadDetailViewController {
         alert.alertStyle = .warning
         alert.addButton(withTitle: String(localized: .CommonStrings.commonClose))
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        // Collect session names for tabs to the right (before mutating)
-        let sessionNames = (index + 1..<count).map { thread.tmuxSessionNames[$0] }
-        batchCloseTabs(sessionNames: sessionNames)
+        let slotsToClose = Array(tabSlots[(index + 1)...])
+        batchCloseSlots(slotsToClose)
     }
 
     func closeTabsToTheLeft(of index: Int) {
         guard index > 0 else { return }
-        let tabCount = index
 
         let alert = NSAlert()
         alert.messageText = String(localized: .ThreadStrings.tabsCloseLeftTitle)
-        alert.informativeText = tabCount == 1
-            ? String(localized: .ThreadStrings.tabsCloseLeftMessageOne(tabCount))
-            : String(localized: .ThreadStrings.tabsCloseLeftMessageMany(tabCount))
+        alert.informativeText = index == 1
+            ? String(localized: .ThreadStrings.tabsCloseLeftMessageOne(index))
+            : String(localized: .ThreadStrings.tabsCloseLeftMessageMany(index))
         alert.alertStyle = .warning
         alert.addButton(withTitle: String(localized: .CommonStrings.commonClose))
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        // Collect session names for tabs to the left (before mutating)
-        let sessionNames = (0..<index).map { thread.tmuxSessionNames[$0] }
-        batchCloseTabs(sessionNames: sessionNames)
+        let slotsToClose = Array(tabSlots[..<index])
+        batchCloseSlots(slotsToClose)
     }
 
-    /// Closes multiple tabs by session name in a single sequential Task.
-    private func batchCloseTabs(sessionNames: [String]) {
-        // Capture old session-name-to-index mapping before async mutation
-        let oldSessionNames = thread.tmuxSessionNames
-        let removedSet = Set(sessionNames)
+    /// Close a batch of slots (terminal + web).
+    private func batchCloseSlots(_ slots: [TabSlot]) {
+        var terminalSessionsToClose: [String] = []
+        var webIdsToClose: [String] = []
+        for slot in slots {
+            switch slot {
+            case .terminal(let name): terminalSessionsToClose.append(name)
+            case .web(let id): webIdsToClose.append(id)
+            }
+        }
+        // Close web tabs first (synchronous)
+        for id in webIdsToClose {
+            closeWebTab(identifier: id)
+        }
+        // Close terminal tabs (async, handled by handleTabWillCloseNotification)
+        if !terminalSessionsToClose.isEmpty {
+            batchCloseTabs(sessionNames: terminalSessionsToClose)
+        }
+    }
 
+    /// Closes multiple terminal tabs by session name in a single sequential Task.
+    /// UI cleanup for each tab is handled synchronously by `handleTabWillCloseNotification`.
+    func batchCloseTabs(sessionNames: [String]) {
         Task {
             for sessionName in sessionNames {
                 do {
@@ -114,32 +121,6 @@ extension ThreadDetailViewController {
                 if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                     self.thread = updated
                 }
-
-                // Determine which old indices were removed
-                let indicesToRemove = oldSessionNames.enumerated()
-                    .filter { removedSet.contains($0.element) }
-                    .map(\.offset)
-
-                // Remove in reverse order to keep indices stable
-                for index in indicesToRemove.reversed() {
-                    guard index < self.terminalViews.count, index < self.tabItems.count else { continue }
-                    self.terminalViews[index].removeFromSuperview()
-                    self.terminalViews.remove(at: index)
-                    self.tabItems.remove(at: index)
-
-                    if index < self.pinnedCount {
-                        self.pinnedCount -= 1
-                    }
-                    if index == self.primaryTabIndex {
-                        self.primaryTabIndex = 0
-                    } else if self.primaryTabIndex > index {
-                        self.primaryTabIndex -= 1
-                    }
-                }
-
-                self.rebindTabActions()
-                self.rebuildTabBar()
-
                 if self.tabItems.isEmpty {
                     self.showEmptyState()
                 } else {
@@ -153,8 +134,7 @@ extension ThreadDetailViewController {
     // MARK: - Rename Dialog
 
     func showTabRenameDialog(at index: Int) {
-        guard index < thread.tmuxSessionNames.count else { return }
-        let sessionName = thread.tmuxSessionNames[index]
+        guard index < tabSlots.count, case .terminal(let sessionName) = tabSlots[index] else { return }
         let currentCustomName = thread.customTabNames[sessionName]
         let defaultName = MagentThread.defaultDisplayName(at: index)
 
@@ -184,15 +164,7 @@ extension ThreadDetailViewController {
                 )
                 await MainActor.run {
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
-                        self.thread = updated
-                        // Update tab label
-                        if index < self.tabItems.count, index < updated.tmuxSessionNames.count {
-                            self.tabItems[index].titleLabel.stringValue = updated.displayName(
-                                for: updated.tmuxSessionNames[index],
-                                at: index
-                            )
-                        }
-                        // Re-bind closures in case session name changed
+                        // Re-bind closures and labels in case session name changed
                         self.handleRename(updated)
                     }
                 }
@@ -445,7 +417,7 @@ extension ThreadDetailViewController {
         guard index >= pinnedCount else { return }
         moveTab(from: index, to: pinnedCount)
         pinnedCount += 1
-        rebindTabActions()
+        rebindAllTabActions()
         rebuildTabBar()
         persistTabOrder()
     }
@@ -454,7 +426,7 @@ extension ThreadDetailViewController {
         guard index < pinnedCount else { return }
         pinnedCount -= 1
         moveTab(from: index, to: pinnedCount)
-        rebindTabActions()
+        rebindAllTabActions()
         rebuildTabBar()
         persistTabOrder()
     }

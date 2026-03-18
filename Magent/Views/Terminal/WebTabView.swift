@@ -1,0 +1,143 @@
+import Cocoa
+import WebKit
+
+/// Lightweight in-app browser view with back/forward/refresh navigation.
+/// Used for Jira tickets and similar web content displayed inside a tab.
+final class WebTabView: NSView, WKNavigationDelegate {
+
+    let webView: WKWebView
+    private let toolbar: NSStackView
+    private let backButton: NSButton
+    private let forwardButton: NSButton
+    private let refreshButton: NSButton
+    private let titleLabel: NSTextField
+    let tabIdentifier: String
+    let initialURL: URL
+
+    /// Fires when the page title changes (for updating the tab item label).
+    var onTitleChange: ((String?) -> Void)?
+
+    init(url: URL, identifier: String) {
+        self.tabIdentifier = identifier
+        self.initialURL = url
+
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .default()
+        webView = WKWebView(frame: .zero, configuration: config)
+        webView.translatesAutoresizingMaskIntoConstraints = false
+
+        backButton = NSButton(image: NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Back")!, target: nil, action: nil)
+        forwardButton = NSButton(image: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: "Forward")!, target: nil, action: nil)
+        refreshButton = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")!, target: nil, action: nil)
+
+        titleLabel = NSTextField(labelWithString: "")
+        titleLabel.font = .systemFont(ofSize: 11)
+        titleLabel.textColor = .secondaryLabelColor
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        toolbar = NSStackView()
+        toolbar.orientation = .horizontal
+        toolbar.spacing = 4
+        toolbar.alignment = .centerY
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
+
+        super.init(frame: .zero)
+
+        wantsLayer = true
+
+        for btn in [backButton, forwardButton, refreshButton] {
+            btn.bezelStyle = .inline
+            btn.isBordered = false
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            btn.setContentHuggingPriority(.required, for: .horizontal)
+        }
+
+        backButton.target = self
+        backButton.action = #selector(goBack)
+        forwardButton.target = self
+        forwardButton.action = #selector(goForward)
+        refreshButton.target = self
+        refreshButton.action = #selector(reload)
+
+        toolbar.addArrangedSubview(backButton)
+        toolbar.addArrangedSubview(forwardButton)
+        toolbar.addArrangedSubview(refreshButton)
+        toolbar.addArrangedSubview(titleLabel)
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        toolbar.addArrangedSubview(spacer)
+
+        addSubview(toolbar)
+        addSubview(webView)
+
+        NSLayoutConstraint.activate([
+            toolbar.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            toolbar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            toolbar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            toolbar.heightAnchor.constraint(equalToConstant: 28),
+
+            webView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 2),
+            webView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            webView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        webView.navigationDelegate = self
+        webView.load(URLRequest(url: url))
+        updateNavButtons()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: - Navigation Actions
+
+    @objc private func goBack() {
+        webView.goBack()
+    }
+
+    @objc private func goForward() {
+        webView.goForward()
+    }
+
+    @objc func reload() {
+        if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
+            webView.reloadFromOrigin()
+        } else {
+            webView.reload()
+        }
+    }
+
+    func hardRefresh() {
+        webView.reloadFromOrigin()
+    }
+
+    private func updateNavButtons() {
+        backButton.isEnabled = webView.canGoBack
+        forwardButton.isEnabled = webView.canGoForward
+    }
+
+    // MARK: - WKNavigationDelegate
+
+    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        MainActor.assumeIsolated {
+            updateNavButtons()
+            titleLabel.stringValue = webView.title ?? ""
+            onTitleChange?(webView.title)
+        }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        MainActor.assumeIsolated {
+            updateNavButtons()
+        }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
+        MainActor.assumeIsolated {
+            updateNavButtons()
+        }
+    }
+}

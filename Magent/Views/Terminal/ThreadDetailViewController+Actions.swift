@@ -26,7 +26,6 @@ extension ThreadDetailViewController {
 
     private func scrollCurrentTerminal(_ action: TerminalScrollAction) {
         guard let sessionName = currentSessionName() else { return }
-        let currentIndex = currentTabIndex
 
         Task {
             do {
@@ -37,17 +36,9 @@ extension ThreadDetailViewController {
                     try await TmuxService.shared.scrollPageDown(sessionName: sessionName)
                 case .bottom:
                     try await TmuxService.shared.scrollToBottom(sessionName: sessionName)
-                    // Give tmux time to redraw the live pane after exiting copy-mode,
-                    // then scroll ghostty's own viewport to the new bottom so that
-                    // the most recent output is visible at the bottom of the viewport.
-                    // Resolve the view by sessionName at execution time — the tab
-                    // array may have changed (close/reorder) during the delay.
                     try? await Task.sleep(nanoseconds: 80_000_000)
                     await MainActor.run {
-                        if let i = self.thread.tmuxSessionNames.firstIndex(of: sessionName),
-                           i < self.terminalViews.count {
-                            self.terminalViews[i].bindingAction("scroll_to_bottom")
-                        }
+                        self.terminalView(forSession: sessionName)?.bindingAction("scroll_to_bottom")
                     }
                 }
                 await MainActor.run {
@@ -63,8 +54,8 @@ extension ThreadDetailViewController {
             }
         }
 
-        if currentIndex < terminalViews.count {
-            view.window?.makeFirstResponder(terminalViews[currentIndex])
+        if let tv = currentTerminalView() {
+            view.window?.makeFirstResponder(tv)
         }
     }
 
@@ -283,8 +274,11 @@ extension ThreadDetailViewController {
         // the tab appears in the bar without waiting for tmux session creation.
         hideEmptyState()
         let pendingIndex = tabItems.count
-        createTabItem(title: "New Tab", closable: false)
-        rebindTabActions()
+        let item = TabItemView(title: "New Tab")
+        item.showCloseButton = false
+        tabItems.append(item)
+        tabSlots.append(.terminal(sessionName: ""))
+        rebindAllTabActions()
         rebuildTabBar()
 
         // Mark the new tab as selected in the tab bar.
@@ -322,13 +316,18 @@ extension ThreadDetailViewController {
                     let terminalView = self.makeTerminalView(for: tab.tmuxSessionName)
                     self.terminalViews.append(terminalView)
 
+                    // Fix the placeholder slot with the real session name.
+                    if pendingIndex < self.tabSlots.count {
+                        self.tabSlots[pendingIndex] = .terminal(sessionName: tab.tmuxSessionName)
+                    }
+
                     // Update tab title and make it closable.
                     let title = self.thread.displayName(for: tab.tmuxSessionName, at: pendingIndex)
                     if pendingIndex < self.tabItems.count {
                         self.tabItems[pendingIndex].titleLabel.stringValue = title
                         self.tabItems[pendingIndex].showCloseButton = true
                     }
-                    self.rebindTabActions()
+                    self.rebindAllTabActions()
 
                     // Hand off to normal selectTab flow, which shows "Starting agent..." overlay.
                     self.selectTab(at: pendingIndex)
@@ -339,7 +338,10 @@ extension ThreadDetailViewController {
                     if pendingIndex < self.tabItems.count {
                         self.tabItems.remove(at: pendingIndex)
                     }
-                    self.rebindTabActions()
+                    if pendingIndex < self.tabSlots.count {
+                        self.tabSlots.remove(at: pendingIndex)
+                    }
+                    self.rebindAllTabActions()
                     self.rebuildTabBar()
                     self.dismissLoadingOverlay()
                     if self.tabItems.isEmpty {
@@ -379,10 +381,11 @@ extension ThreadDetailViewController {
     func handleRename(_ updated: MagentThread) {
         thread = updated
 
-        // Update onCopy closures to use the new (renamed) tmux session names
-        for (i, terminalView) in terminalViews.enumerated() {
-            if i < thread.tmuxSessionNames.count {
-                let newSessionName = thread.tmuxSessionNames[i]
+        // Update onCopy/onSubmitLine closures to use the new (renamed) tmux session names.
+        // terminalViews are indexed by thread.tmuxSessionNames (creation order).
+        for (termIdx, terminalView) in terminalViews.enumerated() {
+            if termIdx < thread.tmuxSessionNames.count {
+                let newSessionName = thread.tmuxSessionNames[termIdx]
                 terminalView.onCopy = {
                     Task { await TmuxService.shared.copySelectionToClipboard(sessionName: newSessionName) }
                 }
@@ -394,21 +397,49 @@ extension ThreadDetailViewController {
             }
         }
 
-        // Refresh tab labels to reflect re-keyed custom names
-        for (i, item) in tabItems.enumerated() where i < thread.tmuxSessionNames.count {
-            item.titleLabel.stringValue = thread.displayName(for: thread.tmuxSessionNames[i], at: i)
+        // Rebuild tabSlots with updated session names (rename may have changed them).
+        for (displayIdx, slot) in tabSlots.enumerated() {
+            if case .terminal = slot, displayIdx < tabItems.count {
+                // Find the new session name for this display position.
+                // After rename, the session order in tmuxSessionNames corresponds to terminalViews order.
+                // We need to map old slot session name → new session name via the rename map
+                // that ThreadManager already applied. Just rebuild from thread state.
+            }
         }
+        // Simpler: rebuild tabSlots terminal entries from the current thread.tmuxSessionNames
+        // preserving the display order. Match by position in the terminal-only subsequence.
+        var terminalSlotPositions: [Int] = []
+        for (i, slot) in tabSlots.enumerated() {
+            if case .terminal = slot { terminalSlotPositions.append(i) }
+        }
+        for (seqIdx, displayIdx) in terminalSlotPositions.enumerated() {
+            if seqIdx < thread.tmuxSessionNames.count {
+                let newName = thread.tmuxSessionNames[seqIdx]
+                tabSlots[displayIdx] = .terminal(sessionName: newName)
+                if displayIdx < tabItems.count {
+                    tabItems[displayIdx].titleLabel.stringValue = thread.displayName(for: newName, at: displayIdx)
+                }
+            }
+        }
+
         refreshTabStatusIndicators()
         schedulePromptTOCRefresh()
     }
 
     private func refreshTabStatusIndicators() {
-        for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
-            tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
-            tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
-            tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
-            tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
-            tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
+        for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
+            if case .terminal(let sessionName) = slot {
+                tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
+                tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
+                tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
+                tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
+                tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
+            } else {
+                tabItems[i].hasUnreadCompletion = false
+                tabItems[i].hasWaitingForInput = false
+                tabItems[i].hasBusy = false
+                tabItems[i].hasRateLimit = false
+            }
         }
     }
 
@@ -423,8 +454,7 @@ extension ThreadDetailViewController {
 
         if thread.agentTmuxSessions.contains(sessionName) {
             threadManager.scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: sessionName)
-        } else if currentTabIndex < thread.tmuxSessionNames.count {
-            let resolvedSession = thread.tmuxSessionNames[currentTabIndex]
+        } else if let resolvedSession = currentSessionName() {
             if thread.agentTmuxSessions.contains(resolvedSession) {
                 threadManager.scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: resolvedSession)
             }
@@ -512,8 +542,7 @@ extension ThreadDetailViewController {
     }
 
     func continueTabInAgent(at index: Int, targetAgent: AgentType) {
-        guard index < thread.tmuxSessionNames.count else { return }
-        let sessionName = thread.tmuxSessionNames[index]
+        guard index < tabSlots.count, case .terminal(let sessionName) = tabSlots[index] else { return }
         let sourceAgent = threadManager.effectiveAgentType(for: thread.projectId)
         let settings = PersistenceService.shared.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
@@ -561,8 +590,7 @@ extension ThreadDetailViewController {
     }
 
     func exportTabContext(at index: Int) {
-        guard index < thread.tmuxSessionNames.count else { return }
-        let sessionName = thread.tmuxSessionNames[index]
+        guard index < tabSlots.count, case .terminal(let sessionName) = tabSlots[index] else { return }
         let sourceAgent = threadManager.effectiveAgentType(for: thread.projectId)
         let settings = PersistenceService.shared.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })

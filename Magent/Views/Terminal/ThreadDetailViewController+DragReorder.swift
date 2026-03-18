@@ -21,10 +21,10 @@ extension ThreadDetailViewController {
 
             let draggedCenter = draggedView.frame.midX + translation.x
 
-            // Constrain swaps within pinned/unpinned group
+            // Only two drag groups: pinned and unpinned. All tab types mix freely.
             let isPinned = dragIndex < pinnedCount
             let rangeStart = isPinned ? 0 : pinnedCount
-            let rangeEnd = isPinned ? pinnedCount : tabItems.count
+            let rangeEnd = isPinned ? pinnedCount : tabSlots.count
 
             // Check left neighbor
             if dragIndex > rangeStart {
@@ -50,25 +50,22 @@ extension ThreadDetailViewController {
             draggedView.layer?.zPosition = 0
             draggedView.layer?.transform = CATransform3DIdentity
             persistTabOrder()
-            rebindTabActions()
+            rebindAllTabActions()
 
         default:
             break
         }
     }
 
+    /// Swap two adjacent tabs in display order. Only `tabItems` and `tabSlots` are reordered;
+    /// backing arrays (`terminalViews`, `webTabs`) stay in creation order.
     private func swapAdjacentTabs(_ indexA: Int, _ indexB: Int, draggedView: TabItemView, gesture: NSPanGestureRecognizer) {
         let otherView = (tabItems[indexA] === draggedView) ? tabItems[indexB] : tabItems[indexA]
         let otherOldFrame = otherView.frame
 
-        // Swap in model arrays
+        // Swap display-order arrays only
         tabItems.swapAt(indexA, indexB)
-        if indexA < terminalViews.count && indexB < terminalViews.count {
-            terminalViews.swapAt(indexA, indexB)
-        }
-        if indexA < thread.tmuxSessionNames.count && indexB < thread.tmuxSessionNames.count {
-            thread.tmuxSessionNames.swapAt(indexA, indexB)
-        }
+        tabSlots.swapAt(indexA, indexB)
 
         // Update tracking indices
         if primaryTabIndex == indexA { primaryTabIndex = indexB }
@@ -77,13 +74,11 @@ extension ThreadDetailViewController {
         if currentTabIndex == indexA { currentTabIndex = indexB }
         else if currentTabIndex == indexB { currentTabIndex = indexA }
 
-        // Swap positions in the stack view (removeArrangedSubview does NOT remove from superview)
+        // Swap positions in the stack view
         swapInStack(draggedView, otherView)
 
-        // Force layout so frames update
         tabBarStack.layoutSubtreeIfNeeded()
 
-        // Animate the other view from its old position to the new one
         let otherNewFrame = otherView.frame
         otherView.frame = otherOldFrame
         NSAnimationContext.runAnimationGroup { ctx in
@@ -91,7 +86,6 @@ extension ThreadDetailViewController {
             otherView.animator().frame = otherNewFrame
         }
 
-        // Reset translation — the dragged view is now at a new stack position
         gesture.setTranslation(.zero, in: tabBarStack)
         draggedView.layer?.transform = CATransform3DIdentity
     }
@@ -105,29 +99,22 @@ extension ThreadDetailViewController {
         let viewAtMin = tabBarStack.arrangedSubviews[minIdx]
         let viewAtMax = tabBarStack.arrangedSubviews[maxIdx]
 
-        // Remove from higher index first so lower index stays stable
         tabBarStack.removeArrangedSubview(viewAtMax)
         tabBarStack.removeArrangedSubview(viewAtMin)
-        // Re-insert swapped
         tabBarStack.insertArrangedSubview(viewAtMax, at: minIdx)
         tabBarStack.insertArrangedSubview(viewAtMin, at: maxIdx)
     }
 
+    /// Move a tab in display order. Only `tabItems` and `tabSlots` are reordered.
     func moveTab(from source: Int, to dest: Int) {
         guard source != dest else { return }
+        guard source < tabSlots.count, dest < tabSlots.count else { return }
 
         let item = tabItems.remove(at: source)
         tabItems.insert(item, at: dest)
 
-        let terminal = terminalViews.remove(at: source)
-        terminalViews.insert(terminal, at: dest)
-
-        if source < thread.tmuxSessionNames.count {
-            var sessions = thread.tmuxSessionNames
-            let session = sessions.remove(at: source)
-            sessions.insert(session, at: min(dest, sessions.count))
-            thread.tmuxSessionNames = sessions
-        }
+        let slot = tabSlots.remove(at: source)
+        tabSlots.insert(slot, at: dest)
 
         // Update primaryTabIndex
         if primaryTabIndex >= 0 {
@@ -150,13 +137,37 @@ extension ThreadDetailViewController {
         }
     }
 
+    /// Persist the current display order to the thread model and disk.
     func persistTabOrder() {
-        threadManager.reorderTabs(for: thread.id, newOrder: thread.tmuxSessionNames)
-        let pinnedSessions = (0..<pinnedCount).compactMap { i -> String? in
-            guard i < thread.tmuxSessionNames.count else { return nil }
-            return thread.tmuxSessionNames[i]
+        // Derive terminal session order and pinned sessions from tabSlots
+        var terminalOrder: [String] = []
+        var pinnedSessions: [String] = []
+
+        for (i, slot) in tabSlots.enumerated() {
+            if case .terminal(let name) = slot {
+                terminalOrder.append(name)
+                if i < pinnedCount {
+                    pinnedSessions.append(name)
+                }
+            }
         }
+
+        thread.tmuxSessionNames = terminalOrder
+        threadManager.reorderTabs(for: thread.id, newOrder: terminalOrder)
         threadManager.updatePinnedTabs(for: thread.id, pinnedSessions: pinnedSessions)
+
+        // Persist web tab order and pin state
+        var newPersistedWebTabs: [PersistedWebTab] = []
+        for (i, slot) in tabSlots.enumerated() {
+            if case .web(let identifier) = slot {
+                if var persisted = thread.persistedWebTabs.first(where: { $0.identifier == identifier }) {
+                    persisted.isPinned = (i < pinnedCount)
+                    newPersistedWebTabs.append(persisted)
+                }
+            }
+        }
+        thread.persistedWebTabs = newPersistedWebTabs
+        threadManager.updatePersistedWebTabs(for: thread.id, webTabs: thread.persistedWebTabs)
     }
 }
 

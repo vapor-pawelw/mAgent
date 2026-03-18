@@ -5,6 +5,53 @@ extension ThreadDetailViewController {
 
     // MARK: - Open PR/MR
 
+    /// Middle-click: open PR/MR in an in-app web tab.
+    func openPRInWebTab() {
+        if let pr = thread.pullRequestInfo {
+            let icon = openPRButtonImage(for: threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown)
+            openWebTab(url: pr.url, identifier: "pr:\(pr.url.absoluteString)", title: pr.shortLabel, icon: icon, iconType: .pullRequest)
+            return
+        }
+
+        // No detected PR — resolve URL the same way as left-click but open in web tab
+        Task {
+            let settings = PersistenceService.shared.loadSettings()
+            guard let project = settings.projects.first(where: { $0.id == self.thread.projectId }) else { return }
+
+            let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
+            guard let remote = remotes.first(where: { $0.name == "origin" }) ?? remotes.first else {
+                await MainActor.run {
+                    BannerManager.shared.show(message: "No git remotes found", style: .warning)
+                }
+                return
+            }
+
+            let branch = self.thread.actualBranch ?? self.thread.branchName
+            let defaultBranch: String?
+            if let projectDefaultBranch = project.defaultBranch {
+                defaultBranch = projectDefaultBranch
+            } else {
+                defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: project.repoPath)
+            }
+            let prInfo = await GitService.shared.fetchPullRequest(remote: remote, branch: branch)
+            let url = prInfo?.url
+                ?? remote.pullRequestURL(for: branch, defaultBranch: defaultBranch)
+                ?? remote.openPullRequestsURL
+                ?? remote.repoWebURL
+
+            await MainActor.run {
+                guard let url else {
+                    BannerManager.shared.show(message: "Could not construct URL for remote \(remote.name)", style: .warning)
+                    return
+                }
+                let provider = remote.provider
+                let icon = self.openPRButtonImage(for: provider)
+                let title = prInfo.map { $0.shortLabel } ?? "PR"
+                self.openWebTab(url: url, identifier: "pr:\(url.absoluteString)", title: title, icon: icon, iconType: .pullRequest)
+            }
+        }
+    }
+
     @objc func openPRTapped(_ sender: NSButton) {
         // If we have a detected PR, open it directly
         if let pr = thread.pullRequestInfo {
@@ -81,7 +128,7 @@ extension ThreadDetailViewController {
             openPRButton.isHidden = false
             openPRButton.title = pr.shortLabel
             openPRButton.imagePosition = .imageLeading
-            openPRButton.toolTip = "\(pr.displayLabel) — Click to open"
+            openPRButton.toolTip = "\(pr.displayLabel)\nClick: open in browser · Middle-click: open in tab"
         } else if thread.isMain {
             // Main worktree: always show PR button (opens PR list)
             openPRButton.isHidden = false
@@ -116,15 +163,16 @@ extension ThreadDetailViewController {
     }
 
     private func openPRTooltip(for provider: GitHostingProvider) -> String {
+        let suffix = "\nMiddle-click: open in tab"
         switch provider {
         case .github:
-            return "Open GitHub Pull Request in Browser"
+            return "Open GitHub Pull Request in Browser" + suffix
         case .gitlab:
-            return "Open GitLab Merge Request in Browser"
+            return "Open GitLab Merge Request in Browser" + suffix
         case .bitbucket:
-            return "Open Bitbucket Pull Request in Browser"
+            return "Open Bitbucket Pull Request in Browser" + suffix
         case .unknown:
-            return "Open Pull Request in Browser"
+            return "Open Pull Request in Browser" + suffix
         }
     }
 

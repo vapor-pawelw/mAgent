@@ -69,6 +69,39 @@ public nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
     }
 }
 
+// MARK: - Web Tab Persistence
+
+public nonisolated enum WebTabIconType: String, Codable, Sendable {
+    case jira
+    case pullRequest
+    case none
+}
+
+public nonisolated struct PersistedWebTab: Codable, Sendable, Equatable {
+    public let identifier: String
+    public let url: URL
+    public var title: String
+    public let iconType: WebTabIconType
+    public var isPinned: Bool
+
+    public init(identifier: String, url: URL, title: String, iconType: WebTabIconType, isPinned: Bool = false) {
+        self.identifier = identifier
+        self.url = url
+        self.title = title
+        self.iconType = iconType
+        self.isPinned = isPinned
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        identifier = try container.decode(String.self, forKey: .identifier)
+        url = try container.decode(URL.self, forKey: .url)
+        title = try container.decode(String.self, forKey: .title)
+        iconType = try container.decodeIfPresent(WebTabIconType.self, forKey: .iconType) ?? .none
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+    }
+}
+
 public nonisolated struct PullRequestInfo: Sendable, Equatable {
     public let number: Int
     public let url: URL
@@ -138,6 +171,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     /// ahead of its base branch on any branch. Used to guard archive suggestions so a brand-new,
     /// untouched worktree is never suggested for archiving.
     public var hasEverDoneWork: Bool
+    /// Persisted web tabs (Jira, PR, etc.) — loaded lazily when the user selects them.
+    public var persistedWebTabs: [PersistedWebTab]
 
     // MARK: - Computed
 
@@ -288,6 +323,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case submittedPromptsBySession
         case localFileSyncPathsSnapshot
         case hasEverDoneWork
+        case persistedWebTabs
     }
 
     public init(
@@ -322,7 +358,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isThreadIconManuallySet: Bool = false,
         submittedPromptsBySession: [String: [String]] = [:],
         localFileSyncPathsSnapshot: [String]? = nil,
-        hasEverDoneWork: Bool = false
+        hasEverDoneWork: Bool = false,
+        persistedWebTabs: [PersistedWebTab] = []
     ) {
         self.id = id
         self.projectId = projectId
@@ -356,6 +393,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.submittedPromptsBySession = submittedPromptsBySession
         self.localFileSyncPathsSnapshot = localFileSyncPathsSnapshot
         self.hasEverDoneWork = hasEverDoneWork
+        self.persistedWebTabs = persistedWebTabs
     }
 
     public init(from decoder: Decoder) throws {
@@ -392,6 +430,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         submittedPromptsBySession = try container.decodeIfPresent([String: [String]].self, forKey: .submittedPromptsBySession) ?? [:]
         localFileSyncPathsSnapshot = try container.decodeIfPresent([String].self, forKey: .localFileSyncPathsSnapshot)
         hasEverDoneWork = try container.decodeIfPresent(Bool.self, forKey: .hasEverDoneWork) ?? false
+        persistedWebTabs = try container.decodeIfPresent([PersistedWebTab].self, forKey: .persistedWebTabs) ?? []
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -445,6 +484,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encodeIfPresent(localFileSyncPathsSnapshot, forKey: .localFileSyncPathsSnapshot)
         if hasEverDoneWork {
             try container.encode(hasEverDoneWork, forKey: .hasEverDoneWork)
+        }
+        if !persistedWebTabs.isEmpty {
+            try container.encode(persistedWebTabs, forKey: .persistedWebTabs)
         }
     }
 }

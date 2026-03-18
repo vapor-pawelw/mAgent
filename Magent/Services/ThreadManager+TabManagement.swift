@@ -239,6 +239,12 @@ extension ThreadManager {
         try? persistence.saveActiveThreads(threads)
     }
 
+    func updatePersistedWebTabs(for threadId: UUID, webTabs: [PersistedWebTab]) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        threads[index].persistedWebTabs = webTabs
+        try? persistence.saveActiveThreads(threads)
+    }
+
     func updateLastSelectedSession(for threadId: UUID, sessionName: String?) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         if threads[index].lastSelectedTmuxSessionName == sessionName { return }

@@ -134,7 +134,13 @@ extension ThreadDetailViewController {
             return
         }
 
-        let sessionName = thread.tmuxSessionNames[currentTabIndex]
+        guard let sessionName = currentSessionName() else {
+            promptTOCSessionName = nil
+            promptTOCEntries = []
+            promptTOCCanShowForCurrentTab = false
+            applyPromptTOCVisibility()
+            return
+        }
         guard thread.agentTmuxSessions.contains(sessionName) else {
             promptTOCSessionName = nil
             promptTOCEntries = []
@@ -155,7 +161,7 @@ extension ThreadDetailViewController {
             includeAttributes: true
         ) ?? ""
         guard !Task.isCancelled else { return }
-        guard currentTabIndex < thread.tmuxSessionNames.count, thread.tmuxSessionNames[currentTabIndex] == sessionName else { return }
+        guard currentSessionName() == sessionName else { return }
 
         var entries = parsePromptEntries(from: paneContent, agentType: agentType)
         // If the detected agent type found nothing, retry with both markers —
@@ -735,8 +741,7 @@ extension ThreadDetailViewController {
 
     private func handlePromptTOCSelection(entryIndex: Int) {
         guard entryIndex >= 0, entryIndex < promptTOCEntries.count else { return }
-        guard currentTabIndex < thread.tmuxSessionNames.count else { return }
-        let sessionName = thread.tmuxSessionNames[currentTabIndex]
+        guard let sessionName = currentSessionName() else { return }
         guard promptTOCSessionName == sessionName else { return }
 
         let entry = promptTOCEntries[entryIndex]

@@ -11,6 +11,7 @@ extension ThreadDetailViewController {
             sv.removeFromSuperview()
         }
 
+        // Pinned tabs (any type)
         for i in 0..<pinnedCount where i < tabItems.count {
             tabItems[i].showPinIcon = true
             tabBarStack.addArrangedSubview(tabItems[i])
@@ -20,6 +21,7 @@ extension ThreadDetailViewController {
             tabBarStack.addArrangedSubview(pinSeparator)
         }
 
+        // Unpinned tabs (any type)
         for i in pinnedCount..<tabItems.count {
             tabItems[i].showPinIcon = false
             tabBarStack.addArrangedSubview(tabItems[i])
@@ -36,33 +38,26 @@ extension ThreadDetailViewController {
     // MARK: - Tab Management
 
     func createTabItem(title: String, closable: Bool, pinned: Bool = false) {
-        let index = tabItems.count
-        let settings = PersistenceService.shared.loadSettings()
         let item = TabItemView(title: title)
         item.showCloseButton = closable
         item.showPinIcon = pinned
-        item.onSelect = { [weak self] in self?.selectTab(at: index) }
-        item.onClose = { [weak self] in self?.closeTab(at: index) }
-        item.onRename = { [weak self] in self?.showTabRenameDialog(at: index) }
-        item.onPin = { [weak self] in self?.togglePin(at: index) }
-        item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: index, targetAgent: agent) }
-        item.onExportContext = { [weak self] in self?.exportTabContext(at: index) }
-        item.availableAgentsForContinue = settings.availableActiveAgents
-
-        // Pan gesture for drag-to-reorder
-        let pan = NSPanGestureRecognizer(target: self, action: #selector(handleTabDrag(_:)))
-        pan.delaysPrimaryMouseButtonEvents = false
-        pan.delegate = self
-        item.addGestureRecognizer(pan)
-
         tabItems.append(item)
     }
 
-    func selectTab(at index: Int) {
-        guard index < terminalViews.count else { return }
-        guard index < thread.tmuxSessionNames.count else { return }
-        let sessionName = thread.tmuxSessionNames[index]
+    // MARK: - Unified Tab Selection
 
+    func selectTab(at index: Int) {
+        guard index >= 0, index < tabSlots.count, index < tabItems.count else { return }
+
+        switch tabSlots[index] {
+        case .terminal(let sessionName):
+            selectTerminalTab(at: index, sessionName: sessionName)
+        case .web(let identifier):
+            selectWebTabByIdentifier(identifier, displayIndex: index)
+        }
+    }
+
+    private func selectTerminalTab(at index: Int, sessionName: String) {
         guard preparedSessions.contains(sessionName) else {
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -76,8 +71,9 @@ extension ThreadDetailViewController {
                           sessionName == self.loadingOverlaySessionName else { return }
                     self.updateLoadingOverlayDetail(action?.loadingOverlayDetail)
                 }
-                guard index < self.terminalViews.count else { return }
-                self.selectPreparedTab(at: index)
+                // Re-resolve display index (may have shifted)
+                guard let currentDisplayIndex = self.displayIndex(forSession: sessionName) else { return }
+                self.selectPreparedTab(at: currentDisplayIndex)
             }
             return
         }
@@ -86,37 +82,36 @@ extension ThreadDetailViewController {
     }
 
     func selectPreparedTab(at index: Int) {
-        guard index < terminalViews.count else { return }
-        guard index < thread.tmuxSessionNames.count else { return }
-        let sessionName = thread.tmuxSessionNames[index]
+        guard index < tabSlots.count else { return }
+        guard case .terminal(let sessionName) = tabSlots[index] else { return }
+        guard let tv = terminalView(forSession: sessionName) else { return }
+
+        hideActiveWebTab()
 
         for (i, item) in tabItems.enumerated() {
             item.isSelected = (i == index)
         }
 
-        let terminalView = terminalViews[index]
-
         // Lazily add the view to the container on first selection (creates the surface).
-        // On subsequent selections just show/hide to avoid destroying and recreating
-        // the ghostty surface, which causes a visible tmux re-attach scroll animation.
-        if terminalView.superview == nil {
-            terminalView.translatesAutoresizingMaskIntoConstraints = false
-            terminalContainer.addSubview(terminalView)
+        if tv.superview == nil {
+            tv.translatesAutoresizingMaskIntoConstraints = false
+            terminalContainer.addSubview(tv)
             NSLayoutConstraint.activate([
-                terminalView.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
-                terminalView.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
-                terminalView.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
-                terminalView.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
+                tv.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+                tv.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
+                tv.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
+                tv.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
             ])
         }
         bringPromptTOCOverlayToFront()
         bringScrollOverlaysToFront()
 
-        for (i, tv) in terminalViews.enumerated() {
-            tv.isHidden = (i != index)
+        // Hide all terminal views, show selected
+        for termView in terminalViews {
+            termView.isHidden = (termView !== tv)
         }
 
-        view.window?.makeFirstResponder(terminalView)
+        view.window?.makeFirstResponder(tv)
         currentTabIndex = index
         updateTerminalScrollControlsState()
 
@@ -203,23 +198,36 @@ extension ThreadDetailViewController {
         schedulePromptTOCRefresh()
     }
 
-    func rebindTabActions() {
+    // MARK: - Unified Rebind
+
+    func rebindAllTabActions() {
         let settings = PersistenceService.shared.loadSettings()
         let count = tabItems.count
-        for (i, item) in tabItems.enumerated() {
+
+        for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
+            let item = tabItems[i]
             item.onSelect = { [weak self] in self?.selectTab(at: i) }
             item.onClose = { [weak self] in self?.closeTab(at: i) }
-            item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
             item.onPin = { [weak self] in self?.togglePin(at: i) }
-            item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: i, targetAgent: agent) }
-            item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
             item.onCloseTabsToTheRight = { [weak self] in self?.closeTabsToTheRight(of: i) }
             item.onCloseTabsToTheLeft = { [weak self] in self?.closeTabsToTheLeft(of: i) }
-            item.availableAgentsForContinue = settings.availableActiveAgents
             item.tabIndex = i
             item.totalTabCount = count
             item.showCloseButton = true
             item.showPinIcon = (i < pinnedCount)
+
+            switch slot {
+            case .terminal:
+                item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
+                item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: i, targetAgent: agent) }
+                item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
+                item.availableAgentsForContinue = settings.availableActiveAgents
+            case .web:
+                item.onRename = { [weak self] in self?.showWebTabRenameDialog(at: i) }
+                item.onContinueIn = nil
+                item.onExportContext = nil
+                item.availableAgentsForContinue = []
+            }
         }
     }
 }

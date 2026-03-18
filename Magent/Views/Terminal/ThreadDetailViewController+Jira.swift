@@ -1,6 +1,19 @@
 import Cocoa
 import MagentCore
 
+/// NSButton subclass that forwards middle-click events to a callback.
+final class MiddleClickButton: NSButton {
+    var onMiddleClick: (() -> Void)?
+
+    override func otherMouseDown(with event: NSEvent) {
+        if event.buttonNumber == 2 {
+            onMiddleClick?()
+        } else {
+            super.otherMouseDown(with: event)
+        }
+    }
+}
+
 extension ThreadDetailViewController {
 
     // MARK: - Jira Button
@@ -22,11 +35,11 @@ extension ThreadDetailViewController {
             } else if thread.isMain {
                 openInJiraButton.title = ""
                 openInJiraButton.imagePosition = .imageOnly
-                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenJiraBoard)
+                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenJiraBoard) + "\nMiddle-click: open in tab"
             } else {
                 openInJiraButton.title = ""
                 openInJiraButton.imagePosition = .imageOnly
-                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenJiraProject)
+                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenJiraProject) + "\nMiddle-click: open in tab"
             }
             refreshPRJiraSeparator()
             return
@@ -51,9 +64,9 @@ extension ThreadDetailViewController {
         openInJiraButton.title = ticketKey
         openInJiraButton.imagePosition = .imageLeading
         if let summary = thread.verifiedJiraTicket?.summary, !summary.isEmpty {
-            openInJiraButton.toolTip = "\(ticketKey): \(summary) — Open in Jira"
+            openInJiraButton.toolTip = "\(ticketKey): \(summary)\nClick: open in browser · Middle-click: open in tab"
         } else {
-            openInJiraButton.toolTip = "\(ticketKey) — Open in Jira"
+            openInJiraButton.toolTip = "\(ticketKey)\nClick: open in browser · Middle-click: open in tab"
         }
     }
 
@@ -67,18 +80,21 @@ extension ThreadDetailViewController {
         return NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira") ?? NSImage()
     }
 
-    @objc func openInJiraTapped() {
+    /// Resolves the Jira URL and ticket key for the current thread, if available.
+    private func resolveJiraURLAndKey() -> (url: URL, ticketKey: String?)? {
         let settings = PersistenceService.shared.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let siteURL = project?.jiraSiteURL ?? settings.jiraSiteURL
-        guard !siteURL.isEmpty else { return }
+        guard !siteURL.isEmpty else { return nil }
         let jira = JiraService.shared
 
         var url: URL?
+        var ticketKey: String?
 
 #if FEATURE_JIRA_SYNC
-        if let ticketKey = thread.jiraTicketKey {
-            url = jira.ticketURL(siteURL: siteURL, ticketKey: ticketKey)
+        if let key = thread.jiraTicketKey {
+            ticketKey = key
+            url = jira.ticketURL(siteURL: siteURL, ticketKey: key)
         } else if thread.isMain, let projectKey = project?.jiraProjectKey {
             if let boardId = project?.jiraBoardId {
                 url = jira.boardURL(siteURL: siteURL, projectKey: projectKey, boardId: boardId)
@@ -90,19 +106,43 @@ extension ThreadDetailViewController {
         }
 #endif
 
-        // Fall back to branch-detected ticket
-        if url == nil, let ticketKey = thread.effectiveJiraTicketKey {
-            url = jira.ticketURL(siteURL: siteURL, ticketKey: ticketKey)
+        if url == nil, let key = thread.effectiveJiraTicketKey {
+            ticketKey = key
+            url = jira.ticketURL(siteURL: siteURL, ticketKey: key)
         }
 
-        if let url {
-            NSWorkspace.shared.open(url)
-        } else {
+        guard let url else { return nil }
+        return (url, ticketKey)
+    }
+
+    /// Middle-click: open Jira ticket in an in-app web tab.
+    func openJiraInWebTab() {
+        guard let resolved = resolveJiraURLAndKey() else {
             BannerManager.shared.show(
                 message: String(localized: .JiraStrings.jiraCouldNotBuildURL),
                 style: .warning,
                 duration: 5.0
             )
+            return
         }
+
+        let ticketKey = resolved.ticketKey
+        let identifier = ticketKey.map { "jira:\($0)" } ?? "jira:\(resolved.url.absoluteString)"
+        let title = ticketKey ?? "Jira"
+        let icon = jiraButtonImage()
+
+        openWebTab(url: resolved.url, identifier: identifier, title: title, icon: icon, iconType: .jira)
+    }
+
+    @objc func openInJiraTapped() {
+        guard let resolved = resolveJiraURLAndKey() else {
+            BannerManager.shared.show(
+                message: String(localized: .JiraStrings.jiraCouldNotBuildURL),
+                style: .warning,
+                duration: 5.0
+            )
+            return
+        }
+        NSWorkspace.shared.open(resolved.url)
     }
 }

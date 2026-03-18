@@ -280,7 +280,22 @@ User Action (+ button)
 - Persist the resolved agent type per tmux session (`sessionAgentTypes` plus `MAGENT_AGENT_TYPE`) and use that stored session-level value for recreation/resume logic; do not reinterpret an old tab from the project's current default agent.
 - The loading overlay must follow the actual selected session, not the first tab in the thread. Its secondary detail line is reserved for non-routine recovery actions reported by session recreation; normal agent startup should continue to show only `Starting agent...`.
 - For already-live sessions, loading UI should prefer runtime process detection (`pane_current_command` + child args) over persisted configuration. If the pane is back at a shell, dismiss/skip the startup overlay rather than waiting for agent-ready markers that will never appear.
-- **Two-phase new-tab creation**: `addTab()` immediately adds the tab item to the bar and shows a "Creating tab…" overlay before any async work starts. The `TerminalSurfaceView` is only created and appended to `terminalViews` after the tmux session is fully set up. This means `tabItems.count` can temporarily exceed `terminalViews.count`; code that iterates these arrays concurrently must account for this. Once the session is ready, `selectTab(at:)` takes over and transitions the overlay to "Starting agent…" via the normal `startLoadingOverlayTracking` path.
+- **Two-phase new-tab creation**: `addTab()` immediately adds the tab item to the bar and shows a "Creating tab…" overlay before any async work starts. The `TerminalSurfaceView` is only created and appended to `terminalViews` after the tmux session is fully set up. The placeholder `TabSlot.terminal(sessionName: "")` is replaced with the real session name once the tmux session is ready. Once the session is ready, `selectTab(at:)` takes over and transitions the overlay to "Starting agent…" via the normal `startLoadingOverlayTracking` path.
+
+### TabSlot Indirection (Web Tab Support)
+
+Display order is decoupled from content arrays via `tabSlots: [TabSlot]`, an enum array parallel to `tabItems`:
+
+- `.terminal(sessionName:)` — content is in `terminalViews`, indexed by `thread.tmuxSessionNames`
+- `.web(identifier:)` — content is in `webTabs`, keyed by identifier
+
+Key invariants:
+- `tabItems.count == tabSlots.count` always
+- `terminalViews` stays in `thread.tmuxSessionNames` (creation) order; never reordered by drag
+- `webTabs` stays in creation order; never reordered by drag
+- Only `tabSlots` + `tabItems` change order during drag/pin operations
+- Single unified `pinnedCount` covers all tab types
+- Content lookup uses session name / identifier keys, not positional indices (via `terminalView(forSession:)`, `currentTerminalView()`, etc.)
 
 ## tmux Session Ownership
 

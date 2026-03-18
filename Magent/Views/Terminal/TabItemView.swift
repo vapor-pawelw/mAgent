@@ -4,6 +4,7 @@ import MagentCore
 final class TabItemView: NSView, NSMenuDelegate {
 
     let pinIcon: NSImageView
+    let typeIcon: NSImageView
     let busySpinner: NSProgressIndicator
     let completionDot: NSView
     let rateLimitIcon: NSImageView
@@ -99,6 +100,7 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     init(title: String) {
         pinIcon = NSImageView()
+        typeIcon = NSImageView()
         busySpinner = NSProgressIndicator()
         completionDot = NSView()
         rateLimitIcon = NSImageView()
@@ -120,6 +122,12 @@ final class TabItemView: NSView, NSMenuDelegate {
         pinIcon.translatesAutoresizingMaskIntoConstraints = false
         pinIcon.isHidden = true
         pinIcon.setContentHuggingPriority(.required, for: .horizontal)
+
+        // Type icon (permanent icon for web tabs — Jira, PR, etc.)
+        typeIcon.translatesAutoresizingMaskIntoConstraints = false
+        typeIcon.isHidden = true
+        typeIcon.setContentHuggingPriority(.required, for: .horizontal)
+        typeIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         // Completion dot (green circle)
         completionDot.wantsLayer = true
@@ -170,7 +178,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         contentStack.alignment = .centerY
         contentStack.spacing = 5
         contentStack.translatesAutoresizingMaskIntoConstraints = false
-        for view in [pinIcon, completionDot, busySpinner, rateLimitIcon, titleLabel, closeButton] {
+        for view in [pinIcon, typeIcon, completionDot, busySpinner, rateLimitIcon, titleLabel, closeButton] {
             contentStack.addArrangedSubview(view)
         }
         contentStack.orientation = .horizontal
@@ -183,6 +191,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             contentStack.centerYAnchor.constraint(equalTo: centerYAnchor),
             pinIcon.widthAnchor.constraint(equalToConstant: 12),
             pinIcon.heightAnchor.constraint(equalToConstant: 12),
+            typeIcon.widthAnchor.constraint(equalToConstant: 14),
+            typeIcon.heightAnchor.constraint(equalToConstant: 14),
             completionDot.widthAnchor.constraint(equalToConstant: 8),
             completionDot.heightAnchor.constraint(equalToConstant: 8),
             busySpinner.widthAnchor.constraint(equalToConstant: 10),

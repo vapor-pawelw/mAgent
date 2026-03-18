@@ -186,8 +186,8 @@ extension ThreadDetailViewController {
               let len = userInfo["len"] as? UInt64 else { return }
 
         // Only react to updates from the currently visible terminal.
-        guard currentTabIndex < terminalViews.count,
-              let surface = terminalViews[currentTabIndex].surface,
+        guard let currentTV = currentTerminalView(),
+              let surface = currentTV.surface,
               Int(bitPattern: surface) == surfaceAddr else { return }
 
         let linesFromBottom = (total > offset + len) ? (total - offset - len) : 0
