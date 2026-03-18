@@ -281,14 +281,14 @@ public final class TmuxService: Sendable {
 
     private func installMouseOpenableURLCaptureScript() {
         let path = mouseOpenableURLCaptureScriptPath
-        let marker = "# magent-mouse-openable-url-capture-v2"
-        if let existing = try? String(contentsOfFile: path, encoding: .utf8), existing.hasPrefix(marker) {
+        let marker = "# magent-mouse-openable-url-capture-v3"
+        if let existing = try? String(contentsOfFile: path, encoding: .utf8), existing.contains(marker) {
             return
         }
 
         let script = """
-        \(marker)
         #!/bin/sh
+        \(marker)
         session_name="$1"
         mouse_hyperlink="$2"
         mouse_word="$3"
