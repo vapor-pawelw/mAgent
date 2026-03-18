@@ -8,7 +8,8 @@
 - The current default section does not show a trash icon in Settings and is rejected in the sidebar menu with a banner.
 - Changing the default section on the same screen updates which row can be deleted immediately.
 - Deleting a section no longer requires it to be empty first.
-- The confirmation alert warns that threads in the deleted section will be moved to the current default section and shows the number of affected threads.
+- Empty sections (0 threads) are deleted immediately without any confirmation dialog.
+- Non-empty sections show a confirmation alert warning that threads will be moved to the current default section, with the number of affected threads.
 - Project override sections follow the same rule, including the `Inherit global` default option.
 
 ### Implementation Notes

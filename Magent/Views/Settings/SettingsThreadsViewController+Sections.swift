@@ -158,15 +158,17 @@ extension SettingsThreadsViewController {
         guard defaultSection.id != section.id else { return }
 
         let threadCount = threadsInGlobalSection(section).count
-        let alert = NSAlert()
-        alert.messageText = "Delete Section?"
-        alert.informativeText = threadCount == 1
-            ? "Delete \"\(section.name)\"? 1 thread will be moved to \"\(defaultSection.name)\"."
-            : "Delete \"\(section.name)\"? \(threadCount) threads will be moved to \"\(defaultSection.name)\"."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        if threadCount > 0 {
+            let alert = NSAlert()
+            alert.messageText = "Delete Section?"
+            alert.informativeText = threadCount == 1
+                ? "Delete \"\(section.name)\"? 1 thread will be moved to \"\(defaultSection.name)\"."
+                : "Delete \"\(section.name)\"? \(threadCount) threads will be moved to \"\(defaultSection.name)\"."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Delete")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
 
         ThreadManager.shared.reassignThreadsAssigned(
             toSection: section.id,

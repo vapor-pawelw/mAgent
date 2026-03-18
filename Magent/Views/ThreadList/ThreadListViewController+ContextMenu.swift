@@ -603,16 +603,18 @@ extension ThreadListViewController {
             projectId: projectId,
             settings: settings
         ).count
-        let infoText = threadCount == 1
-            ? "Delete \"\(section.name)\"? 1 thread will be moved to \"\(defaultSection.name)\"."
-            : "Delete \"\(section.name)\"? \(threadCount) threads will be moved to \"\(defaultSection.name)\"."
-        let alert = NSAlert()
-        alert.messageText = "Delete Section?"
-        alert.informativeText = infoText
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        if threadCount > 0 {
+            let infoText = threadCount == 1
+                ? "Delete \"\(section.name)\"? 1 thread will be moved to \"\(defaultSection.name)\"."
+                : "Delete \"\(section.name)\"? \(threadCount) threads will be moved to \"\(defaultSection.name)\"."
+            let alert = NSAlert()
+            alert.messageText = "Delete Section?"
+            alert.informativeText = infoText
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Delete")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
 
         ThreadManager.shared.reassignThreadsAssigned(
             toSection: sectionId,

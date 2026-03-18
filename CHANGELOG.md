@@ -48,6 +48,7 @@ All notable changes to this project will be documented in this file.
 - Thread Settings › Sidebar now has a "Move completed threads to top" checkbox, letting you disable auto-reorder on agent completion without leaving the Threads tab.
 
 ### Sidebar
+- Deleting an empty section (0 threads) no longer shows a confirmation alert — it removes immediately. The confirmation dialog only appears when the section has threads that need to be moved.
 - Fixed: the archive icon now appears in the same position as the busy/completion indicators (right-aligned status slot), instead of to the left of them.
 - Fixed: the archive icon no longer appears when a thread's PR is merged remotely but commits are still present locally ahead of the base branch. The icon now only shows once the local base branch has been updated and the branch is truly fully delivered.
 - Fixed: the thread icon is now properly vertically centered when a thread row shows only a single line (no subtitle or PR).
