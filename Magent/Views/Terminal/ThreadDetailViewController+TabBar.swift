@@ -41,7 +41,14 @@ extension ThreadDetailViewController {
         let item = TabItemView(title: title)
         item.showCloseButton = closable
         item.showPinIcon = pinned
+        attachDragGesture(to: item)
         tabItems.append(item)
+    }
+
+    func attachDragGesture(to item: TabItemView) {
+        let pan = NSPanGestureRecognizer(target: self, action: #selector(handleTabDrag(_:)))
+        pan.delegate = self
+        item.addGestureRecognizer(pan)
     }
 
     // MARK: - Unified Tab Selection

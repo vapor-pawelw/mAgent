@@ -28,6 +28,7 @@ extension ThreadDetailViewController {
 
             let item = TabItemView(title: persisted.title)
             item.showCloseButton = true
+            attachDragGesture(to: item)
             applyWebTabIcon(to: item, iconType: persisted.iconType)
 
             if persisted.isPinned {
@@ -65,6 +66,7 @@ extension ThreadDetailViewController {
 
         let item = TabItemView(title: title)
         item.showCloseButton = true
+        attachDragGesture(to: item)
 
         if let icon {
             item.typeIcon.image = icon

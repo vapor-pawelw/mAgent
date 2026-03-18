@@ -276,6 +276,7 @@ extension ThreadDetailViewController {
         let pendingIndex = tabItems.count
         let item = TabItemView(title: "New Tab")
         item.showCloseButton = false
+        attachDragGesture(to: item)
         tabItems.append(item)
         tabSlots.append(.terminal(sessionName: ""))
         rebindAllTabActions()
