@@ -567,6 +567,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             }
             return false
         }
+        if let thread = item as? MagentThread, thread.isArchiving {
+            return false
+        }
         return item is MagentThread
     }
 

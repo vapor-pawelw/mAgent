@@ -18,7 +18,7 @@ This thread refined the left-rail and spacing rules for project headers, section
 - Threads inside sections keep their extra indentation level relative to top-level rows.
 - Project separators sit closer to the following repo name, while the first repo still keeps a visible gap from the very top of the sidebar.
 - All sidebar elements (thread status markers, section disclosure buttons, project `+` button, separators) share a consistent trailing-edge inset controlled by `sidebarTrailingInset`.
-- The archive icon (`archivebox.fill`) appears in the same right-aligned trailing area as the busy spinner, completion dot, and rate-limit icons. It is independent: it can show alongside the completion dot (e.g. work delivered and agent just finished). The archive icon is hidden while the agent is busy or waiting for input.
+- The archive icon (`archivebox.fill`) appears in the same right-aligned trailing area as the busy spinner, completion dot, and rate-limit icons. It is independent: it can show alongside the completion dot (e.g. work delivered and agent just finished). The archive icon is hidden while the agent is busy or waiting for input. Clicking the archive button must **not** select the row — `SidebarOutlineView.mouseDown` intercepts clicks that land on the archive button and fires the action directly without calling `super`, preventing NSOutlineView from processing the click as a row selection. `shouldSelectItem` also returns `false` for threads with `isArchiving == true` as a safety net.
 
 ## Implementation Notes
 

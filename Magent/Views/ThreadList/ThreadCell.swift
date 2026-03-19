@@ -66,7 +66,7 @@ final class ThreadCell: NSTableCellView {
     private var primaryDirtyDot: NSImageView?
     private var secondaryDirtyDot: NSImageView?
     private var pinImageView: NSImageView?
-    private var archiveButton: NSButton?
+    private(set) var archiveButton: NSButton?
     private var completionImageView: NSImageView?
     private var rateLimitImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
