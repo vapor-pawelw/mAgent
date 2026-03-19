@@ -32,7 +32,7 @@ Base branch is no longer stored as a fixed string per thread. Instead, `GitServi
 
 ### Manual Base Branch Override
 
-The base branch label in the changes panel footer is clickable. Clicking it opens a menu of ancestor branches (produced by `GitService.listAncestorBranches`, same decorated-log walk as detection but collecting all matches instead of stopping at the first). The current base is check-marked. Selecting a different branch writes it into `WorktreeMetadata.detectedBaseBranch` via `ThreadManager.setBaseBranch(_:for:)`, which immediately updates the diff panel.
+The base branch label in the changes panel footer is clickable. Clicking it opens a menu of ancestor branches (produced by `GitService.listAncestorBranches`, same decorated-log walk as detection but collecting all matches up to and including the project's default branch). Ancestors beyond the default branch are excluded. The menu is listed with the farthest ancestor at the top and the closest at the bottom, matching the upward pop direction from the bottom-left anchor. The current base is check-marked. Selecting a different branch writes it into `WorktreeMetadata.detectedBaseBranch` via `ThreadManager.setBaseBranch(_:for:)`, which immediately updates the diff panel.
 
 ### PR/MR Target Branch Mismatch
 

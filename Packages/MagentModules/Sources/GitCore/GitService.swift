@@ -412,7 +412,9 @@ public final class GitService: Sendable {
     /// Returns remote ancestor branches ordered by proximity to HEAD (closest first).
     /// Uses the same decorated-log walk as `detectBaseBranch` but collects all matches
     /// instead of stopping at the first. Useful for letting the user pick a base branch.
-    public func listAncestorBranches(worktreePath: String, currentBranch: String) async -> [String] {
+    /// When `defaultBranch` is provided, collection stops after including that branch
+    /// (no ancestors beyond the default branch are shown).
+    public func listAncestorBranches(worktreePath: String, currentBranch: String, defaultBranch: String? = nil) async -> [String] {
         let result = await ShellExecutor.execute(
             "git log --decorate=full --simplify-by-decoration --format='%D' HEAD",
             workingDirectory: worktreePath
@@ -420,6 +422,7 @@ public final class GitService: Sendable {
         guard result.exitCode == 0 else { return [] }
         let lines = result.stdout.components(separatedBy: "\n")
         let excluded = "refs/remotes/origin/\(currentBranch)"
+        let defaultRef = defaultBranch.map { "origin/\($0)" }
         var seen = Set<String>()
         var branches: [String] = []
         for line in lines {
@@ -431,6 +434,10 @@ public final class GitService: Sendable {
                 let name = String(ref.dropFirst("refs/remotes/".count))
                 if seen.insert(name).inserted {
                     branches.append(name)
+                }
+                // Stop after including the default branch — no ancestors beyond it
+                if let defaultRef, name == defaultRef {
+                    return branches
                 }
             }
         }

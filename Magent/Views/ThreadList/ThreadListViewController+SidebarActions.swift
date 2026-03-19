@@ -583,9 +583,10 @@ extension ThreadListViewController {
             let menu = NSMenu()
             menu.autoenablesItems = false
 
-            // Build the list: ancestors first (proximity order), with the current base checked
+            // Build the list: reversed so closest ancestors are at the bottom
+            // (menu pops upward from the bottom-left anchor).
             var addedBranches = Set<String>()
-            for branch in ancestors {
+            for branch in ancestors.reversed() {
                 let item = NSMenuItem(title: branch, action: #selector(self.baseBranchMenuItemSelected(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = branch

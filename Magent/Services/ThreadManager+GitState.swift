@@ -511,12 +511,16 @@ extension ThreadManager {
     }
 
     /// Returns ancestor remote branches for a thread, ordered closest-first.
+    /// Stops at the project's default branch so ancestors beyond it are excluded.
     func listAncestorBranches(for threadId: UUID) async -> [String] {
         guard let thread = threads.first(where: { $0.id == threadId }),
               FileManager.default.fileExists(atPath: thread.worktreePath) else { return [] }
+        let settings = persistence.loadSettings()
+        let defaultBranch = settings.projects.first(where: { $0.id == thread.projectId })?.defaultBranch ?? "main"
         return await git.listAncestorBranches(
             worktreePath: thread.worktreePath,
-            currentBranch: thread.currentBranch
+            currentBranch: thread.currentBranch,
+            defaultBranch: defaultBranch
         )
     }
 
