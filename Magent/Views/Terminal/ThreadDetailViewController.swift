@@ -354,7 +354,7 @@ final class ThreadDetailViewController: NSViewController {
         archiveThreadButton.isHidden = thread.isMain
 
         reviewButton.bezelStyle = .texturedRounded
-        reviewButton.image = NSImage(systemSymbolName: "eye", accessibilityDescription: String(localized: .NotificationStrings.reviewChanges))
+        reviewButton.image = NSImage(systemSymbolName: "text.magnifyingglass", accessibilityDescription: String(localized: .NotificationStrings.reviewChanges))
         reviewButton.target = self
         reviewButton.action = #selector(reviewButtonTapped)
         reviewButton.toolTip = String(localized: .NotificationStrings.reviewButtonTooltip)
@@ -400,8 +400,8 @@ final class ThreadDetailViewController: NSViewController {
         topBar.alignment = .centerY
         topBar.detachesHiddenViews = true
         topBar.translatesAutoresizingMaskIntoConstraints = false
-        // PR and Jira buttons leftmost, then separator, then utility buttons, then archive separator + archive
-        for view in [addTabButton, tabBarStack, openPRButton, openInJiraButton, prJiraSeparator, openInXcodeButton, openInFinderButton, reviewButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, archiveThreadButton] as [NSView] {
+        // Review button next to add-tab, then tab bar, then PR/Jira, then utility buttons, then archive
+        for view in [addTabButton, reviewButton, tabBarStack, openPRButton, openInJiraButton, prJiraSeparator, openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, archiveThreadButton] as [NSView] {
             topBar.addArrangedSubview(view)
         }
 
@@ -962,7 +962,7 @@ final class ThreadDetailViewController: NSViewController {
                 accessibilityDescription: String(localized: .ThreadStrings.threadArchiveTitle)
             )
             reviewButton.image = NSImage(
-                systemSymbolName: "eye",
+                systemSymbolName: "text.magnifyingglass",
                 accessibilityDescription: String(localized: .NotificationStrings.reviewChanges)
             )
             exportContextButton.image = NSImage(
