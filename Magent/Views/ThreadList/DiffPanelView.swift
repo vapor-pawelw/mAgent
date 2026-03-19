@@ -655,11 +655,6 @@ final class DiffPanelView: NSView {
     }
 
     func updateBranchInfo(branchName: String?, baseBranch: String?) {
-        guard !uncommittedEntries.isEmpty else {
-            branchInfoLabel.isHidden = true
-            return
-        }
-
         if let branch = branchName, !branch.isEmpty, let base = baseBranch, !base.isEmpty {
             branchInfoLabel.stringValue = "\(branch) ← \(base)"
             branchInfoLabel.toolTip = "Branch: \(branch)\nBase: \(base)"

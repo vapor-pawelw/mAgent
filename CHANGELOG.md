@@ -16,6 +16,9 @@ All notable changes to this project will be documented in this file.
 - `--description` now sets the thread's task description immediately (previously the description text was consumed for slug generation but never persisted on the thread).
 - `--section` now places the thread in the correct section during creation instead of moving it after, eliminating a visible "jump" in the sidebar.
 
+### Sidebar
+- The changes panel now always shows the "branch ← base" info label when viewing a non-main thread, even when there are no uncommitted changes. Previously the label was hidden unless the working tree was dirty.
+
 ### Thread
 - New thread sheet now includes a "Base branch" combo box that lets you type a branch name or pick from existing local branches (sorted most-recently-modified first, default branch listed first). The field uses the project's default branch as placeholder rather than prefilling it, with a hint label explaining the default. Validates the chosen (or implied default) branch exists before accepting — shows an inline error if not found.
 - "Create from this branch" context menu action now opens the full new-thread sheet (pre-filled with base branch) instead of a submenu that skipped the sheet.
