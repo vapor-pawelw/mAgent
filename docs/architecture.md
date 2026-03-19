@@ -311,9 +311,9 @@ Display order is decoupled from content arrays via `tabSlots: [TabSlot]`, an enu
 
 Key invariants:
 - `tabItems.count == tabSlots.count` always
-- `terminalViews` stays in `thread.tmuxSessionNames` (creation) order; never reordered by drag
+- `terminalViews` stays parallel to `thread.tmuxSessionNames`; both are reordered together by `persistTabOrder()` during drag/pin operations
 - `webTabs` stays in creation order; never reordered by drag
-- Only `tabSlots` + `tabItems` change order during drag/pin operations
+- `tabSlots` + `tabItems` change order during drag/pin operations; `persistTabOrder()` syncs `terminalViews` and `thread.tmuxSessionNames` to match
 - Single unified `pinnedCount` covers all tab types
 - Content lookup uses session name / identifier keys, not positional indices (via `terminalView(forSession:)`, `currentTerminalView()`, etc.)
 

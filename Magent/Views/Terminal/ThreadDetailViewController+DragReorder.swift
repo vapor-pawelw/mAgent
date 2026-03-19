@@ -1,4 +1,5 @@
 import Cocoa
+import GhosttyBridge
 import MagentCore
 
 extension ThreadDetailViewController {
@@ -156,6 +157,19 @@ extension ThreadDetailViewController {
                 }
             }
         }
+
+        // Reorder terminalViews to match the new session order.
+        // terminalViews is kept parallel to thread.tmuxSessionNames; if we update
+        // the name order without reordering the views, terminalView(forSession:)
+        // will return the wrong surface after a drag/pin/unpin.
+        let oldNames = thread.tmuxSessionNames
+        var reorderedViews: [TerminalSurfaceView] = []
+        for name in terminalOrder {
+            if let oldIdx = oldNames.firstIndex(of: name), oldIdx < terminalViews.count {
+                reorderedViews.append(terminalViews[oldIdx])
+            }
+        }
+        terminalViews = reorderedViews
 
         thread.tmuxSessionNames = terminalOrder
         threadManager.reorderTabs(for: thread.id, newOrder: terminalOrder)
