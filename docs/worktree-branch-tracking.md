@@ -30,6 +30,16 @@ Base branch is no longer stored as a fixed string per thread. Instead, `GitServi
 
 `resolveBaseBranch(for:)` reads the cache first, then falls back to `project.defaultBranch` → `thread.baseBranch` → `"main"`. This means the changes panel and delivery check always use an accurate base branch even after branch switches inside the worktree.
 
+### Manual Base Branch Override
+
+The base branch label in the changes panel footer is clickable. Clicking it opens a menu of ancestor branches (produced by `GitService.listAncestorBranches`, same decorated-log walk as detection but collecting all matches instead of stopping at the first). The current base is check-marked. Selecting a different branch writes it into `WorktreeMetadata.detectedBaseBranch` via `ThreadManager.setBaseBranch(_:for:)`, which immediately updates the diff panel.
+
+### PR/MR Target Branch Mismatch
+
+`PullRequestInfo.baseBranch` now captures the PR/MR target branch (`baseRefName` on GitHub, `target_branch` on GitLab). When viewing a non-main thread with an open PR whose target differs from the app's resolved base branch, a mismatch banner appears with a "Use PR target" button. Accepting stores `"origin/<prTarget>"` as the base branch override (same cache path as manual override above) and clears the banner.
+
+The comparison normalizes by stripping `origin/` prefixes, since the app stores base branches with the prefix but PR APIs return bare branch names.
+
 ## hasEverDoneWork Flag
 
 `MagentThread.hasEverDoneWork` is a persisted, monotonic (write-once) flag set the first time a thread's worktree becomes dirty **or** has commits ahead of its detected base branch — on any branch. It gates `showArchiveSuggestion`, ensuring brand-new untouched worktrees are never suggested for archiving.

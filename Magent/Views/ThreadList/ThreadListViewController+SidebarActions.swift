@@ -573,6 +573,55 @@ extension ThreadListViewController {
         diffPanelView.updateBranchInfo(branchName: branchName, baseBranch: baseBranch)
     }
 
+    func showBaseBranchMenu(anchorView: NSView) {
+        guard let thread = selectedThreadFromState(), !thread.isMain else { return }
+        let currentBase = threadManager.resolveBaseBranch(for: thread)
+        let threadId = thread.id
+
+        Task { @MainActor in
+            let ancestors = await threadManager.listAncestorBranches(for: threadId)
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+
+            // Build the list: ancestors first (proximity order), with the current base checked
+            var addedBranches = Set<String>()
+            for branch in ancestors {
+                let item = NSMenuItem(title: branch, action: #selector(self.baseBranchMenuItemSelected(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = branch
+                if branch == currentBase {
+                    item.state = .on
+                }
+                menu.addItem(item)
+                addedBranches.insert(branch)
+            }
+
+            // If the current base isn't in the ancestor list (manual override or stale), add it at top
+            if !addedBranches.contains(currentBase) {
+                let item = NSMenuItem(title: currentBase, action: #selector(self.baseBranchMenuItemSelected(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = currentBase
+                item.state = .on
+                menu.insertItem(item, at: 0)
+            }
+
+            if menu.items.isEmpty {
+                let item = NSMenuItem(title: "No ancestor branches found", action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                menu.addItem(item)
+            }
+
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: anchorView.bounds.height), in: anchorView)
+        }
+    }
+
+    @objc private func baseBranchMenuItemSelected(_ sender: NSMenuItem) {
+        guard let branch = sender.representedObject as? String,
+              let thread = selectedThreadFromState() else { return }
+        threadManager.setBaseBranch(branch, for: thread.id)
+        refreshDiffPanel(for: thread)
+    }
+
     func refreshDiffPanel(for thread: MagentThread, resetPagination: Bool = true, preserveSelection: Bool = false) {
         if resetPagination || diffPanelCommitLimitByThreadId[thread.id] == nil {
             diffPanelCommitLimitByThreadId[thread.id] = diffPanelCommitPageSize
@@ -666,30 +715,71 @@ extension ThreadListViewController {
 
     func refreshBranchMismatchView(for thread: MagentThread) {
         // Read the latest transient state from the thread manager
-        guard let current = threadManager.threads.first(where: { $0.id == thread.id }),
-              current.hasBranchMismatch,
-              let actual = current.actualBranch,
-              let expected = current.expectedBranch else {
+        guard let current = threadManager.threads.first(where: { $0.id == thread.id }) else {
             branchMismatchView.clear()
             return
         }
-        branchMismatchView.update(
-            actualBranch: actual,
-            expectedBranch: expected,
-            hasMismatch: true
-        )
-        branchMismatchView.onAcceptBranch = { [weak self] in
-            self?.handleAcceptBranch(for: current)
+
+        // Main threads: show branch mismatch (actual != expected)
+        if current.hasBranchMismatch,
+           let actual = current.actualBranch,
+           let expected = current.expectedBranch {
+            branchMismatchView.update(
+                actualBranch: actual,
+                expectedBranch: expected,
+                hasMismatch: true
+            )
+            branchMismatchView.onAcceptBranch = { [weak self] in
+                self?.handleAcceptBranch(for: current)
+            }
+            branchMismatchView.onSwitchBranch = { [weak self] in
+                self?.handleSwitchBranch(for: current)
+            }
+            return
         }
-        branchMismatchView.onSwitchBranch = { [weak self] in
-            self?.handleSwitchBranch(for: current)
+
+        // Non-main threads: show PR target mismatch (app base != PR target)
+        if !current.isMain,
+           let prInfo = current.pullRequestInfo,
+           let prTarget = prInfo.baseBranch,
+           !prInfo.isMerged, !prInfo.isClosed {
+            let appBase = threadManager.resolveBaseBranch(for: current)
+            // Compare without origin/ prefix for matching
+            let normalizedAppBase = appBase.hasPrefix("origin/")
+                ? String(appBase.dropFirst("origin/".count)) : appBase
+            if normalizedAppBase != prTarget {
+                branchMismatchView.updatePRTargetMismatch(
+                    appBase: appBase,
+                    prTarget: prTarget,
+                    prLabel: prInfo.displayLabel
+                )
+                branchMismatchView.onUsePRTarget = { [weak self] in
+                    self?.handleUsePRTarget(for: current, prTarget: prTarget)
+                }
+                return
+            }
         }
+
+        branchMismatchView.clear()
     }
 
     private func handleAcceptBranch(for thread: MagentThread) {
         let actual = thread.actualBranch ?? thread.branchName
         threadManager.acceptActualBranch(threadId: thread.id)
         BannerManager.shared.show(message: "Branch \(actual) accepted as expected", style: .info, duration: 3)
+        branchMismatchView.clear()
+        refreshDiffPanelForSelectedThread()
+    }
+
+    private func handleUsePRTarget(for thread: MagentThread, prTarget: String) {
+        // Store as "origin/<branch>" to match the detection format
+        let baseBranch = "origin/\(prTarget)"
+        threadManager.setBaseBranch(baseBranch, for: thread.id)
+        BannerManager.shared.show(
+            message: "Target branch changed to \(prTarget)",
+            style: .info,
+            duration: 3
+        )
         branchMismatchView.clear()
         refreshDiffPanelForSelectedThread()
     }

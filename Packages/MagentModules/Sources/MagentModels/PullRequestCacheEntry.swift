@@ -8,10 +8,11 @@ public struct PullRequestCacheEntry: Codable, Sendable {
     public let isDraft: Bool
     public let reviewDecision: ReviewDecision?
     public let isClosed: Bool
+    public let baseBranch: String?
     public let cachedAt: Date
 
     private enum CodingKeys: String, CodingKey {
-        case number, url, provider, isMerged, isDraft, reviewDecision, isClosed, cachedAt
+        case number, url, provider, isMerged, isDraft, reviewDecision, isClosed, baseBranch, cachedAt
     }
 
     public init(from info: PullRequestInfo, cachedAt: Date = Date()) {
@@ -22,6 +23,7 @@ public struct PullRequestCacheEntry: Codable, Sendable {
         self.isDraft = info.isDraft
         self.reviewDecision = info.reviewDecision
         self.isClosed = info.isClosed
+        self.baseBranch = info.baseBranch
         self.cachedAt = cachedAt
     }
 
@@ -36,6 +38,7 @@ public struct PullRequestCacheEntry: Codable, Sendable {
         reviewDecision = try container.decodeIfPresent(String.self, forKey: .reviewDecision)
             .flatMap { ReviewDecision(rawValue: $0) }
         isClosed = try container.decodeIfPresent(Bool.self, forKey: .isClosed) ?? false
+        baseBranch = try container.decodeIfPresent(String.self, forKey: .baseBranch)
         cachedAt = try container.decode(Date.self, forKey: .cachedAt)
     }
 
@@ -48,6 +51,7 @@ public struct PullRequestCacheEntry: Codable, Sendable {
         try container.encode(isDraft, forKey: .isDraft)
         try container.encodeIfPresent(reviewDecision?.rawValue, forKey: .reviewDecision)
         try container.encode(isClosed, forKey: .isClosed)
+        try container.encodeIfPresent(baseBranch, forKey: .baseBranch)
         try container.encode(cachedAt, forKey: .cachedAt)
     }
 
@@ -59,7 +63,8 @@ public struct PullRequestCacheEntry: Codable, Sendable {
             isMerged: isMerged,
             isDraft: isDraft,
             reviewDecision: reviewDecision,
-            isClosed: isClosed
+            isClosed: isClosed,
+            baseBranch: baseBranch
         )
     }
 }

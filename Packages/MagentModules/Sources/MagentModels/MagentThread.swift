@@ -119,6 +119,8 @@ public nonisolated struct PullRequestInfo: Sendable, Equatable {
     public let reviewDecision: ReviewDecision?
     /// Closed without merge (GitHub "CLOSED", GitLab "closed").
     public let isClosed: Bool
+    /// The target/base branch of the PR/MR (e.g. "develop", "main").
+    public let baseBranch: String?
 
     public init(
         number: Int,
@@ -127,7 +129,8 @@ public nonisolated struct PullRequestInfo: Sendable, Equatable {
         isMerged: Bool = false,
         isDraft: Bool = false,
         reviewDecision: ReviewDecision? = nil,
-        isClosed: Bool = false
+        isClosed: Bool = false,
+        baseBranch: String? = nil
     ) {
         self.number = number
         self.url = url
@@ -136,6 +139,7 @@ public nonisolated struct PullRequestInfo: Sendable, Equatable {
         self.isDraft = isDraft
         self.reviewDecision = reviewDecision
         self.isClosed = isClosed
+        self.baseBranch = baseBranch
     }
 
     public var numberLabel: String {

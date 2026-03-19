@@ -5,6 +5,7 @@ final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
 
     var onSwitchBranch: (() -> Void)?
     var onAcceptBranch: (() -> Void)?
+    var onUsePRTarget: (() -> Void)?
 
     private let iconView = NSImageView()
     private let messageLabel = NSTextField(labelWithString: "")
@@ -223,12 +224,38 @@ final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
         isHidden = false
     }
 
+    /// Shows a notification when the app's base branch differs from the PR/MR target branch.
+    func updatePRTargetMismatch(appBase: String, prTarget: String, prLabel: String) {
+        storedActual = appBase
+        storedExpected = prTarget
+
+        messageLabel.stringValue = "Target branch differs from \(prLabel)"
+
+        currentLabel.attributedStringValue = attributedBranchString(prefix: "app target: ", branch: appBase)
+        expectedLabel.attributedStringValue = attributedBranchString(prefix: "\(prLabel) target: ", branch: prTarget)
+        detailExplanation.stringValue = "The base branch in the app doesn't match the \(prLabel) target. Use PR target to align them."
+
+        acceptButton.title = "Use PR target"
+        acceptButton.toolTip = "Change app target to \(prTarget)"
+        acceptButton.target = self
+        acceptButton.action = #selector(usePRTargetTapped)
+        switchButton.isHidden = true
+
+        applyExpandedState(animated: false)
+        isHidden = false
+    }
+
     func clear() {
         storedActual = ""
         storedExpected = ""
         messageLabel.stringValue = ""
         toolTip = nil
+        acceptButton.title = "Accept"
         acceptButton.toolTip = nil
+        acceptButton.target = self
+        acceptButton.action = #selector(acceptTapped)
+        switchButton.isHidden = false
+        onUsePRTarget = nil
         switchButton.toolTip = nil
         isExpanded = false
         detailContainer.isHidden = true
@@ -283,5 +310,9 @@ final class BranchMismatchView: NSView, NSGestureRecognizerDelegate {
 
     @objc private func switchTapped() {
         onSwitchBranch?()
+    }
+
+    @objc private func usePRTargetTapped() {
+        onUsePRTarget?()
     }
 }

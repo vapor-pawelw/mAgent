@@ -264,7 +264,7 @@ public final class GitService: Sendable {
         let quotedRepo = ShellExecutor.shellQuote(repo)
         let quotedBranch = ShellExecutor.shellQuote(branch)
 
-        let fields = "number,url,isDraft,state,reviewDecision"
+        let fields = "number,url,isDraft,state,reviewDecision,baseRefName"
 
         // Prefer open PRs; fall back to all states (merged/closed) if none found.
         for state in ["open", "all"] {
@@ -282,6 +282,7 @@ public final class GitService: Sendable {
             let prState = first["state"] as? String ?? "OPEN"
             let isDraft = first["isDraft"] as? Bool ?? false
             let reviewDecision = (first["reviewDecision"] as? String).flatMap { ReviewDecision(rawValue: $0) }
+            let baseRefName = first["baseRefName"] as? String
             return PullRequestInfo(
                 number: number,
                 url: url,
@@ -289,7 +290,8 @@ public final class GitService: Sendable {
                 isMerged: prState == "MERGED",
                 isDraft: isDraft,
                 reviewDecision: reviewDecision,
-                isClosed: prState == "CLOSED"
+                isClosed: prState == "CLOSED",
+                baseBranch: baseRefName
             )
         }
         return nil
@@ -327,6 +329,7 @@ public final class GitService: Sendable {
             // GitLab exposes approved_by as an array of approvers
             let approvedBy = first["approved_by"] as? [[String: Any]]
             let reviewDecision: ReviewDecision? = if let approvedBy, !approvedBy.isEmpty { .approved } else { nil }
+            let targetBranch = first["target_branch"] as? String
 
             return PullRequestInfo(
                 number: number,
@@ -335,7 +338,8 @@ public final class GitService: Sendable {
                 isMerged: state == "merged",
                 isDraft: isDraft,
                 reviewDecision: reviewDecision,
-                isClosed: state == "closed"
+                isClosed: state == "closed",
+                baseBranch: targetBranch
             )
         }
         return nil
@@ -403,6 +407,34 @@ public final class GitService: Sendable {
             }
         }
         return nil
+    }
+
+    /// Returns remote ancestor branches ordered by proximity to HEAD (closest first).
+    /// Uses the same decorated-log walk as `detectBaseBranch` but collects all matches
+    /// instead of stopping at the first. Useful for letting the user pick a base branch.
+    public func listAncestorBranches(worktreePath: String, currentBranch: String) async -> [String] {
+        let result = await ShellExecutor.execute(
+            "git log --decorate=full --simplify-by-decoration --format='%D' HEAD",
+            workingDirectory: worktreePath
+        )
+        guard result.exitCode == 0 else { return [] }
+        let lines = result.stdout.components(separatedBy: "\n")
+        let excluded = "refs/remotes/origin/\(currentBranch)"
+        var seen = Set<String>()
+        var branches: [String] = []
+        for line in lines {
+            let refs = line.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            for ref in refs {
+                guard ref.hasPrefix("refs/remotes/origin/"),
+                      ref != "refs/remotes/origin/HEAD",
+                      ref != excluded else { continue }
+                let name = String(ref.dropFirst("refs/remotes/".count))
+                if seen.insert(name).inserted {
+                    branches.append(name)
+                }
+            }
+        }
+        return branches
     }
 
     /// Returns local branch names sorted by most-recent committer date (descending).
