@@ -493,6 +493,33 @@ extension ThreadManager {
         return await git.diffStats(worktreePath: thread.worktreePath, baseBranch: baseBranch)
     }
 
+    // MARK: - Manual Base Branch Override
+
+    /// Sets the base branch for a thread, updating the worktree metadata cache.
+    func setBaseBranch(_ baseBranch: String, for threadId: UUID) {
+        guard let thread = threads.first(where: { $0.id == threadId }) else { return }
+        let settings = persistence.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { return }
+        let basePath = project.resolvedWorktreesBasePath()
+        var cache = persistence.loadWorktreeCache(worktreesBasePath: basePath)
+        var meta = cache.worktrees[thread.worktreeKey] ?? WorktreeMetadata()
+        meta.detectedBaseBranch = baseBranch
+        meta.detectedFor = thread.currentBranch
+        cache.worktrees[thread.worktreeKey] = meta
+        persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    /// Returns ancestor remote branches for a thread, ordered closest-first.
+    func listAncestorBranches(for threadId: UUID) async -> [String] {
+        guard let thread = threads.first(where: { $0.id == threadId }),
+              FileManager.default.fileExists(atPath: thread.worktreePath) else { return [] }
+        return await git.listAncestorBranches(
+            worktreePath: thread.worktreePath,
+            currentBranch: thread.currentBranch
+        )
+    }
+
     // MARK: - Private Helpers
 
     /// Config-only base branch resolution (no cache read). Used as fallback when detection fails.

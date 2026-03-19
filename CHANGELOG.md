@@ -17,6 +17,8 @@ All notable changes to this project will be documented in this file.
 - `--section` now places the thread in the correct section during creation instead of moving it after, eliminating a visible "jump" in the sidebar.
 
 ### Sidebar
+- The base branch label in the changes panel is now clickable — opens a menu of ancestor branches (closest-first) to quickly change the base branch for diff comparison.
+- When a PR/MR target branch differs from the app's base branch, a mismatch banner offers a one-click "Use PR target" action to align them.
 - The changes panel now always shows the "branch ← base" info label when viewing a non-main thread, even when there are no uncommitted changes. Previously the label was hidden unless the working tree was dirty.
 
 ### Thread

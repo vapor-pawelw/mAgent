@@ -119,6 +119,8 @@ final class DiffPanelView: NSView {
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private let branchInfoLabel = NSTextField(labelWithString: "")
+    private let baseBranchButton = NSButton()
+    private let branchInfoStack = NSStackView()
 
     // Working-tree entries (always loaded from git status)
     private var uncommittedEntries: [FileDiffEntry] = []
@@ -157,6 +159,8 @@ final class DiffPanelView: NSView {
     var onCommitSelected: ((String?) -> Void)?
     /// Called when the user double-taps a commit row (nil = "Uncommitted"). Second arg is display title.
     var onCommitDoubleTapped: ((String?, String) -> Void)?
+    /// Called when the user clicks the base branch label to change it.
+    var onBaseBranchClicked: ((_ anchorView: NSView) -> Void)?
 
     private var allBranchEntries: [FileDiffEntry] = []
 
@@ -267,14 +271,29 @@ final class DiffPanelView: NSView {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrollView)
 
-        // Branch info at the bottom
+        // Branch info at the bottom — label for branch name, clickable button for base branch
         branchInfoLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         branchInfoLabel.textColor = NSColor(resource: .textSecondary).withAlphaComponent(0.7)
         branchInfoLabel.lineBreakMode = .byTruncatingMiddle
         branchInfoLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        branchInfoLabel.translatesAutoresizingMaskIntoConstraints = false
-        branchInfoLabel.isHidden = true
-        addSubview(branchInfoLabel)
+
+        baseBranchButton.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
+        baseBranchButton.isBordered = false
+        baseBranchButton.contentTintColor = NSColor.controlAccentColor
+        baseBranchButton.target = self
+        baseBranchButton.action = #selector(baseBranchTapped)
+        baseBranchButton.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        baseBranchButton.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        baseBranchButton.toolTip = "Click to change base branch"
+
+        branchInfoStack.orientation = .horizontal
+        branchInfoStack.spacing = 0
+        branchInfoStack.alignment = .firstBaseline
+        branchInfoStack.addArrangedSubview(branchInfoLabel)
+        branchInfoStack.addArrangedSubview(baseBranchButton)
+        branchInfoStack.translatesAutoresizingMaskIntoConstraints = false
+        branchInfoStack.isHidden = true
+        addSubview(branchInfoStack)
 
         // Commit detail header — replaces tab bar in commit detail mode
         backButton.title = "‹ Back"
@@ -339,11 +358,11 @@ final class DiffPanelView: NSView {
             scrollView.topAnchor.constraint(equalTo: commitContextLabel.bottomAnchor, constant: 2),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: branchInfoLabel.topAnchor, constant: -4),
+            scrollView.bottomAnchor.constraint(equalTo: branchInfoStack.topAnchor, constant: -4),
 
-            branchInfoLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            branchInfoLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            branchInfoLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            branchInfoStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            branchInfoStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            branchInfoStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
 
             commitDetailHeaderView.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4),
             commitDetailHeaderView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -628,7 +647,7 @@ final class DiffPanelView: NSView {
 
         // Hide panel only when there's nothing to show
         if !hasContent && !forceVisible {
-            branchInfoLabel.isHidden = true
+            branchInfoStack.isHidden = true
             setPanelVisible(false)
             return
         }
@@ -656,12 +675,18 @@ final class DiffPanelView: NSView {
 
     func updateBranchInfo(branchName: String?, baseBranch: String?) {
         if let branch = branchName, !branch.isEmpty, let base = baseBranch, !base.isEmpty {
-            branchInfoLabel.stringValue = "\(branch) ← \(base)"
+            branchInfoLabel.stringValue = "\(branch) ← "
             branchInfoLabel.toolTip = "Branch: \(branch)\nBase: \(base)"
-            branchInfoLabel.isHidden = false
+            baseBranchButton.title = base
+            baseBranchButton.toolTip = "Click to change base branch"
+            branchInfoStack.isHidden = false
         } else {
-            branchInfoLabel.isHidden = true
+            branchInfoStack.isHidden = true
         }
+    }
+
+    @objc private func baseBranchTapped() {
+        onBaseBranchClicked?(baseBranchButton)
     }
 
     func clear() {
@@ -680,7 +705,7 @@ final class DiffPanelView: NSView {
         commitsTabButton.isHidden = true
         commitContextLabel.isHidden = true
         updateTabTitles()
-        branchInfoLabel.isHidden = true
+        branchInfoStack.isHidden = true
         setPanelVisible(false)
     }
 
