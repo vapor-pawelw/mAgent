@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - `--section` now places the thread in the correct section during creation instead of moving it after, eliminating a visible "jump" in the sidebar.
 
 ### Sidebar
+- Tapping the archive suggestion button on a sidebar row no longer selects the thread first, avoiding a heavyweight detail-view load that was immediately discarded.
 - Thread sign emoji submenu now toggles: selecting the already-active sign clears it, removing the need for a separate "Clear" option.
 - The base branch label in the changes panel is now clickable — opens a menu of ancestor branches to quickly change the base branch for diff comparison. The menu stops at the project's default branch (no deep ancestors beyond it) and lists closest ancestors at the bottom to match the upward pop direction.
 - When a PR/MR target branch differs from the app's base branch, a mismatch banner offers a one-click "Use PR target" action to align them.

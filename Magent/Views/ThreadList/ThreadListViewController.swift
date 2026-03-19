@@ -27,6 +27,25 @@ final class SidebarOutlineView: NSOutlineView {
         super.scrollRowToVisible(row)
     }
 
+    /// Intercept clicks on the archive suggestion button inside thread cells so that
+    /// tapping "archive" does not also select the row (which would trigger a heavyweight
+    /// detail-view load that is immediately discarded).
+    override func mouseDown(with event: NSEvent) {
+        let loc = convert(event.locationInWindow, from: nil)
+        let row = self.row(at: loc)
+        if row >= 0,
+           let cell = view(atColumn: 0, row: row, makeIfNecessary: false) as? ThreadCell,
+           let archiveBtn = cell.archiveButton,
+           !archiveBtn.isHidden {
+            let btnLoc = archiveBtn.convert(loc, from: self)
+            if archiveBtn.bounds.contains(btnLoc) {
+                archiveBtn.sendAction(archiveBtn.action, to: archiveBtn.target)
+                return
+            }
+        }
+        super.mouseDown(with: event)
+    }
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         isDragInteractionActive = true
         return super.draggingEntered(sender)
