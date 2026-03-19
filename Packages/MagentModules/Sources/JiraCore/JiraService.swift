@@ -26,6 +26,18 @@ public nonisolated struct JiraTicket: Codable, Sendable {
     public let issueId: Int?
 }
 
+/// A Jira project status with its category metadata.
+public nonisolated struct JiraProjectStatus: Sendable, Equatable, Hashable {
+    public let name: String
+    /// "new", "indeterminate", or "done"
+    public let categoryKey: String?
+
+    public init(name: String, categoryKey: String?) {
+        self.name = name
+        self.categoryKey = categoryKey
+    }
+}
+
 public enum JiraError: LocalizedError {
     case acliNotInstalled
     case notAuthenticated
@@ -146,18 +158,41 @@ public final class JiraService: Sendable {
     // MARK: - Status Discovery
 
     public func discoverStatuses(projectKey: String) async throws -> [String] {
+        try await discoverProjectStatuses(projectKey: projectKey).map(\.name)
+    }
+
+    /// Discovers all project statuses with their category keys from recent tickets.
+    public func discoverProjectStatuses(projectKey: String) async throws -> [JiraProjectStatus] {
         let jql = "project = \(projectKey) ORDER BY updated DESC"
         let tickets = try await searchTickets(jql: jql)
 
         var seen = Set<String>()
-        var statuses: [String] = []
+        var statuses: [JiraProjectStatus] = []
         for ticket in tickets {
-            let status = ticket.status
-            if !status.isEmpty && seen.insert(status).inserted {
-                statuses.append(status)
+            let name = ticket.status
+            if !name.isEmpty && seen.insert(name).inserted {
+                statuses.append(JiraProjectStatus(name: name, categoryKey: ticket.statusCategoryKey))
             }
         }
         return statuses
+    }
+
+    // MARK: - Transitions
+
+    /// Transitions a Jira ticket to the given status via acli.
+    /// Throws `JiraError.commandFailed` with the acli error message on failure.
+    public func transitionTicket(key: String, toStatus: String) async throws {
+        try await ensureAuthenticated()
+
+        let escapedKey = shellQuote(key)
+        let escapedStatus = shellQuote(toStatus)
+        let result = await ShellExecutor.execute(
+            "acli jira workitem transition --key \(escapedKey) --status \(escapedStatus) --yes"
+        )
+        guard result.exitCode == 0 else {
+            let error = (result.stderr + result.stdout).trimmingCharacters(in: .whitespacesAndNewlines)
+            throw JiraError.commandFailed(error)
+        }
     }
 
     // MARK: - URL Builders

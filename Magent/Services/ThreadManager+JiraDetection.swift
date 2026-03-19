@@ -105,6 +105,7 @@ extension ThreadManager {
         do {
             let tickets = try await JiraService.shared.searchTickets(jql: jql)
             let now = Date()
+            var projectKeysToFetchStatuses = Set<String>()
             for ticket in tickets {
                 let entry = JiraTicketCacheEntry(
                     key: ticket.key,
@@ -114,8 +115,18 @@ extension ThreadManager {
                     verifiedAt: now
                 )
                 jiraTicketCache[ticket.key] = entry
+                // Collect project keys for status discovery
+                if let projectKey = ticket.key.split(separator: "-").first.map(String.init),
+                   _jiraProjectStatusesCache[projectKey] == nil {
+                    projectKeysToFetchStatuses.insert(projectKey)
+                }
             }
             persistence.saveJiraTicketCache(jiraTicketCache)
+
+            // Pre-fetch project statuses for context menu
+            for projectKey in projectKeysToFetchStatuses {
+                _ = await fetchAndCacheProjectStatuses(projectKey: projectKey)
+            }
         } catch {
             // Auth failure or acli error — skip silently, existing cache entries remain valid
         }
@@ -229,5 +240,51 @@ extension ThreadManager {
         if jiraTicketCache.count != before {
             persistence.saveJiraTicketCache(jiraTicketCache)
         }
+    }
+
+    // MARK: - Force Refresh (Context Menu)
+
+    /// Force-refreshes a single thread's Jira ticket data, bypassing the 60-second throttle.
+    func forceRefreshJiraTicket(for thread: MagentThread) {
+        guard let ticketKey = thread.effectiveJiraTicketKey else { return }
+        loadJiraTicketCacheIfNeeded()
+        // Also invalidate project statuses so they're re-fetched on next menu open
+        if let projectKey = ticketKey.split(separator: "-").first.map(String.init) {
+            _jiraProjectStatusesCache.removeValue(forKey: projectKey)
+        }
+        Task {
+            await refreshSingleTicketKey(ticketKey)
+        }
+    }
+
+    // MARK: - Project Statuses Cache
+
+    /// Returns cached project statuses, or nil if not yet fetched.
+    func cachedProjectStatuses(for projectKey: String) -> [JiraProjectStatus]? {
+        _jiraProjectStatusesCache[projectKey]
+    }
+
+    /// Fetches project statuses from Jira and caches them.
+    func fetchAndCacheProjectStatuses(projectKey: String) async -> [JiraProjectStatus] {
+        if let cached = _jiraProjectStatusesCache[projectKey] {
+            return cached
+        }
+        do {
+            let statuses = try await JiraService.shared.discoverProjectStatuses(projectKey: projectKey)
+            _jiraProjectStatusesCache[projectKey] = statuses
+            return statuses
+        } catch {
+            return []
+        }
+    }
+
+    // MARK: - Status Transition
+
+    /// Transitions a Jira ticket to a new status and refreshes the cache on success.
+    func transitionJiraTicket(ticketKey: String, toStatus: String) async throws {
+        try await JiraService.shared.transitionTicket(key: ticketKey, toStatus: toStatus)
+
+        // Refresh the ticket cache to reflect the new status
+        await refreshSingleTicketKey(ticketKey)
     }
 }

@@ -13,6 +13,8 @@ extension ThreadListViewController {
             return buildMainThreadContextMenu(for: thread)
         }
 
+        let settings = persistence.loadSettings()
+
         // Pin/Unpin
         let pinTitle = thread.isPinned ? String(localized: .CommonStrings.commonUnpin) : String(localized: .CommonStrings.commonPin)
         let pinItem = NSMenuItem(title: pinTitle, action: #selector(toggleThreadPin(_:)), keyEquivalent: "")
@@ -21,17 +23,12 @@ extension ThreadListViewController {
         pinItem.representedObject = thread.id
         menu.addItem(pinItem)
 
-        let hideTitle = thread.isSidebarHidden
-            ? String(localized: .CommonStrings.commonUnhide)
-            : String(localized: .CommonStrings.commonHide)
-        let hideItem = NSMenuItem(title: hideTitle, action: #selector(toggleThreadHidden(_:)), keyEquivalent: "")
-        hideItem.target = self
-        hideItem.image = NSImage(
-            systemSymbolName: thread.isSidebarHidden ? "eye" : "eye.slash",
-            accessibilityDescription: nil
-        )
-        hideItem.representedObject = thread.id
-        menu.addItem(hideItem)
+        // Jira (below pin)
+        if let jiraItem = buildJiraMenuItem(for: thread, settings: settings) {
+            menu.addItem(jiraItem)
+        }
+
+        menu.addItem(NSMenuItem.separator())
 
         let promptRenameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameWithAgent), action: #selector(renameThreadFromPrompt(_:)), keyEquivalent: "")
         promptRenameItem.target = self
@@ -39,15 +36,11 @@ extension ThreadListViewController {
         promptRenameItem.representedObject = thread
         menu.addItem(promptRenameItem)
 
-        menu.addItem(NSMenuItem.separator())
-
         let descriptionItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetDescription), action: #selector(setThreadDescription(_:)), keyEquivalent: "")
         descriptionItem.target = self
         descriptionItem.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
         descriptionItem.representedObject = thread
         menu.addItem(descriptionItem)
-
-        let settings = persistence.loadSettings()
 
         // Rename branch
         let renameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameBranch), action: #selector(renameThread(_:)), keyEquivalent: "")
@@ -70,6 +63,19 @@ extension ThreadListViewController {
         menu.addItem(signItem)
 
         menu.addItem(NSMenuItem.separator())
+
+        // Hide/Unhide
+        let hideTitle = thread.isSidebarHidden
+            ? String(localized: .CommonStrings.commonUnhide)
+            : String(localized: .CommonStrings.commonHide)
+        let hideItem = NSMenuItem(title: hideTitle, action: #selector(toggleThreadHidden(_:)), keyEquivalent: "")
+        hideItem.target = self
+        hideItem.image = NSImage(
+            systemSymbolName: thread.isSidebarHidden ? "eye" : "eye.slash",
+            accessibilityDescription: nil
+        )
+        hideItem.representedObject = thread.id
+        menu.addItem(hideItem)
 
         // Move to... submenu
         let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
@@ -114,11 +120,6 @@ extension ThreadListViewController {
             prItem.image = pullRequestMenuIcon(for: thread)
             prItem.representedObject = thread
             menu.addItem(prItem)
-        }
-
-        // Open in Jira
-        if let jiraItem = buildJiraMenuItem(for: thread, settings: settings) {
-            menu.addItem(jiraItem)
         }
 
         menu.addItem(NSMenuItem.separator())
@@ -376,6 +377,7 @@ extension ThreadListViewController {
             keyEquivalent: ""
         )
         openItem.target = self
+        openItem.image = NSImage(systemSymbolName: "safari", accessibilityDescription: nil)
         openItem.representedObject = thread
         submenu.addItem(openItem)
 
@@ -386,17 +388,108 @@ extension ThreadListViewController {
                 keyEquivalent: ""
             )
             descItem.target = self
+            descItem.image = NSImage(systemSymbolName: "text.quote", accessibilityDescription: nil)
             descItem.representedObject = thread
             submenu.addItem(descItem)
         }
+
+        // Change Status submenu
+        if let ticketKey = thread.effectiveJiraTicketKey,
+           let changeStatusItem = buildChangeStatusSubmenu(for: thread, ticketKey: ticketKey, settings: settings) {
+            submenu.addItem(NSMenuItem.separator())
+            submenu.addItem(changeStatusItem)
+        }
+
+        // Refresh
+        submenu.addItem(NSMenuItem.separator())
+        let refreshItem = NSMenuItem(
+            title: "Refresh",
+            action: #selector(refreshJiraTicket(_:)),
+            keyEquivalent: ""
+        )
+        refreshItem.target = self
+        refreshItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+        refreshItem.representedObject = thread
+        submenu.addItem(refreshItem)
 
         item.submenu = submenu
         return item
     }
 
+    private func buildChangeStatusSubmenu(for thread: MagentThread, ticketKey: String, settings: AppSettings) -> NSMenuItem? {
+        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        guard let projectKey = projectKeyFromTicket(ticketKey) ?? project?.jiraProjectKey else { return nil }
+
+        let statuses = threadManager.cachedProjectStatuses(for: projectKey)
+        let currentStatus = thread.verifiedJiraTicket?.status
+
+        let changeStatusItem = NSMenuItem(title: "Change Status", action: nil, keyEquivalent: "")
+        changeStatusItem.image = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: nil)
+
+        if let statuses, !statuses.isEmpty {
+            let statusSubmenu = NSMenu()
+            for status in statuses {
+                let statusItem = NSMenuItem(
+                    title: status.name,
+                    action: #selector(changeJiraStatus(_:)),
+                    keyEquivalent: ""
+                )
+                statusItem.target = self
+                statusItem.image = jiraStatusDotImage(categoryKey: status.categoryKey)
+                statusItem.representedObject = [
+                    "thread": thread,
+                    "ticketKey": ticketKey,
+                    "status": status.name
+                ] as [String: Any]
+                if status.name == currentStatus {
+                    statusItem.state = .on
+                }
+                statusSubmenu.addItem(statusItem)
+            }
+            changeStatusItem.submenu = statusSubmenu
+        } else {
+            // Statuses not cached yet — fetch in background for next time
+            changeStatusItem.action = nil
+            changeStatusItem.isEnabled = false
+            changeStatusItem.title = "Change Status (loading…)"
+            Task {
+                _ = await threadManager.fetchAndCacheProjectStatuses(projectKey: projectKey)
+            }
+        }
+
+        return changeStatusItem
+    }
+
+    /// Extracts the project key from a ticket key (e.g. "IP-1234" → "IP").
+    private func projectKeyFromTicket(_ ticketKey: String) -> String? {
+        let parts = ticketKey.split(separator: "-")
+        guard parts.count >= 2 else { return nil }
+        return String(parts[0])
+    }
+
+    /// Returns a colored dot image based on Jira status category.
+    private func jiraStatusDotImage(categoryKey: String?) -> NSImage {
+        let color: NSColor
+        switch categoryKey {
+        case "new":
+            color = .systemBlue
+        case "indeterminate":
+            color = .systemYellow
+        case "done":
+            color = .systemGreen
+        default:
+            color = .tertiaryLabelColor
+        }
+        return colorDotImage(color: color, size: 8)
+    }
+
     private func jiraMenuTitle(ticketKey: String, thread: MagentThread) -> String {
         if let summary = thread.verifiedJiraTicket?.summary, !summary.isEmpty {
-            return "\(ticketKey): \(summary)"
+            let title = "\(ticketKey): \(summary)"
+            if title.count > 100 {
+                return String(title.prefix(100)) + "…"
+            }
+            return title
         }
         return ticketKey
     }
@@ -446,6 +539,44 @@ extension ThreadListViewController {
         if let url {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    @objc private func changeJiraStatus(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let thread = info["thread"] as? MagentThread,
+              let ticketKey = info["ticketKey"] as? String,
+              let status = info["status"] as? String else { return }
+
+        // Don't transition if already in this status
+        if thread.verifiedJiraTicket?.status == status { return }
+
+        Task {
+            do {
+                try await threadManager.transitionJiraTicket(
+                    ticketKey: ticketKey,
+                    toStatus: status
+                )
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "\(ticketKey) → \(status)",
+                        style: .info
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "Failed to transition \(ticketKey): \(error.localizedDescription)",
+                        style: .error
+                    )
+                }
+            }
+        }
+    }
+
+    @objc private func refreshJiraTicket(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread else { return }
+        threadManager.forceRefreshJiraTicket(for: thread)
+        BannerManager.shared.show(message: "Refreshing Jira ticket…", style: .info)
     }
 
     private func buildProjectContextMenu(for project: SidebarProject) -> NSMenu {
