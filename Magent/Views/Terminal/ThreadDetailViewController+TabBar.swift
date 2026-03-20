@@ -149,6 +149,7 @@ extension ThreadDetailViewController {
         UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
         UserDefaults.standard.set(sessionName, forKey: Self.lastOpenedSessionDefaultsKey)
         refreshInitialPromptFailureBanner()
+        refreshPendingPromptBanner()
 
         // Clear unread completion and waiting dots for this tab
         guard index < tabItems.count else { return }

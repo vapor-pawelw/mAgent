@@ -18,6 +18,12 @@ final class ThreadManager {
         let agentType: AgentType?
     }
 
+    struct PendingPromptInjectionInfo {
+        let prompt: String
+        let shouldSubmitInitialPrompt: Bool
+        let agentType: AgentType?
+    }
+
     static let shared = ThreadManager()
 
     weak var delegate: ThreadManagerDelegate?
@@ -38,6 +44,7 @@ final class ThreadManager {
     var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
     var knownGoodSessionContexts: [String: KnownGoodSessionContext] = [:]
     var initialPromptInjectionFailuresBySession: [String: InitialPromptInjectionFailureInfo] = [:]
+    var pendingPromptInjectionsBySession: [String: PendingPromptInjectionInfo] = [:]
     /// Per-thread cache of AI-generated rename payloads, keyed by normalized prompt.
     /// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
     /// Cleared when a thread is archived or deleted.

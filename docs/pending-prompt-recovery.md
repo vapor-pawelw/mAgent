@@ -15,13 +15,24 @@ When the user submits the New Thread or New Tab sheet, their prompt is written t
 
 `registerPendingPromptCleanup` **must** be called inside the `MainActor.run` block that precedes `injectAfterStart`. This guarantees the listener is set up before the background injection task can post `magentAgentKeysInjected`. Registering it after `createThread`/`addTab` returns is too late — injection can complete before the caller resumes on the main thread.
 
+## Pending Injection Banner
+
+When `injectAfterStart` is called with a prompt, it synchronously registers the pending state in `pendingPromptInjectionsBySession` and posts `magentPromptInjectionPending` **before** spawning the async injection task. `ThreadDetailViewController` shows an info-style banner: "Prompt will be injected once the agent is ready." with an **Inject Now** button that calls `forceInjectPendingPrompt(sessionName:)` — directly sending the prompt via tmux without waiting for agent readiness.
+
+The pending banner is dismissed when:
+- `magentAgentKeysInjected` fires (injection succeeded)
+- `magentInitialPromptInjectionFailed` fires (failure banner replaces it)
+- The user clicks **Inject Now** (force-injects immediately)
+
+The banner refreshes on tab switch (`refreshPendingPromptBanner`), same as the failure banner.
+
 ## Injection Failure Handling
 
 If `sendText` fails (e.g., tmux session died between readiness check and paste), `injectAfterStart` does **not** post `magentAgentKeysInjected`. This means the recovery file is intentionally preserved (same pattern as interactive shell blockers).
 
 If the agent prompt marker never appears within the initial-prompt timeout, Magent also keeps the pending prompt state instead of blindly pasting into the pane. The affected terminal tab shows a persistent, non-dismissable warning banner with:
 
-- **Inject Prompt** — retries prompt injection for that same session/tab
+- **Inject Prompt** — clears the failure state, dismisses the failure banner, and retries prompt injection for that same session/tab (the pending banner takes over during the retry)
 - **Already Injected** — clears the warning when the user has already entered the prompt manually
 
 This banner is scoped to the affected terminal tab only. Switching to another tab or a web tab should not surface it there.

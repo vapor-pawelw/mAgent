@@ -162,6 +162,9 @@ final class ThreadDetailViewController: NSViewController {
     var initialPromptFailureBanner: BannerView?
     var initialPromptFailureBannerSessionName: String?
     var initialPromptFailureBannerTopConstraint: NSLayoutConstraint?
+    var pendingPromptBanner: BannerView?
+    var pendingPromptBannerSessionName: String?
+    var pendingPromptBannerTopConstraint: NSLayoutConstraint?
     var preparedSessions: Set<String> = []
     var sessionPreparationTasks: [String: Task<Bool, Never>] = [:]
     var backgroundSessionPreparationTask: Task<Void, Never>?
@@ -366,6 +369,12 @@ final class ThreadDetailViewController: NSViewController {
             name: .magentAgentKeysInjected,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePromptInjectionPendingNotification(_:)),
+            name: .magentPromptInjectionPending,
+            object: nil
+        )
 
         Task {
             await setupTabs()
@@ -384,6 +393,7 @@ final class ThreadDetailViewController: NSViewController {
         backgroundSessionPreparationTask?.cancel()
         sessionPreparationTasks.values.forEach { $0.cancel() }
         dismissInitialPromptFailureBanner()
+        dismissPendingPromptBanner()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -971,16 +981,33 @@ final class ThreadDetailViewController: NSViewController {
               thread.tmuxSessionNames.contains(sessionName) else {
             return
         }
+        // Dismiss pending banner — the failure banner replaces it
+        if pendingPromptBannerSessionName == sessionName {
+            dismissPendingPromptBanner()
+        }
         refreshInitialPromptFailureBanner()
     }
 
     @objc private func handleAgentKeysInjectedNotification(_ notification: Notification) {
-        guard let sessionName = notification.userInfo?["sessionName"] as? String,
-              threadManager.initialPromptInjectionFailure(for: sessionName) != nil else {
-            return
+        guard let sessionName = notification.userInfo?["sessionName"] as? String else { return }
+
+        // Dismiss the pending-prompt banner for this session
+        if pendingPromptBannerSessionName == sessionName {
+            dismissPendingPromptBanner()
         }
+
+        // Clear failure state if it existed
+        guard threadManager.initialPromptInjectionFailure(for: sessionName) != nil else { return }
         threadManager.clearInitialPromptInjectionFailure(for: sessionName)
         refreshInitialPromptFailureBanner()
+    }
+
+    @objc private func handlePromptInjectionPendingNotification(_ notification: Notification) {
+        guard let sessionName = notification.userInfo?["sessionName"] as? String,
+              thread.tmuxSessionNames.contains(sessionName) else {
+            return
+        }
+        showPendingPromptBanner(sessionName: sessionName)
     }
 
     @objc private func handleAgentWaitingNotification(_ notification: Notification) {
@@ -1217,6 +1244,8 @@ final class ThreadDetailViewController: NSViewController {
             actions: [
                 BannerAction(title: "Inject Prompt") { [weak self] in
                     guard let self else { return }
+                    self.threadManager.clearInitialPromptInjectionFailure(for: sessionName)
+                    self.dismissInitialPromptFailureBanner()
                     let injection = self.threadManager.effectiveInjection(for: self.thread.projectId)
                     self.threadManager.injectAfterStart(
                         sessionName: sessionName,
@@ -1255,6 +1284,63 @@ final class ThreadDetailViewController: NSViewController {
         initialPromptFailureBanner = nil
         initialPromptFailureBannerSessionName = nil
         initialPromptFailureBannerTopConstraint = nil
+    }
+
+    // MARK: - Pending Prompt Banner
+
+    func refreshPendingPromptBanner() {
+        guard let sessionName = currentSessionName(),
+              threadManager.pendingPromptInjection(for: sessionName) != nil else {
+            dismissPendingPromptBanner()
+            return
+        }
+        showPendingPromptBanner(sessionName: sessionName)
+    }
+
+    private func showPendingPromptBanner(sessionName: String) {
+        guard currentSessionName() == sessionName else { return }
+
+        if pendingPromptBannerSessionName == sessionName,
+           pendingPromptBanner != nil {
+            return
+        }
+
+        dismissPendingPromptBanner()
+
+        let banner = BannerView(config: BannerConfig(
+            message: "Prompt will be injected once the agent is ready.",
+            style: .info,
+            duration: nil,
+            isDismissible: false,
+            actions: [
+                BannerAction(title: "Inject Now") { [weak self] in
+                    guard let self else { return }
+                    self.threadManager.forceInjectPendingPrompt(sessionName: sessionName)
+                    self.dismissPendingPromptBanner()
+                },
+            ]
+        ))
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        terminalContainer.addSubview(banner, positioned: .above, relativeTo: nil)
+        let topConstraint = banner.topAnchor.constraint(equalTo: terminalContainer.topAnchor, constant: 12)
+        NSLayoutConstraint.activate([
+            topConstraint,
+            banner.centerXAnchor.constraint(equalTo: terminalContainer.centerXAnchor),
+            banner.leadingAnchor.constraint(greaterThanOrEqualTo: terminalContainer.leadingAnchor, constant: 20),
+            banner.trailingAnchor.constraint(lessThanOrEqualTo: terminalContainer.trailingAnchor, constant: -20),
+            banner.widthAnchor.constraint(lessThanOrEqualToConstant: 640),
+        ])
+
+        pendingPromptBanner = banner
+        pendingPromptBannerSessionName = sessionName
+        pendingPromptBannerTopConstraint = topConstraint
+    }
+
+    private func dismissPendingPromptBanner() {
+        pendingPromptBanner?.removeFromSuperview()
+        pendingPromptBanner = nil
+        pendingPromptBannerSessionName = nil
+        pendingPromptBannerTopConstraint = nil
     }
 
 }
