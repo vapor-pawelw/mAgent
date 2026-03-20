@@ -8,6 +8,12 @@ All notable changes to this project will be documented in this file.
 - Added "Continue in" forward button next to the review button in the terminal header, letting you hand off the current tab's context to another agent without opening the tab's context menu.
 - Fixed "Creating tab..." spinner getting stuck after a new tab finishes creation, blocking keyboard input to the terminal.
 
+### Performance
+- Switching between threads now reuses cached terminal views and skips redundant recent session validation, so already-live tabs appear faster.
+
+### Agents
+- If the initial prompt does not reach the agent input within startup timeout, only the affected tab now shows a persistent recovery banner with actions to re-inject the prompt or confirm it was already entered manually.
+
 ## 1.3.1 - 2026-03-20
 
 
