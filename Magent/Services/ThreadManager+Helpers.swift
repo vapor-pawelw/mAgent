@@ -368,11 +368,7 @@ extension ThreadManager {
                     return
                 }
             }
-            NotificationCenter.default.post(
-                name: .magentAgentKeysInjected,
-                object: nil,
-                userInfo: ["sessionName": sessionName]
-            )
+            self.postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: true)
         }
     }
 
@@ -399,6 +395,17 @@ extension ThreadManager {
     func registerPendingPromptCleanup(fileURL: URL?, sessionName: String) {
         guard let fileURL else { return }
         PendingInitialPromptStore.clearAfterInjection(fileURL: fileURL, sessionName: sessionName)
+    }
+
+    private func postAgentKeysInjectedNotification(sessionName: String, includedInitialPrompt: Bool) {
+        NotificationCenter.default.post(
+            name: .magentAgentKeysInjected,
+            object: nil,
+            userInfo: [
+                "sessionName": sessionName,
+                "includedInitialPrompt": includedInitialPrompt,
+            ]
+        )
     }
 
     func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, shouldSubmitInitialPrompt: Bool = true, agentType: AgentType? = nil) {
@@ -470,11 +477,7 @@ extension ThreadManager {
                 }
                 pendingPromptInjectionSessions.removeValue(forKey: sessionName)
                 pendingPromptInjectionTasks.removeValue(forKey: sessionName)
-                NotificationCenter.default.post(
-                    name: .magentAgentKeysInjected,
-                    object: nil,
-                    userInfo: ["sessionName": sessionName]
-                )
+                postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: true)
             } else if let prompt, shouldSubmitInitialPrompt {
                 // When an initial prompt is provided, skip the agent context injection
                 // and send only the prompt. The agent context would race with the prompt —
@@ -520,11 +523,7 @@ extension ThreadManager {
                 try? await tmux.sendEnter(sessionName: sessionName)
                 pendingPromptInjectionSessions.removeValue(forKey: sessionName)
                 pendingPromptInjectionTasks.removeValue(forKey: sessionName)
-                NotificationCenter.default.post(
-                    name: .magentAgentKeysInjected,
-                    object: nil,
-                    userInfo: ["sessionName": sessionName]
-                )
+                postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: true)
             } else if !agentContext.isEmpty {
                 // No initial prompt — send agent context as usual
                 if !terminalCommand.isEmpty {
@@ -555,17 +554,9 @@ extension ThreadManager {
                     return
                 }
                 try? await tmux.sendKeys(sessionName: sessionName, keys: agentContext)
-                NotificationCenter.default.post(
-                    name: .magentAgentKeysInjected,
-                    object: nil,
-                    userInfo: ["sessionName": sessionName]
-                )
+                postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: false)
             } else if didSendTerminalCommand {
-                NotificationCenter.default.post(
-                    name: .magentAgentKeysInjected,
-                    object: nil,
-                    userInfo: ["sessionName": sessionName]
-                )
+                postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: false)
             }
         }
         if prompt != nil {
@@ -1526,6 +1517,7 @@ extension Notification.Name {
     /// the agent to become ready, so the UI can show a "pending injection" banner.
     static let magentPendingPromptInjection = Notification.Name("magentPendingPromptInjection")
     /// Posted by `injectAfterStart` after all tmux keys (including Enter) are sent.
+    /// Carries "sessionName" (String) and "includedInitialPrompt" (Bool).
     static let magentAgentKeysInjected = Notification.Name("magentAgentKeysInjected")
     /// Posted by `injectAfterStart` when an initial prompt was never injected because
     /// the agent prompt marker failed to appear within the timeout window.

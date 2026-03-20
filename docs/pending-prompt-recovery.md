@@ -22,10 +22,10 @@ When `injectAfterStart` is called with an initial prompt, the session is registe
 > "Prompt will be injected once the agent is ready."
 
 - **Inject Now** — cancels the in-flight polling task (`pendingPromptInjectionTasks[sessionName]`), then directly sends the prompt to tmux via `injectPendingPromptNow(...)`, bypassing `waitForAgentPrompt`.
-- The banner auto-dismisses when `magentAgentKeysInjected` fires (injection succeeded) or when `magentInitialPromptInjectionFailed` fires (transitions to the failure banner below).
+- The banner auto-dismisses only when a prompt-bearing `magentAgentKeysInjected` fires (`includedInitialPrompt == true`) or when `magentInitialPromptInjectionFailed` fires (transitions to the failure banner below).
 - Scoped to the current tab only — switching tabs re-evaluates via `refreshPendingPromptBanner()`.
 
-`magentAgentKeysInjected` is completion-only. Do not post it after a prelude terminal command if the agent context or initial prompt is still pending, otherwise the loading overlay, pending banner, and crash-recovery cleanup can all clear too early.
+`magentAgentKeysInjected` is completion-only. It carries `includedInitialPrompt` so prompt-specific UI and cleanup react only to the completion that actually pasted/submitted the prompt. Do not let prompt-less terminal-command or agent-context injections masquerade as prompt completion, otherwise the pending banner and crash-recovery cleanup can clear too early.
 
 ### Cancellation safety
 

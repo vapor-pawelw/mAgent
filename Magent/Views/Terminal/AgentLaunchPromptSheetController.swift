@@ -126,8 +126,9 @@ enum PendingInitialPromptStore {
             .sorted { $0.1.createdAt < $1.1.createdAt }
     }
 
-    /// Schedules deletion of `fileURL` once `magentAgentKeysInjected` fires for `sessionName`.
-    /// Falls back to deleting after 60 s in case injection never fires (e.g. session dies).
+    /// Schedules deletion of `fileURL` once a prompt-bearing `magentAgentKeysInjected`
+    /// fires for `sessionName`. Falls back to deleting after 60 s in case injection
+    /// never fires (e.g. session dies).
     @MainActor
     static func clearAfterInjection(fileURL: URL, sessionName: String) {
         final class Once: @unchecked Sendable { var token: NSObjectProtocol? }
@@ -136,6 +137,7 @@ enum PendingInitialPromptStore {
             forName: .magentAgentKeysInjected, object: nil, queue: .main
         ) { [once] notification in
             guard (notification.userInfo?["sessionName"] as? String) == sessionName else { return }
+            guard (notification.userInfo?["includedInitialPrompt"] as? Bool) == true else { return }
             try? FileManager.default.removeItem(at: fileURL)
             if let t = once.token { NotificationCenter.default.removeObserver(t) }
             once.token = nil

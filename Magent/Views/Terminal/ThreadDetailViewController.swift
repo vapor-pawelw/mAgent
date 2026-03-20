@@ -990,12 +990,14 @@ final class ThreadDetailViewController: NSViewController {
 
     @objc private func handleAgentKeysInjectedNotification(_ notification: Notification) {
         guard let sessionName = notification.userInfo?["sessionName"] as? String else { return }
+        let includedInitialPrompt = (notification.userInfo?["includedInitialPrompt"] as? Bool) == true
 
-        // Dismiss pending-injection banner on success
-        if pendingPromptBannerSessionName == sessionName {
+        // Dismiss pending-injection UI only when this completion actually sent the prompt.
+        if includedInitialPrompt, pendingPromptBannerSessionName == sessionName {
             dismissPendingPromptBanner()
         }
 
+        guard includedInitialPrompt else { return }
         guard threadManager.initialPromptInjectionFailure(for: sessionName) != nil else { return }
         threadManager.clearInitialPromptInjectionFailure(for: sessionName)
         refreshInitialPromptFailureBanner()
