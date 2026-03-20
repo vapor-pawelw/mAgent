@@ -19,3 +19,8 @@
 - Worktree recreation progress in `SplitViewController.handleMissingWorktreeSelection(...)`
 - tmux restart/recovery progress in `ThreadManager.restartTmuxAndRecoverSessions()`
 - Jira status transition progress in `ThreadListViewController.showJiraTransitionProgressBanner()`
+
+## Current Non-Dismissible Action-Required Examples
+
+- Pending prompt injection — info-style banner on a tab waiting for agent readiness, with "Inject Now" to bypass polling
+- Initial prompt injection failure — warning-style banner on the affected tab, with "Inject Prompt" and "Already Injected" actions

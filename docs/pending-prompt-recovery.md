@@ -15,6 +15,20 @@ When the user submits the New Thread or New Tab sheet, their prompt is written t
 
 `registerPendingPromptCleanup` **must** be called inside the `MainActor.run` block that precedes `injectAfterStart`. This guarantees the listener is set up before the background injection task can post `magentAgentKeysInjected`. Registering it after `createThread`/`addTab` returns is too late — injection can complete before the caller resumes on the main thread.
 
+## Pending Injection Banner
+
+When `injectAfterStart` is called with an initial prompt, the session is registered in `pendingPromptInjectionSessions` and a `.magentPendingPromptInjection` notification fires **before** the background polling Task begins. `ThreadDetailViewController` observes this notification and shows a non-dismissible info banner on the affected tab:
+
+> "Prompt will be injected once the agent is ready."
+
+- **Inject Now** — cancels the in-flight polling task (`pendingPromptInjectionTasks[sessionName]`), then directly sends the prompt to tmux via `injectPendingPromptNow(...)`, bypassing `waitForAgentPrompt`.
+- The banner auto-dismisses when `magentAgentKeysInjected` fires (injection succeeded) or when `magentInitialPromptInjectionFailed` fires (transitions to the failure banner below).
+- Scoped to the current tab only — switching tabs re-evaluates via `refreshPendingPromptBanner()`.
+
+### Cancellation safety
+
+`injectAfterStart` stores its `Task` in `pendingPromptInjectionTasks[sessionName]`. Both prompt-wait paths (`shouldSubmitInitialPrompt` true/false) check `Task.isCancelled` after `waitForAgentPrompt` returns and exit silently if cancelled, preventing double-injection when the user clicks "Inject Now" while polling is in progress.
+
 ## Injection Failure Handling
 
 If `sendText` fails (e.g., tmux session died between readiness check and paste), `injectAfterStart` does **not** post `magentAgentKeysInjected`. This means the recovery file is intentionally preserved (same pattern as interactive shell blockers).

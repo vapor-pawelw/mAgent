@@ -292,6 +292,8 @@ extension ThreadManager {
         shouldSubmitInitialPrompt: Bool,
         agentType: AgentType?
     ) async {
+        pendingPromptInjectionSessions.removeValue(forKey: sessionName)
+        pendingPromptInjectionTasks.removeValue(forKey: sessionName)
         initialPromptInjectionFailuresBySession[sessionName] = InitialPromptInjectionFailureInfo(
             prompt: prompt,
             shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
@@ -317,6 +319,44 @@ extension ThreadManager {
 
     func clearInitialPromptInjectionFailure(for sessionName: String) {
         initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
+    }
+
+    func pendingPromptInjection(for sessionName: String) -> InitialPromptInjectionFailureInfo? {
+        pendingPromptInjectionSessions[sessionName]
+    }
+
+    func clearPendingPromptInjection(for sessionName: String) {
+        pendingPromptInjectionSessions.removeValue(forKey: sessionName)
+        pendingPromptInjectionTasks[sessionName]?.cancel()
+        pendingPromptInjectionTasks.removeValue(forKey: sessionName)
+    }
+
+    /// Cancels the in-flight polling task and immediately injects the pending prompt.
+    func injectPendingPromptNow(sessionName: String, prompt: String, shouldSubmitInitialPrompt: Bool, agentType: AgentType?) {
+        clearPendingPromptInjection(for: sessionName)
+        NSLog("[injectPendingPromptNow] session=\(sessionName) submit=\(shouldSubmitInitialPrompt)")
+        Task {
+            if shouldSubmitInitialPrompt {
+                do {
+                    try await tmux.sendText(sessionName: sessionName, text: prompt)
+                } catch {
+                    NSLog("[injectPendingPromptNow] sendText failed: \(error)")
+                    return
+                }
+                let appeared = await waitForPromptToAppear(sessionName: sessionName, prompt: prompt)
+                if !appeared {
+                    NSLog("[injectPendingPromptNow] prompt fingerprint not found — sending Enter anyway")
+                }
+                try? await tmux.sendEnter(sessionName: sessionName)
+            } else {
+                try? await tmux.sendText(sessionName: sessionName, text: prompt)
+            }
+            NotificationCenter.default.post(
+                name: .magentAgentKeysInjected,
+                object: nil,
+                userInfo: ["sessionName": sessionName]
+            )
+        }
     }
 
     // MARK: - Injection
@@ -349,7 +389,25 @@ extension ThreadManager {
         let hasPrompt = shouldSubmitInitialPrompt && prompt != nil
         guard !terminalCommand.isEmpty || !agentContext.isEmpty || prompt != nil else { return }
         NSLog("[injectAfterStart] session=\(sessionName) hasPrompt=\(hasPrompt) injectOnly=\(prompt != nil && !shouldSubmitInitialPrompt) hasTermCmd=\(!terminalCommand.isEmpty) agentType=\(agentType?.rawValue ?? "nil")")
-        Task {
+
+        // Track pending prompt injection so the UI can show a "waiting" banner
+        if let prompt {
+            pendingPromptInjectionSessions[sessionName] = InitialPromptInjectionFailureInfo(
+                prompt: prompt,
+                shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                agentType: agentType
+            )
+            NotificationCenter.default.post(
+                name: .magentPendingPromptInjection,
+                object: self,
+                userInfo: ["sessionName": sessionName]
+            )
+        }
+
+        // Cancel any prior in-flight injection for this session
+        pendingPromptInjectionTasks[sessionName]?.cancel()
+
+        let task = Task {
             _ = await waitForPaneCaptureReady(sessionName: sessionName)
             if !terminalCommand.isEmpty {
                 try? await tmux.sendKeys(sessionName: sessionName, keys: terminalCommand)
@@ -368,6 +426,7 @@ extension ThreadManager {
                     agentType: agentType,
                     timeout: 30
                 )
+                guard !Task.isCancelled else { return }
                 if !promptReady {
                     await postInitialPromptInjectionTimeout(
                         sessionName: sessionName,
@@ -378,6 +437,8 @@ extension ThreadManager {
                     return
                 }
                 try? await tmux.sendText(sessionName: sessionName, text: prompt)
+                pendingPromptInjectionSessions.removeValue(forKey: sessionName)
+                pendingPromptInjectionTasks.removeValue(forKey: sessionName)
                 NotificationCenter.default.post(
                     name: .magentAgentKeysInjected,
                     object: nil,
@@ -394,6 +455,7 @@ extension ThreadManager {
                     agentType: agentType,
                     timeout: 30
                 )
+                guard !Task.isCancelled else { return }
                 if !promptReady {
                     await postInitialPromptInjectionTimeout(
                         sessionName: sessionName,
@@ -412,6 +474,8 @@ extension ThreadManager {
                     try await tmux.sendText(sessionName: sessionName, text: prompt)
                 } catch {
                     NSLog("[injectAfterStart] sendText failed for session \(sessionName): \(error)")
+                    pendingPromptInjectionSessions.removeValue(forKey: sessionName)
+                    pendingPromptInjectionTasks.removeValue(forKey: sessionName)
                     await MainActor.run {
                         BannerManager.shared.show(
                             message: "Initial prompt not sent — failed to paste into terminal.",
@@ -437,6 +501,8 @@ extension ThreadManager {
                     NSLog("[injectAfterStart] prompt fingerprint not found in pane for session \(sessionName) — sending Enter anyway")
                 }
                 try? await tmux.sendEnter(sessionName: sessionName)
+                pendingPromptInjectionSessions.removeValue(forKey: sessionName)
+                pendingPromptInjectionTasks.removeValue(forKey: sessionName)
                 NotificationCenter.default.post(
                     name: .magentAgentKeysInjected,
                     object: nil,
@@ -473,6 +539,9 @@ extension ThreadManager {
                 }
                 try? await tmux.sendKeys(sessionName: sessionName, keys: agentContext)
             }
+        }
+        if prompt != nil {
+            pendingPromptInjectionTasks[sessionName] = task
         }
     }
 
@@ -1425,6 +1494,9 @@ extension Notification.Name {
     /// Posted by `injectAfterStart` just before it begins waiting for the agent TUI
     /// so that the loading overlay knows to suppress poll-timer dismissal.
     static let magentAgentInjectionStarted = Notification.Name("magentAgentInjectionStarted")
+    /// Posted by `injectAfterStart` when an initial prompt is queued and waiting for
+    /// the agent to become ready, so the UI can show a "pending injection" banner.
+    static let magentPendingPromptInjection = Notification.Name("magentPendingPromptInjection")
     /// Posted by `injectAfterStart` after all tmux keys (including Enter) are sent.
     static let magentAgentKeysInjected = Notification.Name("magentAgentKeysInjected")
     /// Posted by `injectAfterStart` when an initial prompt was never injected because

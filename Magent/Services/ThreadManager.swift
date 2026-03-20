@@ -38,6 +38,11 @@ final class ThreadManager {
     var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
     var knownGoodSessionContexts: [String: KnownGoodSessionContext] = [:]
     var initialPromptInjectionFailuresBySession: [String: InitialPromptInjectionFailureInfo] = [:]
+    /// Sessions that have a prompt queued and are waiting for the agent to become ready.
+    var pendingPromptInjectionSessions: [String: InitialPromptInjectionFailureInfo] = [:]
+    /// In-flight injection tasks, keyed by session name. Used to cancel polling when
+    /// the user triggers manual "Inject Now" from the pending-prompt banner.
+    var pendingPromptInjectionTasks: [String: Task<Void, Never>] = [:]
     /// Per-thread cache of AI-generated rename payloads, keyed by normalized prompt.
     /// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
     /// Cleared when a thread is archived or deleted.
