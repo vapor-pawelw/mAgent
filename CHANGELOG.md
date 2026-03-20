@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - Fixed "Creating tab..." spinner getting stuck after a new tab finishes creation, blocking keyboard input to the terminal.
 - Fixed unnecessary `Starting agent...` flashes when switching to an already-live tab whose tmux session did not need recovery.
 - Fixed: switching threads no longer lets a Codex tab come back as a fresh Claude tab or get cleaned up immediately. Session restore now preserves each tab's stored agent type and gives orphan cleanup a grace period instead of running zero-grace on every thread switch.
+- Fixed: pinned tabs could cause the wrong terminal surface to display or the wrong tab to be selected when navigating to a specific session.
 
 ### Performance
 - Switching between threads now reuses cached terminal views and skips redundant recent session validation, so already-live tabs appear faster.

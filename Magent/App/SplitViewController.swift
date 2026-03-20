@@ -378,7 +378,7 @@ final class SplitViewController: NSSplitViewController {
 
         // If the thread was already showing, tabs are set up — select directly
         if alreadyShowing, let sessionName, let detailVC = currentDetailVC {
-            if let tabIndex = detailVC.thread.tmuxSessionNames.firstIndex(of: sessionName) {
+            if let tabIndex = detailVC.displayIndex(forSession: sessionName) {
                 detailVC.selectTab(at: tabIndex)
             }
         }

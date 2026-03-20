@@ -662,10 +662,12 @@ final class ThreadDetailViewController: NSViewController {
                 let title = thread.displayName(for: sessionName, at: i)
                 createTabItem(title: title, closable: true, pinned: i < pinnedCount)
                 tabSlots.append(.terminal(sessionName: sessionName))
-
-                let terminalView = makeTerminalView(for: sessionName)
-                terminalViews.append(terminalView)
             }
+
+            // Build terminalViews outside the display-order loop because this array
+            // must be parallel to thread.tmuxSessionNames (canonical order), not
+            // orderedSessions (display order with pinned tabs first).
+            terminalViews = thread.tmuxSessionNames.map(makeTerminalView(for:))
 
             // Restore persisted web tabs (pages load lazily on selection).
             // Pinned web tabs are inserted into the pinned section; unpinned appended at end.
