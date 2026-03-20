@@ -58,6 +58,11 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - `rebuildChangesRows()` — always hides `commitContextLabel`, shows `allBranchEntries` file rows or "No changes in this branch" empty state. Independent of commit selection.
 - `CommitRowView` — selectable NSView subclass (like `DiffFileRowView`) with `isSelected` highlight. Uses `"__uncommitted__"` as a sentinel hash for the Uncommitted row's `updateCommitRowSelectionAppearance`.
 
+### Branch Info Footer
+- Branch info at the bottom of the panel uses a two-line vertical layout: line 1 is the current branch name (`branchInfoLabel`), line 2 is a `⤷` arrow (`baseLineLabel`) followed by the clickable base branch button (`baseBranchButton`).
+- `origin/` prefixes are stripped for display in both the footer and the base branch selection menu; internal values (`representedObject`) retain the full ref.
+- `updateBranchInfo(branchName:baseBranch:)` handles the stripping and layout visibility.
+
 ### Controller Layer
 - `ThreadListViewController.onCommitSelected` is wired in `ThreadListViewController.swift` setup.
 - `handleCommitSelected(_:)` in `ThreadListViewController+SidebarActions.swift` — launches async task to call `GitService.commitDiffStats`, then calls `diffPanelView.updateCommitEntries`. Guard: `selectedThreadID == thread.id` to drop stale results.

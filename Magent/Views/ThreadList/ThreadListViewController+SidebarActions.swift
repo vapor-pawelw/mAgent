@@ -587,7 +587,8 @@ extension ThreadListViewController {
             // (menu pops upward from the bottom-left anchor).
             var addedBranches = Set<String>()
             for branch in ancestors.reversed() {
-                let item = NSMenuItem(title: branch, action: #selector(self.baseBranchMenuItemSelected(_:)), keyEquivalent: "")
+                let displayName = branch.hasPrefix("origin/") ? String(branch.dropFirst(7)) : branch
+                let item = NSMenuItem(title: displayName, action: #selector(self.baseBranchMenuItemSelected(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = branch
                 if branch == currentBase {
@@ -599,7 +600,8 @@ extension ThreadListViewController {
 
             // If the current base isn't in the ancestor list (manual override or stale), add it at top
             if !addedBranches.contains(currentBase) {
-                let item = NSMenuItem(title: currentBase, action: #selector(self.baseBranchMenuItemSelected(_:)), keyEquivalent: "")
+                let displayName = currentBase.hasPrefix("origin/") ? String(currentBase.dropFirst(7)) : currentBase
+                let item = NSMenuItem(title: displayName, action: #selector(self.baseBranchMenuItemSelected(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = currentBase
                 item.state = .on

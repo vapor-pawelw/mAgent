@@ -119,7 +119,9 @@ final class DiffPanelView: NSView {
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private let branchInfoLabel = NSTextField(labelWithString: "")
+    private let baseLineLabel = NSTextField(labelWithString: "⤷ ")
     private let baseBranchButton = NSButton()
+    private let baseLineStack = NSStackView()
     private let branchInfoStack = NSStackView()
 
     // Working-tree entries (always loaded from git status)
@@ -271,11 +273,16 @@ final class DiffPanelView: NSView {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrollView)
 
-        // Branch info at the bottom — label for branch name, clickable button for base branch
+        // Branch info at the bottom — line 1: branch name, line 2: "Base: " + clickable button
         branchInfoLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         branchInfoLabel.textColor = NSColor(resource: .textSecondary).withAlphaComponent(0.7)
         branchInfoLabel.lineBreakMode = .byTruncatingMiddle
         branchInfoLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        baseLineLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        baseLineLabel.textColor = NSColor(resource: .textSecondary).withAlphaComponent(0.7)
+        baseLineLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        baseLineLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         baseBranchButton.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
         baseBranchButton.isBordered = false
@@ -286,11 +293,17 @@ final class DiffPanelView: NSView {
         baseBranchButton.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         baseBranchButton.toolTip = "Click to change base branch"
 
-        branchInfoStack.orientation = .horizontal
-        branchInfoStack.spacing = 0
-        branchInfoStack.alignment = .firstBaseline
+        baseLineStack.orientation = .horizontal
+        baseLineStack.spacing = 0
+        baseLineStack.alignment = .firstBaseline
+        baseLineStack.addArrangedSubview(baseLineLabel)
+        baseLineStack.addArrangedSubview(baseBranchButton)
+
+        branchInfoStack.orientation = .vertical
+        branchInfoStack.spacing = 1
+        branchInfoStack.alignment = .leading
         branchInfoStack.addArrangedSubview(branchInfoLabel)
-        branchInfoStack.addArrangedSubview(baseBranchButton)
+        branchInfoStack.addArrangedSubview(baseLineStack)
         branchInfoStack.translatesAutoresizingMaskIntoConstraints = false
         branchInfoStack.isHidden = true
         addSubview(branchInfoStack)
@@ -675,9 +688,10 @@ final class DiffPanelView: NSView {
 
     func updateBranchInfo(branchName: String?, baseBranch: String?) {
         if let branch = branchName, !branch.isEmpty, let base = baseBranch, !base.isEmpty {
-            branchInfoLabel.stringValue = "\(branch) ← "
-            branchInfoLabel.toolTip = "Branch: \(branch)\nBase: \(base)"
-            baseBranchButton.title = base
+            let displayBase = base.hasPrefix("origin/") ? String(base.dropFirst(7)) : base
+            branchInfoLabel.stringValue = branch
+            branchInfoLabel.toolTip = "Branch: \(branch)"
+            baseBranchButton.title = displayBase
             baseBranchButton.toolTip = "Click to change base branch"
             branchInfoStack.isHidden = false
         } else {
