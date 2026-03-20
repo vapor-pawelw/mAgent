@@ -404,8 +404,12 @@ extension ThreadManager {
             )
         }
 
-        // Cancel any prior in-flight injection for this session
-        pendingPromptInjectionTasks[sessionName]?.cancel()
+        // Cancel any prior in-flight injection for this session — but only when
+        // the new call also carries a prompt. A prompt-less call (agent context only,
+        // e.g. from recreateSessionIfNeeded) must not nuke an in-flight prompt task.
+        if prompt != nil {
+            pendingPromptInjectionTasks[sessionName]?.cancel()
+        }
 
         let task = Task {
             _ = await waitForPaneCaptureReady(sessionName: sessionName)

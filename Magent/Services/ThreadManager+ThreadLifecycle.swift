@@ -208,6 +208,21 @@ extension ThreadManager {
                 environmentVariables: sessionEnvironment
             )
 
+            // Mark the session as known-good immediately so that setupTabs →
+            // ensureSessionPrepared → recreateSessionIfNeeded short-circuits
+            // instead of racing with the prompt injection task.
+            let isAgentSession = useAgentCommand && selectedAgentType != nil
+            markSessionContextKnownGood(
+                sessionName: tmuxSessionName,
+                threadId: threadID,
+                expectedPath: worktreePath,
+                projectPath: project.repoPath,
+                isAgentSession: isAgentSession
+            )
+            if isAgentSession {
+                await tmux.setupBellPipe(for: tmuxSessionName)
+            }
+
             let thread = MagentThread(
                 id: threadID,
                 projectId: project.id,

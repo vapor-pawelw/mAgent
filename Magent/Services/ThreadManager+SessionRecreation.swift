@@ -327,7 +327,7 @@ extension ThreadManager {
             && cached.isAgentSession == isAgentSession
     }
 
-    private func markSessionContextKnownGood(
+    func markSessionContextKnownGood(
         sessionName: String,
         threadId: UUID,
         expectedPath: String,

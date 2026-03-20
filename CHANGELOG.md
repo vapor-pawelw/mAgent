@@ -28,6 +28,7 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - New threads with a preinjected prompt now show an info banner ("Prompt will be injected once the agent is ready.") with an "Inject Now" button to bypass polling and send the prompt immediately.
 - Fixed initial prompt injection failing for Codex threads — prompt detection now uses ANSI-aware capture to recognize the `›` marker with placeholder text, and avoids injecting when the user has already typed input.
+- Fixed initial prompt silently lost on both Claude and Codex when session recreation races with prompt injection during thread creation.
 - Fixed Codex initial prompt injection timing out on tall tmux panes where the visible `›` prompt sat above trailing blank space at the bottom of the pane.
 - If the initial prompt does not reach the agent input within startup timeout, only the affected tab now shows a persistent recovery banner with actions to re-inject the prompt or confirm it was already entered manually.
 
