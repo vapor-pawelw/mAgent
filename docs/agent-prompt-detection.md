@@ -38,6 +38,8 @@ This is checked by `isPromptLineEmpty(_:marker:)` in `ThreadManager+Helpers.swif
 
 Codex uses `─────────` separator lines between conversation turns. `latestScopedPaneLines` extracts only content after the last separator to avoid matching stale prompt markers from earlier turns.
 
+Prompt detection must drop trailing blank/filler lines before clipping to its "recent lines" window. On tall tmux panes, Codex can leave the real `›` placeholder prompt well above a large block of empty bottom space; taking the last N raw lines first can miss the visible prompt entirely and cause false startup timeouts.
+
 ## Custom / Unknown Agent
 
 Falls back to a content-volume heuristic: the pane is considered ready when it has more than 50 non-whitespace characters.
