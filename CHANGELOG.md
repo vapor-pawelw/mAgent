@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Agents
+- When a thread starts with a pre-injected prompt, a "Prompt will be injected once the agent is ready" info banner now appears immediately with an "Inject Now" button to bypass polling. The banner disappears automatically once injection succeeds, or is replaced by the failure banner if injection times out.
+
+### Settings
+- Added a read-only Keyboard Shortcuts reference card to General settings showing all app keybinds.
+- Keyboard shortcuts (New Thread, New Tab, Close Tab, Refresh/Hard Refresh Web Tab) are now configurable via settings and update at runtime without restart.
+
 ### Thread
 - Added "Continue in" forward button next to the review button in the terminal header, letting you hand off the current tab's context to another agent without opening the tab's context menu.
 - Tightened thread header button spacing so the top bar actions sit closer together.
