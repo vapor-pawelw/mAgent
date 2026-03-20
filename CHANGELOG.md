@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Settings
+- In-app updates now clear macOS launch-blocking app attributes before relaunch, preventing some installs from requiring a manual `xattr -cr /Applications/Magent.app` fix after update.
 
 ## 1.3.0 - 2026-03-19
 
