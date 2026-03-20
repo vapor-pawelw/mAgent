@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 - Branch info at the bottom of the changes panel now displays on two lines — current branch on top, base/target branch below with a `⤷` arrow — and strips `origin/` prefixes for cleaner display.
 
 ### Thread
+- Description, branch, and base branch fields in the new-thread sheet are now editable for terminal-type threads (previously greyed out).
 - Added "Continue in" forward button next to the review button in the terminal header, letting you hand off the current tab's context to another agent without opening the tab's context menu.
 - Tightened thread header button spacing so the top bar actions sit closer together.
 - Fixed "Creating tab..." spinner getting stuck after a new tab finishes creation, blocking keyboard input to the terminal.

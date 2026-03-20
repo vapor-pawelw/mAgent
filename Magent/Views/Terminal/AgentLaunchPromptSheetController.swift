@@ -1095,21 +1095,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func updatePromptAreaEnabled() {
-        let isTerminal: Bool
-        if case .terminal = selectedPickerItem() {
-            isTerminal = true
-        } else {
-            isTerminal = false
-        }
         // Prompt text view is always editable — for terminal it's the shell command, for agents it's the initial prompt
         promptTextView.isEditable = true
         promptTextView.alphaValue = 1.0
         promptLabel?.stringValue = promptLabelText
-        if config.showDescriptionAndBranchFields {
-            descriptionField.isEnabled = !isTerminal
-            branchField.isEnabled = !isTerminal
-            baseBranchField.isEnabled = !isTerminal
-        }
     }
 
     // MARK: - NSTextViewDelegate
