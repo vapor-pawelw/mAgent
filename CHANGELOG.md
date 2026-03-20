@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 
 ### Agents
 - Fixed initial prompt injection failing for Codex threads — prompt detection now uses ANSI-aware capture to recognize the `›` marker with placeholder text, and avoids injecting when the user has already typed input.
+- Fixed Codex initial prompt injection timing out on tall tmux panes where the visible `›` prompt sat above trailing blank space at the bottom of the pane.
 - If the initial prompt does not reach the agent input within startup timeout, only the affected tab now shows a persistent recovery banner with actions to re-inject the prompt or confirm it was already entered manually.
 
 ## 1.3.1 - 2026-03-20

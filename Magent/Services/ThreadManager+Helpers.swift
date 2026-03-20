@@ -169,13 +169,11 @@ extension ThreadManager {
         agentType: AgentType?
     ) -> Bool {
         let recentLines = latestScopedPaneLines(from: paneContent, agentType: agentType)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .suffix(12)
-        let trimmedLines = recentLines
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        guard !trimmedLines.isEmpty else { return false }
+        guard !recentLines.isEmpty else { return false }
         let bareMarker = String(marker)
-        return trimmedLines.contains { line in
+        return recentLines.contains { line in
             // Strip ANSI escapes for the structural check
             let plain = Self.stripAnsiEscapes(line)
             let filtered = plain.filter { !$0.isWhitespace }
