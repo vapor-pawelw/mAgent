@@ -8,7 +8,7 @@ When the user submits the New Thread or New Tab sheet, their prompt is written t
 
 1. **`acceptTapped`** in `AgentLaunchPromptSheetController` — writes `magent-pending-prompt-<UUID>.json` to `/tmp` via `PendingInitialPromptStore.save(...)`, then immediately clears the draft from persistent storage.
 2. **`createThread` / `addTab`** in `ThreadManager` — immediately after tmux session creation, `markSessionContextKnownGood` is called so that the concurrent `setupTabs` → `recreateSessionIfNeeded` path short-circuits. Then, inside the `MainActor.run` block that runs **before** `injectAfterStart` is called, `registerPendingPromptCleanup(fileURL:sessionName:)` subscribes to `magentAgentKeysInjected` for the new session.
-3. **`injectAfterStart`** (background `Task`) — waits for the agent-specific prompt marker via `waitForAgentPrompt` (see `docs/agent-prompt-detection.md` for per-agent detection details), sends tmux keys, and posts `magentAgentKeysInjected` when done. The subscriber from step 2 deletes the temp file.
+3. **`injectAfterStart`** (background `Task`) — waits for the agent-specific prompt marker via `waitForAgentPrompt` (see `docs/agent-prompt-detection.md` for per-agent detection details), sends tmux keys, and posts `magentAgentKeysInjected` only after the full startup injection for that session is complete. The subscriber from step 2 deletes the temp file.
 4. **60-second fallback** — if injection never fires (e.g., session dies), `DispatchQueue.main.asyncAfter` deletes the file after 60 s.
 
 ## Critical Ordering Constraint
@@ -25,6 +25,8 @@ When `injectAfterStart` is called with an initial prompt, the session is registe
 - The banner auto-dismisses when `magentAgentKeysInjected` fires (injection succeeded) or when `magentInitialPromptInjectionFailed` fires (transitions to the failure banner below).
 - Scoped to the current tab only — switching tabs re-evaluates via `refreshPendingPromptBanner()`.
 
+`magentAgentKeysInjected` is completion-only. Do not post it after a prelude terminal command if the agent context or initial prompt is still pending, otherwise the loading overlay, pending banner, and crash-recovery cleanup can all clear too early.
+
 ### Cancellation safety
 
 `injectAfterStart` stores its `Task` in `pendingPromptInjectionTasks[sessionName]`. Both prompt-wait paths (`shouldSubmitInitialPrompt` true/false) check `Task.isCancelled` after `waitForAgentPrompt` returns and exit silently if cancelled, preventing double-injection when the user clicks "Inject Now" while polling is in progress.
@@ -33,7 +35,7 @@ Cancellation is **conditional**: a new `injectAfterStart` call only cancels the 
 
 ## Injection Failure Handling
 
-If `sendText` fails (e.g., tmux session died between readiness check and paste), `injectAfterStart` does **not** post `magentAgentKeysInjected`. This means the recovery file is intentionally preserved (same pattern as interactive shell blockers).
+If `sendText` fails (e.g., tmux session died between readiness check and paste), `injectAfterStart` does **not** post `magentAgentKeysInjected`. Instead it transitions into the same per-tab initial-prompt failure state as a readiness timeout, so the recovery file is intentionally preserved and the user still gets an `Inject Prompt` retry path.
 
 If the agent prompt marker never appears within the initial-prompt timeout, Magent also keeps the pending prompt state instead of blindly pasting into the pane. The affected terminal tab shows a persistent, non-dismissable warning banner with:
 
