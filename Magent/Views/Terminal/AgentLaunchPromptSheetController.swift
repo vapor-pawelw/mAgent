@@ -1197,12 +1197,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         // Validate URL when Web is selected — block submission on empty or unparseable input.
         if case .web = item {
-            let normalizedURL: URL? = {
-                guard !rawPrompt.isEmpty else { return nil }
-                if let parsed = URL(string: rawPrompt), parsed.scheme != nil { return parsed }
-                return URL(string: "https://\(rawPrompt)")
-            }()
-            guard normalizedURL != nil else {
+            guard WebURLNormalizer.normalize(rawPrompt) != nil else {
                 NSSound.beep()
                 promptLabel?.stringValue = rawPrompt.isEmpty ? "Initial URL (required)" : "Initial URL (invalid)"
                 promptLabel?.textColor = .systemRed
@@ -1327,14 +1322,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 initialWebURL: nil
             ))
         case .web:
-            let url: URL? = {
-                guard !rawPrompt.isEmpty else { return nil }
-                if let parsed = URL(string: rawPrompt), parsed.scheme != nil {
-                    return parsed
-                }
-                // Bare hostname or path — prepend https://
-                return URL(string: "https://\(rawPrompt)")
-            }()
+            let url = WebURLNormalizer.normalize(rawPrompt)
             finish(with: AgentLaunchSheetResult(
                 agentType: nil,
                 useAgentCommand: false,
