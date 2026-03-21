@@ -35,11 +35,12 @@ enum AgentLaunchPromptDraftStore {
         persistence.saveAgentLaunchPromptDrafts(drafts)
     }
 
-    /// Clears drafts for all modes (agent, terminal, and the legacy key).
+    /// Clears drafts for all modes (agent, terminal, web, and the legacy key).
     static func clearAll(for scope: AgentLaunchPromptDraftScope) {
         var drafts = persistence.loadAgentLaunchPromptDrafts()
         drafts.removeValue(forKey: scope.storageKey(mode: "agent"))
         drafts.removeValue(forKey: scope.storageKey(mode: "terminal"))
+        drafts.removeValue(forKey: scope.storageKey(mode: "web"))
         drafts.removeValue(forKey: scope.storageKey)
         persistence.saveAgentLaunchPromptDrafts(drafts)
     }
@@ -265,6 +266,8 @@ struct AgentLaunchSheetResult {
     let selectedProject: Project?
     /// The section selected by the user. Non-nil when the section picker was shown.
     let selectedSectionId: UUID?
+    /// URL for web tab creation. Non-nil when the user selected the "Web" type.
+    let initialWebURL: URL?
 }
 
 /// A rounded chip view that shows accent-tinted background, adapting correctly to light/dark mode.
@@ -321,11 +324,13 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private enum PickerItem {
         case agent(AgentType, isDefault: Bool)
         case terminal
+        case web
 
         var storageRaw: String {
             switch self {
             case .agent(let type, _): return type.rawValue
             case .terminal: return "terminal"
+            case .web: return "web"
             }
         }
     }
@@ -407,6 +412,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             pickerItems.append(.agent(agent, isDefault: agent == config.defaultAgentType))
         }
         pickerItems.append(.terminal)
+        pickerItems.append(.web)
 
         for (i, item) in pickerItems.enumerated() {
             switch item {
@@ -420,6 +426,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 }
                 agentPicker.addItem(withTitle: "Terminal")
                 agentPicker.lastItem?.tag = i
+            case .web:
+                agentPicker.addItem(withTitle: "Web")
+                agentPicker.lastItem?.tag = i
             }
         }
 
@@ -429,6 +438,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private func applyLastSelection() {
         guard PersistenceService.shared.loadSettings().rememberLastTypeSelection else { return }
         guard let raw = AgentLastSelectionStore.lastSelection(for: config.draftScope),
+              raw != "web",  // Never auto-restore "Web" — it must be explicit each time.
               let index = pickerItems.firstIndex(where: { $0.storageRaw == raw }) else {
             return
         }
@@ -1013,12 +1023,23 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     // MARK: - Draft
 
     private var promptLabelText: String {
-        currentMode == "terminal" ? "Initial command" : "Initial prompt"
+        switch currentMode {
+        case "terminal": return "Initial command"
+        case "web": return "Initial URL"
+        default: return "Initial prompt"
+        }
+    }
+
+    private var promptLabelPlaceholder: String? {
+        currentMode == "web" ? "https://..." : nil
     }
 
     private var currentMode: String {
-        if case .terminal? = selectedPickerItem() { return "terminal" }
-        return "agent"
+        switch selectedPickerItem() {
+        case .terminal?: return "terminal"
+        case .web?: return "web"
+        default: return "agent"
+        }
     }
 
     private func loadDraft(mode: String) {
@@ -1044,6 +1065,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func applyPrefillIfNeeded() {
+        guard currentMode != "web" else { return }
         guard promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let prefill = currentMode == "terminal" ? config.terminalInjectionPrefill : config.agentContextPrefill
         if let p = prefill, !p.isEmpty {
@@ -1097,7 +1119,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func updatePromptAreaEnabled() {
-        // Prompt text view is always editable — for terminal it's the shell command, for agents it's the initial prompt
+        // Prompt text view is always editable — for terminal it's the shell command, for agents it's the initial prompt, for web it's the URL
         promptTextView.isEditable = true
         promptTextView.alphaValue = 1.0
         promptLabel?.stringValue = promptLabelText
@@ -1206,21 +1228,30 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func performAccept(item: PickerItem, rawPrompt: String, rawDesc: String, rawBranch: String, rawBaseBranch: String, rawTitle: String) {
-        AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
+        // Never remember "Web" as last selection — it should always be explicit.
+        if case .web = item { /* skip */ } else {
+            AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
+        }
 
         // Write crash-recovery temp file before clearing the draft, so the submitted
         // content is safe even if the app crashes during thread/tab creation.
+        // Web tabs don't go through tmux injection, so skip crash-recovery for them.
         let agentType: AgentType? = {
             if case .agent(let t, _) = item { return t }
             return nil
         }()
-        let pendingPromptFileURL = rawPrompt.isEmpty ? nil : PendingInitialPromptStore.save(
-            prompt: rawPrompt,
-            description: rawDesc.isEmpty ? nil : rawDesc,
-            branchName: rawBranch.isEmpty ? nil : rawBranch,
-            agentType: agentType,
-            scope: currentDraftScope
-        )
+        let pendingPromptFileURL: URL?
+        if case .web = item {
+            pendingPromptFileURL = nil
+        } else {
+            pendingPromptFileURL = rawPrompt.isEmpty ? nil : PendingInitialPromptStore.save(
+                prompt: rawPrompt,
+                description: rawDesc.isEmpty ? nil : rawDesc,
+                branchName: rawBranch.isEmpty ? nil : rawBranch,
+                agentType: agentType,
+                scope: currentDraftScope
+            )
+        }
 
         // Clear draft immediately — the modal is now clean if the user opens it again
         // while the thread/tab is still being created in the background.
@@ -1257,7 +1288,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 tabTitle: rawTitle.isEmpty ? nil : rawTitle,
                 pendingPromptFileURL: pendingPromptFileURL,
                 selectedProject: selectedProject,
-                selectedSectionId: selectedSectionId
+                selectedSectionId: selectedSectionId,
+                initialWebURL: nil
             ))
         case .agent(let type, _):
             finish(with: AgentLaunchSheetResult(
@@ -1270,7 +1302,30 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 tabTitle: rawTitle.isEmpty ? nil : rawTitle,
                 pendingPromptFileURL: pendingPromptFileURL,
                 selectedProject: selectedProject,
-                selectedSectionId: selectedSectionId
+                selectedSectionId: selectedSectionId,
+                initialWebURL: nil
+            ))
+        case .web:
+            let url: URL? = {
+                guard !rawPrompt.isEmpty else { return nil }
+                if let parsed = URL(string: rawPrompt), parsed.scheme != nil {
+                    return parsed
+                }
+                // Bare hostname or path — prepend https://
+                return URL(string: "https://\(rawPrompt)")
+            }()
+            finish(with: AgentLaunchSheetResult(
+                agentType: nil,
+                useAgentCommand: false,
+                prompt: nil,
+                description: rawDesc.isEmpty ? nil : rawDesc,
+                branchName: rawBranch.isEmpty ? nil : rawBranch,
+                baseBranch: rawBaseBranch.isEmpty ? nil : rawBaseBranch,
+                tabTitle: rawTitle.isEmpty ? nil : rawTitle,
+                pendingPromptFileURL: nil,
+                selectedProject: selectedProject,
+                selectedSectionId: selectedSectionId,
+                initialWebURL: url
             ))
         }
     }
