@@ -43,6 +43,9 @@ final class ThreadManager {
     /// In-flight injection tasks, keyed by session name. Used to cancel polling when
     /// the user triggers manual "Inject Now" from the pending-prompt banner.
     var pendingPromptInjectionTasks: [String: Task<Void, Never>] = [:]
+    /// Timestamp of the last successful prompt-bearing injection per session.
+    /// Lets callers wait for the actual tmux send to complete before renaming sessions.
+    var initialPromptInjectionCompletionsBySession: [String: Date] = [:]
     /// Per-thread cache of AI-generated rename payloads, keyed by normalized prompt.
     /// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
     /// Cleared when a thread is archived or deleted.

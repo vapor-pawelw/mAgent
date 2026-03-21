@@ -285,6 +285,7 @@ extension ThreadManager {
         shouldSubmitInitialPrompt: Bool,
         agentType: AgentType?
     ) async {
+        clearMagentBusy(sessionName: sessionName)
         await MainActor.run {
             BannerManager.shared.show(
                 message: message,
@@ -311,8 +312,10 @@ extension ThreadManager {
         shouldSubmitInitialPrompt: Bool,
         agentType: AgentType?
     ) async {
+        clearMagentBusy(sessionName: sessionName)
         pendingPromptInjectionSessions.removeValue(forKey: sessionName)
         pendingPromptInjectionTasks.removeValue(forKey: sessionName)
+        initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
         initialPromptInjectionFailuresBySession[sessionName] = InitialPromptInjectionFailureInfo(
             prompt: prompt,
             shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
@@ -340,8 +343,64 @@ extension ThreadManager {
         initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
     }
 
+    func clearTrackedInitialPromptInjection(for sessionName: String) {
+        initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
+        initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
+        clearPendingPromptInjection(for: sessionName)
+    }
+
+    func clearTrackedInitialPromptInjection(forSessions sessionNames: some Sequence<String>) {
+        for sessionName in sessionNames {
+            clearTrackedInitialPromptInjection(for: sessionName)
+        }
+    }
+
     func pendingPromptInjection(for sessionName: String) -> InitialPromptInjectionFailureInfo? {
         pendingPromptInjectionSessions[sessionName]
+    }
+
+    func didCompleteInitialPromptInjection(for sessionName: String) -> Bool {
+        initialPromptInjectionCompletionsBySession[sessionName] != nil
+    }
+
+    func hasTrackedInitialPromptInjection(for sessionName: String) -> Bool {
+        pendingPromptInjectionSessions[sessionName] != nil
+            || pendingPromptInjectionTasks[sessionName] != nil
+            || initialPromptInjectionFailuresBySession[sessionName] != nil
+            || initialPromptInjectionCompletionsBySession[sessionName] != nil
+    }
+
+    /// Waits for a prompt-bearing injection to finish sending keys before callers perform
+    /// session-sensitive work such as tmux renames.
+    func waitForInitialPromptInjectionSettlement(
+        sessionName: String,
+        timeout: TimeInterval = 35
+    ) async -> Bool {
+        if didCompleteInitialPromptInjection(for: sessionName) {
+            return true
+        }
+        if initialPromptInjectionFailure(for: sessionName) != nil {
+            return false
+        }
+
+        let wasTrackedAtStart = hasTrackedInitialPromptInjection(for: sessionName)
+        guard wasTrackedAtStart else { return false }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            // Callers may wait on this before renaming tmux sessions. If that caller is
+            // cancelled, do not keep polling the old session name until timeout.
+            guard !Task.isCancelled else { return false }
+            if didCompleteInitialPromptInjection(for: sessionName) {
+                return true
+            }
+            if initialPromptInjectionFailure(for: sessionName) != nil {
+                return false
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+
+        return didCompleteInitialPromptInjection(for: sessionName)
     }
 
     func clearPendingPromptInjection(for sessionName: String) {
@@ -416,7 +475,23 @@ extension ThreadManager {
         PendingInitialPromptStore.clearAfterInjection(fileURL: fileURL, sessionName: sessionName)
     }
 
+    /// Removes a session from `magentBusySessions` on the owning thread and
+    /// notifies the sidebar so the spinner can update.
+    func clearMagentBusy(sessionName: String) {
+        guard let idx = threads.firstIndex(where: {
+            $0.magentBusySessions.contains(sessionName)
+        }) else { return }
+        threads[idx].magentBusySessions.remove(sessionName)
+        Task { @MainActor in
+            self.delegate?.threadManager(self, didUpdateThreads: self.threads)
+        }
+    }
+
     private func postAgentKeysInjectedNotification(sessionName: String, includedInitialPrompt: Bool) {
+        clearMagentBusy(sessionName: sessionName)
+        if includedInitialPrompt {
+            initialPromptInjectionCompletionsBySession[sessionName] = Date()
+        }
         NotificationCenter.default.post(
             name: .magentAgentKeysInjected,
             object: nil,
@@ -430,11 +505,28 @@ extension ThreadManager {
     func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, shouldSubmitInitialPrompt: Bool = true, agentType: AgentType? = nil) {
         let prompt = initialPrompt.flatMap { $0.isEmpty ? nil : $0 }
         let hasPrompt = shouldSubmitInitialPrompt && prompt != nil
-        guard !terminalCommand.isEmpty || !agentContext.isEmpty || prompt != nil else { return }
+
+        // Mark session as magent-busy for the duration of injection/readiness detection.
+        // This ensures the sidebar shows a spinner even before the agent starts.
+        if let idx = threads.firstIndex(where: {
+            $0.tmuxSessionNames.contains(sessionName)
+        }), !threads[idx].magentBusySessions.contains(sessionName) {
+            threads[idx].magentBusySessions.insert(sessionName)
+            Task { @MainActor in
+                self.delegate?.threadManager(self, didUpdateThreads: self.threads)
+            }
+        }
+
+        guard !terminalCommand.isEmpty || !agentContext.isEmpty || prompt != nil else {
+            clearMagentBusy(sessionName: sessionName)
+            return
+        }
         NSLog("[injectAfterStart] session=\(sessionName) hasPrompt=\(hasPrompt) injectOnly=\(prompt != nil && !shouldSubmitInitialPrompt) hasTermCmd=\(!terminalCommand.isEmpty) agentType=\(agentType?.rawValue ?? "nil")")
 
         // Track pending prompt injection so the UI can show a "waiting" banner
         if let prompt {
+            initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
+            initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
             pendingPromptInjectionSessions[sessionName] = InitialPromptInjectionFailureInfo(
                 prompt: prompt,
                 shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
@@ -472,7 +564,10 @@ extension ThreadManager {
                     agentType: agentType,
                     timeout: 30
                 )
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    self.clearMagentBusy(sessionName: sessionName)
+                    return
+                }
                 if !promptReady {
                     await postInitialPromptInjectionFailure(
                         sessionName: sessionName,
@@ -508,7 +603,10 @@ extension ThreadManager {
                     agentType: agentType,
                     timeout: 30
                 )
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    self.clearMagentBusy(sessionName: sessionName)
+                    return
+                }
                 if !promptReady {
                     await postInitialPromptInjectionFailure(
                         sessionName: sessionName,
@@ -1027,6 +1125,19 @@ extension ThreadManager {
             changed = true
         }
 
+        // Re-key magentBusySessions — filter against all tmux sessions (not just agent ones)
+        // since magent busy applies to any session during injection/setup.
+        let validAllSessions = Set(threads[index].tmuxSessionNames)
+        let remappedMagentBusy = Set(
+            threads[index].magentBusySessions
+                .map { sessionRenameMap[$0] ?? $0 }
+                .filter { validAllSessions.contains($0) || $0 == MagentThread.threadSetupSentinel }
+        )
+        if remappedMagentBusy != threads[index].magentBusySessions {
+            threads[index].magentBusySessions = remappedMagentBusy
+            changed = true
+        }
+
         // Keep notification dedup state aligned with waiting sessions after rename.
         let renamedTargets = Set(sessionRenameMap.values)
         for (oldName, newName) in sessionRenameMap where notifiedWaitingSessions.remove(oldName) != nil {
@@ -1036,6 +1147,46 @@ extension ThreadManager {
         }
         for target in renamedTargets where !remappedWaiting.contains(target) {
             notifiedWaitingSessions.remove(target)
+        }
+
+        return changed
+    }
+
+    @discardableResult
+    func remapInitialPromptInjectionState(sessionRenameMap: [String: String]) -> Bool {
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        var changed = false
+
+        func remapDictionary<Value>(_ dictionary: inout [String: Value]) {
+            let originalKeys = Set(dictionary.keys)
+            var remapped: [String: Value] = [:]
+            // Build this manually instead of `Dictionary(uniqueKeysWithValues:)` so a
+            // future caller cannot crash here if two old session names ever collapse to
+            // the same new name during rename reconciliation.
+            for key in dictionary.keys.sorted() {
+                guard let value = dictionary[key] else { continue }
+                remapped[sessionRenameMap[key] ?? key] = value
+            }
+            dictionary = remapped
+            if Set(dictionary.keys) != originalKeys {
+                changed = true
+            }
+        }
+
+        remapDictionary(&initialPromptInjectionFailuresBySession)
+        remapDictionary(&pendingPromptInjectionSessions)
+        remapDictionary(&initialPromptInjectionCompletionsBySession)
+
+        let originalTaskKeys = Set(pendingPromptInjectionTasks.keys)
+        var remappedTasks: [String: Task<Void, Never>] = [:]
+        for key in pendingPromptInjectionTasks.keys.sorted() {
+            guard let task = pendingPromptInjectionTasks[key] else { continue }
+            remappedTasks[sessionRenameMap[key] ?? key] = task
+        }
+        pendingPromptInjectionTasks = remappedTasks
+        if Set(pendingPromptInjectionTasks.keys) != originalTaskKeys {
+            changed = true
         }
 
         return changed
@@ -1064,6 +1215,15 @@ extension ThreadManager {
                 notifiedWaitingSessions.remove(session)
             }
             threads[index].waitingForInputSessions = prunedWaiting
+            changed = true
+        }
+
+        // Prune magentBusySessions against all known tmux sessions + the setup sentinel.
+        let validMagentTargets = Set(threads[index].tmuxSessionNames)
+            .union([MagentThread.threadSetupSentinel])
+        let prunedMagentBusy = threads[index].magentBusySessions.intersection(validMagentTargets)
+        if prunedMagentBusy != threads[index].magentBusySessions {
+            threads[index].magentBusySessions = prunedMagentBusy
             changed = true
         }
 

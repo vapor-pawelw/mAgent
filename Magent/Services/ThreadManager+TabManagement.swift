@@ -186,6 +186,8 @@ extension ThreadManager {
             }
             threads[index].agentHasRun = true
         }
+        // Mark session as magent-busy until injection/readiness completes.
+        threads[index].magentBusySessions.insert(tmuxSessionName)
         try persistence.saveActiveThreads(threads)
         let tab = Tab(
             threadId: currentThread.id,
@@ -354,9 +356,11 @@ extension ThreadManager {
         threads[idx].sessionAgentTypes.removeValue(forKey: sessionName)
         threads[idx].unreadCompletionSessions.remove(sessionName)
         threads[idx].busySessions.remove(sessionName)
+        threads[idx].magentBusySessions.remove(sessionName)
         threads[idx].waitingForInputSessions.remove(sessionName)
         threads[idx].rateLimitedSessions.removeValue(forKey: sessionName)
         notifiedWaitingSessions.remove(sessionName)
+        clearTrackedInitialPromptInjection(for: sessionName)
         threads[idx].customTabNames.removeValue(forKey: sessionName)
         threads[idx].submittedPromptsBySession.removeValue(forKey: sessionName)
         threads[idx].tmuxSessionNames.removeAll { $0 == sessionName }
