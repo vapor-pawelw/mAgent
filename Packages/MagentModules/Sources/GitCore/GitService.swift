@@ -635,6 +635,7 @@ public final class GitService: Sendable {
             ))
         }
 
+        entries.sort { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
         return entries
     }
 
