@@ -104,7 +104,7 @@ extension ThreadManager {
             skipNextAutoSelect = true
         }
         await MainActor.run {
-            delegate?.threadManager(self, didCreateThread: pendingThread)
+            delegate?.threadManager(self, didCreateThread: pendingThreadWithBusy)
         }
 
         // Phase 2: Perform git and tmux setup. On failure, clean up the pending thread.
@@ -495,6 +495,10 @@ extension ThreadManager {
 
         let archivedAt = Date()
 
+        // Prompt-injection bookkeeping is global to ThreadManager rather than persisted on
+        // the thread, so archive/delete must clear it explicitly when a thread disappears.
+        clearTrackedInitialPromptInjection(forSessions: thread.tmuxSessionNames)
+
         // Remove from active list
         threads.removeAll { $0.id == thread.id }
 
@@ -678,6 +682,10 @@ extension ThreadManager {
         if let ticketKey = thread.jiraTicketKey {
             excludeJiraTicket(key: ticketKey, projectId: thread.projectId)
         }
+
+        // Prompt-injection bookkeeping is global to ThreadManager rather than persisted on
+        // the thread, so archive/delete must clear it explicitly when a thread disappears.
+        clearTrackedInitialPromptInjection(forSessions: thread.tmuxSessionNames)
 
         // Remove from active list
         threads.remove(at: index)

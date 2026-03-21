@@ -27,6 +27,8 @@ When `injectAfterStart` is called with an initial prompt, the session is registe
 
 `magentAgentKeysInjected` is completion-only. It carries `includedInitialPrompt` so prompt-specific UI and cleanup react only to the completion that actually pasted/submitted the prompt. Do not let prompt-less terminal-command or agent-context injections masquerade as prompt completion, otherwise the pending banner and crash-recovery cleanup can clear too early.
 
+First-prompt auto-rename must not rename tmux sessions until that prompt-bearing injection has actually settled. `injectAfterStart` addresses tmux by session name while it polls for readiness and later sends the prompt; renaming the session before `magentAgentKeysInjected` arrives strands the task on the old session name, breaks prompt delivery, and makes rebuilt thread views lose the pending/failure banner unless the prompt-injection state is re-keyed with the rename.
+
 ### Cancellation safety
 
 `injectAfterStart` stores its `Task` in `pendingPromptInjectionTasks[sessionName]`. Both prompt-wait paths (`shouldSubmitInitialPrompt` true/false) check `Task.isCancelled` after `waitForAgentPrompt` returns and exit silently if cancelled, preventing double-injection when the user clicks "Inject Now" while polling is in progress.

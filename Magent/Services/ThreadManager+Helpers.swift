@@ -315,6 +315,7 @@ extension ThreadManager {
         clearMagentBusy(sessionName: sessionName)
         pendingPromptInjectionSessions.removeValue(forKey: sessionName)
         pendingPromptInjectionTasks.removeValue(forKey: sessionName)
+        initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
         initialPromptInjectionFailuresBySession[sessionName] = InitialPromptInjectionFailureInfo(
             prompt: prompt,
             shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
@@ -342,8 +343,64 @@ extension ThreadManager {
         initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
     }
 
+    func clearTrackedInitialPromptInjection(for sessionName: String) {
+        initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
+        initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
+        clearPendingPromptInjection(for: sessionName)
+    }
+
+    func clearTrackedInitialPromptInjection(forSessions sessionNames: some Sequence<String>) {
+        for sessionName in sessionNames {
+            clearTrackedInitialPromptInjection(for: sessionName)
+        }
+    }
+
     func pendingPromptInjection(for sessionName: String) -> InitialPromptInjectionFailureInfo? {
         pendingPromptInjectionSessions[sessionName]
+    }
+
+    func didCompleteInitialPromptInjection(for sessionName: String) -> Bool {
+        initialPromptInjectionCompletionsBySession[sessionName] != nil
+    }
+
+    func hasTrackedInitialPromptInjection(for sessionName: String) -> Bool {
+        pendingPromptInjectionSessions[sessionName] != nil
+            || pendingPromptInjectionTasks[sessionName] != nil
+            || initialPromptInjectionFailuresBySession[sessionName] != nil
+            || initialPromptInjectionCompletionsBySession[sessionName] != nil
+    }
+
+    /// Waits for a prompt-bearing injection to finish sending keys before callers perform
+    /// session-sensitive work such as tmux renames.
+    func waitForInitialPromptInjectionSettlement(
+        sessionName: String,
+        timeout: TimeInterval = 35
+    ) async -> Bool {
+        if didCompleteInitialPromptInjection(for: sessionName) {
+            return true
+        }
+        if initialPromptInjectionFailure(for: sessionName) != nil {
+            return false
+        }
+
+        let wasTrackedAtStart = hasTrackedInitialPromptInjection(for: sessionName)
+        guard wasTrackedAtStart else { return false }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            // Callers may wait on this before renaming tmux sessions. If that caller is
+            // cancelled, do not keep polling the old session name until timeout.
+            guard !Task.isCancelled else { return false }
+            if didCompleteInitialPromptInjection(for: sessionName) {
+                return true
+            }
+            if initialPromptInjectionFailure(for: sessionName) != nil {
+                return false
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+
+        return didCompleteInitialPromptInjection(for: sessionName)
     }
 
     func clearPendingPromptInjection(for sessionName: String) {
@@ -432,6 +489,9 @@ extension ThreadManager {
 
     private func postAgentKeysInjectedNotification(sessionName: String, includedInitialPrompt: Bool) {
         clearMagentBusy(sessionName: sessionName)
+        if includedInitialPrompt {
+            initialPromptInjectionCompletionsBySession[sessionName] = Date()
+        }
         NotificationCenter.default.post(
             name: .magentAgentKeysInjected,
             object: nil,
@@ -465,6 +525,8 @@ extension ThreadManager {
 
         // Track pending prompt injection so the UI can show a "waiting" banner
         if let prompt {
+            initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
+            initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
             pendingPromptInjectionSessions[sessionName] = InitialPromptInjectionFailureInfo(
                 prompt: prompt,
                 shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
@@ -1085,6 +1147,46 @@ extension ThreadManager {
         }
         for target in renamedTargets where !remappedWaiting.contains(target) {
             notifiedWaitingSessions.remove(target)
+        }
+
+        return changed
+    }
+
+    @discardableResult
+    func remapInitialPromptInjectionState(sessionRenameMap: [String: String]) -> Bool {
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        var changed = false
+
+        func remapDictionary<Value>(_ dictionary: inout [String: Value]) {
+            let originalKeys = Set(dictionary.keys)
+            var remapped: [String: Value] = [:]
+            // Build this manually instead of `Dictionary(uniqueKeysWithValues:)` so a
+            // future caller cannot crash here if two old session names ever collapse to
+            // the same new name during rename reconciliation.
+            for key in dictionary.keys.sorted() {
+                guard let value = dictionary[key] else { continue }
+                remapped[sessionRenameMap[key] ?? key] = value
+            }
+            dictionary = remapped
+            if Set(dictionary.keys) != originalKeys {
+                changed = true
+            }
+        }
+
+        remapDictionary(&initialPromptInjectionFailuresBySession)
+        remapDictionary(&pendingPromptInjectionSessions)
+        remapDictionary(&initialPromptInjectionCompletionsBySession)
+
+        let originalTaskKeys = Set(pendingPromptInjectionTasks.keys)
+        var remappedTasks: [String: Task<Void, Never>] = [:]
+        for key in pendingPromptInjectionTasks.keys.sorted() {
+            guard let task = pendingPromptInjectionTasks[key] else { continue }
+            remappedTasks[sessionRenameMap[key] ?? key] = task
+        }
+        pendingPromptInjectionTasks = remappedTasks
+        if Set(pendingPromptInjectionTasks.keys) != originalTaskKeys {
+            changed = true
         }
 
         return changed

@@ -360,6 +360,7 @@ extension ThreadManager {
         threads[idx].waitingForInputSessions.remove(sessionName)
         threads[idx].rateLimitedSessions.removeValue(forKey: sessionName)
         notifiedWaitingSessions.remove(sessionName)
+        clearTrackedInitialPromptInjection(for: sessionName)
         threads[idx].customTabNames.removeValue(forKey: sessionName)
         threads[idx].submittedPromptsBySession.removeValue(forKey: sessionName)
         threads[idx].tmuxSessionNames.removeAll { $0 == sessionName }
