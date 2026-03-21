@@ -14,6 +14,11 @@ All notable changes to this project will be documented in this file.
 - Jira ticket detection in Settings can now be limited to specific project prefixes, using a comma- or semicolon-separated filter like `IP, APPL, UT`.
 
 ### Sidebar
+- File rows in the changes panel now show filename first (in status color) followed by the directory path (gray, smaller) for better scannability.
+- Right-clicking a file row now offers Copy Filename, Show in Finder, and Stage/Unstage (for uncommitted files and directories).
+- Right-clicking a commit row now offers Copy Hash and Copy Message.
+- Changed files are now sorted by status group (untracked → unstaged → staged → committed), then alphabetically within each group.
+- Target branch picker no longer shows unrelated historical branches — only branches between the default branch and HEAD are listed.
 - The changes panel now has a refresh button in its top-right corner so you can manually reload git status, branch/base info, commits, and file changes for the selected thread without waiting for background polling.
 - Branch info at the bottom of the changes panel now displays on two lines — current branch on top, base/target branch below with a `⤷` arrow — and strips `origin/` prefixes for cleaner display.
 

@@ -406,40 +406,55 @@ public final class GitService: Sendable {
                 return String(ref.dropFirst("refs/remotes/".count)) // e.g. "origin/develop"
             }
         }
+
+        // Fallback: when origin/main (or origin/master) diverged, the decorated walk
+        // won't find it. Check common default branches via merge-base.
+        for candidate in ["main", "master"] where candidate != currentBranch {
+            let mb = await mergeBase(worktreePath: worktreePath, baseBranch: candidate)
+            if mb != nil { return "origin/\(candidate)" }
+        }
         return nil
     }
 
-    /// Returns remote ancestor branches ordered by proximity to HEAD (closest first).
-    /// Uses the same decorated-log walk as `detectBaseBranch` but collects all matches
-    /// instead of stopping at the first. Useful for letting the user pick a base branch.
-    /// When `defaultBranch` is provided, collection stops after including that branch
-    /// (no ancestors beyond the default branch are shown).
+    /// Returns remote ancestor branches between the default branch and HEAD,
+    /// ordered by proximity to HEAD (closest first). Only includes branches
+    /// whose tips are within the merge-base..HEAD range, plus the default branch itself.
     public func listAncestorBranches(worktreePath: String, currentBranch: String, defaultBranch: String? = nil) async -> [String] {
+        let base = defaultBranch ?? "main"
+        guard let mergeBaseHash = await mergeBase(worktreePath: worktreePath, baseBranch: base) else {
+            return ["origin/\(base)"]
+        }
+
+        // Only walk commits between merge-base and HEAD
         let result = await ShellExecutor.execute(
-            "git log --decorate=full --simplify-by-decoration --format='%D' HEAD",
+            "git log --decorate=full --simplify-by-decoration --format='%D' \(shellQuote(mergeBaseHash))..HEAD",
             workingDirectory: worktreePath
         )
-        guard result.exitCode == 0 else { return [] }
-        let lines = result.stdout.components(separatedBy: "\n")
+
         let excluded = "refs/remotes/origin/\(currentBranch)"
-        let defaultRef = defaultBranch.map { "origin/\($0)" }
         var seen = Set<String>()
         var branches: [String] = []
-        for line in lines {
-            let refs = line.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            for ref in refs {
-                guard ref.hasPrefix("refs/remotes/origin/"),
-                      ref != "refs/remotes/origin/HEAD",
-                      ref != excluded else { continue }
-                let name = String(ref.dropFirst("refs/remotes/".count))
-                if seen.insert(name).inserted {
-                    branches.append(name)
-                }
-                // Stop after including the default branch — no ancestors beyond it
-                if let defaultRef, name == defaultRef {
-                    return branches
+
+        if result.exitCode == 0 {
+            let lines = result.stdout.components(separatedBy: "\n")
+            for line in lines {
+                let refs = line.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                for ref in refs {
+                    guard ref.hasPrefix("refs/remotes/origin/"),
+                          ref != "refs/remotes/origin/HEAD",
+                          ref != excluded else { continue }
+                    let name = String(ref.dropFirst("refs/remotes/".count))
+                    if seen.insert(name).inserted {
+                        branches.append(name)
+                    }
                 }
             }
+        }
+
+        // Always include the default branch as the last option
+        let defaultRef = "origin/\(base)"
+        if !seen.contains(defaultRef) {
+            branches.append(defaultRef)
         }
         return branches
     }
@@ -635,6 +650,12 @@ public final class GitService: Sendable {
             ))
         }
 
+        entries.sort {
+            if $0.workingStatus.sortOrder != $1.workingStatus.sortOrder {
+                return $0.workingStatus.sortOrder < $1.workingStatus.sortOrder
+            }
+            return $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending
+        }
         return entries
     }
 
@@ -759,6 +780,22 @@ public final class GitService: Sendable {
         guard numstatResult.exitCode == 0 else { return [] }
         // All files in a commit are "committed" status
         return parseDiffEntries(numstatOutput: numstatResult.stdout, statusMap: [:])
+    }
+
+    /// Stages a file (or directory) in the working tree.
+    public func stageFile(worktreePath: String, relativePath: String) async {
+        _ = await ShellExecutor.execute(
+            "git add \(shellQuote(relativePath))",
+            workingDirectory: worktreePath
+        )
+    }
+
+    /// Unstages a file (or directory) from the index, keeping working tree changes.
+    public func unstageFile(worktreePath: String, relativePath: String) async {
+        _ = await ShellExecutor.execute(
+            "git restore --staged \(shellQuote(relativePath))",
+            workingDirectory: worktreePath
+        )
     }
 
     /// Returns the full unified diff output for a single commit.
