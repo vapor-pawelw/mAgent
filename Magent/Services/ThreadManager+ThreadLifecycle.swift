@@ -156,9 +156,9 @@ extension ThreadManager {
 
             // Web-only thread: skip tmux session creation, only add the web tab.
             if let webURL = initialWebURL {
-                let identifier = "web:\(webURL.absoluteString)"
-                let title = webURL.host ?? webURL.absoluteString
-                let webTab = PersistedWebTab(identifier: identifier, url: webURL, title: title, iconType: .none)
+                let identifier = "web:\(UUID().uuidString)"
+                let title = webURL.host ?? "Web"
+                let webTab = PersistedWebTab(identifier: identifier, url: webURL, title: title, iconType: .web)
 
                 var thread = MagentThread(
                     id: threadID,

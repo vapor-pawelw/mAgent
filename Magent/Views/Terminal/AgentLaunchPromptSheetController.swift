@@ -438,7 +438,6 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private func applyLastSelection() {
         guard PersistenceService.shared.loadSettings().rememberLastTypeSelection else { return }
         guard let raw = AgentLastSelectionStore.lastSelection(for: config.draftScope),
-              raw != "web",  // Never auto-restore "Web" — it must be explicit each time.
               let index = pickerItems.firstIndex(where: { $0.storageRaw == raw }) else {
             return
         }
@@ -1228,10 +1227,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func performAccept(item: PickerItem, rawPrompt: String, rawDesc: String, rawBranch: String, rawBaseBranch: String, rawTitle: String) {
-        // Never remember "Web" as last selection — it should always be explicit.
-        if case .web = item { /* skip */ } else {
-            AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
-        }
+        AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
 
         // Write crash-recovery temp file before clearing the draft, so the submitted
         // content is safe even if the app crashes during thread/tab creation.

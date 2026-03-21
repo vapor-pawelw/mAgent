@@ -251,8 +251,8 @@ extension ThreadDetailViewController {
         controller.present(for: window) { [weak self] result in
             guard let self, let result else { return }
             if let webURL = result.initialWebURL {
-                let title = result.tabTitle ?? webURL.host ?? webURL.absoluteString
-                self.openWebTab(url: webURL, identifier: "web:\(webURL.absoluteString)", title: title)
+                let title = result.tabTitle ?? webURL.host ?? "Web"
+                self.openWebTab(url: webURL, identifier: "web:\(UUID().uuidString)", title: title, iconType: .web)
             } else {
                 self.addTab(
                     using: result.agentType,
@@ -702,7 +702,7 @@ extension ThreadDetailViewController: NSMenuDelegate {
             addTab(using: nil, useAgentCommand: true)
         case .web:
             let blankURL = URL(string: "about:blank")!
-            openWebTab(url: blankURL, identifier: "web:\(UUID().uuidString)", title: "Web")
+            openWebTab(url: blankURL, identifier: "web:\(UUID().uuidString)", title: "Web", iconType: .web)
         }
     }
 
