@@ -226,13 +226,13 @@ enum BackgroundLocalSyncWorker {
 
 extension ThreadManager {
 
-    private enum LocalSyncConflictMode {
+    private nonisolated enum LocalSyncConflictMode {
         case overwrite
         case skip
         case prompt
     }
 
-    private enum LocalSyncConflictChoice {
+    private nonisolated enum LocalSyncConflictChoice {
         case overwrite
         case overwriteAll
         case skip
@@ -240,40 +240,40 @@ extension ThreadManager {
         case cancel
     }
 
-    private enum LocalSyncItemKind {
+    private nonisolated enum LocalSyncItemKind {
         case file
         case directory
     }
 
-    private enum LocalSyncConflictKind {
+    private nonisolated enum LocalSyncConflictKind {
         case fileDifferent
         case fileBlocksDirectory
         case directoryBlocksFile
     }
 
-    private struct LocalSyncConflict {
+    private nonisolated struct LocalSyncConflict: Sendable {
         let relativePath: String
         let destinationPath: String
         let kind: LocalSyncConflictKind
     }
 
-    private struct LocalSyncBaselineManifest: Codable {
+    private nonisolated struct LocalSyncBaselineManifest: Codable, Sendable {
         let fileHashes: [String: String]
     }
 
-    private enum LocalSyncDirectoryMaterialization {
+    private nonisolated enum LocalSyncDirectoryMaterialization {
         case onDemand
         case always
     }
 
-    private enum LocalSyncConflictDirection {
+    private nonisolated enum LocalSyncConflictDirection {
         case intoWorktree
         case intoRepo
     }
 
     // MARK: - Local Sync In (Repo -> Worktree)
 
-    func syncConfiguredLocalPathsIntoWorktree(
+    @concurrent func syncConfiguredLocalPathsIntoWorktree(
         project: Project,
         worktreePath: String,
         syncPaths: [String],
@@ -328,7 +328,7 @@ extension ThreadManager {
 
     // MARK: - Local Sync Back (Worktree -> Repo)
 
-    func syncConfiguredLocalPathsFromWorktree(
+    @concurrent func syncConfiguredLocalPathsFromWorktree(
         project: Project,
         worktreePath: String,
         syncPaths: [String],
@@ -368,7 +368,7 @@ extension ThreadManager {
         }
     }
 
-    func effectiveLocalSyncPaths(for thread: MagentThread, project: Project) -> [String] {
+    nonisolated func effectiveLocalSyncPaths(for thread: MagentThread, project: Project) -> [String] {
         let currentPaths = project.normalizedLocalFileSyncPaths
         if let snapshot = thread.localFileSyncPathsSnapshot {
             let snapshotPaths = Project.normalizeLocalFileSyncPaths(snapshot)
@@ -382,7 +382,7 @@ extension ThreadManager {
 
     // MARK: - Merge Copy
 
-    private func mergeLocalSyncItem(
+    @concurrent private func mergeLocalSyncItem(
         sourcePath: String,
         destinationPath: String,
         relativePath: String,
@@ -508,7 +508,7 @@ extension ThreadManager {
         }
     }
 
-    private func ensureLocalSyncDirectoryTree(
+    @concurrent private func ensureLocalSyncDirectoryTree(
         destinationRootPath: String,
         relativeDirectoryPath: String,
         conflictMode: LocalSyncConflictMode,
@@ -540,7 +540,7 @@ extension ThreadManager {
         return true
     }
 
-    private func ensureLocalSyncDirectoryExists(
+    @concurrent private func ensureLocalSyncDirectoryExists(
         atPath destinationPath: String,
         relativePath: String,
         conflictMode: LocalSyncConflictMode,
@@ -574,7 +574,7 @@ extension ThreadManager {
         return true
     }
 
-    private func localSyncItemKind(atPath path: String) -> LocalSyncItemKind? {
+    nonisolated private func localSyncItemKind(atPath path: String) -> LocalSyncItemKind? {
         guard FileManager.default.fileExists(atPath: path) else { return nil }
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
               let type = attrs[.type] as? FileAttributeType else {
@@ -583,7 +583,7 @@ extension ThreadManager {
         return type == .typeDirectory ? .directory : .file
     }
 
-    private func localSyncFilesMatch(sourcePath: String, destinationPath: String) throws -> Bool {
+    nonisolated private func localSyncFilesMatch(sourcePath: String, destinationPath: String) throws -> Bool {
         let fm = FileManager.default
         guard let sourceAttrs = try? fm.attributesOfItem(atPath: sourcePath),
               let destinationAttrs = try? fm.attributesOfItem(atPath: destinationPath) else {
@@ -601,7 +601,7 @@ extension ThreadManager {
 
     // MARK: - Baseline Manifest
 
-    private func shouldSkipArchiveCopyForUnchangedFile(
+    nonisolated private func shouldSkipArchiveCopyForUnchangedFile(
         sourcePath: String,
         relativePath: String,
         baselineFileHashes: [String: String]?
@@ -614,13 +614,13 @@ extension ThreadManager {
         return currentHash == baselineHash
     }
 
-    private func localSyncFileHash(atPath path: String) throws -> String {
+    nonisolated private func localSyncFileHash(atPath path: String) throws -> String {
         let data = try Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe)
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
-    private func buildLocalSyncFileHashes(rootPath: String, syncPaths: [String]) throws -> [String: String] {
+    nonisolated private func buildLocalSyncFileHashes(rootPath: String, syncPaths: [String]) throws -> [String: String] {
         var hashes: [String: String] = [:]
         for relativePath in syncPaths {
             let absolutePath = (rootPath as NSString).appendingPathComponent(relativePath)
@@ -633,7 +633,7 @@ extension ThreadManager {
         return hashes
     }
 
-    private func collectLocalSyncFileHashes(
+    nonisolated private func collectLocalSyncFileHashes(
         absolutePath: String,
         relativePath: String,
         into hashes: inout [String: String]
@@ -657,7 +657,7 @@ extension ThreadManager {
         }
     }
 
-    private func saveLocalSyncBaselineManifest(worktreePath: String, fileHashes: [String: String]) async throws {
+    @concurrent private func saveLocalSyncBaselineManifest(worktreePath: String, fileHashes: [String: String]) async throws {
         guard let manifestPath = await localSyncBaselineManifestPath(worktreePath: worktreePath) else {
             throw ThreadManagerError.localFileSyncFailed("Could not resolve local sync manifest path.")
         }
@@ -671,7 +671,7 @@ extension ThreadManager {
         try data.write(to: URL(fileURLWithPath: manifestPath), options: .atomic)
     }
 
-    private func loadLocalSyncBaselineFileHashes(worktreePath: String) async -> [String: String]? {
+    @concurrent private func loadLocalSyncBaselineFileHashes(worktreePath: String) async -> [String: String]? {
         guard let manifestPath = await localSyncBaselineManifestPath(worktreePath: worktreePath) else {
             return nil
         }
@@ -683,7 +683,7 @@ extension ThreadManager {
         return manifest.fileHashes
     }
 
-    private func localSyncBaselineManifestPath(worktreePath: String) async -> String? {
+    @concurrent private func localSyncBaselineManifestPath(worktreePath: String) async -> String? {
         let preferred = await ShellExecutor.execute(
             "git rev-parse --path-format=absolute --git-path magent-local-sync-baseline.json",
             workingDirectory: worktreePath
@@ -705,7 +705,7 @@ extension ThreadManager {
 
     // MARK: - Conflict Resolution
 
-    private func shouldOverwriteLocalSyncConflict(
+    @concurrent private func shouldOverwriteLocalSyncConflict(
         _ conflict: LocalSyncConflict,
         conflictMode: LocalSyncConflictMode,
         overwriteAll: inout Bool,
@@ -720,7 +720,7 @@ extension ThreadManager {
         case .prompt:
             if overwriteAll { return true }
             if ignoreAll { return false }
-            let choice = presentLocalSyncConflictAlert(conflict, direction: conflictDirection)
+            let choice = await presentLocalSyncConflictAlert(conflict, direction: conflictDirection)
             switch choice {
             case .overwrite:
                 return true
