@@ -144,6 +144,10 @@ extension ThreadManager {
 
         let settings = persistence.loadSettings()
         let refreshedThread = threads.first(where: { $0.id == thread.id }) ?? thread
+
+        // Bail out if this session name is no longer part of the thread
+        // (e.g. a rename landed while preparation was in-flight).
+        guard refreshedThread.tmuxSessionNames.contains(sessionName) else { return false }
         let project = settings.projects.first(where: { $0.id == refreshedThread.projectId })
         let projectPath = project?.repoPath ?? thread.worktreePath
         let projectName = project?.name ?? "project"
@@ -244,6 +248,12 @@ extension ThreadManager {
                 workingDirectory: thread.worktreePath
             )
         }
+
+        // Re-check ownership: a rename may have landed during the awaits above,
+        // removing this session name from the thread. Bail out to avoid creating
+        // an orphan session under the stale old name.
+        let revalidatedThread = threads.first(where: { $0.id == thread.id }) ?? thread
+        guard revalidatedThread.tmuxSessionNames.contains(sessionName) else { return false }
 
         try? await tmux.createSession(
             name: sessionName,

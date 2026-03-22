@@ -569,6 +569,13 @@ extension ThreadManager {
         threads[index].pinnedTmuxSessions = newPinnedSessions
         _ = remapTransientSessionState(threadIndex: index, sessionRenameMap: sessionRenameMap)
         _ = remapInitialPromptInjectionState(sessionRenameMap: sessionRenameMap)
+        // Re-key known-good session context cache so renamed sessions
+        // aren't re-validated (and potentially killed) on next tab switch.
+        for (oldName, newName) in sessionRenameMap where oldName != newName {
+            if let cached = knownGoodSessionContexts.removeValue(forKey: oldName) {
+                knownGoodSessionContexts[newName] = cached
+            }
+        }
         threads[index].unreadCompletionSessions = Set(
             threads[index].unreadCompletionSessions.map { sessionRenameMap[$0] ?? $0 }
         )
@@ -1097,13 +1104,20 @@ extension ThreadManager {
         )
         _ = remapInitialPromptInjectionState(sessionRenameMap: [sessionName: resolvedSessionName])
 
+        // Re-key known-good session context cache so the renamed session
+        // isn't re-validated (and potentially killed) on next tab switch.
+        if let cachedContext = knownGoodSessionContexts.removeValue(forKey: sessionName) {
+            knownGoodSessionContexts[resolvedSessionName] = cachedContext
+        }
+
         // Update custom tab names: remove old key, store under new key
         threads[index].customTabNames.removeValue(forKey: sessionName)
         threads[index].customTabNames[resolvedSessionName] = trimmed
 
-        // Re-setup bell monitoring if this was an agent session
+        // Re-setup bell monitoring if this was an agent session.
+        // Use forceSetupBellPipe to stop the old-name pipe and start a fresh one.
         if threads[index].agentTmuxSessions.contains(resolvedSessionName) {
-            await tmux.setupBellPipe(for: resolvedSessionName)
+            await tmux.forceSetupBellPipe(for: resolvedSessionName)
         }
 
         try persistence.saveActiveThreads(threads)
