@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.3.2 - 2026-03-22
+
+
 ### Agents
 - When a thread starts with a pre-injected prompt, a "Prompt will be injected once the agent is ready" info banner now appears immediately with an "Inject Now" button to bypass polling. The banner disappears automatically once injection succeeds, or is replaced by the failure banner if injection times out.
 - Fixed another startup prompt-injection timeout on tall panes by widening the tmux readiness capture window before trimming blank filler lines, so newly started agents are less likely to miss a visible input prompt.
@@ -55,6 +60,7 @@ All notable changes to this project will be documented in this file.
 - Fixed initial prompt silently lost on both Claude and Codex when session recreation races with prompt injection during thread creation.
 - Fixed Codex initial prompt injection timing out on tall tmux panes where the visible `›` prompt sat above trailing blank space at the bottom of the pane.
 - If the initial prompt does not reach the agent input within startup timeout, only the affected tab now shows a persistent recovery banner with actions to re-inject the prompt or confirm it was already entered manually.
+
 
 ## 1.3.1 - 2026-03-20
 
