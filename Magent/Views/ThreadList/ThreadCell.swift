@@ -253,7 +253,7 @@ final class ThreadCell: NSTableCellView {
         addSubview(emojiLabel)
         signEmojiLabel = emojiLabel
         NSLayoutConstraint.activate([
-            emojiLabel.trailingAnchor.constraint(equalTo: iv.leadingAnchor, constant: 1),
+            emojiLabel.trailingAnchor.constraint(equalTo: iv.leadingAnchor, constant: -1),
             emojiLabel.centerYAnchor.constraint(equalTo: iv.centerYAnchor),
         ])
 
@@ -584,6 +584,9 @@ final class ThreadCell: NSTableCellView {
         if let emoji = thread.signEmoji {
             signEmojiLabel?.stringValue = emoji
             signEmojiLabel?.textColor = ThreadListViewController.signEmojiTintColor(for: emoji) ?? .labelColor
+            signEmojiLabel?.font = (emoji == "↑" || emoji == "↓")
+                ? .systemFont(ofSize: 12, weight: .bold)
+                : .systemFont(ofSize: 9, weight: .bold)
             signEmojiLabel?.isHidden = false
         } else {
             signEmojiLabel?.stringValue = ""
