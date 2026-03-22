@@ -108,6 +108,11 @@ Each thread is 1:1 with a git worktree:
 Thread rename updates branch/session names, but running agent processes cannot have their cwd/env rewritten in-place.
 The underlying worktree directory is not moved. To keep active sessions stable, rename creates a compatibility symlink from the new thread-name path to the existing worktree path and updates tmux session environment for future shells/panes.
 
+Both thread rename and tab rename change tmux session names, which requires rekeying all session-name-keyed state at two levels:
+- **ThreadManager**: `knownGoodSessionContexts` (session-validation cache), transient session state, bell pipes (`forceSetupBellPipe` to replace old-name pipes).
+- **ThreadDetailViewController**: `preparedSessions`, `sessionPreparationTasks`/`sessionPreparationTaskTokens` (in-flight tasks are cancelled since their old-name completion path would fail), `loadingOverlaySessionName`, `startupOverlayRequiredSessions`. This is centralised in `rekeySessionState(_:)`.
+- **recreateSessionIfNeeded** guards against stale session names by checking `tmuxSessionNames.contains(sessionName)` both at entry and again immediately before `tmux.createSession`, so a rename landing mid-preparation cannot resurrect an orphan session.
+
 ### 4.2 Prompt-Based Rename Reuse
 
 Manual `Rename...` from the non-main thread context menu reuses the same model payload path as first-prompt auto-rename so branch slug generation, task description generation, and icon suggestion stay behaviorally aligned.

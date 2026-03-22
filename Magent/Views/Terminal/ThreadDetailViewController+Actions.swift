@@ -389,7 +389,24 @@ extension ThreadDetailViewController {
     }
 
     func handleRename(_ updated: MagentThread) {
+        // Capture old terminal session names (in slot order) before updating thread state.
+        var oldTerminalNames: [String] = []
+        for slot in tabSlots {
+            if case .terminal(let name) = slot { oldTerminalNames.append(name) }
+        }
+
         thread = updated
+
+        // Build old→new rename map from positional correspondence.
+        var renameMap: [String: String] = [:]
+        for (seqIdx, newName) in thread.tmuxSessionNames.enumerated() {
+            if seqIdx < oldTerminalNames.count, oldTerminalNames[seqIdx] != newName {
+                renameMap[oldTerminalNames[seqIdx]] = newName
+            }
+        }
+
+        // Re-key all session-keyed VC state in one place so no cache is missed.
+        rekeySessionState(renameMap)
 
         // Update onCopy/onSubmitLine closures to use the new (renamed) tmux session names.
         // terminalViews are indexed by thread.tmuxSessionNames (creation order).
@@ -407,16 +424,7 @@ extension ThreadDetailViewController {
             }
         }
 
-        // Rebuild tabSlots with updated session names (rename may have changed them).
-        for (displayIdx, slot) in tabSlots.enumerated() {
-            if case .terminal = slot, displayIdx < tabItems.count {
-                // Find the new session name for this display position.
-                // After rename, the session order in tmuxSessionNames corresponds to terminalViews order.
-                // We need to map old slot session name → new session name via the rename map
-                // that ThreadManager already applied. Just rebuild from thread state.
-            }
-        }
-        // Simpler: rebuild tabSlots terminal entries from the current thread.tmuxSessionNames
+        // Rebuild tabSlots terminal entries from the current thread.tmuxSessionNames
         // preserving the display order. Match by position in the terminal-only subsequence.
         var terminalSlotPositions: [Int] = []
         for (i, slot) in tabSlots.enumerated() {
@@ -434,6 +442,41 @@ extension ThreadDetailViewController {
 
         refreshTabStatusIndicators()
         schedulePromptTOCRefresh()
+    }
+
+    /// Re-keys all session-name-keyed VC state after a rename.
+    /// Centralised so that future session-keyed caches cannot be forgotten.
+    private func rekeySessionState(_ renameMap: [String: String]) {
+        guard !renameMap.isEmpty else { return }
+
+        // preparedSessions
+        for (oldName, newName) in renameMap {
+            if preparedSessions.remove(oldName) != nil {
+                preparedSessions.insert(newName)
+            }
+        }
+
+        // In-flight preparation tasks: cancel the old-name task (its completion
+        // path would use displayIndex(forSession: oldName) which now fails) and
+        // let the new name be prepared lazily on next tab selection.
+        for (oldName, _) in renameMap {
+            if let task = sessionPreparationTasks.removeValue(forKey: oldName) {
+                task.cancel()
+            }
+            sessionPreparationTaskTokens.removeValue(forKey: oldName)
+        }
+
+        // Loading overlay tracks which session it is waiting for.
+        if let current = loadingOverlaySessionName, let newName = renameMap[current] {
+            loadingOverlaySessionName = newName
+        }
+
+        // Startup overlay requirements
+        for (oldName, newName) in renameMap {
+            if startupOverlayRequiredSessions.remove(oldName) != nil {
+                startupOverlayRequiredSessions.insert(newName)
+            }
+        }
     }
 
     private func refreshTabStatusIndicators() {
