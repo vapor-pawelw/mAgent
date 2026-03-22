@@ -12,6 +12,61 @@
         }
       }
     },
+    "updateDownloading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading Magent %@..."
+          }
+        }
+      }
+    },
+    "updatePreparing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing update..."
+          }
+        }
+      }
+    },
+    "updateReadyToInstall": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magent %@ is ready to install."
+          }
+        }
+      }
+    },
+    "updateInstallAndRelaunch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install and Relaunch"
+          }
+        }
+      }
+    },
+    "updateInstalling": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installing... Magent will restart in a moment."
+          }
+        }
+      }
+    },
     "updateCheckAlreadyInProgress": {
       "extractionState": "manual",
       "localizations": {

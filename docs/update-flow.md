@@ -15,7 +15,9 @@ Implementation details:
 - Release notes come from the GitHub release `body` and are passed through banner/settings UI as optional details text.
 - Detected update state is kept in memory by `UpdateService` and broadcast with `magentUpdateStateChanged`, which `SettingsGeneralViewController` observes to refresh its update card.
 - Skipped-version persistence lives in `AppSettings.skippedUpdateVersion`.
-- For direct bundle installs, `UpdateService.installUpdate` does all the slow work in-app (download via `URLSession.download(for:)`, then DMG mount+ditto or ZIP unpack), showing progress banners at each phase. Only then is a minimal swap-only shell script launched (`writeSwapScript`), which just waits for the process to exit, `mv`s the prepared bundle into place, and calls `open`. The app terminates after 0.3 s.
+- For direct bundle installs, `UpdateService.downloadUpdate` does all the slow work in-app (download via `URLSession.download(for:)`, then DMG mount+ditto or ZIP unpack), showing progress banners with spinners at each phase. When download and extraction complete, the user sees a persistent "Magent X.Y.Z is ready to install" banner with an "Install and Relaunch" button. Only when the user clicks that button is the minimal swap-only shell script launched (`writeSwapScript`), which waits for the process to exit, `mv`s the prepared bundle into place, and calls `open`. The app terminates after 0.3 s.
+- Prepared update state (`preparedAppURL`, `preparedVersion`) is invalidated whenever `setDetectedUpdate` changes the detected version to prevent installing a stale payload. `isUpdateReadyToInstall` enforces `preparedVersion == detectedUpdate?.version.displayString`.
+- The install phase (`performSwapAndRelaunch`) is guarded by `isUpdating` and clears prepared state on first click to prevent duplicate swap scripts from banner + Settings racing.
 - For both direct bundle installs and Homebrew installs, the updater clears `com.apple.quarantine` and `com.apple.provenance` from the prepared/final app bundle before relaunch. This is a defensive workaround for unsigned release artifacts that could otherwise install successfully but refuse Finder/LaunchServices launch until the user manually ran `xattr -cr /Applications/Magent.app`.
 - For Homebrew installs, the original detached-script flow is kept: `brew upgrade --cask magent` runs after the app exits because Homebrew manages its own download, then the updater clears launch-blocking xattrs from `/Applications/Magent.app` before reopening it.
 
@@ -40,9 +42,17 @@ What changed in this thread (walrein):
 - Settings toggle calls `handleAutoCheckSettingChanged()` to immediately start/stop the poller.
 - Poller is started in `AppDelegate` after the initial launch check, gated by the setting. Stopped on `applicationWillTerminate`.
 
+What changed in this thread (sealeo):
+- Split the bundle-replacement update flow into two user-visible phases: download+extract (with spinner banners) → "Install and Relaunch" button. The app no longer closes until the user explicitly clicks install.
+- Settings update button now shows "Install and Relaunch" when a download is ready, or "Update to X.Y.Z" to start the download.
+- Added version-matching invariant: prepared payload is invalidated when the detected update version changes, and install requires `preparedVersion == detectedUpdate.version`.
+- Added re-entrancy guard on install phase to prevent duplicate swap scripts.
+- Re-checks that find an already-prepared version show the "ready to install" banner instead of regressing to "update available".
+
 Gotchas for future agents:
 - Do not switch back to GitHub's `/releases/latest` endpoint unless you also handle its `404`-when-empty behavior. An empty public release repo is a valid state during setup.
 - `skippedUpdateVersion` suppresses the banner for that version, not the underlying detected update state. Settings should continue to show the available version so the user can install it manually.
 - If you change update UI state, keep the banner flow and `SettingsGeneralViewController` in sync through `UpdateService.pendingUpdateSummary` and `magentUpdateStateChanged` rather than duplicating fetch logic in the view.
 - Until releases are properly signed/notarized, keep the updater-side `xattr` scrub in both relaunch flows. Replacing the app bundle without clearing `com.apple.quarantine` / `com.apple.provenance` can leave the fresh install launchable from Terminal but blocked in Finder/LaunchServices.
 - The periodic poller intentionally avoids re-showing update banners for the same version. If you add a new banner-showing path triggered by periodic checks, gate it behind `shownUpdateBannerForVersion` to avoid clobbering higher-priority banners (recovery, warning, progress).
+- The prepared update payload (`preparedAppURL`/`preparedVersion`) must always be invalidated when `detectedUpdate` changes version. Without this, a stale download from version N could be installed when the user thinks they're installing version N+1. The invariant is enforced in `setDetectedUpdate`, `isUpdateReadyToInstall`, and `installPreparedUpdate`.

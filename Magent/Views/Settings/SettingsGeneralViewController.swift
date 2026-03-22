@@ -310,7 +310,11 @@ final class SettingsGeneralViewController: NSViewController {
 
     @objc private func updateNowTapped() {
         Task { @MainActor in
-            await UpdateService.shared.installDetectedUpdateIfAvailable()
+            if UpdateService.shared.isUpdateReadyToInstall {
+                await UpdateService.shared.installPreparedUpdate()
+            } else {
+                await UpdateService.shared.installDetectedUpdateIfAvailable()
+            }
         }
     }
 
@@ -337,7 +341,11 @@ final class SettingsGeneralViewController: NSViewController {
             return
         }
 
-        installUpdateButton.title = "Update to \(summary.availableVersion)"
+        if UpdateService.shared.isUpdateReadyToInstall {
+            installUpdateButton.title = "Install and Relaunch"
+        } else {
+            installUpdateButton.title = "Update to \(summary.availableVersion)"
+        }
         installUpdateButton.isHidden = false
 
         if summary.isSkipped {
