@@ -125,6 +125,10 @@ final class UpdateService {
     private var isChecking = false
     private var isUpdating = false
     private var detectedUpdate: AvailableUpdate?
+    /// Holds the path to a downloaded+extracted app bundle ready for swap.
+    private var preparedAppURL: URL?
+    /// The version string of the prepared update (used to match against detectedUpdate).
+    private var preparedVersion: String?
 
     private enum InstallStrategy {
         case homebrewCask
@@ -157,9 +161,24 @@ final class UpdateService {
         )
     }
 
+    /// True when the update has been downloaded and extracted, ready for install,
+    /// and the prepared version still matches the currently detected update.
+    var isUpdateReadyToInstall: Bool {
+        guard let preparedVersion, preparedAppURL != nil else { return false }
+        return preparedVersion == detectedUpdate?.version.displayString
+    }
+
     func installDetectedUpdateIfAvailable() async {
         guard let detectedUpdate else { return }
-        await installUpdate(detectedUpdate)
+        await downloadUpdate(detectedUpdate)
+    }
+
+    /// Called when user clicks "Install and relaunch" after download is complete.
+    func installPreparedUpdate() async {
+        guard let preparedAppURL, let preparedVersion,
+              let detectedUpdate,
+              preparedVersion == detectedUpdate.version.displayString else { return }
+        await performSwapAndRelaunch(update: detectedUpdate, preparedAppURL: preparedAppURL)
     }
 
     private func checkForUpdates(trigger: CheckTrigger) async {
@@ -204,7 +223,11 @@ final class UpdateService {
                     }
                     return
                 }
-                showAvailableUpdateBanner(available)
+                if isUpdateReadyToInstall {
+                    showReadyToInstallBanner(version: availableVersion)
+                } else {
+                    showAvailableUpdateBanner(available)
+                }
             }
         } catch {
             if trigger == .manual {
@@ -231,7 +254,7 @@ final class UpdateService {
             actions: [
                 BannerAction(title: String(localized: .UpdateStrings.updateNow)) {
                     Task { @MainActor in
-                        await UpdateService.shared.installUpdate(available)
+                        await UpdateService.shared.installDetectedUpdateIfAvailable()
                     }
                 },
                 BannerAction(title: String(localized: .UpdateStrings.updateSkipVersion)) {
@@ -261,8 +284,21 @@ final class UpdateService {
         let nextNotes = update?.releaseNotes
         detectedUpdate = update
 
+        // Invalidate prepared payload when the detected version changes.
+        if previousVersion != nextVersion {
+            invalidatePreparedUpdate()
+        }
+
         guard previousVersion != nextVersion || previousNotes != nextNotes else { return }
         notifyUpdateStateChanged()
+    }
+
+    private func invalidatePreparedUpdate() {
+        if let preparedAppURL {
+            try? FileManager.default.removeItem(at: preparedAppURL.deletingLastPathComponent())
+        }
+        preparedAppURL = nil
+        preparedVersion = nil
     }
 
     private func notifyUpdateStateChanged() {
@@ -344,7 +380,8 @@ final class UpdateService {
 
     // MARK: - Installation
 
-    private func installUpdate(_ update: AvailableUpdate) async {
+    /// Phase 1: Download and extract the update, then show "Install and relaunch" button.
+    private func downloadUpdate(_ update: AvailableUpdate) async {
         guard !isUpdating else { return }
         isUpdating = true
         defer { isUpdating = false }
@@ -381,31 +418,24 @@ final class UpdateService {
                 try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
                 // Phase 1: Download in-app so user sees progress.
-                showUpdateProgressBanner("Downloading \(update.version.displayString)...")
+                showUpdateProgressBanner(
+                    String(localized: .UpdateStrings.updateDownloading(update.version.displayString)),
+                    showsSpinner: true
+                )
                 let archiveURL = tempDir.appendingPathComponent("Magent.\(update.assetKind.rawValue)")
                 try await downloadAsset(from: update.assetURL, to: archiveURL)
 
                 // Phase 2: Unpack/prepare in-app.
-                showUpdateProgressBanner("Preparing update...")
-                let preparedAppURL = try await extractApp(from: archiveURL, kind: update.assetKind, in: tempDir)
+                showUpdateProgressBanner(
+                    String(localized: .UpdateStrings.updatePreparing),
+                    showsSpinner: true
+                )
+                let extracted = try await extractApp(from: archiveURL, kind: update.assetKind, in: tempDir)
 
-                // Phase 3: Launch a minimal swap-only script, then terminate.
-                // The swap script just waits for this process to exit, moves the prepared app
-                // into place, and relaunches — all of which is fast since download/unpack is done.
-                let swapScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
-                try writeSwapScript(at: swapScriptPath)
-                let q = ShellExecutor.shellQuote
-                let command = "/usr/bin/nohup /bin/zsh \(q(swapScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(preparedAppURL.path)) \(q(appBundlePath)) \(q(updaterLogPath)) >/dev/null 2>&1 &"
-                let result = await ShellExecutor.execute(command)
-                guard result.exitCode == 0 else {
-                    let msg = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                    throw UpdateError.failedToStartUpdater(msg.isEmpty ? "unknown error" : msg)
-                }
-
-                clearSkippedVersion(matching: update.version.displayString)
-                showUpdateProgressBanner("Installing... Magent will restart in a moment.")
-                try? await Task.sleep(nanoseconds: 300_000_000)
-                NSApp.terminate(nil)
+                // Phase 3: Store prepared app and show "Install and relaunch" banner.
+                self.preparedAppURL = extracted
+                self.preparedVersion = update.version.displayString
+                showReadyToInstallBanner(version: update.version.displayString)
             }
         } catch {
             BannerManager.shared.show(
@@ -416,12 +446,66 @@ final class UpdateService {
         }
     }
 
-    private func showUpdateProgressBanner(_ message: String) {
+    /// Phase 2: Swap the prepared app bundle and relaunch.
+    private func performSwapAndRelaunch(update: AvailableUpdate, preparedAppURL: URL) async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        // Clear prepared state immediately to prevent duplicate clicks.
+        self.preparedAppURL = nil
+        self.preparedVersion = nil
+
+        do {
+            let appBundlePath = Bundle.main.bundlePath
+            let swapScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
+            try writeSwapScript(at: swapScriptPath)
+            let q = ShellExecutor.shellQuote
+            let command = "/usr/bin/nohup /bin/zsh \(q(swapScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(preparedAppURL.path)) \(q(appBundlePath)) \(q(updaterLogPath)) >/dev/null 2>&1 &"
+            let result = await ShellExecutor.execute(command)
+            guard result.exitCode == 0 else {
+                let msg = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                throw UpdateError.failedToStartUpdater(msg.isEmpty ? "unknown error" : msg)
+            }
+
+            clearSkippedVersion(matching: update.version.displayString)
+            showUpdateProgressBanner(
+                String(localized: .UpdateStrings.updateInstalling)
+            )
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            NSApp.terminate(nil)
+        } catch {
+            isUpdating = false
+            BannerManager.shared.show(
+                message: error.localizedDescription,
+                style: .error,
+                duration: 6
+            )
+        }
+    }
+
+    private func showReadyToInstallBanner(version: String) {
+        BannerManager.shared.show(
+            message: String(localized: .UpdateStrings.updateReadyToInstall(version)),
+            style: .info,
+            duration: nil,
+            isDismissible: true,
+            actions: [
+                BannerAction(title: String(localized: .UpdateStrings.updateInstallAndRelaunch)) {
+                    Task { @MainActor in
+                        await UpdateService.shared.installPreparedUpdate()
+                    }
+                },
+            ]
+        )
+        notifyUpdateStateChanged()
+    }
+
+    private func showUpdateProgressBanner(_ message: String, showsSpinner: Bool = false) {
         BannerManager.shared.show(
             message: message,
             style: .info,
             duration: nil,
-            isDismissible: false
+            isDismissible: false,
+            showsSpinner: showsSpinner
         )
     }
 

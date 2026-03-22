@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Settings
+- Software update now shows explicit download progress before closing the app. After download completes, an "Install and Relaunch" button lets you choose when to restart.
 
 ## 1.3.2 - 2026-03-22
 
