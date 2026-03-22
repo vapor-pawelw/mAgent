@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Settings
+- Magent now checks for new versions every hour in the background (respects the existing auto-check setting and responds immediately to setting toggles).
 
 ## 1.3.2 - 2026-03-22
 
