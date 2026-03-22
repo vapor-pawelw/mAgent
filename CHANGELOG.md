@@ -4,7 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Web Tabs
+- Middle-click and Cmd-click on links now open them in a new web tab instead of navigating the current tab.
+- Links with `target="_blank"` now open in a new web tab instead of being silently dropped.
+- Toolbar buttons are now consistently sized with improved spacing, and Refresh is moved to the right of the address bar.
 
 ## 1.3.2 - 2026-03-22
 
