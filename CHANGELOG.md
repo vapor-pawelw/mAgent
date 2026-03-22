@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Thread
+- Fixed UI freezing during Local Sync Path resync by moving filesystem copy and hash work off the main thread.
 
 ## 1.3.2 - 2026-03-22
 

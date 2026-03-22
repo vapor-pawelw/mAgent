@@ -37,7 +37,7 @@ Non-main threads expose a top-bar resync button (↺) that, when clicked, shows 
 - **Project → Worktree**: copies the thread's eligible local sync paths from the main repo worktree into the thread (was the only available direction before)
 - **Worktree → Project**: pushes local sync paths from the thread worktree back to the main repo (same merge logic as archive sync-back, but on demand)
 
-The button is hidden when the project has no Local Sync Paths configured (re-evaluates when settings change, so it appears automatically after paths are added). While sync is running the button is replaced by a spinner; it returns when the operation completes.
+The button is hidden when the project has no Local Sync Paths configured (re-evaluates when settings change, so it appears automatically after paths are added). While sync is running the button is replaced by a spinner; it returns when the operation completes. Both directions run filesystem work (recursive copy, hashing) in a detached task off the main thread so the UI stays responsive during large syncs.
 
 ### Project → Worktree
 

@@ -118,15 +118,22 @@ extension ThreadDetailViewController {
         }
 
         startResyncSpinner()
+        let projectSnapshot = project
+        let worktreePath = currentThread.worktreePath
+        let syncPathsSnapshot = syncPaths
         Task {
             defer { Task { @MainActor in self.stopResyncSpinner() } }
             do {
-                let missingPaths = try await self.threadManager.syncConfiguredLocalPathsIntoWorktree(
-                    project: project,
-                    worktreePath: currentThread.worktreePath,
-                    syncPaths: syncPaths,
-                    promptForConflicts: true
-                )
+                // Detach the filesystem walk so the recursive copy/hash work does not
+                // inherit this AppKit controller's MainActor executor.
+                let missingPaths = try await Task.detached(priority: .userInitiated) {
+                    try await ThreadManager.shared.syncConfiguredLocalPathsIntoWorktree(
+                        project: projectSnapshot,
+                        worktreePath: worktreePath,
+                        syncPaths: syncPathsSnapshot,
+                        promptForConflicts: true
+                    )
+                }.value
 
                 await MainActor.run {
                     if missingPaths.isEmpty {
@@ -176,15 +183,22 @@ extension ThreadDetailViewController {
         }
 
         startResyncSpinner()
+        let projectSnapshot = project
+        let worktreePath = currentThread.worktreePath
+        let syncPathsSnapshot = syncPaths
         Task {
             defer { Task { @MainActor in self.stopResyncSpinner() } }
             do {
-                try await self.threadManager.syncConfiguredLocalPathsFromWorktree(
-                    project: project,
-                    worktreePath: currentThread.worktreePath,
-                    syncPaths: syncPaths,
-                    promptForConflicts: true
-                )
+                // Detach the filesystem walk so the recursive copy/hash work does not
+                // inherit this AppKit controller's MainActor executor.
+                try await Task.detached(priority: .userInitiated) {
+                    try await ThreadManager.shared.syncConfiguredLocalPathsFromWorktree(
+                        project: projectSnapshot,
+                        worktreePath: worktreePath,
+                        syncPaths: syncPathsSnapshot,
+                        promptForConflicts: true
+                    )
+                }.value
                 await MainActor.run {
                     BannerManager.shared.show(
                         message: "Local Sync Paths pushed back to the main repo.",
