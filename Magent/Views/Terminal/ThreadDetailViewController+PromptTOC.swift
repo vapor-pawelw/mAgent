@@ -126,14 +126,6 @@ extension ThreadDetailViewController {
 
     @MainActor
     func refreshPromptTOC() async {
-        guard currentTabIndex < thread.tmuxSessionNames.count else {
-            promptTOCSessionName = nil
-            promptTOCEntries = []
-            promptTOCCanShowForCurrentTab = false
-            applyPromptTOCVisibility()
-            return
-        }
-
         guard let sessionName = currentSessionName() else {
             promptTOCSessionName = nil
             promptTOCEntries = []
