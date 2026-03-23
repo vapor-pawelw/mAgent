@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 - Thread rows now show how long the thread has been busy or idle (e.g. "<1m", "5m", "2h") in a subtle label at the bottom-right corner. Can be toggled off in Settings > Threads.
 
 ### Thread
+- Fixed prompt Table of Contents overlay not appearing on threads that have pinned web tabs.
 - New "Draft" checkbox on the initial prompt window lets you save a prompt as a draft tab instead of running it immediately. Draft tabs persist across relaunches, show an editable agent picker and prompt, and can be discarded or started when ready.
 - Sync status in the sidebar now shows "Sync failed" in red when PR or Jira sync encounters network or auth errors, instead of silently showing the last successful sync time.
 - Local Sync now shows a persistent spinner banner while syncing files, replacing the toolbar-only spinner that was easy to miss.
