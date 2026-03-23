@@ -47,6 +47,7 @@ extension ThreadManager {
             await self.checkTmuxZombieHealth()
 
             var didRunStatusSync = false
+            var syncHadErrors = false
 
             // Refresh dirty and delivered states every 10th tick (~30 seconds)
             dirtyCheckTickCounter += 1
@@ -61,7 +62,8 @@ extension ThreadManager {
             _jiraSyncTickCounter += 1
             if _jiraSyncTickCounter >= 60 {
                 _jiraSyncTickCounter = 0
-                await runJiraSyncTick()
+                let jiraOk = await runJiraSyncTick()
+                if !jiraOk { syncHadErrors = true }
                 didRunStatusSync = true
             }
 
@@ -70,12 +72,14 @@ extension ThreadManager {
             _prSyncTickCounter += 1
             if _prSyncTickCounter >= 60 {
                 _prSyncTickCounter = 0
-                await runPRSyncTick()
+                let prOk = await runPRSyncTick()
+                if !prOk { syncHadErrors = true }
                 didRunStatusSync = true
             }
 
             if didRunStatusSync {
                 lastStatusSyncAt = Date()
+                lastStatusSyncFailed = syncHadErrors
                 await MainActor.run {
                     NotificationCenter.default.post(name: .magentStatusSyncCompleted, object: nil)
                 }
@@ -87,10 +91,11 @@ extension ThreadManager {
     /// Skips if a sync pass is already in progress.
     func forceRefreshStatuses() {
         Task {
-            await runPRSyncTick()
-            await runJiraSyncTick()
+            let prOk = await runPRSyncTick()
+            let jiraOk = await runJiraSyncTick()
             await verifyDetectedJiraTickets()
             lastStatusSyncAt = Date()
+            lastStatusSyncFailed = !prOk || !jiraOk
             // Reset counters so the next periodic tick doesn't re-run immediately.
             _prSyncTickCounter = 0
             _jiraSyncTickCounter = 0

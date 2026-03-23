@@ -47,7 +47,7 @@ extension ThreadManager {
         }
 
         if !thread.isMain, branch != defaultBranch,
-           let info = await git.fetchPullRequest(remote: remote, branch: branch) {
+           let info = try? await git.fetchPullRequest(remote: remote, branch: branch) {
             await updatePullRequestInfo(info, forThreadId: thread.id)
             return info.url
         }
@@ -57,8 +57,10 @@ extension ThreadManager {
             ?? remote.repoWebURL
     }
 
-    func runPRSyncTick() async {
-        guard !isPRSyncRunning else { return }
+    /// Returns `true` if the sync completed without errors.
+    @discardableResult
+    func runPRSyncTick() async -> Bool {
+        guard !isPRSyncRunning else { return true }
         isPRSyncRunning = true
         defer { isPRSyncRunning = false }
 
@@ -69,6 +71,7 @@ extension ThreadManager {
 
         let snapshot = threads.filter { !$0.isArchived && !$0.isMain }
         var changed = false
+        var hadErrors = false
         for thread in snapshot {
             guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else {
                 continue
@@ -84,7 +87,13 @@ extension ThreadManager {
             }
 
             let branch = thread.actualBranch ?? thread.branchName
-            let info = await git.fetchPullRequest(remote: remote, branch: branch)
+            let info: PullRequestInfo?
+            do {
+                info = try await git.fetchPullRequest(remote: remote, branch: branch)
+            } catch {
+                hadErrors = true
+                continue
+            }
             guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
             if threads[i].pullRequestInfo != info {
                 threads[i].pullRequestInfo = info
@@ -104,6 +113,7 @@ extension ThreadManager {
         }
 
         prunePRCache()
+        return !hadErrors
     }
 
     /// Refreshes PR status for a single thread (called on thread selection).
@@ -120,7 +130,7 @@ extension ThreadManager {
             }
 
             let branch = thread.actualBranch ?? thread.branchName
-            let info = await git.fetchPullRequest(remote: remote, branch: branch)
+            let info = try? await git.fetchPullRequest(remote: remote, branch: branch)
             await updatePullRequestInfo(info, forThreadId: thread.id)
         }
     }

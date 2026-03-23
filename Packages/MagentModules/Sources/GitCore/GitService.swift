@@ -2,6 +2,10 @@ import Foundation
 import ShellInfra
 import MagentModels
 
+public enum PRFetchError: Error {
+    case cliFailure(stderr: String)
+}
+
 public final class GitService: Sendable {
 
     public static let shared = GitService()
@@ -245,15 +249,18 @@ public final class GitService: Sendable {
     private var _ghAvailable: Bool?
     private var _glabAvailable: Bool?
 
-    public func fetchPullRequest(remote: GitRemote, branch: String) async -> PullRequestInfo? {
+    /// Fetches pull request info for a branch.
+    /// - Returns: `PullRequestInfo` if a PR exists, `nil` if no PR is found.
+    /// - Throws: If the CLI command fails (network error, auth issue, etc.).
+    public func fetchPullRequest(remote: GitRemote, branch: String) async throws -> PullRequestInfo? {
         switch remote.provider {
-        case .github:   return await fetchGitHubPR(remote: remote, branch: branch)
-        case .gitlab:   return await fetchGitLabMR(remote: remote, branch: branch)
+        case .github:   return try await fetchGitHubPR(remote: remote, branch: branch)
+        case .gitlab:   return try await fetchGitLabMR(remote: remote, branch: branch)
         case .bitbucket, .unknown: return nil
         }
     }
 
-    private func fetchGitHubPR(remote: GitRemote, branch: String) async -> PullRequestInfo? {
+    private func fetchGitHubPR(remote: GitRemote, branch: String) async throws -> PullRequestInfo? {
         if _ghAvailable == nil {
             let check = await ShellExecutor.execute("which gh")
             _ghAvailable = check.exitCode == 0
@@ -270,7 +277,9 @@ public final class GitService: Sendable {
         for state in ["open", "all"] {
             let cmd = "gh pr list --repo \(quotedRepo) --head \(quotedBranch) --json \(fields) --state \(state) --search 'sort:created-desc' --limit 1"
             let result = await ShellExecutor.execute(cmd)
-            guard result.exitCode == 0 else { continue }
+            guard result.exitCode == 0 else {
+                throw PRFetchError.cliFailure(stderr: result.stderr)
+            }
 
             let data = Data(result.stdout.utf8)
             guard let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
@@ -297,7 +306,7 @@ public final class GitService: Sendable {
         return nil
     }
 
-    private func fetchGitLabMR(remote: GitRemote, branch: String) async -> PullRequestInfo? {
+    private func fetchGitLabMR(remote: GitRemote, branch: String) async throws -> PullRequestInfo? {
         if _glabAvailable == nil {
             let check = await ShellExecutor.execute("which glab")
             _glabAvailable = check.exitCode == 0
@@ -313,7 +322,9 @@ public final class GitService: Sendable {
             let flag = mrState == "all" ? "--all" : "--state \(mrState)"
             let cmd = "glab mr list --repo \(quotedRepo) --source-branch \(quotedBranch) \(flag) --output json --per-page 1"
             let result = await ShellExecutor.execute(cmd)
-            guard result.exitCode == 0 else { continue }
+            guard result.exitCode == 0 else {
+                throw PRFetchError.cliFailure(stderr: result.stderr)
+            }
 
             let data = Data(result.stdout.utf8)
             guard let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],

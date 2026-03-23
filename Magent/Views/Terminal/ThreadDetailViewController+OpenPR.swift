@@ -33,7 +33,7 @@ extension ThreadDetailViewController {
             } else {
                 defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: project.repoPath)
             }
-            let prInfo = await GitService.shared.fetchPullRequest(remote: remote, branch: branch)
+            let prInfo = try? await GitService.shared.fetchPullRequest(remote: remote, branch: branch)
             let url = prInfo?.url
                 ?? remote.pullRequestURL(for: branch, defaultBranch: defaultBranch)
                 ?? remote.openPullRequestsURL
@@ -189,7 +189,7 @@ extension ThreadDetailViewController {
         for remote in remotes {
             let directURL: URL?
             if branch != defaultBranch {
-                directURL = await GitService.shared.fetchPullRequest(remote: remote, branch: branch)?.url
+                directURL = try? await GitService.shared.fetchPullRequest(remote: remote, branch: branch)?.url
             } else {
                 directURL = nil
             }
@@ -225,7 +225,7 @@ extension ThreadDetailViewController {
 
     private func openRemoteURL(_ remote: GitRemote, branch: String, defaultBranch: String?) {
         Task {
-            let url = await GitService.shared.fetchPullRequest(remote: remote, branch: branch)?.url
+            let url = (try? await GitService.shared.fetchPullRequest(remote: remote, branch: branch))?.url
                 ?? remote.pullRequestURL(for: branch, defaultBranch: defaultBranch)
                 ?? remote.openPullRequestsURL
                 ?? remote.repoWebURL
