@@ -15,6 +15,16 @@ extension ThreadListViewController {
 
         let settings = persistence.loadSettings()
 
+        // Mark as read (when thread has unread agent completion)
+        if thread.hasUnreadAgentCompletion {
+            let markReadItem = NSMenuItem(title: String(localized: .ThreadStrings.threadMarkAsRead), action: #selector(markThreadAsRead(_:)), keyEquivalent: "")
+            markReadItem.target = self
+            markReadItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
+            markReadItem.representedObject = thread.id
+            menu.addItem(markReadItem)
+            menu.addItem(NSMenuItem.separator())
+        }
+
         // Pin/Unpin
         let pinTitle = thread.isPinned ? String(localized: .CommonStrings.commonUnpin) : String(localized: .CommonStrings.commonPin)
         let pinItem = NSMenuItem(title: pinTitle, action: #selector(toggleThreadPin(_:)), keyEquivalent: "")
@@ -720,6 +730,11 @@ extension ThreadListViewController {
     @objc private func toggleThreadPin(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         threadManager.toggleThreadPin(threadId: threadId)
+    }
+
+    @objc private func markThreadAsRead(_ sender: NSMenuItem) {
+        guard let threadId = sender.representedObject as? UUID else { return }
+        threadManager.markThreadCompletionSeen(threadId: threadId)
     }
 
     @objc private func toggleThreadHidden(_ sender: NSMenuItem) {

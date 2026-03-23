@@ -540,6 +540,17 @@
         }
       }
     },
+    "threadMarkAsRead": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as Read"
+          }
+        }
+      }
+    },
     "threadMoveTo": {
       "extractionState": "manual",
       "localizations": {
