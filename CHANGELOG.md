@@ -12,6 +12,9 @@ All notable changes to this project will be documented in this file.
 ### Banner
 - Fixed banner buttons and dismiss (X) being unresponsive — clicks were silently ignored due to a coordinate-space mismatch between the flipped split view and the unflipped banner overlay.
 
+### Sidebar
+- Thread rows now show how long the thread has been busy or idle (e.g. "<1m", "5m", "2h") in a subtle label at the bottom-right corner. Can be toggled off in Settings > Threads.
+
 ### Thread
 - New "Draft" checkbox on the initial prompt window lets you save a prompt as a draft tab instead of running it immediately. Draft tabs persist across relaunches, show an editable agent picker and prompt, and can be discarded or started when ready.
 - Sync status in the sidebar now shows "Sync failed" in red when PR or Jira sync encounters network or auth errors, instead of silently showing the last successful sync time.
