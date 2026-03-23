@@ -69,6 +69,20 @@ public nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
     }
 }
 
+// MARK: - Draft Tab Persistence
+
+public nonisolated struct PersistedDraftTab: Codable, Sendable, Equatable {
+    public let identifier: String
+    public var agentType: AgentType
+    public var prompt: String
+
+    public init(identifier: String, agentType: AgentType, prompt: String) {
+        self.identifier = identifier
+        self.agentType = agentType
+        self.prompt = prompt
+    }
+}
+
 // MARK: - Web Tab Persistence
 
 public nonisolated enum WebTabIconType: String, Codable, Sendable {
@@ -218,6 +232,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var hasEverDoneWork: Bool
     /// Persisted web tabs (Jira, PR, etc.) — loaded lazily when the user selects them.
     public var persistedWebTabs: [PersistedWebTab]
+    /// Persisted draft tabs — agent prompts saved for later execution.
+    public var persistedDraftTabs: [PersistedDraftTab]
     /// Optional sign emoji displayed to the left of the thread icon (e.g. 🛑, ✅).
     public var signEmoji: String?
 
@@ -404,6 +420,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case localFileSyncPathsSnapshot
         case hasEverDoneWork
         case persistedWebTabs
+        case persistedDraftTabs
         case signEmoji
     }
 
@@ -441,6 +458,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         localFileSyncPathsSnapshot: [String]? = nil,
         hasEverDoneWork: Bool = false,
         persistedWebTabs: [PersistedWebTab] = [],
+        persistedDraftTabs: [PersistedDraftTab] = [],
         signEmoji: String? = nil
     ) {
         self.id = id
@@ -476,6 +494,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.localFileSyncPathsSnapshot = localFileSyncPathsSnapshot
         self.hasEverDoneWork = hasEverDoneWork
         self.persistedWebTabs = persistedWebTabs
+        self.persistedDraftTabs = persistedDraftTabs
         self.signEmoji = signEmoji
     }
 
@@ -514,6 +533,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         localFileSyncPathsSnapshot = try container.decodeIfPresent([String].self, forKey: .localFileSyncPathsSnapshot)
         hasEverDoneWork = try container.decodeIfPresent(Bool.self, forKey: .hasEverDoneWork) ?? false
         persistedWebTabs = try container.decodeIfPresent([PersistedWebTab].self, forKey: .persistedWebTabs) ?? []
+        persistedDraftTabs = try container.decodeIfPresent([PersistedDraftTab].self, forKey: .persistedDraftTabs) ?? []
         signEmoji = try container.decodeIfPresent(String.self, forKey: .signEmoji)
 
         // Decode new set, or migrate from old boolean
@@ -571,6 +591,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         }
         if !persistedWebTabs.isEmpty {
             try container.encode(persistedWebTabs, forKey: .persistedWebTabs)
+        }
+        if !persistedDraftTabs.isEmpty {
+            try container.encode(persistedDraftTabs, forKey: .persistedDraftTabs)
         }
         try container.encodeIfPresent(signEmoji, forKey: .signEmoji)
     }
