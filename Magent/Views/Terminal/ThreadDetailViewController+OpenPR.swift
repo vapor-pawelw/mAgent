@@ -7,9 +7,22 @@ extension ThreadDetailViewController {
 
     /// Middle-click: open PR/MR in an in-app web tab.
     func openPRInWebTab() {
-        if let pr = thread.pullRequestInfo {
-            let icon = openPRButtonImage(for: threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown)
-            openWebTab(url: pr.url, identifier: "pr:\(pr.url.absoluteString)", title: pr.shortLabel, icon: icon, iconType: .pullRequest)
+        if !thread.isMain {
+            Task {
+                guard let action = await threadManager.resolvePullRequestActionTarget(for: self.thread) else { return }
+                await MainActor.run {
+                    let icon = self.openPRButtonImage(for: action.provider)
+                    let title = self.pullRequestWebTabTitle(for: action)
+                    let identifierPrefix = action.isCreation ? "pr-create:" : "pr:"
+                    self.openWebTab(
+                        url: action.url,
+                        identifier: "\(identifierPrefix)\(action.url.absoluteString)",
+                        title: title,
+                        icon: icon,
+                        iconType: .pullRequest
+                    )
+                }
+            }
             return
         }
 
@@ -53,9 +66,13 @@ extension ThreadDetailViewController {
     }
 
     @objc func openPRTapped(_ sender: NSButton) {
-        // If we have a detected PR, open it directly
-        if let pr = thread.pullRequestInfo {
-            NSWorkspace.shared.open(pr.url)
+        if !thread.isMain {
+            Task {
+                guard let action = await threadManager.resolvePullRequestActionTarget(for: thread) else { return }
+                await MainActor.run {
+                    _ = NSWorkspace.shared.open(action.url)
+                }
+            }
             return
         }
 
@@ -124,17 +141,22 @@ extension ThreadDetailViewController {
     }
 
     private func applyPRButtonTitle() {
+        let provider = threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown
         if let pr = thread.pullRequestInfo {
             openPRButton.isHidden = false
             openPRButton.title = pr.shortLabel
             openPRButton.imagePosition = .imageLeading
             openPRButton.toolTip = "\(pr.displayLabel) (\(pr.statusText))\nClick: open in browser · Middle-click: open in tab"
+        } else if !thread.isMain, thread.pullRequestLookupStatus == .notFound, provider != .unknown {
+            openPRButton.isHidden = false
+            openPRButton.title = createPullRequestShortTitle(for: provider)
+            openPRButton.imagePosition = .imageLeading
+            openPRButton.toolTip = createPullRequestTooltip(for: provider)
         } else if thread.isMain {
             // Main worktree: always show PR button (opens PR list)
             openPRButton.isHidden = false
             openPRButton.title = ""
             openPRButton.imagePosition = .imageOnly
-            let provider = threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown
             openPRButton.toolTip = openPRTooltip(for: provider)
         } else {
             // Non-main: hide when no PR detected
@@ -174,6 +196,39 @@ extension ThreadDetailViewController {
         case .unknown:
             return "Open Pull Request in Browser" + suffix
         }
+    }
+
+    private func createPullRequestShortTitle(for provider: GitHostingProvider) -> String {
+        switch provider {
+        case .gitlab:
+            return "Create MR"
+        case .github, .bitbucket, .unknown:
+            return "Create PR"
+        }
+    }
+
+    private func createPullRequestTooltip(for provider: GitHostingProvider) -> String {
+        let suffix = "\nMiddle-click: open in tab"
+        switch provider {
+        case .github:
+            return "Create GitHub Pull Request in Browser" + suffix
+        case .gitlab:
+            return "Create GitLab Merge Request in Browser" + suffix
+        case .bitbucket:
+            return "Create Bitbucket Pull Request in Browser" + suffix
+        case .unknown:
+            return "Create Pull Request in Browser" + suffix
+        }
+    }
+
+    private func pullRequestWebTabTitle(for action: ThreadManager.PullRequestActionTarget) -> String {
+        if action.isCreation {
+            return action.provider == .gitlab ? "Create MR" : "Create PR"
+        }
+        if let pr = thread.pullRequestInfo {
+            return pr.shortLabel
+        }
+        return action.provider == .gitlab ? "MR" : "PR"
     }
 
     private func hostIcon(for provider: GitHostingProvider) -> NSImage? {
@@ -337,7 +392,9 @@ extension ThreadDetailViewController {
         thread.isFullyDelivered = latest.isFullyDelivered
         thread.isDirty = latest.isDirty
         let prChanged = thread.pullRequestInfo != latest.pullRequestInfo
+            || thread.pullRequestLookupStatus != latest.pullRequestLookupStatus
         thread.pullRequestInfo = latest.pullRequestInfo
+        thread.pullRequestLookupStatus = latest.pullRequestLookupStatus
         refreshReviewButtonVisibility()
         if prChanged {
             applyPRButtonTitle()

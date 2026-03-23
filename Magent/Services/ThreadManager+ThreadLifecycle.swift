@@ -682,6 +682,7 @@ extension ThreadManager {
         restoredThread.hasBranchMismatch = false
         restoredThread.rateLimitedSessions = [:]
         restoredThread.pullRequestInfo = nil
+        restoredThread.pullRequestLookupStatus = .unknown
         restoredThread.busySessions.removeAll()
         restoredThread.waitingForInputSessions.removeAll()
 

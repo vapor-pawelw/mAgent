@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 - Local Sync conflict diffs are now readable in dark mode — added/removed lines use colored text instead of relying solely on background tinting.
 - Local Sync conflict alerts now offer a "Show Diff" button for text files, letting you inspect exactly what changed before choosing to override or ignore.
 - Fixed UI freezing during Local Sync Path resync by moving filesystem copy and hash work off the main thread.
+- PR/MR actions now stay hidden until Magent has a definitive CLI lookup result, so threads without detected PRs no longer show dead "Show PR" actions.
+- When a thread branch has no PR/MR yet, Magent now offers Create PR/MR actions that prefill source branch, target branch, and the thread description as the initial title when the hosting provider supports it.
 
 ### Web Tabs
 - Web tabs now remember the current page URL across app restarts, reopening where you left off instead of the original URL.

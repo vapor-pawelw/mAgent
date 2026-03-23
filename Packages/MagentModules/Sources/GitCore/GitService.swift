@@ -253,25 +253,33 @@ public final class GitService: Sendable {
     /// - Returns: `PullRequestInfo` if a PR exists, `nil` if no PR is found.
     /// - Throws: If the CLI command fails (network error, auth issue, etc.).
     public func fetchPullRequest(remote: GitRemote, branch: String) async throws -> PullRequestInfo? {
+        if case .found(let info) = try await lookupPullRequest(remote: remote, branch: branch) {
+            return info
+        }
+        return nil
+    }
+
+    public func lookupPullRequest(remote: GitRemote, branch: String) async throws -> PullRequestLookupResult {
         switch remote.provider {
         case .github:   return try await fetchGitHubPR(remote: remote, branch: branch)
         case .gitlab:   return try await fetchGitLabMR(remote: remote, branch: branch)
-        case .bitbucket, .unknown: return nil
+        case .bitbucket, .unknown: return .unavailable
         }
     }
 
-    private func fetchGitHubPR(remote: GitRemote, branch: String) async throws -> PullRequestInfo? {
+    private func fetchGitHubPR(remote: GitRemote, branch: String) async throws -> PullRequestLookupResult {
         if _ghAvailable == nil {
             let check = await ShellExecutor.execute("which gh")
             _ghAvailable = check.exitCode == 0
         }
-        guard _ghAvailable == true else { return nil }
+        guard _ghAvailable == true else { return .unavailable }
 
         let repo = "\(remote.host)/\(remote.repoPath)"
         let quotedRepo = ShellExecutor.shellQuote(repo)
         let quotedBranch = ShellExecutor.shellQuote(branch)
 
         let fields = "number,url,isDraft,state,reviewDecision,baseRefName"
+        var hadSuccessfulLookup = false
 
         // Prefer open PRs; fall back to all states (merged/closed) if none found.
         for state in ["open", "all"] {
@@ -283,16 +291,24 @@ public final class GitService: Sendable {
 
             let data = Data(result.stdout.utf8)
             guard let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-                  let first = array.first,
-                  let number = first["number"] as? Int,
+                  let first = array.first else {
+                if let emptyArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]], emptyArray.isEmpty {
+                    hadSuccessfulLookup = true
+                }
+                continue
+            }
+            hadSuccessfulLookup = true
+            guard let number = first["number"] as? Int,
                   let urlString = first["url"] as? String,
-                  let url = URL(string: urlString) else { continue }
+                  let url = URL(string: urlString) else {
+                continue
+            }
 
             let prState = first["state"] as? String ?? "OPEN"
             let isDraft = first["isDraft"] as? Bool ?? false
             let reviewDecision = (first["reviewDecision"] as? String).flatMap { ReviewDecision(rawValue: $0) }
             let baseRefName = first["baseRefName"] as? String
-            return PullRequestInfo(
+            return .found(PullRequestInfo(
                 number: number,
                 url: url,
                 provider: remote.provider,
@@ -301,21 +317,22 @@ public final class GitService: Sendable {
                 reviewDecision: reviewDecision,
                 isClosed: prState == "CLOSED",
                 baseBranch: baseRefName
-            )
+            ))
         }
-        return nil
+        return hadSuccessfulLookup ? .notFound : .unavailable
     }
 
-    private func fetchGitLabMR(remote: GitRemote, branch: String) async throws -> PullRequestInfo? {
+    private func fetchGitLabMR(remote: GitRemote, branch: String) async throws -> PullRequestLookupResult {
         if _glabAvailable == nil {
             let check = await ShellExecutor.execute("which glab")
             _glabAvailable = check.exitCode == 0
         }
-        guard _glabAvailable == true else { return nil }
+        guard _glabAvailable == true else { return .unavailable }
 
         let repo = "\(remote.host)/\(remote.repoPath)"
         let quotedRepo = ShellExecutor.shellQuote(repo)
         let quotedBranch = ShellExecutor.shellQuote(branch)
+        var hadSuccessfulLookup = false
 
         // Prefer open MRs; fall back to all states if none found.
         for mrState in ["opened", "all"] {
@@ -328,8 +345,14 @@ public final class GitService: Sendable {
 
             let data = Data(result.stdout.utf8)
             guard let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-                  let first = array.first,
-                  let number = first["iid"] as? Int else { continue }
+                  let first = array.first else {
+                if let emptyArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]], emptyArray.isEmpty {
+                    hadSuccessfulLookup = true
+                }
+                continue
+            }
+            hadSuccessfulLookup = true
+            guard let number = first["iid"] as? Int else { continue }
 
             let url = remote.directPullRequestURL(number: number)
                 ?? URL(string: "https://\(remote.host)/\(remote.repoPath)/-/merge_requests/\(number)")!
@@ -342,7 +365,7 @@ public final class GitService: Sendable {
             let reviewDecision: ReviewDecision? = if let approvedBy, !approvedBy.isEmpty { .approved } else { nil }
             let targetBranch = first["target_branch"] as? String
 
-            return PullRequestInfo(
+            return .found(PullRequestInfo(
                 number: number,
                 url: url,
                 provider: remote.provider,
@@ -351,9 +374,9 @@ public final class GitService: Sendable {
                 reviewDecision: reviewDecision,
                 isClosed: state == "closed",
                 baseBranch: targetBranch
-            )
+            ))
         }
-        return nil
+        return hadSuccessfulLookup ? .notFound : .unavailable
     }
 
     public func getCurrentBranch(workingDirectory: String) async -> String? {
@@ -497,9 +520,9 @@ public final class GitService: Sendable {
     }
 
     /// Returns `true` when all commits on HEAD are present in `baseBranch` (via merge,
-    /// fast-forward, or cherry-pick). Callers must guard against fresh/empty branches using
-    /// `MagentThread.hasEverDoneWork` before calling this — an empty `baseBranch..HEAD` log
-    /// on a never-touched branch would also return `true`.
+     /// fast-forward, or cherry-pick). Callers must guard against fresh/empty branches using
+     /// `MagentThread.hasEverDoneWork` before calling this — an empty `baseBranch..HEAD` log
+     /// on a never-touched branch would also return `true`.
     public func isFullyDelivered(worktreePath: String, baseBranch: String) async -> Bool {
         // Check if the branch has commits not reachable from baseBranch.
         let logResult = await ShellExecutor.execute(

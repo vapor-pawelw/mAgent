@@ -135,6 +135,17 @@ public enum ReviewDecision: String, Codable, Sendable, Equatable {
     case reviewRequired = "REVIEW_REQUIRED"
 }
 
+public nonisolated enum PullRequestLookupStatus: String, Sendable, Equatable {
+    case unknown
+    case unavailable
+    case notFound
+    case found
+
+    public var canPresentAction: Bool {
+        self == .found || self == .notFound
+    }
+}
+
 public nonisolated struct PullRequestInfo: Sendable, Equatable {
     public let number: Int
     public let url: URL
@@ -283,6 +294,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var rateLimitedSessions: [String: AgentRateLimitInfo] = [:]
     // Transient (not persisted) — detected open PR/MR for this branch.
     public var pullRequestInfo: PullRequestInfo? = nil
+    // Transient (not persisted) — whether PR/MR lookup succeeded, failed, or confirmed no PR exists.
+    public var pullRequestLookupStatus: PullRequestLookupStatus = .unknown
     // Transient (not persisted) — set while an archive operation is in progress.
     public var isArchiving: Bool = false
     // Transient (not persisted) — cached verification of the detected Jira ticket key.

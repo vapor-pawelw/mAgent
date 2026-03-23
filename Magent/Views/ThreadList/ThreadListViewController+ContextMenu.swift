@@ -112,9 +112,7 @@ extension ThreadListViewController {
         finderItem.representedObject = thread
         menu.addItem(finderItem)
 
-        // Show Pull Request (only for projects with a recognized hosting provider)
-        if projectsWithValidRemotes.contains(thread.projectId) {
-            let prTitle = thread.pullRequestInfo.map { String(localized: .ThreadStrings.threadOpenPullRequestLabel($0.displayLabel)) } ?? String(localized: .ThreadStrings.threadShowPullRequest)
+        if let prTitle = pullRequestMenuTitle(for: thread) {
             let prItem = NSMenuItem(title: prTitle, action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
             prItem.target = self
             prItem.image = pullRequestMenuIcon(for: thread)
@@ -528,6 +526,27 @@ extension ThreadListViewController {
     private func pullRequestMenuIcon(for thread: MagentThread) -> NSImage {
         let provider = threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown
         return OpenActionIcons.pullRequestIcon(for: provider, size: 16)
+    }
+
+    private func pullRequestMenuTitle(for thread: MagentThread) -> String? {
+        if thread.isMain {
+            guard projectsWithValidRemotes.contains(thread.projectId) else { return nil }
+            return thread.pullRequestInfo.map { String(localized: .ThreadStrings.threadOpenPullRequestLabel($0.displayLabel)) }
+                ?? String(localized: .ThreadStrings.threadShowOpenPullRequests)
+        }
+
+        if let pr = thread.pullRequestInfo {
+            return String(localized: .ThreadStrings.threadOpenPullRequestLabel(pr.displayLabel))
+        }
+
+        guard thread.pullRequestLookupStatus == .notFound else { return nil }
+        let provider = threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown
+        switch provider {
+        case .gitlab:
+            return String(localized: .ThreadStrings.threadCreateMergeRequest)
+        case .github, .bitbucket, .unknown:
+            return String(localized: .ThreadStrings.threadCreatePullRequest)
+        }
     }
 
     private func resolveJiraURL(for thread: MagentThread) -> URL? {
@@ -1066,9 +1085,13 @@ extension ThreadListViewController {
     @objc private func openThreadPullRequest(_ sender: NSMenuItem) {
         guard let thread = sender.representedObject as? MagentThread else { return }
 
-        // If we have a detected PR, open it directly
-        if let pr = thread.pullRequestInfo {
-            NSWorkspace.shared.open(pr.url)
+        if !thread.isMain {
+            Task {
+                guard let action = await threadManager.resolvePullRequestActionTarget(for: thread) else { return }
+                await MainActor.run {
+                    _ = NSWorkspace.shared.open(action.url)
+                }
+            }
             return
         }
 
@@ -1076,13 +1099,6 @@ extension ThreadListViewController {
         guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { return }
 
         Task {
-            if let url = await threadManager.resolvePullRequestURL(for: thread) {
-                await MainActor.run {
-                    _ = NSWorkspace.shared.open(url)
-                }
-                return
-            }
-
             let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
             guard !remotes.isEmpty else {
                 await MainActor.run {

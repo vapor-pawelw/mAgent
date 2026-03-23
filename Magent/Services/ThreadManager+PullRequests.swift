@@ -3,6 +3,12 @@ import MagentCore
 
 extension ThreadManager {
 
+    struct PullRequestActionTarget {
+        let url: URL
+        let provider: GitHostingProvider
+        let isCreation: Bool
+    }
+
     private func cachedPullRequestRemote(for projectId: UUID, repoPath: String) async -> GitRemote? {
         if let cached = _cachedRemoteByProjectId[projectId] {
             return cached
@@ -17,13 +23,29 @@ extension ThreadManager {
         return chosen
     }
 
-    private func updatePullRequestInfo(_ info: PullRequestInfo?, forThreadId threadId: UUID) async {
+    private func updatePullRequestLookup(_ result: PullRequestLookupResult, forThreadId threadId: UUID) async {
+        let info: PullRequestInfo?
+        let status: PullRequestLookupStatus
+
+        switch result {
+        case .found(let foundInfo):
+            info = foundInfo
+            status = .found
+        case .notFound:
+            info = nil
+            status = .notFound
+        case .unavailable:
+            info = nil
+            status = .unavailable
+        }
+
         guard let index = threads.firstIndex(where: { $0.id == threadId }),
-              threads[index].pullRequestInfo != info else {
+              threads[index].pullRequestInfo != info || threads[index].pullRequestLookupStatus != status else {
             return
         }
 
         threads[index].pullRequestInfo = info
+        threads[index].pullRequestLookupStatus = status
         savePRInfoToCache(info: info, thread: threads[index])
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
@@ -31,30 +53,56 @@ extension ThreadManager {
         }
     }
 
-    func resolvePullRequestURL(for thread: MagentThread) async -> URL? {
+    private func normalizedPullRequestTargetBranch(for thread: MagentThread, project: Project) -> String {
+        let sourceBranch = thread.actualBranch ?? thread.branchName
+
+        let baseCandidate = resolveBaseBranch(for: thread)
+        let normalizedBase = baseCandidate.hasPrefix("origin/")
+            ? String(baseCandidate.dropFirst("origin/".count))
+            : baseCandidate
+        if !normalizedBase.isEmpty, normalizedBase != sourceBranch {
+            return normalizedBase
+        }
+
+        if let configuredDefault = project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !configuredDefault.isEmpty,
+           configuredDefault != sourceBranch {
+            return configuredDefault
+        }
+
+        return "main"
+    }
+
+    func resolvePullRequestActionTarget(for thread: MagentThread) async -> PullRequestActionTarget? {
+        if let info = thread.pullRequestInfo {
+            return PullRequestActionTarget(
+                url: info.url,
+                provider: info.provider,
+                isCreation: false
+            )
+        }
+
         let settings = persistence.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == thread.projectId }),
               let remote = await cachedPullRequestRemote(for: project.id, repoPath: project.repoPath) else {
             return nil
         }
 
-        let branch = thread.actualBranch ?? thread.branchName
-        let defaultBranch: String?
-        if let projectDefaultBranch = project.defaultBranch {
-            defaultBranch = projectDefaultBranch
-        } else {
-            defaultBranch = await git.detectDefaultBranch(repoPath: project.repoPath)
+        guard !thread.isMain, thread.pullRequestLookupStatus == .notFound else {
+            return nil
         }
 
-        if !thread.isMain, branch != defaultBranch,
-           let info = try? await git.fetchPullRequest(remote: remote, branch: branch) {
-            await updatePullRequestInfo(info, forThreadId: thread.id)
-            return info.url
+        let sourceBranch = thread.actualBranch ?? thread.branchName
+        let targetBranch = normalizedPullRequestTargetBranch(for: thread, project: project)
+        let title = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = remote.createPullRequestURL(sourceBranch: sourceBranch, targetBranch: targetBranch, title: title) else {
+            return nil
         }
-
-        return remote.pullRequestURL(for: branch, defaultBranch: defaultBranch)
-            ?? remote.openPullRequestsURL
-            ?? remote.repoWebURL
+        return PullRequestActionTarget(
+            url: url,
+            provider: remote.provider,
+            isCreation: true
+        )
     }
 
     /// Returns `true` if the sync completed without errors.
@@ -78,9 +126,12 @@ extension ThreadManager {
             }
 
             guard let remote = await cachedPullRequestRemote(for: project.id, repoPath: project.repoPath) else {
-                if let i = threads.firstIndex(where: { $0.id == thread.id }),
-                   threads[i].pullRequestInfo != nil {
+                guard let i = threads.firstIndex(where: { $0.id == thread.id }) else {
+                    continue
+                }
+                if threads[i].pullRequestInfo != nil || threads[i].pullRequestLookupStatus != .unavailable {
                     threads[i].pullRequestInfo = nil
+                    threads[i].pullRequestLookupStatus = .unavailable
                     changed = true
                 }
                 continue
@@ -88,15 +139,29 @@ extension ThreadManager {
 
             let branch = thread.actualBranch ?? thread.branchName
             let info: PullRequestInfo?
+            let status: PullRequestLookupStatus
             do {
-                info = try await git.fetchPullRequest(remote: remote, branch: branch)
+                let lookupResult = try await git.lookupPullRequest(remote: remote, branch: branch)
+                switch lookupResult {
+                case .found(let foundInfo):
+                    info = foundInfo
+                    status = .found
+                case .notFound:
+                    info = nil
+                    status = .notFound
+                case .unavailable:
+                    info = nil
+                    status = .unavailable
+                }
             } catch {
                 hadErrors = true
-                continue
+                info = nil
+                status = .unavailable
             }
             guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
-            if threads[i].pullRequestInfo != info {
+            if threads[i].pullRequestInfo != info || threads[i].pullRequestLookupStatus != status {
                 threads[i].pullRequestInfo = info
+                threads[i].pullRequestLookupStatus = status
                 savePRInfoToCache(info: info, thread: threads[i])
                 changed = true
             }
@@ -126,12 +191,17 @@ extension ThreadManager {
             let settings = persistence.loadSettings()
             guard let project = settings.projects.first(where: { $0.id == thread.projectId }),
                   let remote = await cachedPullRequestRemote(for: project.id, repoPath: project.repoPath) else {
+                await updatePullRequestLookup(.unavailable, forThreadId: thread.id)
                 return
             }
 
             let branch = thread.actualBranch ?? thread.branchName
-            let info = try? await git.fetchPullRequest(remote: remote, branch: branch)
-            await updatePullRequestInfo(info, forThreadId: thread.id)
+            do {
+                let lookupResult = try await git.lookupPullRequest(remote: remote, branch: branch)
+                await updatePullRequestLookup(lookupResult, forThreadId: thread.id)
+            } catch {
+                await updatePullRequestLookup(.unavailable, forThreadId: thread.id)
+            }
         }
     }
 
@@ -154,6 +224,7 @@ extension ThreadManager {
             let branch = threads[i].actualBranch ?? threads[i].branchName
             if let cached = prCache[branch] {
                 threads[i].pullRequestInfo = cached.toPullRequestInfo()
+                threads[i].pullRequestLookupStatus = .found
                 changed = true
             }
         }
