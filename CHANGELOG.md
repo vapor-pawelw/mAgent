@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Fixed banner buttons and dismiss (X) being unresponsive — clicks were silently ignored due to a coordinate-space mismatch between the flipped split view and the unflipped banner overlay.
 
 ### Sidebar
+- Right-clicking a completed thread now offers "Mark as Read" at the top of the context menu, clearing the completion badge without switching to it.
 - Thread rows now show how long the thread has been busy or idle (e.g. "<1m", "5m", "2h") in a subtle label at the bottom-right corner. Can be toggled off in Settings > Threads.
 
 ### Thread
