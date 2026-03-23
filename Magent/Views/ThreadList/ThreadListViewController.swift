@@ -300,6 +300,7 @@ final class ThreadListViewController: NSViewController {
     @objc private func syncRefreshTapped() {
         threadManager.forceRefreshStatuses()
         syncStatusLabel.stringValue = "Syncing…"
+        syncStatusLabel.textColor = .tertiaryLabelColor
     }
 
     private func updateSyncStatusLabel() {
@@ -307,6 +308,7 @@ final class ThreadListViewController: NSViewController {
             // Startup sync is in flight — show "Syncing…" if we have threads loaded.
             if !threadManager.threads.isEmpty {
                 syncStatusLabel.stringValue = "Syncing…"
+                syncStatusLabel.textColor = .tertiaryLabelColor
                 syncRefreshButton.isHidden = true
                 syncStatusContainer.isHidden = false
             } else {
@@ -315,7 +317,13 @@ final class ThreadListViewController: NSViewController {
             recalculateSidebarHeaderInset()
             return
         }
-        syncStatusLabel.stringValue = "Synced \(Self.relativeTimeString(from: lastSync))"
+        if threadManager.lastStatusSyncFailed {
+            syncStatusLabel.stringValue = "Sync failed \(Self.relativeTimeString(from: lastSync))"
+            syncStatusLabel.textColor = .systemRed
+        } else {
+            syncStatusLabel.stringValue = "Synced \(Self.relativeTimeString(from: lastSync))"
+            syncStatusLabel.textColor = .tertiaryLabelColor
+        }
         syncRefreshButton.isHidden = false
         syncStatusContainer.isHidden = false
         recalculateSidebarHeaderInset()

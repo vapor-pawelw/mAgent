@@ -79,6 +79,8 @@ var dirtyCheckTickCounter: Int = 0
     var isPRSyncRunning = false
     /// Timestamp of the last completed PR + Jira background sync pass.
     var lastStatusSyncAt: Date?
+    /// Whether the last sync pass encountered errors (network, auth, etc.).
+    var lastStatusSyncFailed = false
     /// Tracks when each tmux session was last scanned for rate-limit text.
     /// Used to throttle non-active-session scans to once every 15 seconds.
     var lastRateLimitScanBySession: [String: Date] = [:]
@@ -180,8 +182,9 @@ var dirtyCheckTickCounter: Int = 0
         await refreshBranchStates()
         await verifyDetectedJiraTickets()
         populatePRInfoFromCache()
-        await runPRSyncTick()
+        let prSyncOk = await runPRSyncTick()
         lastStatusSyncAt = Date()
+        lastStatusSyncFailed = !prSyncOk
 
         await MainActor.run {
             updateDockBadge()

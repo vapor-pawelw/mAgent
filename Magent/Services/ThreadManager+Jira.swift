@@ -30,28 +30,35 @@ extension ThreadManager {
 
     // MARK: - Auto-sync Tick
 
-    func runJiraSyncTick() async {
+    /// Returns `true` if the sync completed without errors.
+    @discardableResult
+    func runJiraSyncTick() async -> Bool {
         let settings = persistence.loadSettings()
+        var allOk = true
         for project in settings.projects where project.jiraSyncEnabled {
-            await syncJiraForProject(project, settings: settings)
+            let ok = await syncJiraForProject(project, settings: settings)
+            if !ok { allOk = false }
         }
+        return allOk
     }
 
     // MARK: - Per-project Sync
 
-    private func syncJiraForProject(_ project: Project, settings: AppSettings) async {
-        guard let projectKey = project.jiraProjectKey, !projectKey.isEmpty else { return }
-        guard let assigneeId = project.jiraAssigneeAccountId, !assigneeId.isEmpty else { return }
+    /// Returns `true` if the sync completed without errors.
+    @discardableResult
+    private func syncJiraForProject(_ project: Project, settings: AppSettings) async -> Bool {
+        guard let projectKey = project.jiraProjectKey, !projectKey.isEmpty else { return true }
+        guard let assigneeId = project.jiraAssigneeAccountId, !assigneeId.isEmpty else { return true }
 
         let siteURL = project.jiraSiteURL ?? settings.jiraSiteURL
-        guard !siteURL.isEmpty else { return }
+        guard !siteURL.isEmpty else { return true }
 
         // Auto-create project sections from Jira if none exist.
         // Return after creating — the next sync tick will match tickets using the persisted sections.
         if project.threadSections == nil {
             do {
                 let sections = try await syncSectionsFromJira(project: project)
-                guard !sections.isEmpty else { return }
+                guard !sections.isEmpty else { return true }
                 var updatedSettings = persistence.loadSettings()
                 if let idx = updatedSettings.projects.firstIndex(where: { $0.id == project.id }) {
                     updatedSettings.projects[idx].threadSections = sections
@@ -62,8 +69,9 @@ extension ThreadManager {
                 }
             } catch {
                 // Can't sync without sections — skip this project
+                return false
             }
-            return
+            return true
         }
 
         let jql = "project = \(projectKey) AND assignee = \"\(assigneeId)\" AND statusCategory != Done ORDER BY updated DESC"
@@ -82,10 +90,10 @@ extension ThreadManager {
                     isDismissible: true
                 )
             }
-            return
+            return false
         } catch {
             // Transient error — skip this tick
-            return
+            return false
         }
 
         let ticketKeys = Set(tickets.map(\.key))
@@ -141,6 +149,7 @@ extension ThreadManager {
         } else {
             _mismatchBannerShownProjectIds.remove(project.id)
         }
+        return true
     }
 
     // MARK: - Thread Creation for Tickets
@@ -284,7 +293,8 @@ extension ThreadManager {
         []
     }
 
-    func runJiraSyncTick() async {}
+    @discardableResult
+    func runJiraSyncTick() async -> Bool { true }
 
     func excludeJiraTicket(key: String, projectId: UUID) {}
 }
