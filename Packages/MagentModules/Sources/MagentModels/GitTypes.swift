@@ -30,6 +30,12 @@ public nonisolated enum GitHostingProvider: Sendable {
     case unknown
 }
 
+public nonisolated enum PullRequestLookupResult: Sendable, Equatable {
+    case found(PullRequestInfo)
+    case notFound
+    case unavailable
+}
+
 public nonisolated struct GitRemote: Sendable {
     public let name: String
     public let host: String
@@ -74,6 +80,49 @@ public nonisolated struct GitRemote: Sendable {
         }
     }
 
+    public func createPullRequestURL(sourceBranch: String, targetBranch: String?, title: String? = nil) -> URL? {
+        let normalizedSource = sourceBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTarget = targetBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !normalizedSource.isEmpty else { return nil }
+
+        switch provider {
+        case .github:
+            guard let normalizedTarget, !normalizedTarget.isEmpty else { return nil }
+            let encodedTarget = Self.encodePathComponent(normalizedTarget)
+            let encodedSource = Self.encodePathComponent(normalizedSource)
+            var components = URLComponents(string: "https://\(host)/\(repoPath)/compare/\(encodedTarget)...\(encodedSource)")
+            var queryItems = [URLQueryItem(name: "expand", value: "1")]
+            if let normalizedTitle, !normalizedTitle.isEmpty {
+                queryItems.append(URLQueryItem(name: "title", value: normalizedTitle))
+            }
+            components?.queryItems = queryItems
+            return components?.url
+        case .gitlab:
+            var components = URLComponents(string: "https://\(host)/\(repoPath)/-/merge_requests/new")
+            var queryItems = [URLQueryItem(name: "merge_request[source_branch]", value: normalizedSource)]
+            if let normalizedTarget, !normalizedTarget.isEmpty {
+                queryItems.append(URLQueryItem(name: "merge_request[target_branch]", value: normalizedTarget))
+            }
+            if let normalizedTitle, !normalizedTitle.isEmpty {
+                queryItems.append(URLQueryItem(name: "merge_request[title]", value: normalizedTitle))
+            }
+            components?.queryItems = queryItems
+            return components?.url
+        case .bitbucket:
+            guard let normalizedTarget, !normalizedTarget.isEmpty else { return nil }
+            var components = URLComponents(string: "https://\(host)/\(repoPath)/pull-requests/new")
+            components?.queryItems = [
+                URLQueryItem(name: "source", value: normalizedSource),
+                URLQueryItem(name: "dest", value: normalizedTarget)
+            ]
+            return components?.url
+        case .unknown:
+            return nil
+        }
+    }
+
     public func directPullRequestURL(number: Int) -> URL? {
         switch provider {
         case .github:    URL(string: "https://\(host)/\(repoPath)/pull/\(number)")
@@ -96,6 +145,11 @@ public nonisolated struct GitRemote: Sendable {
         if lower.contains("gitlab") { return .gitlab }
         if lower.contains("bitbucket") { return .bitbucket }
         return .unknown
+    }
+
+    private static func encodePathComponent(_ value: String) -> String {
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
     /// Parses git remote URLs in various formats:

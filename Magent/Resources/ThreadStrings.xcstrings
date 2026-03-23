@@ -672,6 +672,28 @@
         }
       }
     },
+    "threadCreateMergeRequest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Merge Request"
+          }
+        }
+      }
+    },
+    "threadCreatePullRequest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Pull Request"
+          }
+        }
+      }
+    },
     "threadOpenTicketInJira": {
       "extractionState": "manual",
       "localizations": {
