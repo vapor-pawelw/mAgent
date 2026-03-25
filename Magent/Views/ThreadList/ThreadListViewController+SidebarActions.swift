@@ -1059,7 +1059,7 @@ extension ThreadListViewController {
             return
         }
 
-        // Main threads: show branch mismatch (actual != expected)
+        // Show branch mismatch (actual != expected) for main and non-main threads
         if current.hasBranchMismatch,
            let actual = current.actualBranch,
            let expected = current.expectedBranch {
@@ -1097,6 +1097,21 @@ extension ThreadListViewController {
                 }
                 return
             }
+        }
+
+        // Show one-time banner if the base branch was auto-reset because it no longer exists.
+        if let reset = threadManager.baseBranchResets[current.id] {
+            let shortOld = reset.oldBase.hasPrefix("origin/")
+                ? String(reset.oldBase.dropFirst("origin/".count)) : reset.oldBase
+            let shortNew = reset.newBase.hasPrefix("origin/")
+                ? String(reset.newBase.dropFirst("origin/".count)) : reset.newBase
+            BannerManager.shared.show(
+                message: "Base branch \(shortOld) no longer exists — reset to \(shortNew)",
+                style: .warning,
+                duration: nil,
+                isDismissible: true
+            )
+            threadManager.clearBaseBranchReset(for: current.id)
         }
 
         branchMismatchView.clear()

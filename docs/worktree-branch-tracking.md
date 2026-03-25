@@ -2,33 +2,44 @@
 
 ## User Behavior
 
-- For non-main threads, Magent now treats the branch currently checked out in the worktree as the source of truth.
-- After first-prompt auto-rename, `magent-cli auto-rename-thread`, `magent-cli rename-branch`, or any manual `git checkout` / `git switch`, the sidebar and `CHANGES` footer should show the new branch without requiring the user to accept a mismatch banner.
-- The main thread still keeps its separate "expected branch" behavior based on the project's configured default branch.
+- Each thread has an expected branch (`branchName`). For main threads this is the project's default branch; for non-main threads it is the branch created with the worktree (updated only by explicit rename operations).
+- The branch mismatch banner appears for **all** threads (main and non-main) when the worktree's actual checked-out branch differs from the expected one. The user can "Accept" (update the expected branch) or "Switch back" (checkout the expected branch).
+- After first-prompt auto-rename, `magent-cli auto-rename-thread`, or `magent-cli rename-branch`, the rename code sets `branchName` directly — no mismatch.
+- Manual `git checkout` / `git switch` inside the terminal **will** show the mismatch banner. The user must explicitly accept or switch back.
 
 ## Implementation Notes
 
-- `ThreadManager.refreshBranchStates()` updates `actualBranch` for all threads, but for non-main threads it also persists `branchName = actualBranch` when Git reports a different checked-out branch.
-- Branch-mismatch UI remains meaningful only for the main thread. Non-main worktrees now adopt the current branch instead of treating that state as drift.
+- `ThreadManager.refreshBranchStates()` updates `actualBranch` for all threads. It does **not** auto-update `branchName` — the poller only detects mismatch, never silently resolves it.
+- `branchName` is updated only by: thread creation (phase 2), rename operations (`ThreadManager+Rename`), or the user clicking "Accept" on the mismatch banner (`acceptActualBranch`).
 - Worktree discovery in `ThreadManager.syncThreadsWithWorktrees(for:)` must seed `branchName` from `git branch --show-current` rather than assuming the directory name or rename symlink matches the checked-out branch.
 - The sidebar diff footer is fed from the latest thread-manager snapshot, not from a stale `MagentThread` captured before rename/switch operations completed.
 
-## Changed In This Thread
+## History
 
-- Fixed stale `thread.branchName` after auto-rename and branch switches.
-- Fixed `CHANGES` footer branch labels so they refresh from live thread state after rename/switch operations.
-- Fixed imported/recovered worktrees to record their real checked-out branch on discovery.
+- Initial: auto-synced `branchName` from actual checked-out branch for non-main threads.
+- Current: `branchName` is never auto-updated by the poller. Branch mismatch banner shown for all threads. Base branch is explicit-only (no auto-detection).
 
 ## Gotchas
 
 - Thread name, worktree directory basename, and git branch are no longer interchangeable. Rename symlinks intentionally let the thread name differ from the real worktree path, and manual branch switches can make the branch differ from both.
 - When refreshing UI after rename or branch changes, resolve the current thread again from `ThreadManager.threads` by `id` before reading `branchName` or `actualBranch`. Using the pre-refresh `MagentThread` snapshot can leave footer/tooltips one update behind.
+- `WorktreeMetadata.detectedFor` is a legacy field — no longer written or consumed. Retained only for Codable backward compatibility with existing cache files on disk.
 
-## Base Branch Detection (Dynamic)
+## Base Branch Resolution (Explicit)
 
-Base branch is no longer stored as a fixed string per thread. Instead, `GitService.detectBaseBranch(worktreePath:currentBranch:)` walks the decorated commit history (`git log --simplify-by-decoration`) to find the nearest `origin/*` ancestor, excluding the current branch's own remote tracking ref. When the decorated walk finds no remote refs (common when `origin/main` has diverged past the merge-base), it falls back to checking `main`/`master` via `merge-base` and returns the first one that shares a common ancestor with HEAD. The result is cached in `WorktreeMetadata` keyed by the branch name it was detected for (`detectedFor`). The cache is stale when `detectedFor != thread.currentBranch`, triggering re-detection automatically.
+Base branch is **never auto-detected** from git history. It is set during thread creation and only changes via explicit user action (context menu, CLI `set-base-branch`, or "Use PR target" button).
 
-`resolveBaseBranch(for:)` reads the cache first, then falls back to `thread.baseBranch` → `project.defaultBranch` → `"main"`. The thread's stored base branch (set at creation time) takes priority over the project default so the user's explicit choice is respected. This means the changes panel and delivery check always use an accurate base branch even after branch switches inside the worktree.
+`resolveBaseBranch(for:)` priority:
+1. **Manual override** — `WorktreeMetadata.detectedBaseBranch` in the worktree cache (written by context menu, CLI, or PR target action).
+2. **Creation-time value** — `thread.baseBranch` (set during `createThread` from the explicit `--base-branch` flag or project default).
+3. **Project default** — `project.defaultBranch`.
+4. **Hardcoded fallback** — `"main"`.
+
+### Missing base branch recovery
+
+During the delivery polling cycle, the resolved base branch is validated via `git rev-parse --verify`. If the ref does not exist (both bare name and `origin/`-prefixed form are checked), the base branch is reset to the project default. The old base branch name is persisted in `WorktreeMetadata.baseBranchResetFrom` so a warning banner can be shown when the user selects the thread — even across app restarts. The banner is shown once per reset; acknowledging it (or dismissing it) clears `baseBranchResetFrom` from both memory and disk.
+
+`GitService.detectBaseBranch(worktreePath:currentBranch:)` still exists in GitService but is no longer called from the polling loop or resolution path.
 
 ### Manual Base Branch Override
 

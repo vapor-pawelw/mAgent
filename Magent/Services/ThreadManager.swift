@@ -18,6 +18,11 @@ final class ThreadManager {
         let agentType: AgentType?
     }
 
+    struct BaseBranchReset: Sendable {
+        let oldBase: String
+        let newBase: String
+    }
+
     static let shared = ThreadManager()
 
     weak var delegate: ThreadManagerDelegate?
@@ -61,6 +66,9 @@ final class ThreadManager {
     /// Persisted allowlist of fingerprints the user manually ignored per agent.
     var ignoredRateLimitFingerprintsByAgent: [AgentType: Set<String>] = [:]
     var rateLimitCacheLoaded = false
+    /// Tracks threads whose base branch was missing and got reset to project default.
+    /// Keyed by thread ID, consumed when the user selects the thread (banner shown once).
+    var baseBranchResets: [UUID: BaseBranchReset] = [:]
     var rateLimitCacheDirty = false
     var ignoredRateLimitCacheLoaded = false
     var ignoredRateLimitCacheDirty = false

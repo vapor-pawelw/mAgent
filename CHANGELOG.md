@@ -24,6 +24,8 @@ All notable changes to this project will be documented in this file.
 - Right-clicking a completed thread now offers "Mark as Read" at the top of the context menu, clearing the completion badge without switching to it.
 - Thread rows now show how long the thread has been busy or idle (e.g. "<1m", "5m", "2h") in a subtle label at the bottom-right corner. Can be toggled off in Settings > Threads.
 - Cmd+Shift+N creates a new thread branching from the selected thread's branch, inheriting its section and inserting right below it in the sidebar.
+- Base branch is no longer auto-detected from git history — it stays as set during thread creation (or project default) and only changes via explicit user action (context menu, CLI, or "Use PR target"). If the stored base branch no longer exists, it falls back to the project default and shows a warning banner.
+- Branch mismatch banner now appears for non-main threads too — if the worktree is on a different branch than expected, the user can accept or switch back.
 
 ### Auto-Rename
 - Auto-rename now triggers on every first prompt, including questions — previously, prompts classified as questions were silently skipped.

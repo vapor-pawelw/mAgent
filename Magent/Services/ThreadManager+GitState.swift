@@ -27,23 +27,25 @@ extension ThreadManager {
     // MARK: - Base Branch
 
     /// Returns the resolved base branch for a thread.
-    /// Priority: detected remote branch (cached per current branch) → stored baseBranch → project default → "main".
+    /// Priority: manual override (cache) → stored baseBranch (from creation) → project default → "main".
+    /// Base branch is never auto-detected — it only changes via explicit user action
+    /// (context menu, CLI, "Use PR target").
     func resolveBaseBranch(for thread: MagentThread) -> String {
         let settings = persistence.loadSettings()
+        // 1. Manual override stored in worktree cache (set via context menu, CLI, or PR target).
         if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
             let cache = persistence.loadWorktreeCache(worktreesBasePath: project.resolvedWorktreesBasePath())
             if let meta = cache.worktrees[thread.worktreeKey],
-               let detected = meta.detectedBaseBranch,
-               let detectedFor = meta.detectedFor,
-               detectedFor == thread.currentBranch {
-                return detected
+               let override = meta.detectedBaseBranch,
+               !override.isEmpty {
+                return override
             }
         }
-        // Thread's stored base branch (from creation) takes priority over
-        // the project default so the user's explicit choice is respected.
+        // 2. Thread's stored base branch from creation time.
         if let base = thread.baseBranch, !base.isEmpty {
             return base
         }
+        // 3. Project default branch.
         if let project = settings.projects.first(where: { $0.id == thread.projectId }),
            let defaultBranch = project.defaultBranch, !defaultBranch.isEmpty {
             return defaultBranch
@@ -140,9 +142,9 @@ extension ThreadManager {
             let projectId: UUID
             let worktreeKey: String
             let currentBranch: String
-            // Set when base branch was newly detected from git (cache needs update).
-            let detectedBaseBranch: String?
             let resolvedBaseBranch: String
+            // Non-nil when the originally resolved base branch was missing and we fell back.
+            let baseBranchFallback: BaseBranchReset?
             // hasEverDoneWork was false in snapshot but is now true.
             let newlyHasEverDoneWork: Bool
             // We found commits ahead this cycle — delivery is false by definition.
@@ -155,25 +157,27 @@ extension ThreadManager {
         // captured value-type data and never touch shared mutable state.
         struct ThreadInput {
             let thread: MagentThread
-            let cachedBaseBranch: String?     // valid only when detectedFor matches currentBranch
-            let fallbackBaseBranch: String    // from project config
+            let resolvedBaseBranch: String
+            let fallbackBaseBranch: String    // project default, used if resolvedBaseBranch is missing
             let forkPoint: String?            // for migration check
         }
 
         var inputs: [ThreadInput] = []
         for thread in snapshot {
             guard FileManager.default.fileExists(atPath: thread.worktreePath) else { continue }
-            guard let projectEntry = cacheByProjectId[thread.projectId] else { continue }
-            let meta = projectEntry.cache.worktrees[thread.worktreeKey]
-            let cachedBase: String? = {
-                guard let detected = meta?.detectedBaseBranch,
-                      let detectedFor = meta?.detectedFor,
-                      detectedFor == thread.currentBranch else { return nil }
-                return detected
-            }()
+            guard cacheByProjectId[thread.projectId] != nil else { continue }
+            let meta = cacheByProjectId[thread.projectId]?.cache.worktrees[thread.worktreeKey]
+
+            // Restore persisted base branch reset info for banner display.
+            if let resetFrom = meta?.baseBranchResetFrom, !resetFrom.isEmpty,
+               let override = meta?.detectedBaseBranch {
+                baseBranchResets[thread.id] = BaseBranchReset(oldBase: resetFrom, newBase: override)
+            }
+
+            let resolved = resolveBaseBranch(for: thread)
             inputs.append(ThreadInput(
                 thread: thread,
-                cachedBaseBranch: cachedBase,
+                resolvedBaseBranch: resolved,
                 fallbackBaseBranch: resolveBaseBranchFromConfig(for: thread, settings: settings),
                 forkPoint: meta?.forkPointCommit
             ))
@@ -186,25 +190,30 @@ extension ThreadManager {
                 let thread = input.thread
                 let snapshotHasEverDoneWork = thread.hasEverDoneWork
                 let snapshotIsDirty = thread.isDirty
+                let initialBase = input.resolvedBaseBranch
+                let fallbackBase = input.fallbackBaseBranch
                 group.addTask {
-                    // Phase 1: resolve base branch.
-                    let resolvedBase: String
-                    let detectedBase: String?
-                    if let cached = input.cachedBaseBranch {
-                        resolvedBase = cached
-                        detectedBase = nil
-                    } else if let detected = await self.git.detectBaseBranch(
-                        worktreePath: thread.worktreePath,
-                        currentBranch: thread.currentBranch
-                    ) {
-                        resolvedBase = detected
-                        detectedBase = detected
-                    } else {
-                        resolvedBase = input.fallbackBaseBranch
-                        detectedBase = nil
+                    // Phase 0: validate base branch exists; fall back to project default if missing.
+                    var resolvedBase = initialBase
+                    var baseBranchFallback: BaseBranchReset?
+                    // Check both the ref as-is and with origin/ prefix.
+                    // baseBranch can be stored as "main", "origin/main", or "develop".
+                    var baseExists = await self.git.branchExists(
+                        repoPath: thread.worktreePath,
+                        branchName: initialBase
+                    )
+                    if !baseExists && !initialBase.hasPrefix("origin/") {
+                        baseExists = await self.git.branchExists(
+                            repoPath: thread.worktreePath,
+                            branchName: "origin/\(initialBase)"
+                        )
+                    }
+                    if !baseExists {
+                        resolvedBase = fallbackBase
+                        baseBranchFallback = BaseBranchReset(oldBase: initialBase, newBase: fallbackBase)
                     }
 
-                    // Phase 2: hasEverDoneWork check (only if not already set in snapshot).
+                    // Phase 1: hasEverDoneWork check (only if not already set in snapshot).
                     var newlyHasEverDoneWork = false
                     var knownHasCommitsAhead = false
                     if !snapshotHasEverDoneWork {
@@ -226,7 +235,7 @@ extension ThreadManager {
                         }
                     }
 
-                    // Phase 3: isFullyDelivered check.
+                    // Phase 2: isFullyDelivered check.
                     let hasWorkDone = snapshotHasEverDoneWork || newlyHasEverDoneWork
                     let isFullyDelivered: Bool?
                     if !hasWorkDone {
@@ -245,8 +254,8 @@ extension ThreadManager {
                         projectId: thread.projectId,
                         worktreeKey: thread.worktreeKey,
                         currentBranch: thread.currentBranch,
-                        detectedBaseBranch: detectedBase,
                         resolvedBaseBranch: resolvedBase,
+                        baseBranchFallback: baseBranchFallback,
                         newlyHasEverDoneWork: newlyHasEverDoneWork,
                         knownHasCommitsAhead: knownHasCommitsAhead,
                         isFullyDelivered: isFullyDelivered
@@ -262,18 +271,24 @@ extension ThreadManager {
         var changed = false
         var persistedThreadsChanged = false
         for result in results {
-            // Update cache if base branch was newly detected.
-            if let detected = result.detectedBaseBranch,
-               var projectEntry = cacheByProjectId[result.projectId] {
-                var meta = projectEntry.cache.worktrees[result.worktreeKey] ?? WorktreeMetadata()
-                meta.detectedBaseBranch = detected
-                meta.detectedFor = result.currentBranch
-                projectEntry.cache.worktrees[result.worktreeKey] = meta
-                projectEntry.dirty = true
-                cacheByProjectId[result.projectId] = projectEntry
-            }
-
             guard let i = threads.firstIndex(where: { $0.id == result.threadId }) else { continue }
+
+            // When base branch was missing, update the cache to the fallback value
+            // and record the reset so we can show a banner for the selected thread.
+            if let fallback = result.baseBranchFallback {
+                if var projectEntry = cacheByProjectId[result.projectId] {
+                    var meta = projectEntry.cache.worktrees[result.worktreeKey] ?? WorktreeMetadata()
+                    meta.detectedBaseBranch = fallback.newBase
+                    meta.baseBranchResetFrom = fallback.oldBase
+                    projectEntry.cache.worktrees[result.worktreeKey] = meta
+                    projectEntry.dirty = true
+                    cacheByProjectId[result.projectId] = projectEntry
+                }
+                baseBranchResets[threads[i].id] = BaseBranchReset(
+                    oldBase: fallback.oldBase,
+                    newBase: fallback.newBase
+                )
+            }
 
             if result.newlyHasEverDoneWork && !threads[i].hasEverDoneWork {
                 threads[i].hasEverDoneWork = true
@@ -416,16 +431,10 @@ extension ThreadManager {
                 expected = threads[i].branchName
             }
 
-            if !threads[i].isMain,
-               let actual = result.actual, !actual.isEmpty,
-               threads[i].branchName != actual {
-                threads[i].branchName = actual
-                persistedChanged = true
-            }
-
             let resolvedExpected = threads[i].isMain ? expected : threads[i].branchName
             let mismatch: Bool
-            if threads[i].isMain, let resolvedExpected, let actual = result.actual {
+            if let resolvedExpected, let actual = result.actual,
+               !resolvedExpected.isEmpty, !actual.isEmpty {
                 mismatch = actual != resolvedExpected
             } else {
                 mismatch = false
@@ -534,10 +543,24 @@ extension ThreadManager {
         var cache = persistence.loadWorktreeCache(worktreesBasePath: basePath)
         var meta = cache.worktrees[thread.worktreeKey] ?? WorktreeMetadata()
         meta.detectedBaseBranch = baseBranch
-        meta.detectedFor = thread.currentBranch
         cache.worktrees[thread.worktreeKey] = meta
         persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
         delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    /// Acknowledges (clears) the base branch reset banner for a thread.
+    func clearBaseBranchReset(for threadId: UUID) {
+        baseBranchResets.removeValue(forKey: threadId)
+        guard let thread = threads.first(where: { $0.id == threadId }) else { return }
+        let settings = persistence.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { return }
+        let basePath = project.resolvedWorktreesBasePath()
+        var cache = persistence.loadWorktreeCache(worktreesBasePath: basePath)
+        if var meta = cache.worktrees[thread.worktreeKey] {
+            meta.baseBranchResetFrom = nil
+            cache.worktrees[thread.worktreeKey] = meta
+            persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
+        }
     }
 
     /// Returns ancestor remote branches for a thread, ordered closest-first.
