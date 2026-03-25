@@ -196,7 +196,18 @@ public final class GitService: Sendable {
         }
     }
 
+    /// Returns `true` when the repo at `repoPath` has at least one commit.
+    public func repoHasCommits(repoPath: String) async -> Bool {
+        let result = await ShellExecutor.execute(
+            "git rev-parse --verify HEAD",
+            workingDirectory: repoPath
+        )
+        return result.exitCode == 0
+    }
+
     /// Detects the default branch via origin/HEAD, falling back to main/master existence check.
+    /// For empty repos (no commits), reads `init.defaultBranch` or HEAD symbolic ref to determine
+    /// which branch will be created on first commit.
     public func detectDefaultBranch(repoPath: String) async -> String? {
         // Try origin/HEAD (set during clone)
         let result = await ShellExecutor.execute(
@@ -213,6 +224,17 @@ public final class GitService: Sendable {
             if await branchExists(repoPath: repoPath, branchName: candidate) {
                 return candidate
             }
+        }
+
+        // For empty repos (no commits yet), read the unborn HEAD to find out what
+        // branch name git init used (respects user's init.defaultBranch config).
+        let headRef = await ShellExecutor.execute(
+            "git symbolic-ref HEAD",
+            workingDirectory: repoPath
+        )
+        let headName = headRef.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        if headRef.exitCode == 0, headName.hasPrefix("refs/heads/") {
+            return String(headName.dropFirst("refs/heads/".count))
         }
 
         return nil

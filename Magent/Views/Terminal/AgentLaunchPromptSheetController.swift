@@ -1235,13 +1235,18 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             ? titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
 
-        // Validate base branch exists before proceeding
+        // Validate base branch exists before proceeding.
+        // Skip validation for empty repos (no commits) — worktree creation handles
+        // the unborn-branch case and branch validation would always fail.
         if config.showDescriptionAndBranchFields, let repoPath = resolvedRepoPath() {
             let branchToValidate = rawBaseBranch.isEmpty ? resolvedDefaultBranchName() : rawBaseBranch
             acceptButton.isEnabled = false
             cancelButton.isEnabled = false
             Task { [weak self] in
-                let exists = await GitService.shared.branchExists(repoPath: repoPath, branchName: branchToValidate)
+                let hasCommits = await GitService.shared.repoHasCommits(repoPath: repoPath)
+                let exists = hasCommits
+                    ? await GitService.shared.branchExists(repoPath: repoPath, branchName: branchToValidate)
+                    : true  // Empty repo — skip validation
                 await MainActor.run {
                     guard let self else { return }
                     self.acceptButton.isEnabled = true

@@ -662,6 +662,35 @@ extension ThreadListViewController {
                         }
                     }
 
+                    // Create an initial empty commit so the default branch actually
+                    // exists — without this, worktree creation and branch validation
+                    // fail because `git init` alone leaves the repo with no commits
+                    // and no materialized branch.
+                    let commitProcess = Process()
+                    commitProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+                    commitProcess.arguments = [
+                        "-C", path,
+                        "commit", "--allow-empty", "-m", "Initial commit"
+                    ]
+                    commitProcess.standardOutput = FileHandle.nullDevice
+                    commitProcess.standardError = FileHandle.nullDevice
+                    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                        commitProcess.terminationHandler = { proc in
+                            if proc.terminationStatus == 0 {
+                                cont.resume()
+                            } else {
+                                cont.resume(throwing: NSError(domain: "Magent", code: 1, userInfo: [
+                                    NSLocalizedDescriptionKey: "git commit exited with status \(proc.terminationStatus)"
+                                ]))
+                            }
+                        }
+                        do {
+                            try commitProcess.run()
+                        } catch {
+                            cont.resume(throwing: error)
+                        }
+                    }
+
                     let defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: path)
 
                     await MainActor.run {
