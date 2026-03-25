@@ -576,6 +576,11 @@ extension ThreadManager {
 
         // Safe to call directly — archiveThread is @MainActor (implicit via build settings),
         // so execution resumes on the main actor after the @concurrent persistArchiveState await.
+        // Evict any cached ghostty terminal views for this thread's sessions BEFORE the
+        // cleanup task kills the tmux sessions. Ghostty calls _exit() when the PTY fd closes
+        // on a live surface, which silently terminates the entire process.
+        ReusableTerminalViewCache.shared.evictSessions(thread.tmuxSessionNames)
+
         NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)
         delegate?.threadManager(self, didArchiveThread: thread)
 
@@ -762,6 +767,9 @@ extension ThreadManager {
         if let ticketKey = thread.jiraTicketKey {
             excludeJiraTicket(key: ticketKey, projectId: thread.projectId)
         }
+
+        // Evict cached ghostty surfaces before killing sessions (see archiveThread comment).
+        ReusableTerminalViewCache.shared.evictSessions(thread.tmuxSessionNames)
 
         // Prompt-injection bookkeeping is global to ThreadManager rather than persisted on
         // the thread, so archive/delete must clear it explicitly when a thread disappears.

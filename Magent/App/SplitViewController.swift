@@ -430,8 +430,10 @@ final class SplitViewController: NSSplitViewController {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func showEmptyState() {
-        currentDetailVC?.cacheTerminalViewsForReuse()
+    private func showEmptyState(skipTerminalCache: Bool = false) {
+        if !skipTerminalCache {
+            currentDetailVC?.cacheTerminalViewsForReuse()
+        }
         currentDetailVC = nil
         ThreadManager.shared.setActiveThread(nil)
         preserveSidebarWidthDuringContentChange {
@@ -516,13 +518,13 @@ extension SplitViewController: ThreadListDelegate {
 
     func threadList(_ controller: ThreadListViewController, didArchiveThread thread: MagentThread) {
         if currentDetailVC?.thread.id == thread.id {
-            showEmptyState()
+            showEmptyState(skipTerminalCache: true)
         }
     }
 
     func threadList(_ controller: ThreadListViewController, didDeleteThread thread: MagentThread) {
         if currentDetailVC?.thread.id == thread.id {
-            showEmptyState()
+            showEmptyState(skipTerminalCache: true)
         }
     }
 
