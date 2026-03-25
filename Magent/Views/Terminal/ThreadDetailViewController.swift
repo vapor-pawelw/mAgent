@@ -82,6 +82,14 @@ final class ReusableTerminalViewCache {
         fifoSessionNames.removeAll()
     }
 
+    /// Evict cached views whose sessions are about to be killed (archive/delete).
+    /// This prevents ghostty from calling _exit() when the PTY closes on a cached surface.
+    func evictSessions(_ sessionNames: [String]) {
+        for name in sessionNames {
+            remove(sessionName: name)
+        }
+    }
+
     private func pruneExpiredEntries(now: Date = Date()) {
         let expiredSessionNames = entriesBySession.compactMap { sessionName, entry -> String? in
             guard now.timeIntervalSince(entry.lastAccessedAt) > Self.maxIdleAge else { return nil }

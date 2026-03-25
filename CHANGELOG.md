@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.
 - The changes panel in the bottom left is now always visible, even for threads with no commits or changes — shows "No commits" / "No changes in this branch" empty states instead of hiding entirely.
 - Fixed target branch in the changes panel not reflecting the base branch when creating a thread off another thread.
 - Fixed UI freezing when archiving a thread — persistence I/O now runs off the main actor so the archiving overlay stays responsive.
+- Fixed app silently terminating after archiving or deleting a thread — cached ghostty terminal surfaces kept live PTY connections that triggered libghostty's `_exit()` when the tmux sessions were killed.
 - Thread row contents now visually dim while archiving is in progress.
 - "Rename Using Prompt" in the thread context menu is now a "Rename with prompt" submenu showing the 3 most recent agent prompts for quick one-click rename, plus a "Custom…" option for free-form input.
 - Right-clicking a completed thread now offers "Mark as Read" at the top of the context menu, clearing the completion badge without switching to it.
