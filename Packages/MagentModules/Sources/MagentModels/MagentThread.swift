@@ -227,7 +227,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var archivedAt: Date?
     public var sectionId: UUID?
     public var isMain: Bool
-    public var lastSelectedTmuxSessionName: String?
+    /// Last-selected tab identifier — stores the slot key for any tab type
+    /// (session name for terminal, web/draft identifier for web/draft tabs).
+    public var lastSelectedTabIdentifier: String?
     public var agentHasRun: Bool
     public var isPinned: Bool
     public var isSidebarHidden: Bool
@@ -486,7 +488,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case id, projectId, name, worktreePath, branchName
         case tmuxSessionNames, agentTmuxSessions, sessionConversationIDs, sessionAgentTypes, pinnedTmuxSessions
         case createdAt, isArchived, archivedAt, sectionId, isMain
-        case lastSelectedTmuxSessionName
+        case lastSelectedTabIdentifier = "lastSelectedTmuxSessionName"
         case agentHasRun, isPinned, isSidebarHidden, lastAgentCompletionAt
         case unreadCompletionSessions
         case hasUnreadAgentCompletion // migration only
@@ -523,7 +525,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         archivedAt: Date? = nil,
         sectionId: UUID? = nil,
         isMain: Bool = false,
-        lastSelectedTmuxSessionName: String? = nil,
+        lastSelectedTabIdentifier: String? = nil,
         agentHasRun: Bool = false,
         isPinned: Bool = false,
         isSidebarHidden: Bool = false,
@@ -559,7 +561,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.archivedAt = archivedAt
         self.sectionId = sectionId
         self.isMain = isMain
-        self.lastSelectedTmuxSessionName = lastSelectedTmuxSessionName
+        self.lastSelectedTabIdentifier = lastSelectedTabIdentifier
         self.agentHasRun = agentHasRun
         self.isPinned = isPinned
         self.isSidebarHidden = isSidebarHidden
@@ -598,7 +600,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
         sectionId = try container.decodeIfPresent(UUID.self, forKey: .sectionId)
         isMain = try container.decodeIfPresent(Bool.self, forKey: .isMain) ?? false
-        lastSelectedTmuxSessionName = try container.decodeIfPresent(String.self, forKey: .lastSelectedTmuxSessionName)
+        lastSelectedTabIdentifier = try container.decodeIfPresent(String.self, forKey: .lastSelectedTabIdentifier)
         agentHasRun = try container.decodeIfPresent(Bool.self, forKey: .agentHasRun) ?? false
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         isSidebarHidden = try container.decodeIfPresent(Bool.self, forKey: .isSidebarHidden) ?? false
@@ -655,7 +657,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encodeIfPresent(archivedAt, forKey: .archivedAt)
         try container.encodeIfPresent(sectionId, forKey: .sectionId)
         try container.encode(isMain, forKey: .isMain)
-        try container.encodeIfPresent(lastSelectedTmuxSessionName, forKey: .lastSelectedTmuxSessionName)
+        try container.encodeIfPresent(lastSelectedTabIdentifier, forKey: .lastSelectedTabIdentifier)
         try container.encode(agentHasRun, forKey: .agentHasRun)
         try container.encode(isPinned, forKey: .isPinned)
         try container.encode(isSidebarHidden, forKey: .isSidebarHidden)

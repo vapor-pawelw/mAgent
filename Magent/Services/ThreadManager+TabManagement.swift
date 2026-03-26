@@ -265,7 +265,7 @@ extension ThreadManager {
             threads[index].agentHasRun = true
         }
         threads[index].customTabNames[sessionName] = TmuxSessionNaming.defaultTabDisplayName(for: agentType)
-        threads[index].lastSelectedTmuxSessionName = sessionName
+        threads[index].lastSelectedTabIdentifier = sessionName
         try? persistence.saveActiveThreads(threads)
     }
 
@@ -289,10 +289,10 @@ extension ThreadManager {
         try? persistence.saveActiveThreads(threads)
     }
 
-    func updateLastSelectedSession(for threadId: UUID, sessionName: String?) {
+    func updateLastSelectedTab(for threadId: UUID, identifier: String?) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
-        if threads[index].lastSelectedTmuxSessionName == sessionName { return }
-        threads[index].lastSelectedTmuxSessionName = sessionName
+        if threads[index].lastSelectedTabIdentifier == identifier { return }
+        threads[index].lastSelectedTabIdentifier = identifier
         try? persistence.saveActiveThreads(threads)
     }
 
@@ -370,8 +370,8 @@ extension ThreadManager {
         threads[idx].customTabNames.removeValue(forKey: sessionName)
         threads[idx].submittedPromptsBySession.removeValue(forKey: sessionName)
         threads[idx].tmuxSessionNames.removeAll { $0 == sessionName }
-        if threads[idx].lastSelectedTmuxSessionName == sessionName {
-            threads[idx].lastSelectedTmuxSessionName = threads[idx].tmuxSessionNames.first
+        if threads[idx].lastSelectedTabIdentifier == sessionName {
+            threads[idx].lastSelectedTabIdentifier = threads[idx].tmuxSessionNames.first
         }
         NSLog("[TabClose] removeTabBySessionName: saving threads")
         try persistence.saveActiveThreads(threads)

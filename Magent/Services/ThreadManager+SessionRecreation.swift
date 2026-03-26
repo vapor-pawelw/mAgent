@@ -118,7 +118,7 @@ extension ThreadManager {
             for sessionName in thread.pinnedTmuxSessions where sessionName.hasPrefix("ma-") {
                 names.insert(sessionName)
             }
-            if let selectedSession = thread.lastSelectedTmuxSessionName, selectedSession.hasPrefix("ma-") {
+            if let selectedSession = thread.lastSelectedTabIdentifier, selectedSession.hasPrefix("ma-") {
                 names.insert(selectedSession)
             }
         }

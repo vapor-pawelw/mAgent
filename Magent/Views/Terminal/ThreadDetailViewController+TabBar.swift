@@ -155,12 +155,12 @@ extension ThreadDetailViewController {
         let canShowTOC = thread.agentTmuxSessions.contains(sessionName)
         promptTOCCanShowForCurrentTab = canShowTOC
         applyPromptTOCVisibility()
-        if thread.lastSelectedTmuxSessionName != sessionName {
-            thread.lastSelectedTmuxSessionName = sessionName
-            threadManager.updateLastSelectedSession(for: thread.id, sessionName: sessionName)
+        if thread.lastSelectedTabIdentifier != sessionName {
+            thread.lastSelectedTabIdentifier = sessionName
+            threadManager.updateLastSelectedTab(for: thread.id, identifier: sessionName)
         }
         UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
-        UserDefaults.standard.set(sessionName, forKey: Self.lastOpenedSessionDefaultsKey)
+        UserDefaults.standard.set(sessionName, forKey: Self.lastOpenedTabDefaultsKey)
         refreshPendingPromptBanner()
         refreshInitialPromptFailureBanner()
         refreshPendingPromptBanner()

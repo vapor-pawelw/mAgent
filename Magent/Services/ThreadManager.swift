@@ -224,7 +224,7 @@ var dirtyCheckTickCounter: Int = 0
             bumpThreadToTopOfSection(threads[index].id)
 
             let isActiveThread = threads[index].id == activeThreadId
-            let isActiveTab = isActiveThread && threads[index].lastSelectedTmuxSessionName == session
+            let isActiveTab = isActiveThread && threads[index].lastSelectedTabIdentifier == session
             if !isActiveTab {
                 threads[index].unreadCompletionSessions.insert(session)
             }

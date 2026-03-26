@@ -174,6 +174,13 @@ extension ThreadDetailViewController {
         currentTabIndex = displayIndex
         activeWebTabId = identifier
 
+        if thread.lastSelectedTabIdentifier != identifier {
+            thread.lastSelectedTabIdentifier = identifier
+            threadManager.updateLastSelectedTab(for: thread.id, identifier: identifier)
+        }
+        UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
+        UserDefaults.standard.set(identifier, forKey: Self.lastOpenedTabDefaultsKey)
+
         // Hide terminal overlays while web tab is active
         dismissLoadingOverlay()
         refreshPendingPromptBanner()

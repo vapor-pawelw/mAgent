@@ -195,8 +195,8 @@ extension ThreadManager {
                 newCustomTabNames[renameMap[key] ?? key] = value
             }
             threads[i].customTabNames = newCustomTabNames
-            if let selected = threads[i].lastSelectedTmuxSessionName {
-                threads[i].lastSelectedTmuxSessionName = renameMap[selected] ?? selected
+            if let selected = threads[i].lastSelectedTabIdentifier {
+                threads[i].lastSelectedTabIdentifier = renameMap[selected] ?? selected
             }
             changed = true
         }

@@ -546,8 +546,8 @@ extension ThreadManager {
         }
         threads[index].customTabNames = newCustomTabNames
         _ = remapSubmittedPromptHistory(threadIndex: index, sessionRenameMap: sessionRenameMap)
-        if let selectedName = threads[index].lastSelectedTmuxSessionName {
-            threads[index].lastSelectedTmuxSessionName = sessionRenameMap[selectedName] ?? selectedName
+        if let selectedName = threads[index].lastSelectedTabIdentifier {
+            threads[index].lastSelectedTabIdentifier = sessionRenameMap[selectedName] ?? selectedName
         }
         if markFirstPromptRenameHandled {
             threads[index].didAutoRenameFromFirstPrompt = true
@@ -1011,8 +1011,8 @@ extension ThreadManager {
                 $0 == sessionName ? resolvedSessionName : $0
             }
         }
-        if currentThread.lastSelectedTmuxSessionName == sessionName {
-            threads[index].lastSelectedTmuxSessionName = resolvedSessionName
+        if currentThread.lastSelectedTabIdentifier == sessionName {
+            threads[index].lastSelectedTabIdentifier = resolvedSessionName
         }
         if currentThread.unreadCompletionSessions.contains(sessionName) {
             threads[index].unreadCompletionSessions.remove(sessionName)

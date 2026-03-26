@@ -627,7 +627,7 @@ extension ThreadDetailViewController {
             await threadManager.generateTaskDescriptionIfNeeded(threadId: threadId, prompt: trimmed)
         }
 
-        if thread.lastSelectedTmuxSessionName == sessionName {
+        if thread.lastSelectedTabIdentifier == sessionName {
             schedulePromptTOCRefresh(after: 0.2)
         }
     }

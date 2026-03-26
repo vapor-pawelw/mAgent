@@ -302,7 +302,7 @@ extension ThreadManager {
                 agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
                 sessionAgentTypes: selectedAgentType.map { [tmuxSessionName: $0] } ?? [:],
                 sectionId: requestedSectionId ?? settings.defaultSection(for: project.id)?.id,
-                lastSelectedTmuxSessionName: tmuxSessionName,
+                lastSelectedTabIdentifier: tmuxSessionName,
                 customTabNames: [tmuxSessionName: firstTabDisplayName],
                 baseBranch: baseBranch,
                 submittedPromptsBySession: {
@@ -458,7 +458,7 @@ extension ThreadManager {
             agentTmuxSessions: selectedAgentType != nil ? [tmuxSessionName] : [],
             sessionAgentTypes: selectedAgentType.map { [tmuxSessionName: $0] } ?? [:],
             isMain: true,
-            lastSelectedTmuxSessionName: tmuxSessionName,
+            lastSelectedTabIdentifier: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName]
         )
 
@@ -863,7 +863,7 @@ extension ThreadManager {
             threads[index].tmuxSessionNames = []
             threads[index].sessionConversationIDs = [:]
             threads[index].submittedPromptsBySession = [:]
-            threads[index].lastSelectedTmuxSessionName = nil
+            threads[index].lastSelectedTabIdentifier = nil
 
             // Re-create the worktree
             let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: thread.branchName)
@@ -914,7 +914,7 @@ extension ThreadManager {
         thread.sessionConversationIDs = [:]
         thread.sessionAgentTypes = [:]
         thread.pinnedTmuxSessions = []
-        thread.lastSelectedTmuxSessionName = nil
+        thread.lastSelectedTabIdentifier = nil
         thread.customTabNames = [:]
         thread.submittedPromptsBySession = [:]
     }

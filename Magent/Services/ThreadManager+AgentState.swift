@@ -84,7 +84,7 @@ extension ThreadManager {
             notifiedWaitingSessions.remove(session)
 
             let isActiveThread = threads[index].id == activeThreadId
-            let isActiveTab = isActiveThread && threads[index].lastSelectedTmuxSessionName == session
+            let isActiveTab = isActiveThread && threads[index].lastSelectedTabIdentifier == session
             if !isActiveTab {
                 let hadUnreadCompletion = threads[index].hasUnreadAgentCompletion
                 threads[index].unreadCompletionSessions.insert(session)

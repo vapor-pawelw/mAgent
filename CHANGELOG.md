@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Tabs
+- Switching threads now restores the last-selected tab, including web and draft tabs — previously only terminal tabs were remembered.
+
 ### Settings
 - "Remember type selection" now remembers the last agent type globally across all projects, not per-project.
 - Software update now shows explicit download progress before closing the app. After download completes, an "Install and Relaunch" button lets you choose when to restart.

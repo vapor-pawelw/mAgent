@@ -38,7 +38,7 @@ extension ThreadManager {
                     changedThreadIds.insert(threads[i].id)
 
                     let isActiveThread = threads[i].id == activeThreadId
-                    let isActiveTab = isActiveThread && threads[i].lastSelectedTmuxSessionName == session
+                    let isActiveTab = isActiveThread && threads[i].lastSelectedTabIdentifier == session
                     if !isActiveTab && !notifiedWaitingSessions.contains(session) {
                         notifiedWaitingSessions.insert(session)
                         notifyPairs.append((threadId, session))

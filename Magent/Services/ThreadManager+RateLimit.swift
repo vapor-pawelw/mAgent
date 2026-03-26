@@ -119,7 +119,7 @@ extension ThreadManager {
 
         // Determine the currently visible session so we can scan it on every tick.
         // All other sessions are throttled to one scan per 15 seconds.
-        let activeSession: String? = threads.first(where: { $0.id == activeThreadId })?.lastSelectedTmuxSessionName
+        let activeSession: String? = threads.first(where: { $0.id == activeThreadId })?.lastSelectedTabIdentifier
         let rateLimitThrottle: TimeInterval = 15
 
         let rateLimitSnapshot = threads.filter { !$0.isArchived }

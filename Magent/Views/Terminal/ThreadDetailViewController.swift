@@ -114,7 +114,7 @@ final class ReusableTerminalViewCache {
 
 final class ThreadDetailViewController: NSViewController {
     static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
-    static let lastOpenedSessionDefaultsKey = "MagentLastOpenedSessionName"
+    static let lastOpenedTabDefaultsKey = "MagentLastOpenedSessionName"
     static let promptTOCPositionDefaultsPrefix = "MagentPromptTOCPosition"
     static let promptTOCSizeDefaultsPrefix = "MagentPromptTOCSize"
     static let promptTOCVisibilityDefaultsKey = "MagentPromptTOCVisibilityHidden"
@@ -678,11 +678,12 @@ final class ThreadDetailViewController: NSViewController {
         if hasWebTabsOnly {
             await MainActor.run {
                 dismissLoadingOverlay()
-                if let firstWebSlotIndex = tabSlots.firstIndex(where: {
+                let restoredSlotIndex = resolveLastSelectedSlotIndex()
+                if let idx = restoredSlotIndex ?? tabSlots.firstIndex(where: {
                     if case .web = $0 { return true }
                     return false
                 }) {
-                    selectTab(at: firstWebSlotIndex)
+                    selectTab(at: idx)
                 } else {
                     showEmptyState()
                 }
@@ -690,18 +691,31 @@ final class ThreadDetailViewController: NSViewController {
             return
         }
 
+        // Resolve whether the last-selected tab was a non-terminal tab (web/draft).
+        // If so, we still prepare terminal sessions in the background but select the
+        // non-terminal tab at the end.
+        let nonTerminalSlotIndex: Int? = await MainActor.run {
+            resolveLastSelectedSlotIndex().flatMap { idx in
+                guard idx < tabSlots.count else { return nil }
+                switch tabSlots[idx] {
+                case .web, .draft: return idx
+                case .terminal: return nil
+                }
+            }
+        }
+
         let initialIndex: Int
         let defaults = UserDefaults.standard
         let defaultsThreadId = defaults
             .string(forKey: Self.lastOpenedThreadDefaultsKey)
             .flatMap(UUID.init(uuidString:))
-        let defaultsSession = defaults.string(forKey: Self.lastOpenedSessionDefaultsKey)
+        let defaultsSession = defaults.string(forKey: Self.lastOpenedTabDefaultsKey)
 
         if defaultsThreadId == thread.id,
            let defaultsSession,
            let savedIndex = orderedSessions.firstIndex(of: defaultsSession) {
             initialIndex = savedIndex
-        } else if let lastSelected = thread.lastSelectedTmuxSessionName,
+        } else if let lastSelected = thread.lastSelectedTabIdentifier,
                   let savedIndex = orderedSessions.firstIndex(of: lastSelected) {
             initialIndex = savedIndex
         } else {
@@ -715,10 +729,13 @@ final class ThreadDetailViewController: NSViewController {
         )
 
         await MainActor.run {
-            startLoadingOverlayTracking(sessionName: initialSessionName, agentType: initialAgentType)
+            // Only show terminal loading overlay if we're actually restoring to a terminal tab.
+            if nonTerminalSlotIndex == nil {
+                startLoadingOverlayTracking(sessionName: initialSessionName, agentType: initialAgentType)
 
-            if requireStartupOverlayForInitialSession {
-                requireStartupOverlay(for: initialSessionName)
+                if requireStartupOverlayForInitialSession {
+                    requireStartupOverlay(for: initialSessionName)
+                }
             }
 
             // Initialize indicator dots from thread model
@@ -731,6 +748,11 @@ final class ThreadDetailViewController: NSViewController {
                     tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
                 }
             }
+
+            // If restoring to a non-terminal tab, select it immediately before terminal prep.
+            if let slotIndex = nonTerminalSlotIndex {
+                selectTab(at: slotIndex)
+            }
         }
 
         let recreatedInitialSession = await ensureSessionPrepared(sessionName: initialSessionName) { [weak self] action in
@@ -740,13 +762,15 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         await MainActor.run {
-            // Resolve the display index from session name — web tab restoration may have
-            // shifted indices since initialIndex was computed.
-            let resolvedIndex = displayIndex(forSession: initialSessionName) ?? initialIndex
-            selectPreparedTab(at: resolvedIndex)
-            let keepStartupOverlay = recreatedInitialSession || consumeStartupOverlayRequirement(for: initialSessionName)
-            if !keepStartupOverlay {
-                dismissLoadingOverlay()
+            if nonTerminalSlotIndex == nil {
+                // Resolve the display index from session name — web tab restoration may have
+                // shifted indices since initialIndex was computed.
+                let resolvedIndex = displayIndex(forSession: initialSessionName) ?? initialIndex
+                selectPreparedTab(at: resolvedIndex)
+                let keepStartupOverlay = recreatedInitialSession || consumeStartupOverlayRequirement(for: initialSessionName)
+                if !keepStartupOverlay {
+                    dismissLoadingOverlay()
+                }
             }
             prepareSessionsInBackground(orderedSessions.enumerated().compactMap { offset, sessionName in
                 offset == initialIndex ? nil : sessionName
@@ -786,6 +810,39 @@ final class ThreadDetailViewController: NSViewController {
     /// Display index for a given web tab identifier, or nil.
     func displayIndex(forWebIdentifier id: String) -> Int? {
         tabSlots.firstIndex(of: .web(identifier: id))
+    }
+
+    /// Resolve the last-selected tab slot index from persisted state.
+    /// Checks UserDefaults (current app session) first, then the per-thread persisted identifier.
+    func resolveLastSelectedSlotIndex() -> Int? {
+        let defaults = UserDefaults.standard
+        let defaultsThreadId = defaults
+            .string(forKey: Self.lastOpenedThreadDefaultsKey)
+            .flatMap(UUID.init(uuidString:))
+        let defaultsIdentifier = defaults.string(forKey: Self.lastOpenedTabDefaultsKey)
+
+        // Priority 1: UserDefaults (current app session, matches this thread)
+        if defaultsThreadId == thread.id, let id = defaultsIdentifier,
+           let idx = slotIndex(forIdentifier: id) {
+            return idx
+        }
+        // Priority 2: Per-thread persisted identifier (survives app restart)
+        if let id = thread.lastSelectedTabIdentifier,
+           let idx = slotIndex(forIdentifier: id) {
+            return idx
+        }
+        return nil
+    }
+
+    /// Find the tab slot index for a given identifier (session name, web id, or draft id).
+    private func slotIndex(forIdentifier id: String) -> Int? {
+        tabSlots.firstIndex { slot in
+            switch slot {
+            case .terminal(let name): return name == id
+            case .web(let identifier): return identifier == id
+            case .draft(let identifier): return identifier == id
+            }
+        }
     }
 
     func updateTerminalScrollControlsState() {

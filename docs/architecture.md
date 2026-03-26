@@ -328,6 +328,7 @@ Key invariants:
 - Single unified `pinnedCount` covers all tab types
 - Content lookup uses session name / identifier keys, not positional indices (via `terminalView(forSession:)`, `currentTerminalView()`, etc.)
 - **Web-only threads**: When a thread is created with the "Web" type, it has a worktree and branch but zero tmux sessions (`tmuxSessionNames` is empty). `setupTabs` detects this (`sessions.isEmpty && !persistedWebTabs.isEmpty`) and skips fallback session creation, selecting the first web tab directly instead of going through terminal session preparation.
+- **Tab selection persistence**: `MagentThread.lastSelectedTabIdentifier` stores the identifier of the last-selected tab across all tab types (tmux session name for terminal tabs, web/draft identifier for non-terminal tabs). On thread switch, `resolveLastSelectedSlotIndex()` looks up the saved identifier against all `tabSlots` to restore the correct tab. When the last-selected tab is non-terminal, it is selected immediately while terminal sessions prepare in the background.
 
 ## tmux Session Ownership
 
