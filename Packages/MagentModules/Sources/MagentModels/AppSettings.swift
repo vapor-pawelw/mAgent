@@ -143,7 +143,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         preserveAgentColorTheme: Bool = false,
         rememberLastTypeSelection: Bool = true,
         switchToNewlyCreatedThread: Bool = true,
-        maxIdleSessions: Int? = 10,
+        maxIdleSessions: Int? = nil,
         keyBindings: KeyBindingSettings = KeyBindingSettings()
     ) {
         self.projects = projects
@@ -251,7 +251,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         preserveAgentColorTheme = try container.decodeIfPresent(Bool.self, forKey: .preserveAgentColorTheme) ?? false
         rememberLastTypeSelection = try container.decodeIfPresent(Bool.self, forKey: .rememberLastTypeSelection) ?? true
         switchToNewlyCreatedThread = try container.decodeIfPresent(Bool.self, forKey: .switchToNewlyCreatedThread) ?? true
-        maxIdleSessions = try container.decodeIfPresent(Int.self, forKey: .maxIdleSessions) ?? 10
+        maxIdleSessions = try container.decodeIfPresent(Int.self, forKey: .maxIdleSessions)
         keyBindings = try container.decodeIfPresent(KeyBindingSettings.self, forKey: .keyBindings) ?? KeyBindingSettings()
     }
 
