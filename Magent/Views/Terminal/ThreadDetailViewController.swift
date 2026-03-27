@@ -990,7 +990,8 @@ final class ThreadDetailViewController: NSViewController {
         let sq = ShellExecutor.shellQuote
         let quotedWd = sq(wd)
         let quotedStartCmd = sq(startCmd)
-        let tmuxInner = "tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \(quotedWd) \(quotedStartCmd) && tmux attach-session -t \(sessionName); }"
+        let ensureTerminalFeatures = TmuxService.ensureTerminalFeaturesShellCommand()
+        let tmuxInner = "tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \(quotedWd) \(quotedStartCmd) && { \(ensureTerminalFeatures); } && tmux attach-session -t \(sessionName); }"
         return "/bin/sh -c \(sq(tmuxInner))"
     }
 

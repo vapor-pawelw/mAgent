@@ -1621,15 +1621,22 @@ extension ThreadManager {
         return flags.joined(separator: " ")
     }
 
+    private func codexSessionEnvironmentWrappedCommand(_ command: String) -> String {
+        return "env -u NO_COLOR \(command)"
+    }
+
     private func codexSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {
         let prefix = "command codex"
         guard command.hasPrefix(prefix) else { return command }
 
         let launchFlags = codexSessionLaunchFlags(for: appearanceMode, preserveAgentColorTheme: preserveAgentColorTheme)
-        guard !launchFlags.isEmpty else { return command }
-
         let suffix = String(command.dropFirst(prefix.count))
-        return "\(prefix) \(launchFlags)\(suffix)"
+        let configuredCommand = if launchFlags.isEmpty {
+            "\(prefix)\(suffix)"
+        } else {
+            "\(prefix) \(launchFlags)\(suffix)"
+        }
+        return codexSessionEnvironmentWrappedCommand(configuredCommand)
     }
 
     private func claudeSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {

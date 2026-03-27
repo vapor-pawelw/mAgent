@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Agents
+- Codex sessions inside tmux now keep their full color palette more reliably instead of appearing bland when Magent inherits color-disabling shell environment from the parent terminal.
 - Fixed agent session resume when a tmux session is killed — previously always launched a fresh agent instead of resuming the existing conversation via `--resume`.
 
 ### Tabs
