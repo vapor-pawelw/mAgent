@@ -40,14 +40,17 @@ magent-cli create-thread --project <name> [options]
 | `--prompt <text>` | Initial prompt to send to the agent after creation. |
 | `--name <slug>` | Exact thread name (must be unique). |
 | `--description <text>` | Natural-language description — AI generates a slug from it. |
-| `--section <name>` | Place the thread in this section. |
+| `--section <name>` | Place the thread in this section (case-insensitive). |
 | `--base-thread <name>` | Use an existing thread's branch as the base for the new thread. |
 | `--base-branch <name>` | Use an explicit branch as the base for the new thread. |
+| `--from-thread <name>` | Inherit base branch and section from the named thread. The new thread is positioned directly below it in the sidebar. Special values: `main` (project's main worktree), `none` (suppress auto-detection). |
 | `--no-select` | Create the thread without switching to it in the sidebar. |
 | `--no-submit` | Inject the prompt text into the agent input but don't press Enter. The user can review and submit manually. Recommended when spawning many threads to avoid concurrent agent CPU load. |
 
 If neither `--name` nor `--description` is given, a random name is generated.
 `--base-thread` and `--base-branch` are mutually exclusive.
+
+**Auto-detection**: When called from inside a Magent session (i.e. `$MAGENT_THREAD_ID` is set), `create-thread` automatically inherits the current thread's branch, section, and sidebar position — as if `--from-thread` were set to the current thread. This means agents and scripts don't need to manually resolve the current context. Use `--from-thread none` to suppress this behavior. Explicit `--base-branch`, `--base-thread`, or `--section` flags always take precedence over the inherited values.
 
 **Timeout note**: `create-thread` allows up to 120 seconds for the server to respond, since it involves git worktree creation (can be slow on large repos) and optionally an AI agent call to generate a slug from `--description`. Prefer `--name` over `--description` when you want the exact name and faster response.
 
@@ -56,13 +59,14 @@ If neither `--name` nor `--description` is given, a random name is generated.
 Create multiple threads in parallel. Threads are created concurrently for maximum throughput with minimal UI blocking. Recommended with `--no-submit` when spawning many threads to avoid CPU spikes from concurrent agents.
 
 ```bash
-magent-cli batch-create --project <name> --file <specs.json> [--no-submit]
+magent-cli batch-create --project <name> --file <specs.json> [--from-thread <name|main|none>] [--no-submit]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--project <name>` | **Required.** Project to create all threads in. |
 | `--file <specs.json>` | **Required.** Path to a JSON file containing an array of thread specs. |
+| `--from-thread <name>` | Inherit base branch, section, and sidebar position for all specs (can be overridden per-spec). Same special values as `create-thread`. |
 | `--no-submit` | Apply `--no-submit` to all threads (can also be set per-thread in the spec). |
 
 Each element in the specs array is an object with optional keys:
@@ -73,9 +77,10 @@ Each element in the specs array is an object with optional keys:
 | `description` | Natural-language description (AI generates slug). |
 | `name` | Exact thread name. |
 | `agentType` | `claude`, `codex`, `custom`, or `terminal`. |
-| `sectionName` | Place thread in this section. |
+| `sectionName` | Place thread in this section (case-insensitive). |
 | `baseThreadName` | Branch from an existing thread. |
 | `baseBranch` | Branch from an explicit branch. |
+| `fromThreadName` | Per-spec override for `--from-thread`. |
 | `noSubmit` | Per-thread override for `--no-submit`. |
 
 Example `specs.json`:
@@ -88,6 +93,8 @@ Example `specs.json`:
 ```
 
 The response contains a `threads` array with info for each successfully created thread, and a `warning` field if any failed.
+
+The same auto-detection behavior as `create-thread` applies: when called from inside a Magent session, base branch, section, and sidebar position are inherited from the current thread unless overridden.
 
 **Timeout note**: `batch-create` allows up to 300 seconds since it may involve multiple AI slug generation calls plus parallel git/tmux setup.
 
@@ -272,6 +279,8 @@ magent-cli close-tab --thread <name> --session <session-name>
 ## Section Commands
 
 All section commands accept an optional `--project <name>` flag. Without it, they operate on global sections. With it, they operate on project-specific overrides.
+
+Section names are case-insensitive throughout the app — lookups, duplicate detection, and creation all treat `"TODO"` and `"todo"` as the same name.
 
 ### list-sections
 
