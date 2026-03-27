@@ -220,10 +220,13 @@ extension ThreadManager {
             await refreshAgentConversationID(threadId: refreshedThread.id, sessionName: sessionName)
         }
 
+        // Re-read thread after refresh — refreshAgentConversationID writes to
+        // threads[index] (struct value type), so the earlier snapshot is stale.
+        let threadAfterRefresh = threads.first(where: { $0.id == thread.id }) ?? refreshedThread
         let startCmd: String
-        let sessionAgentType = agentType(for: refreshedThread, sessionName: sessionName)
-            ?? effectiveAgentType(for: refreshedThread.projectId)
-        let resumeSessionID = refreshedThread.sessionConversationIDs[sessionName]
+        let sessionAgentType = agentType(for: threadAfterRefresh, sessionName: sessionName)
+            ?? effectiveAgentType(for: threadAfterRefresh.projectId)
+        let resumeSessionID = threadAfterRefresh.sessionConversationIDs[sessionName]
         let sessionEnvironment = sessionEnvironmentVariables(
             threadId: thread.id,
             worktreePath: thread.isMain ? nil : thread.worktreePath,
