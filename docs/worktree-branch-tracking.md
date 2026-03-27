@@ -5,12 +5,14 @@
 - Each thread has an expected branch (`branchName`). For main threads this is the project's default branch; for non-main threads it is the branch created with the worktree (updated only by explicit rename operations).
 - The branch mismatch banner appears for **all** threads (main and non-main) when the worktree's actual checked-out branch differs from the expected one. The user can "Accept" (update the expected branch) or "Switch back" (checkout the expected branch).
 - After first-prompt auto-rename, `magent-cli auto-rename-thread`, or `magent-cli rename-branch`, the rename code sets `branchName` directly — no mismatch.
+- If a thread branch is renamed via Magent and other threads in the same project use that branch as their base branch, those dependent threads are retargeted automatically to the new branch name. This includes both creation-time base branches and later explicit overrides.
 - Manual `git checkout` / `git switch` inside the terminal **will** show the mismatch banner. The user must explicitly accept or switch back.
 
 ## Implementation Notes
 
 - `ThreadManager.refreshBranchStates()` updates `actualBranch` for all threads. It does **not** auto-update `branchName` — the poller only detects mismatch, never silently resolves it.
 - `branchName` is updated only by: thread creation (phase 2), rename operations (`ThreadManager+Rename`), or the user clicking "Accept" on the mismatch banner (`acceptActualBranch`).
+- Branch rename also retargets sibling threads whose stored `thread.baseBranch` or cached `WorktreeMetadata.detectedBaseBranch` still reference the old branch name. This keeps stacked-thread diffs and archive readiness pointed at the renamed parent instead of falling back to the project default.
 - Worktree discovery in `ThreadManager.syncThreadsWithWorktrees(for:)` must seed `branchName` from `git branch --show-current` rather than assuming the directory name or rename symlink matches the checked-out branch.
 - The sidebar diff footer is fed from the latest thread-manager snapshot, not from a stale `MagentThread` captured before rename/switch operations completed.
 
