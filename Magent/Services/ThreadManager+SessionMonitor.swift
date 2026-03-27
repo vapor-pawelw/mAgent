@@ -47,6 +47,7 @@ extension ThreadManager {
             if _slowTickCounter >= 12 {
                 _slowTickCounter = 0
                 await self.checkForMissingWorktrees()
+                await self.evictIdleSessionsIfNeeded()
                 await self.checkForDeadSessions()
                 if shouldRunStaleCleanup {
                     _ = await self.cleanupStaleMagentSessions(minimumStaleAge: 30)

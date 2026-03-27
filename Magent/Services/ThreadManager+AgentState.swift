@@ -19,7 +19,9 @@ extension ThreadManager {
         for thread in threads {
             guard !thread.isArchived else { continue }
 
-            let deadSessions = thread.tmuxSessionNames.filter { !liveSessions.contains($0) }
+            let deadSessions = thread.tmuxSessionNames.filter {
+                !liveSessions.contains($0) && !evictedIdleSessions.contains($0)
+            }
             guard !deadSessions.isEmpty else { continue }
 
             for sessionName in deadSessions {
@@ -381,6 +383,15 @@ extension ThreadManager {
                         rateLimitChangedThreadIds.insert(threadId)
                     }
                 }
+            }
+        }
+
+        // Stamp sessionLastBusyAt for all currently-busy sessions so idle eviction
+        // knows when a session was last actively working.
+        let busyNow = Date()
+        for thread in threads where !thread.isArchived {
+            for session in thread.busySessions {
+                sessionLastBusyAt[session] = busyNow
             }
         }
 

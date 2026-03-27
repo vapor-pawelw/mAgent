@@ -73,6 +73,13 @@ final class ThreadManager {
     var ignoredRateLimitCacheLoaded = false
     var ignoredRateLimitCacheDirty = false
     var lastPublishedRateLimitSummary: String?
+    /// Tracks when each tmux session was last viewed by the user (tab selected).
+    var sessionLastVisitedAt: [String: Date] = [:]
+    /// Tracks when each tmux session last transitioned from busy to idle.
+    var sessionLastBusyAt: [String: Date] = [:]
+    /// Sessions intentionally killed by idle eviction. checkForDeadSessions skips these;
+    /// cleared when the user revisits the thread, allowing on-demand recreation.
+    var evictedIdleSessions: Set<String> = []
     var sessionsBeingRecreated: Set<String> = []
     var sessionMonitorTimer: Timer?
     var isSessionMonitorTickRunning = false
@@ -180,6 +187,14 @@ final class ThreadManager {
         // process re-detection is not suppressed on relaunch.
         let startupCompletionSessions = await tmux.consumeAgentCompletionSessions()
         applyStartupCompletionSessions(startupCompletionSessions)
+
+        // Seed visit timestamps so no sessions are evicted immediately after launch.
+        let launchNow = Date()
+        for thread in threads where !thread.isArchived {
+            for session in thread.tmuxSessionNames {
+                sessionLastVisitedAt[session] = launchNow
+            }
+        }
 
         // Sync busy state from actual tmux processes so spinners show immediately
         // after restart (busySessions is transient and starts empty on launch).
