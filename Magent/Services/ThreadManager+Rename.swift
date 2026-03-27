@@ -553,6 +553,11 @@ extension ThreadManager {
             threads[index].didAutoRenameFromFirstPrompt = true
         }
 
+        // Retarget other threads in the same project whose baseBranch pointed at the old branch.
+        if !branchAlreadyOwned {
+            retargetBaseBranches(oldBranch: oldBranch, newBranch: newBranchName, projectId: currentThread.projectId)
+        }
+
         try persistence.saveActiveThreads(threads)
 
         await MainActor.run {
@@ -560,6 +565,38 @@ extension ThreadManager {
         }
 
         await verifyDetectedJiraTickets(forThreadIds: [thread.id])
+    }
+
+    // MARK: - Base Branch Retargeting
+
+    /// Updates all threads in the same project whose baseBranch references the old branch name
+    /// to point at the new branch name instead. Updates both the persisted `baseBranch` on the
+    /// thread model and the `detectedBaseBranch` override in the worktree metadata cache.
+    private func retargetBaseBranches(oldBranch: String, newBranch: String, projectId: UUID) {
+        let settings = persistence.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == projectId }) else { return }
+        let basePath = project.resolvedWorktreesBasePath()
+        var cache = persistence.loadWorktreeCache(worktreesBasePath: basePath)
+        var cacheChanged = false
+
+        for i in threads.indices where threads[i].projectId == projectId {
+            // Retarget thread.baseBranch (set at creation time).
+            if let base = threads[i].baseBranch, base == oldBranch {
+                threads[i].baseBranch = newBranch
+            }
+
+            // Retarget worktree cache override (set via context menu, CLI, or PR target).
+            let key = threads[i].worktreeKey
+            if var meta = cache.worktrees[key], meta.detectedBaseBranch == oldBranch {
+                meta.detectedBaseBranch = newBranch
+                cache.worktrees[key] = meta
+                cacheChanged = true
+            }
+        }
+
+        if cacheChanged {
+            persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
+        }
     }
 
     /// Returns true when first-prompt handling already covered task-description generation

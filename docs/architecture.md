@@ -107,6 +107,7 @@ Each thread is 1:1 with a git worktree:
 
 Thread rename updates branch/session names, but running agent processes cannot have their cwd/env rewritten in-place.
 The underlying worktree directory is not moved. To keep active sessions stable, rename creates a compatibility symlink from the new thread-name path to the existing worktree path and updates tmux session environment for future shells/panes.
+If other threads in the same project were stacked on the renamed branch, rename must also retarget their base-branch references from the old branch name to the new one. This applies to both the creation-time `thread.baseBranch` value and any explicit `WorktreeMetadata.detectedBaseBranch` override written later via the UI, CLI, or PR-target alignment. Without that retarget, stacked threads silently fall back to the project default once the old branch name disappears, breaking diff/archive semantics.
 
 Both thread rename and tab rename change tmux session names, which requires rekeying all session-name-keyed state at two levels:
 - **ThreadManager**: `knownGoodSessionContexts` (session-validation cache), transient session state, bell pipes (`forceSetupBellPipe` to replace old-name pipes).

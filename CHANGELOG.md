@@ -39,6 +39,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Fixed target branch in bottom-left not matching the base branch typed during thread creation — the project default was incorrectly overriding the user's explicit choice.
+- Renaming a thread branch now retargets sibling threads that use it as their base branch, including explicit base-branch overrides, so stacked threads keep diffing and archiving against the renamed parent branch.
 - Fixed tab sessions restarting when switching between threads — terminal surfaces are now preserved in the reuse cache instead of being destroyed and recreated.
 - Fixed prompt Table of Contents overlay not appearing on threads that have pinned web tabs.
 - New "Draft" checkbox on the initial prompt window lets you save a prompt as a draft tab instead of running it immediately. Draft tabs persist across relaunches, show an editable agent picker and prompt, and can be discarded or started when ready.
