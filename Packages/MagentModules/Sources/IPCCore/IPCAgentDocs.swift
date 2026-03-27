@@ -5,8 +5,8 @@ public enum IPCAgentDocs {
 
     /// CLI commands available through magent-cli.
     nonisolated private static let cliCommands = """
-    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>] [--no-select] [--no-submit]
-    /tmp/magent-cli batch-create --project <name> --file <specs.json> [--no-submit]
+    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--no-select] [--no-submit]
+    /tmp/magent-cli batch-create --project <name> --file <specs.json> [--from-thread <name|main|none>] [--no-submit]
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
     /tmp/magent-cli send-prompt --thread <name> --prompt <text>
@@ -37,9 +37,10 @@ public enum IPCAgentDocs {
     nonisolated private static let usageNotes = """
     Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
     When creating threads for a specific task, ALWAYS provide --description (what the thread is about) and --prompt (the initial task/instructions for the agent). The description appears in the sidebar; the prompt is injected into the agent so it knows what to work on. Only omit --prompt for threads that need no initial task.
-    When spawning many threads at once, use batch-create with --no-submit. This creates all threads in parallel and injects the prompt text without pressing Enter, avoiding CPU spikes from concurrent agents. Users can submit each prompt manually when ready. The specs.json file is a JSON array of objects with keys: prompt, description, name, agentType, sectionName, baseThreadName, baseBranch, noSubmit.
+    When spawning many threads at once, use batch-create with --no-submit. This creates all threads in parallel and injects the prompt text without pressing Enter, avoiding CPU spikes from concurrent agents. Users can submit each prompt manually when ready. The specs.json file is a JSON array of objects with keys: prompt, description, name, agentType, sectionName, baseThreadName, baseBranch, fromThreadName, noSubmit.
     When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
-    To branch from an existing thread, pass --base-thread <name>. Use --base-branch <name> only when you need an exact branch literal.
+    When called from inside a Magent session, create-thread and batch-create automatically inherit the current thread's branch and section (and position the new thread directly below it in the sidebar). This means you do NOT need to manually pass --base-branch or --section in the common case. Use --base-thread or --base-branch only when the user explicitly wants a different base. Use --section only when the user explicitly wants a different section. Use --from-thread none to suppress auto-detection. Use --from-thread main to inherit from the project's main worktree thread instead.
+    Section names are case-insensitive throughout — "TODO" and "todo" resolve to the same section.
     Use auto-rename-thread (or its rename-thread alias) by default; it generates both branch name and description from one prompt.
     Use rename-branch ONLY when the user gives a literal branch name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about, use auto-rename-thread instead.
     Use set-description to manually set or clear the thread description without renaming the branch.
@@ -71,7 +72,7 @@ public enum IPCAgentDocs {
 
     public static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     public static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    public static let codexIPCVersion = "<!-- magent-ipc-v13 -->"
+    public static let codexIPCVersion = "<!-- magent-ipc-v15 -->"
 
     /// Lightweight Codex `AGENTS.md` hint that points to on-demand docs.
     public static let codexAgentsMdBlock: String = """
