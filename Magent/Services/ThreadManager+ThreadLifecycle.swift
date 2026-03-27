@@ -191,7 +191,7 @@ extension ThreadManager {
 
                 pendingThreadIds.remove(threadID)
                 if let idx = threads.firstIndex(where: { $0.id == threadID }) {
-                    threads[idx] = thread
+                    threads[idx].mergePhase2Setup(from: thread)
                 }
 
                 try persistence.saveActiveThreads(threads)
@@ -322,7 +322,7 @@ extension ThreadManager {
 
             pendingThreadIds.remove(threadID)
             if let idx = threads.firstIndex(where: { $0.id == threadID }) {
-                threads[idx] = thread
+                threads[idx].mergePhase2Setup(from: thread)
                 // Transition magent busy from thread-setup sentinel to session-level busy.
                 // The session stays magent-busy until injectAfterStart completes (prompt
                 // injection or agent-readiness detection for non-prompt threads).

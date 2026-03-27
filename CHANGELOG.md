@@ -27,6 +27,7 @@ All notable changes to this project will be documented in this file.
 - Thread counts are clickable — show a compact popover listing up to 3 matching threads; clicking one jumps straight to that thread.
 
 ### Sidebar
+- Fixed new threads created from another thread (Cmd+N, Cmd+Shift+N, context menu, CLI) landing one position too low instead of directly below the source thread.
 - New threads created via CLI or Cmd+N now automatically inherit the current thread's branch, section, and sidebar position — no manual flags needed. CLI supports `--from-thread` for explicit control (`main`, `none`, or any thread name).
 - Cmd+N now places the new thread directly below the selected thread in the same section, instead of at the bottom of the default section.
 - Creating a new repository from Magent now works end-to-end — the initial commit is created automatically so threads can branch off immediately.

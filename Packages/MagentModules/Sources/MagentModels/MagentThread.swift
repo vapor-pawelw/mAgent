@@ -583,6 +583,22 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.signEmoji = signEmoji
     }
 
+    /// Merges infrastructure fields from a phase-2 thread into this (pending) thread,
+    /// preserving all user-modifiable sidebar metadata (displayOrder, sectionId, icon,
+    /// pin/hidden state, description, sign, etc.) that may have been changed while
+    /// phase 2 was running in the background.
+    public mutating func mergePhase2Setup(from completed: MagentThread) {
+        tmuxSessionNames = completed.tmuxSessionNames
+        agentTmuxSessions = completed.agentTmuxSessions
+        sessionAgentTypes = completed.sessionAgentTypes
+        lastSelectedTabIdentifier = completed.lastSelectedTabIdentifier
+        customTabNames = completed.customTabNames
+        baseBranch = completed.baseBranch
+        submittedPromptsBySession = completed.submittedPromptsBySession
+        localFileSyncPathsSnapshot = completed.localFileSyncPathsSnapshot
+        persistedWebTabs = completed.persistedWebTabs
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)

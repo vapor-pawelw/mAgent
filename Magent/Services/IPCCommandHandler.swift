@@ -324,16 +324,11 @@ final class IPCCommandHandler {
                 requestedName: requestedName,
                 requestedBaseBranch: requestedBaseBranch,
                 requestedSectionId: requestedSectionId,
+                insertAfterThreadId: fromThread?.id,
                 skipAutoSelect: request.noSelect == true
             )
         } catch {
             return .failure("Failed to create thread: \(error.localizedDescription)", id: request.id)
-        }
-
-        // Position the new thread directly below the from-thread in the sidebar
-        if let fromThread {
-            threadManager.placeThreadAfterSibling(threadId: thread.id, afterThreadId: fromThread.id)
-            try? threadManager.persistence.saveActiveThreads(threadManager.threads)
         }
 
         // Set task description from --description (slug generation consumed it for the name,
@@ -516,6 +511,9 @@ final class IPCCommandHandler {
             for (i, spec) in resolved.enumerated() {
                 group.addTask { [threadManager] in
                     do {
+                        // Don't pass insertAfterThreadId here — concurrent creates
+                        // targeting the same fromThread would race on phase 1 ordering.
+                        // A deterministic post-pass below handles positioning.
                         let thread = try await threadManager.createThread(
                             project: project,
                             requestedAgentType: spec.agentType,
@@ -541,11 +539,13 @@ final class IPCCommandHandler {
         }
 
         // Position new threads after their from-thread and set descriptions
-        // (outside task group for main-actor safety).
+        // (outside task group for main-actor safety, in request order for determinism).
+        var needsSave = false
         for (i, result) in results {
             if case .success(let thread) = result {
                 if let ft = resolved[i].fromThread {
                     threadManager.placeThreadAfterSibling(threadId: thread.id, afterThreadId: ft.id)
+                    needsSave = true
                 }
                 if let desc = resolved[i].description?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !desc.isEmpty {
@@ -553,9 +553,11 @@ final class IPCCommandHandler {
                 }
             }
         }
-        if results.contains(where: { if case .success = $0.1 { return true }; return false }),
-           resolved.contains(where: { $0.fromThread != nil }) {
+        if needsSave {
             try? threadManager.persistence.saveActiveThreads(threadManager.threads)
+            await MainActor.run {
+                threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
+            }
         }
 
         // Build response with all created threads
