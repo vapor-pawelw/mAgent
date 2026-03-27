@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 
 ### Banner
 - Fixed banner buttons and dismiss (X) being unresponsive — clicks were silently ignored due to a coordinate-space mismatch between the flipped split view and the unflipped banner overlay.
+- "Unsubmitted prompt recovered" banners for tab prompts now appear only on the affected thread instead of as a global overlay. Dismiss hides the banner until the thread is re-selected; only "Discard" deletes the recovered prompt.
 
 ### Sidebar
 - New threads created via CLI or Cmd+N now automatically inherit the current thread's branch, section, and sidebar position — no manual flags needed. CLI supports `--from-thread` for explicit control (`main`, `none`, or any thread name).
