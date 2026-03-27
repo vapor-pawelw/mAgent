@@ -333,4 +333,5 @@ These are injected into every mAgent-managed tmux session:
 | `MAGENT_PROJECT_PATH` | Absolute path to the main repository |
 | `MAGENT_WORKTREE_NAME` | Thread name |
 | `MAGENT_PROJECT_NAME` | Project name |
+| `MAGENT_THREAD_ID` | Thread UUID — used by `create-thread`/`batch-create` for auto-detection |
 | `MAGENT_SOCKET` | Path to the IPC socket (default: `/tmp/magent.sock`) |
