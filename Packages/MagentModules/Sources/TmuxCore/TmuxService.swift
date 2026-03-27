@@ -5,6 +5,16 @@ import MagentModels
 public final class TmuxService: Sendable {
 
     public static let shared = TmuxService()
+    private static let requiredTerminalFeatureEntries = [
+        "alacritty*:RGB",
+        "foot*:RGB",
+        "ghostty*:RGB",
+        "screen*:RGB",
+        "tmux*:RGB",
+        "wezterm*:RGB",
+        "xterm*:RGB",
+        "xterm*:hyperlinks",
+    ]
     private let agentCompletionEventsPath = "/tmp/magent-agent-completion-events.log"
     private let mouseOpenableURLStatePath = "/tmp/magent-tmux-mouse-openable-url-state.tsv"
     private let paneCache = PaneCaptureCache()
@@ -32,7 +42,9 @@ public final class TmuxService: Sendable {
             cmd += " \(shellQuote(command))"
         }
         _ = try await ShellExecutor.run(cmd)
-        // tmux may have been auto-started by new-session; ensure bell monitoring is configured.
+        // tmux may have been auto-started by new-session; re-apply global terminal
+        // capabilities so lazy server startup gets the same feature set as app launch.
+        await ensureRequiredTerminalFeatures()
         await configureBellMonitoring(resetEventLog: false)
     }
 
@@ -48,9 +60,18 @@ public final class TmuxService: Sendable {
         // Keep tmux scrollbars off; otherwise they reappear inside embedded Ghostty
         // and look like Ghostty's own scrollbar regressed.
         _ = try? await ShellExecutor.run("tmux set-option -g pane-scrollbars off")
-        await ensureTerminalFeature("xterm*:hyperlinks")
+        await ensureRequiredTerminalFeatures()
         await configureMouseOpenableURLTracking()
         await configureBellMonitoring(resetEventLog: true)
+    }
+
+    public static func ensureTerminalFeaturesShellCommand() -> String {
+        requiredTerminalFeatureEntries
+            .map { feature in
+                let quotedFeature = shellQuote(feature)
+                return "tmux show -gv terminal-features 2>/dev/null | grep -Fqx -- \(quotedFeature) || tmux set-option -ga terminal-features \(quotedFeature)"
+            }
+            .joined(separator: " ; ")
     }
 
     /// Applies tmux mouse settings for the given wheel-scroll behavior.
@@ -114,6 +135,12 @@ public final class TmuxService: Sendable {
             .map(String.init)
         guard !existing.contains(feature) else { return }
         _ = try? await ShellExecutor.run("tmux set-option -ga terminal-features \(shellQuote(feature))")
+    }
+
+    private func ensureRequiredTerminalFeatures() async {
+        for feature in Self.requiredTerminalFeatureEntries {
+            await ensureTerminalFeature(feature)
+        }
     }
 
     public func recentMouseOpenableURL(sessionName: String, maxAge: TimeInterval = 2) -> String? {
