@@ -42,6 +42,9 @@ All notable changes to this project will be documented in this file.
 - Sync menu items now show explicit worktree names (e.g. "feature-login → primeape") instead of generic "Project → Worktree" labels.
 - Hold Option when clicking sync to force syncing with the main repo regardless of base branch.
 
+### Thread
+- Archiving a thread no longer blocks the UI — the thread disappears from the sidebar immediately while local sync, persistence, and cleanup run in the background.
+
 ### Sidebar
 - New threads created from a pinned thread now land at the top of the visible group (right below pinned threads) instead of at the bottom of the section.
 - Unpinning a thread now places it at the top of the visible group instead of at the bottom.
