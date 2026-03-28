@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Menu
+- New "Changelog…" menu item (mAgent > Changelog…) shows the bundled changelog with build number and commit hash.
+
+### Build
+- Build number is now incremental, derived from git commit count at compile time.
+
 ### Sessions
 - Status bar now shows active session count (live/total when some are suspended). Click to see breakdown and one-click "Close all idle sessions" to free memory/CPU — tab metadata is preserved and sessions are lazily recreated when you revisit them.
 - Dead sessions are no longer eagerly recreated — only the currently visible session auto-recovers. Background dead sessions stay suspended (dimmed in sidebar and tab bar) until selected, reducing unnecessary resource usage.
