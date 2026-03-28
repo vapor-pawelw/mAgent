@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Sessions
+- New "Limit concurrent idle sessions" setting (Settings > Threads > Session Management) automatically kills tmux sessions that haven't been viewed in over an hour when idle count exceeds the configured limit. Sessions are transparently recreated when you revisit the thread. Defaults to unlimited.
+
+### Performance
+- Session monitor polling is now split into fast (5s) and slow (~1 min) cadences — agent completions, busy state, and dead session recovery stay responsive while heavier checks (worktree scans, zombie detection, idle eviction) run less frequently.
+
 ### Terminal
 - Fixed unwanted slow scroll animation when switching to an agent tab — the CAMetalLayer-backed terminal surface could trigger implicit Core Animation transitions on visibility toggle, causing content to visually slide down from the top.
 
@@ -11,7 +17,6 @@ All notable changes to this project will be documented in this file.
 - Codex sessions inside tmux now keep their full color palette more reliably instead of appearing bland when Magent inherits color-disabling shell environment from the parent terminal.
 - Fixed agent session resume when a tmux session is killed — previously always launched a fresh agent instead of resuming the existing conversation via `--resume`.
 - Restoring an archived thread now resumes the agent conversation instead of starting fresh — previously, conversation history was lost because Claude Code doesn't always write a `sessions-index.json` file.
-
 ### Tabs
 - Switching threads now restores the last-selected tab, including web and draft tabs — previously only terminal tabs were remembered.
 
