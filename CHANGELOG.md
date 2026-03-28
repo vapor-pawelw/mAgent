@@ -34,6 +34,8 @@ All notable changes to this project will be documented in this file.
 - Hold Option when clicking sync to force syncing with the main repo regardless of base branch.
 
 ### Sidebar
+- New threads created from a pinned thread now land at the top of the visible group (right below pinned threads) instead of at the bottom of the section.
+- Unpinning a thread now places it at the top of the visible group instead of at the bottom.
 - Fixed new threads created from another thread (Cmd+N, Cmd+Shift+N, context menu, CLI) landing one position too low instead of directly below the source thread.
 - New threads created via CLI or Cmd+N now automatically inherit the current thread's branch, section, and sidebar position — no manual flags needed. CLI supports `--from-thread` for explicit control (`main`, `none`, or any thread name).
 - Cmd+N now places the new thread directly below the selected thread in the same section, instead of at the bottom of the default section.
