@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Agents
+- Fixed agent completion notifications sometimes not appearing — bell events could be lost during the read-then-truncate of the event log, and accumulated events were wiped on app relaunch before they could be consumed.
 - Codex sessions inside tmux now keep their full color palette more reliably instead of appearing bland when Magent inherits color-disabling shell environment from the parent terminal.
 - Fixed agent session resume when a tmux session is killed — previously always launched a fresh agent instead of resuming the existing conversation via `--resume`.
 - Restoring an archived thread now resumes the agent conversation instead of starting fresh — previously, conversation history was lost because Claude Code doesn't always write a `sessions-index.json` file.
