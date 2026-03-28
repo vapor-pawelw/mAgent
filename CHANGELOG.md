@@ -12,10 +12,15 @@ All notable changes to this project will be documented in this file.
 - Fixed false-positive "Base branch X no longer exists" banner when the base branch and project default are the same (e.g. `develop`), and fixed stale reset banners persisting across refreshes even after the missing branch became available again.
 
 ### Sessions
+- New "Keep Alive" (shield) toggle in thread and tab right-click menus — shielded sessions are never killed by auto-eviction or manual cleanup. A blue shield icon appears on protected tabs.
+- New "Protect pinned threads and tabs from eviction" setting (Settings > Threads, enabled by default) — pinned threads and pinned tabs are automatically protected from cleanup.
+- Closing idle sessions from the status bar now shows a confirmation alert listing which threads/tabs will be killed, with a scrollable breakdown.
+- Idle session auto-eviction now enabled by default (limit: 30 sessions), with a more conservative 10-minute non-busy threshold (previously 1 minute).
 - Session count indicator moved to leftmost position in the status bar for better visibility, with a brighter label color in dark mode.
 - Status bar now shows active session count (live/total when some are suspended). Click to see breakdown and one-click "Close all idle sessions" to free memory/CPU — tab metadata is preserved and sessions are lazily recreated when you revisit them.
 - Dead sessions are no longer eagerly recreated — only the currently visible session auto-recovers. Background dead sessions stay suspended (dimmed in sidebar and tab bar) until selected, reducing unnecessary resource usage.
-- New "Limit concurrent idle sessions" setting (Settings > Threads > Session Management) automatically kills tmux sessions that haven't been viewed in over an hour when idle count exceeds the configured limit. Sessions are transparently recreated when you revisit the thread. Defaults to unlimited.
+- Fixed force-closing sessions from the status bar not graying out sidebar threads and tabs.
+- Fixed auto idle eviction not updating sidebar/tab appearance when sessions are killed.
 
 ### Performance
 - Session monitor polling is now split into fast (5s) and slow (~1 min) cadences — agent completions, busy state, and dead session recovery stay responsive while heavier checks (worktree scans, zombie detection, idle eviction) run less frequently.
