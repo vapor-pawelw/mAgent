@@ -3,11 +3,11 @@ import MagentCore
 
 extension ThreadManager {
 
-    /// Evicts the oldest idle tmux sessions when the total live session count
+    /// Evicts the oldest idle tmux sessions when the number of idle sessions
     /// exceeds `AppSettings.maxIdleSessions`.  Only sessions that have been
     /// idle for at least 1 minute and not visited for at least 1 hour are
-    /// eligible.  Main-thread sessions and the currently selected session are
-    /// always exempt.
+    /// counted as idle.  Main-thread sessions and the currently selected
+    /// session are always exempt.
     func evictIdleSessionsIfNeeded() async {
         let settings = persistence.loadSettings()
         guard let maxIdle = settings.maxIdleSessions else { return }
@@ -20,27 +20,6 @@ extension ThreadManager {
             return
         }
 
-        // Build a flat list of (sessionName, threadId, isMain) for all referenced live sessions.
-        struct SessionInfo {
-            let sessionName: String
-            let threadId: UUID
-            let isMain: Bool
-        }
-
-        var allSessions: [SessionInfo] = []
-        for thread in threads where !thread.isArchived {
-            for session in thread.tmuxSessionNames where liveSessions.contains(session) {
-                allSessions.append(SessionInfo(
-                    sessionName: session,
-                    threadId: thread.id,
-                    isMain: thread.isMain
-                ))
-            }
-        }
-
-        let liveCount = allSessions.count
-        guard liveCount > maxIdle else { return }
-
         let now = Date()
         let minIdleDuration: TimeInterval = 60          // 1 minute since last busy
         let minUnvisitedDuration: TimeInterval = 3600    // 1 hour since last visit
@@ -52,44 +31,46 @@ extension ThreadManager {
             return thread.lastSelectedTabIdentifier
         }()
 
-        // Filter to eviction candidates.
-        var candidates: [(session: String, lastVisited: Date)] = []
-        for info in allSessions {
-            // Never evict main-thread sessions.
-            if info.isMain { continue }
+        // Build the list of sessions that qualify as "idle" for counting purposes.
+        // A session is idle if it passes all the eviction-eligibility checks.
+        var idleCandidates: [(session: String, lastVisited: Date)] = []
+        for thread in threads where !thread.isArchived {
+            for session in thread.tmuxSessionNames where liveSessions.contains(session) {
+                // Never count main-thread sessions as idle.
+                if thread.isMain { continue }
 
-            // Never evict the currently visible session.
-            if info.sessionName == currentSession { continue }
+                // Never count the currently visible session as idle.
+                if session == currentSession { continue }
 
-            // Never evict already-evicted sessions (shouldn't be live, but be safe).
-            if evictedIdleSessions.contains(info.sessionName) { continue }
+                // Already evicted — not live for our purposes.
+                if evictedIdleSessions.contains(session) { continue }
 
-            // Skip sessions that are currently busy.
-            if let thread = threads.first(where: { $0.id == info.threadId }),
-               thread.busySessions.contains(info.sessionName) { continue }
+                // Currently busy — not idle.
+                if thread.busySessions.contains(session) { continue }
 
-            // Skip sessions that were busy within the last minute.
-            if let lastBusy = sessionLastBusyAt[info.sessionName],
-               now.timeIntervalSince(lastBusy) < minIdleDuration { continue }
+                // Was busy within the last minute — not idle yet.
+                if let lastBusy = sessionLastBusyAt[session],
+                   now.timeIntervalSince(lastBusy) < minIdleDuration { continue }
 
-            // Skip sessions visited within the last hour.
-            let lastVisited = sessionLastVisitedAt[info.sessionName] ?? .distantPast
-            if now.timeIntervalSince(lastVisited) < minUnvisitedDuration { continue }
+                // Visited within the last hour — not idle yet.
+                let lastVisited = sessionLastVisitedAt[session] ?? .distantPast
+                if now.timeIntervalSince(lastVisited) < minUnvisitedDuration { continue }
 
-            // Also skip sessions that are waiting for input (user action needed).
-            if let thread = threads.first(where: { $0.id == info.threadId }),
-               thread.waitingForInputSessions.contains(info.sessionName) { continue }
+                // Waiting for user input — don't evict.
+                if thread.waitingForInputSessions.contains(session) { continue }
 
-            candidates.append((info.sessionName, lastVisited))
+                idleCandidates.append((session, lastVisited))
+            }
         }
 
-        guard !candidates.isEmpty else { return }
+        let idleCount = idleCandidates.count
+        guard idleCount > maxIdle else { return }
 
         // Sort: oldest visit first.
-        candidates.sort { $0.lastVisited < $1.lastVisited }
+        idleCandidates.sort { $0.lastVisited < $1.lastVisited }
 
-        let excessCount = liveCount - maxIdle
-        let toEvict = candidates.prefix(excessCount)
+        let excessCount = idleCount - maxIdle
+        let toEvict = idleCandidates.prefix(excessCount)
         guard !toEvict.isEmpty else { return }
 
         for candidate in toEvict {
@@ -98,6 +79,6 @@ extension ThreadManager {
             try? await tmux.killSession(name: candidate.session)
         }
 
-        NSLog("[IdleEviction] Evicted \(toEvict.count) idle session(s), live count was \(liveCount), limit \(maxIdle)")
+        NSLog("[IdleEviction] Evicted \(toEvict.count) idle session(s), idle count was \(idleCount), limit \(maxIdle)")
     }
 }
