@@ -41,6 +41,7 @@ extension ThreadManager {
             await self.checkForRateLimitedSessions()
             await self.syncBusySessionsFromProcessState()
             await self.ensureBellPipes()
+            await self.checkForDeadSessions()
 
             // Slow checks — every 12th tick (~1 minute)
             _slowTickCounter += 1
@@ -48,7 +49,6 @@ extension ThreadManager {
                 _slowTickCounter = 0
                 await self.checkForMissingWorktrees()
                 await self.evictIdleSessionsIfNeeded()
-                await self.checkForDeadSessions()
                 if shouldRunStaleCleanup {
                     _ = await self.cleanupStaleMagentSessions(minimumStaleAge: 30)
                 }
