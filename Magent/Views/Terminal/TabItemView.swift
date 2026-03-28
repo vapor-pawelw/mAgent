@@ -4,6 +4,7 @@ import MagentCore
 final class TabItemView: NSView, NSMenuDelegate {
 
     let pinIcon: NSImageView
+    let keepAliveIcon: NSImageView
     let typeIcon: NSImageView
     let busySpinner: NSProgressIndicator
     let completionDot: NSView
@@ -25,6 +26,11 @@ final class TabItemView: NSView, NSMenuDelegate {
     var showPinIcon: Bool {
         get { !pinIcon.isHidden }
         set { pinIcon.isHidden = !newValue }
+    }
+
+    var showKeepAliveIcon: Bool {
+        get { !keepAliveIcon.isHidden }
+        set { keepAliveIcon.isHidden = !newValue }
     }
 
     var hasUnreadCompletion: Bool = false {
@@ -94,6 +100,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onClose: (() -> Void)?
     var onRename: (() -> Void)?
     var onPin: (() -> Void)?
+    var onKeepAlive: (() -> Void)?
     var onContinueIn: ((AgentType) -> Void)?
     var onExportContext: (() -> Void)?
     var onCloseTabsToTheRight: (() -> Void)?
@@ -104,6 +111,7 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     init(title: String) {
         pinIcon = NSImageView()
+        keepAliveIcon = NSImageView()
         typeIcon = NSImageView()
         busySpinner = NSProgressIndicator()
         completionDot = NSView()
@@ -126,6 +134,13 @@ final class TabItemView: NSView, NSMenuDelegate {
         pinIcon.translatesAutoresizingMaskIntoConstraints = false
         pinIcon.isHidden = true
         pinIcon.setContentHuggingPriority(.required, for: .horizontal)
+
+        // Keep alive (shield) icon
+        keepAliveIcon.image = NSImage(systemSymbolName: "shield.fill", accessibilityDescription: "Keep Alive")
+        keepAliveIcon.contentTintColor = .controlAccentColor
+        keepAliveIcon.translatesAutoresizingMaskIntoConstraints = false
+        keepAliveIcon.isHidden = true
+        keepAliveIcon.setContentHuggingPriority(.required, for: .horizontal)
 
         // Type icon (permanent icon for web tabs — Jira, PR, etc.)
         typeIcon.translatesAutoresizingMaskIntoConstraints = false
@@ -182,7 +197,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         contentStack.alignment = .centerY
         contentStack.spacing = 5
         contentStack.translatesAutoresizingMaskIntoConstraints = false
-        for view in [pinIcon, typeIcon, completionDot, busySpinner, rateLimitIcon, titleLabel, closeButton] {
+        for view in [pinIcon, keepAliveIcon, typeIcon, completionDot, busySpinner, rateLimitIcon, titleLabel, closeButton] {
             contentStack.addArrangedSubview(view)
         }
         contentStack.orientation = .horizontal
@@ -195,6 +210,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             contentStack.centerYAnchor.constraint(equalTo: centerYAnchor),
             pinIcon.widthAnchor.constraint(equalToConstant: 12),
             pinIcon.heightAnchor.constraint(equalToConstant: 12),
+            keepAliveIcon.widthAnchor.constraint(equalToConstant: 10),
+            keepAliveIcon.heightAnchor.constraint(equalToConstant: 10),
             typeIcon.widthAnchor.constraint(equalToConstant: 14),
             typeIcon.heightAnchor.constraint(equalToConstant: 14),
             completionDot.widthAnchor.constraint(equalToConstant: 8),
@@ -264,6 +281,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         onPin?()
     }
 
+    @objc private func keepAliveTapped() {
+        onKeepAlive?()
+    }
+
     @objc private func continueInAgentTapped(_ sender: NSMenuItem) {
         guard let agent = sender.representedObject as? AgentType else { return }
         onContinueIn?(agent)
@@ -328,6 +349,14 @@ final class TabItemView: NSView, NSMenuDelegate {
         let pinItem = NSMenuItem(title: pinTitle, action: #selector(pinTapped), keyEquivalent: "")
         pinItem.target = self
         menu.addItem(pinItem)
+
+        if onKeepAlive != nil {
+            let keepAliveTitle = showKeepAliveIcon ? "Remove Keep Alive" : "Keep Alive"
+            let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(keepAliveTapped), keyEquivalent: "")
+            keepAliveItem.target = self
+            keepAliveItem.image = NSImage(systemSymbolName: showKeepAliveIcon ? "shield.slash" : "shield.fill", accessibilityDescription: nil)
+            menu.addItem(keepAliveItem)
+        }
 
         if onRename != nil {
             menu.addItem(.separator())

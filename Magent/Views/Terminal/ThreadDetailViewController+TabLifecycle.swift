@@ -480,4 +480,18 @@ extension ThreadDetailViewController {
         rebuildTabBar()
         persistTabOrder()
     }
+
+    // MARK: - Keep Alive
+
+    func toggleKeepAlive(at index: Int) {
+        guard index < tabSlots.count,
+              case .terminal(let sessionName) = tabSlots[index] else { return }
+        threadManager.toggleSessionKeepAlive(threadId: thread.id, sessionName: sessionName)
+        // Read fresh state from the manager — `thread` is a cached snapshot.
+        if index < tabItems.count,
+           let freshThread = threadManager.threads.first(where: { $0.id == thread.id }) {
+            thread.protectedTmuxSessions = freshThread.protectedTmuxSessions
+            tabItems[index].showKeepAliveIcon = freshThread.protectedTmuxSessions.contains(sessionName)
+        }
+    }
 }

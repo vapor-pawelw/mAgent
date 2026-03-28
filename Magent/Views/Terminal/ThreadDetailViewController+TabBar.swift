@@ -286,21 +286,27 @@ extension ThreadDetailViewController {
             item.showPinIcon = (i < pinnedCount)
 
             switch slot {
-            case .terminal:
+            case .terminal(let sessionName):
                 item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
                 item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: i, targetAgent: agent) }
                 item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
+                item.onKeepAlive = { [weak self] in self?.toggleKeepAlive(at: i) }
                 item.availableAgentsForContinue = settings.availableActiveAgents
+                item.showKeepAliveIcon = thread.protectedTmuxSessions.contains(sessionName)
             case .web:
                 item.onRename = { [weak self] in self?.showWebTabRenameDialog(at: i) }
                 item.onContinueIn = nil
                 item.onExportContext = nil
+                item.onKeepAlive = nil
                 item.availableAgentsForContinue = []
+                item.showKeepAliveIcon = false
             case .draft:
                 item.onRename = nil
                 item.onContinueIn = nil
                 item.onExportContext = nil
+                item.onKeepAlive = nil
                 item.availableAgentsForContinue = []
+                item.showKeepAliveIcon = false
             }
         }
     }
