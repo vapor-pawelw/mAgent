@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Thread
+- Fixed false-positive "Base branch X no longer exists" banner when the base branch and project default are the same (e.g. `develop`), and fixed stale reset banners persisting across refreshes even after the missing branch became available again.
+
 ### Sessions
 - Status bar now shows active session count (live/total when some are suspended). Click to see breakdown and one-click "Close all idle sessions" to free memory/CPU — tab metadata is preserved and sessions are lazily recreated when you revisit them.
 - Dead sessions are no longer eagerly recreated — only the currently visible session auto-recovers. Background dead sessions stay suspended (dimmed in sidebar and tab bar) until selected, reducing unnecessary resource usage.
