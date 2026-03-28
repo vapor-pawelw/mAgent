@@ -319,14 +319,8 @@ final class ThreadCell: NSTableCellView {
         return dot
     }
 
-    private func setDimmedAppearance(isHidden: Bool, isArchiving: Bool, allSessionsDead: Bool = false) {
-        if isHidden || isArchiving {
-            alphaValue = 0.5
-        } else if allSessionsDead {
-            alphaValue = 0.55
-        } else {
-            alphaValue = 1.0
-        }
+    private func setDimmedAppearance(isHidden: Bool, isArchiving: Bool) {
+        alphaValue = (isHidden || isArchiving) ? 0.5 : 1.0
     }
 
     private func applyRenamePulse(_ active: Bool) {
@@ -461,7 +455,7 @@ final class ThreadCell: NSTableCellView {
         ensureLeadingStack()
         ensureMainAccentBar()
         setLeadingOffset(leadingOffset)
-        setDimmedAppearance(isHidden: thread.isSidebarHidden, isArchiving: thread.isArchiving, allSessionsDead: thread.hasAllSessionsDead)
+        setDimmedAppearance(isHidden: thread.isSidebarHidden, isArchiving: thread.isArchiving)
         mainAccentBar?.isHidden = true
 
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
@@ -490,7 +484,12 @@ final class ThreadCell: NSTableCellView {
                 : .preferredFont(forTextStyle: .body)
         }
         let showsJiraState = AppFeatures.jiraSyncEnabled
-        textField?.textColor = showsJiraState && thread.jiraUnassigned ? .tertiaryLabelColor : .labelColor
+        let deadSessions = thread.hasAllSessionsDead
+        if showsJiraState && thread.jiraUnassigned {
+            textField?.textColor = .tertiaryLabelColor
+        } else {
+            textField?.textColor = deadSessions ? .secondaryLabelColor : .labelColor
+        }
         textField?.lineBreakMode = .byTruncatingTail
 
         if hasDescription, let description = trimmedDescription {
@@ -586,9 +585,14 @@ final class ThreadCell: NSTableCellView {
 
         imageView?.image = Self.cachedSymbolImage(thread.threadIcon.symbolName)
             ?? Self.cachedSymbolImage("terminal")
-        imageView?.contentTintColor = thread.hasUnreadAgentCompletion
-            ? NSColor.controlAccentColor
-            : (sectionColor ?? NSColor(resource: .primaryBrand))
+        if thread.hasAllSessionsDead {
+            // Gray icon distinguishes dead-session threads from merely hidden ones.
+            imageView?.contentTintColor = .tertiaryLabelColor
+        } else {
+            imageView?.contentTintColor = thread.hasUnreadAgentCompletion
+                ? NSColor.controlAccentColor
+                : (sectionColor ?? NSColor(resource: .primaryBrand))
+        }
 
         if let emoji = thread.signEmoji {
             signEmojiLabel?.stringValue = emoji

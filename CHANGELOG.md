@@ -16,6 +16,9 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - IPC system prompt now mentions "threads" so agents better associate the term with Magent management commands.
 
+### Sidebar
+- Dead-session threads now show a gray icon and dimmed description text, making them visually distinct from hidden threads (which dim the entire row).
+
 ### Sessions
 - New "Keep Alive" (shield) toggle in thread and tab right-click menus — shielded sessions are never killed by auto-eviction or manual cleanup. A blue shield icon appears on protected tabs.
 - New "Protect pinned threads and tabs from eviction" setting (Settings > Threads, enabled by default) — pinned threads and pinned tabs are automatically protected from cleanup.

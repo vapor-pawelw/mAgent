@@ -6,7 +6,8 @@ Hidden threads let users keep inactive work visible without archiving it.
 
 - Non-main thread context menus expose `Hide` / `Unhide` directly under `Pin` / `Unpin`.
 - Hidden threads stay in the sidebar, but sort to the bottom of their section or flat project list.
-- Hidden rows render dimmed so they read as deprioritized rather than active.
+- Hidden rows render dimmed (entire cell at 0.5 alpha) so they read as deprioritized rather than active.
+- Dead-session threads use a different visual treatment: gray icon tint + `secondaryLabelColor` description text, keeping the cell at full alpha. This makes hidden vs dead states distinguishable at a glance.
 - Pinning and hiding are mutually exclusive:
   - pinning a hidden thread unhides it
   - hiding a pinned thread unpins it
@@ -31,7 +32,8 @@ Hidden threads let users keep inactive work visible without archiving it.
 - Do not treat `!isPinned` as equivalent to the normal visible group anymore. Hidden threads are also unpinned.
 - Drag/drop validation must enforce all three group boundaries, not just pinned vs. unpinned.
 - Main threads should never expose or accept the hidden state.
-- The dimmed appearance is applied at the cell level only. Selection background still comes from the row view, which keeps the selected state legible.
+- The hidden-thread dimming is applied at the cell level (`alphaValue = 0.5`). Dead-session styling is applied per-subview (icon tint + label color) so it composes naturally when a thread is both hidden and dead.
+- Selection background still comes from the row view, which keeps the selected state legible.
 
 ## Changes in this thread
 
