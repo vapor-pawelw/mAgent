@@ -120,11 +120,18 @@ extension ThreadManager {
     @MainActor
     func toggleThreadPin(threadId: UUID) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        let wasPinned = threads[index].isPinned
         threads[index].isPinned.toggle()
         if threads[index].isPinned {
             threads[index].isSidebarHidden = false
         }
-        placeThreadAtBottomOfSidebarGroup(threadId: threadId)
+        if wasPinned {
+            // Unpinning: place at the top of the visible group so it stays near
+            // the pinned section rather than jumping to the bottom.
+            bumpThreadToTopOfSection(threadId)
+        } else {
+            placeThreadAtBottomOfSidebarGroup(threadId: threadId)
+        }
 
         try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)

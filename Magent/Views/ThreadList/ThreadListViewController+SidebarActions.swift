@@ -274,21 +274,29 @@ extension ThreadListViewController {
             guard let self, let result else { return }
             let targetProject = result.selectedProject ?? project
 
-            // Only insert after the source thread when the new thread will land in the
-            // same project, section, and sidebar group. Otherwise fall back to normal
-            // bottom-of-group placement.
-            let effectiveInsertAfter: UUID? = {
-                guard let source = capturedSourceThread else { return nil }
-                // Project must match.
-                guard targetProject.id == source.projectId else { return nil }
-                // Source must be in the normal visible group (not pinned/hidden).
-                guard source.sidebarListState == .visible else { return nil }
-                // Section must match (compare effective section of source vs what the user picked).
+            // Insert after the source thread when in the same project, section, and
+            // sidebar group. When the source is pinned, place at the top of the visible
+            // group instead (right below pinned threads).
+            let effectiveInsertAfter: UUID?
+            let insertAtTop: Bool
+            if let source = capturedSourceThread, targetProject.id == source.projectId {
                 let settings = self.persistence.loadSettings()
                 let sourceSectionId = self.threadManager.effectiveSectionId(for: source, settings: settings)
-                if sourceSectionId != result.selectedSectionId { return nil }
-                return source.id
-            }()
+                let sameSection = sourceSectionId == result.selectedSectionId
+                if source.sidebarListState == .visible && sameSection {
+                    effectiveInsertAfter = source.id
+                    insertAtTop = false
+                } else if source.sidebarListState == .pinned && sameSection {
+                    effectiveInsertAfter = nil
+                    insertAtTop = true
+                } else {
+                    effectiveInsertAfter = nil
+                    insertAtTop = false
+                }
+            } else {
+                effectiveInsertAfter = nil
+                insertAtTop = false
+            }
 
             self.createThread(
                 for: targetProject,
@@ -302,6 +310,7 @@ extension ThreadListViewController {
                 pendingPromptFileURL: result.pendingPromptFileURL,
                 requestedSectionId: result.selectedSectionId,
                 insertAfterThreadId: effectiveInsertAfter,
+                insertAtTopOfVisibleGroup: insertAtTop,
                 initialWebURL: result.initialWebURL,
                 draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "") } : nil
             )
@@ -393,12 +402,14 @@ extension ThreadListViewController {
 
         let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
         if isOptionPressed {
+            let isPinnedSource = sourceInSameProject?.sidebarListState == .pinned
             createThread(
                 for: project,
                 requestedAgentType: nil,
                 useAgentCommand: true,
                 requestedSectionId: sourceInSameProject?.sectionId,
-                insertAfterThreadId: sourceInSameProject?.id
+                insertAfterThreadId: isPinnedSource ? nil : sourceInSameProject?.id,
+                insertAtTopOfVisibleGroup: isPinnedSource
             )
         } else {
             presentNewThreadSheet(for: project, anchorView: outlineView, sourceThread: sourceInSameProject)
@@ -417,6 +428,7 @@ extension ThreadListViewController {
         pendingPromptFileURL: URL? = nil,
         requestedSectionId: UUID? = nil,
         insertAfterThreadId: UUID? = nil,
+        insertAtTopOfVisibleGroup: Bool = false,
         initialWebURL: URL? = nil,
         draftPrompt: (AgentType, String)? = nil
     ) {
@@ -435,6 +447,7 @@ extension ThreadListViewController {
                     pendingPromptFileURL: pendingPromptFileURL,
                     requestedSectionId: requestedSectionId,
                     insertAfterThreadId: insertAfterThreadId,
+                    insertAtTopOfVisibleGroup: insertAtTopOfVisibleGroup,
                     initialWebURL: initialWebURL
                 )
                 if let desc = taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),

@@ -19,6 +19,7 @@ extension ThreadManager {
         pendingPromptFileURL: URL? = nil,
         requestedSectionId: UUID? = nil,
         insertAfterThreadId: UUID? = nil,
+        insertAtTopOfVisibleGroup: Bool = false,
         skipAutoSelect: Bool = false,
         initialWebURL: URL? = nil
     ) async throws -> MagentThread {
@@ -113,6 +114,8 @@ extension ThreadManager {
         if let lastIndex = threads.indices.last {
             if let insertAfterThreadId {
                 placeThreadAfterSibling(threadId: threads[lastIndex].id, afterThreadId: insertAfterThreadId)
+            } else if insertAtTopOfVisibleGroup {
+                bumpThreadToTopOfSection(threads[lastIndex].id)
             } else {
                 placeThreadAtBottomOfSidebarGroup(threadId: threads[lastIndex].id)
             }

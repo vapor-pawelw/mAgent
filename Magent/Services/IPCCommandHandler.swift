@@ -315,6 +315,7 @@ final class IPCCommandHandler {
 
         let thread: MagentThread
         do {
+            let isPinnedSource = fromThread?.sidebarListState == .pinned
             thread = try await threadManager.createThread(
                 project: project,
                 requestedAgentType: requestedAgent,
@@ -324,7 +325,8 @@ final class IPCCommandHandler {
                 requestedName: requestedName,
                 requestedBaseBranch: requestedBaseBranch,
                 requestedSectionId: requestedSectionId,
-                insertAfterThreadId: fromThread?.id,
+                insertAfterThreadId: isPinnedSource ? nil : fromThread?.id,
+                insertAtTopOfVisibleGroup: isPinnedSource,
                 skipAutoSelect: request.noSelect == true
             )
         } catch {
@@ -544,7 +546,11 @@ final class IPCCommandHandler {
         for (i, result) in results {
             if case .success(let thread) = result {
                 if let ft = resolved[i].fromThread {
-                    threadManager.placeThreadAfterSibling(threadId: thread.id, afterThreadId: ft.id)
+                    if ft.sidebarListState == .pinned {
+                        threadManager.bumpThreadToTopOfSection(thread.id)
+                    } else {
+                        threadManager.placeThreadAfterSibling(threadId: thread.id, afterThreadId: ft.id)
+                    }
                     needsSave = true
                 }
                 if let desc = resolved[i].description?.trimmingCharacters(in: .whitespacesAndNewlines),
