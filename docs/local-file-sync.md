@@ -86,7 +86,9 @@ Before removing a thread worktree, Magent can merge configured paths for that th
 
 - Missing source path in thread worktree: skipped
 - Files unchanged in the thread since creation are skipped (no copy-back)
-- Archive merge-back sync methods are `@concurrent`, running filesystem work on the concurrent pool so the UI stays responsive while the thread row is marked as archiving
+- Archive merge-back sync methods are `@concurrent`, running filesystem work on the concurrent pool so the UI stays responsive
+- For UI callers (`force:true`, `awaitLocalSync:false`), the sync is deferred to a fire-and-forget background task — the thread disappears from the sidebar immediately. Sync failures show a warning banner if the app is still running.
+- For IPC/CLI callers (`awaitLocalSync:true`), the sync is awaited so the result/warning can be returned in the response.
 - Merge-back is additive and non-destructive:
   - directory entries are processed recursively
   - intermediate directories are created only when at least one child file is being copied

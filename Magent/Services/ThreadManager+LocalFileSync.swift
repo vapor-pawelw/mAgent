@@ -3,7 +3,7 @@ import CryptoKit
 import Foundation
 import MagentCore
 
-enum BackgroundLocalSyncWorker {
+nonisolated enum BackgroundLocalSyncWorker {
     private enum ItemKind {
         case file
         case directory
