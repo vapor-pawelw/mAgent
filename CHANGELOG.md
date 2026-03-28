@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
 - Session monitor polling is now split into fast (5s) and slow (~1 min) cadences — agent completions, busy state, and dead session recovery stay responsive while heavier checks (worktree scans, zombie detection, idle eviction) run less frequently.
 
 ### Terminal
+- Fixed Prompt TOC showing 0 entries after session restore/recreation — the pane content wasn't fully rendered when the TOC captured it; a delayed retry now picks up the scrollback once tmux settles.
 - Fixed unwanted slow scroll animation when switching to an agent tab — the CAMetalLayer-backed terminal surface could trigger implicit Core Animation transitions on visibility toggle, causing content to visually slide down from the top.
 
 ### Agents

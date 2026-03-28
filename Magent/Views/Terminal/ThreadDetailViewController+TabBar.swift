@@ -115,6 +115,14 @@ extension ThreadDetailViewController {
                     return
                 }
                 self.selectPreparedTab(at: currentDisplayIndex)
+                // After session recreation the tmux pane may not have rendered
+                // its full scrollback yet, so the immediate TOC refresh inside
+                // selectPreparedTab can capture an empty pane (showing 0 entries).
+                // Schedule a second refresh with a short delay to pick up content
+                // once the pane has settled.
+                if recreated || wasEvicted {
+                    self.schedulePromptTOCRefresh(after: 0.5)
+                }
                 let keepStartupOverlay = recreated || self.consumeStartupOverlayRequirement(for: sessionName)
                 if !keepStartupOverlay {
                     self.dismissLoadingOverlay()
