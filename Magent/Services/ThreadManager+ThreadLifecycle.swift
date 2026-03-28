@@ -952,6 +952,7 @@ extension ThreadManager {
         thread.sessionConversationIDs = [:]
         thread.sessionAgentTypes = [:]
         thread.pinnedTmuxSessions = []
+        thread.protectedTmuxSessions = []
         thread.lastSelectedTabIdentifier = nil
         thread.customTabNames = [:]
         thread.submittedPromptsBySession = [:]

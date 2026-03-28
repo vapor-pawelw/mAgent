@@ -1794,6 +1794,8 @@ extension Notification.Name {
     static let magentRecoveryReopenRequested = Notification.Name("magentRecoveryReopenRequested")
     /// Posted after `cleanupIdleSessions` finishes. Carries "closedCount" (Int).
     static let magentSessionCleanupCompleted = Notification.Name("magentSessionCleanupCompleted")
+    /// Posted when Keep Alive protection changes on a thread. Carries "threadId" (UUID).
+    static let magentKeepAliveChanged = Notification.Name("magentKeepAliveChanged")
 }
 
 // MARK: - Errors

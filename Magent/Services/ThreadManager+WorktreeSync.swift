@@ -179,6 +179,7 @@ extension ThreadManager {
             threads[i].tmuxSessionNames = newNames
             threads[i].agentTmuxSessions = threads[i].agentTmuxSessions.map { renameMap[$0] ?? $0 }
             threads[i].pinnedTmuxSessions = threads[i].pinnedTmuxSessions.map { renameMap[$0] ?? $0 }
+            threads[i].protectedTmuxSessions = Set(threads[i].protectedTmuxSessions.map { renameMap[$0] ?? $0 })
             _ = remapTransientSessionState(threadIndex: i, sessionRenameMap: renameMap)
             threads[i].unreadCompletionSessions = Set(
                 threads[i].unreadCompletionSessions.map { renameMap[$0] ?? $0 }
