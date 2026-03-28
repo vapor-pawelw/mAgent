@@ -26,6 +26,7 @@ All notable changes to this project will be documented in this file.
 - Cmd+Shift+N creates a new thread branching from the selected thread's branch, inheriting its section and inserting right below it in the sidebar.
 
 ### Auto-Rename
+- Thread/worktree names are now permanent — rename commands (auto-rename, CLI, context menu) only change the git branch name, never the thread name or worktree directory. The original auto-generated name stays visible in the sidebar forever.
 - Auto-rename now triggers on every first prompt, including questions — previously, prompts classified as questions were silently skipped.
 
 ### Thread

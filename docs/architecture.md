@@ -103,15 +103,15 @@ Each thread is 1:1 with a git worktree:
 - Archiving a thread → `git worktree remove` + `git worktree prune`
 - Thread state stored separately from git (JSON/SQLite)
 
-### 4.1 Worktree Rename Compatibility
+### 4.1 Worktree Name Stability
 
-Thread rename updates branch/session names, but running agent processes cannot have their cwd/env rewritten in-place.
-The underlying worktree directory is not moved. To keep active sessions stable, rename creates a compatibility symlink from the new thread-name path to the existing worktree path and updates tmux session environment for future shells/panes.
+Thread/worktree names are permanent — set once at creation time (auto-generated pokemon name or explicit CLI `--name`) and never changed. Rename operations (`auto-rename-thread`, `rename-branch`, context menu rename, first-prompt auto-rename) only change the **git branch name**; the thread name, worktree directory, and tmux session names are unaffected.
 
-Both thread rename and tab rename change tmux session names, which requires rekeying all session-name-keyed state at two levels:
-- **ThreadManager**: `knownGoodSessionContexts` (session-validation cache), transient session state, bell pipes (`forceSetupBellPipe` to replace old-name pipes).
-- **ThreadDetailViewController**: `preparedSessions`, `sessionPreparationTasks`/`sessionPreparationTaskTokens` (in-flight tasks are cancelled since their old-name completion path would fail), `loadingOverlaySessionName`, `startupOverlayRequiredSessions`. This is centralised in `rekeySessionState(_:)`.
-- **recreateSessionIfNeeded** guards against stale session names by checking `tmuxSessionNames.contains(sessionName)` both at entry and again immediately before `tmux.createSession`, so a rename landing mid-preparation cannot resurrect an orphan session.
+This simplifies the rename path: no tmux session renaming, no compatibility symlinks, no session-state re-keying in `ThreadManager` or `ThreadDetailViewController`. The thread's `.name` always matches the worktree directory basename.
+
+Tab rename still changes tmux session names (tab-level, not thread-level), which requires rekeying session-name-keyed state:
+- **ThreadDetailViewController**: `preparedSessions`, `sessionPreparationTasks`/`sessionPreparationTaskTokens`, `loadingOverlaySessionName`, `startupOverlayRequiredSessions`. Centralised in `rekeySessionState(_:)`.
+- **recreateSessionIfNeeded** guards against stale session names by checking `tmuxSessionNames.contains(sessionName)` both at entry and again immediately before `tmux.createSession`.
 
 ### 4.2 Prompt-Based Rename Reuse
 
