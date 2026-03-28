@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Sessions
+- New "Limit concurrent idle sessions" setting (Settings > Threads > Session Management) automatically kills tmux sessions that haven't been viewed in over an hour when idle count exceeds the configured limit. Sessions are transparently recreated when you revisit the thread. Defaults to unlimited.
+
+### Performance
+- Session monitor polling is now split into fast (5s) and slow (~1 min) cadences — agent completions, busy state, and dead session recovery stay responsive while heavier checks (worktree scans, zombie detection, idle eviction) run less frequently.
+
 ### Tabs
 - Switching threads now restores the last-selected tab, including web and draft tabs — previously only terminal tabs were remembered.
 
