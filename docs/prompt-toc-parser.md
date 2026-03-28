@@ -201,6 +201,10 @@ After the navigation was correct, a subtle per-session offset remained: sessions
 6. Never use `goto-line` unless you can guarantee historySize is stable (it isn't when an agent is running).
 7. `historySize` query in a separate shell call has ~100ms race window. Even in the same shell command, historySize can change in <1ms during active agent output. Only approaches that don't depend on historySize are race-condition-free.
 
+## Refresh lifecycle after session restore
+
+When a session is recreated (dead-session recovery, idle-eviction restore, worktree recovery), `selectTerminalTab` takes the slow path through `ensureSessionPrepared` → `selectPreparedTab`. `selectPreparedTab` calls `schedulePromptTOCRefresh()` immediately, but the tmux pane may not have rendered its full scrollback yet — `captureFullPane` can return an empty pane, producing 0 entries. A second delayed refresh (0.5s) is scheduled after recreation/eviction to pick up the content once the pane has settled. Without this, the TOC shows "0" until the user manually switches tabs.
+
 ## Future debugging checklist
 
 - If Claude prompts disappear again, capture the pane with attributes (`tmux capture-pane -e -p -S - -E -`) and inspect both foreground and background styling before changing placeholder heuristics.
