@@ -43,6 +43,10 @@ Steps 1 and 2 strip the `origin/` prefix via `stripRemotePrefix(_:)` before retu
 
 During the delivery polling cycle, the resolved base branch is validated via `git rev-parse --verify`. If the ref does not exist (both bare name and `origin/`-prefixed form are checked), the base branch is reset to the project default. The old base branch name is persisted in `WorktreeMetadata.baseBranchResetFrom` so a warning banner can be shown when the user selects the thread — even across app restarts. The banner is shown once per reset; acknowledging it (or dismissing it) clears `baseBranchResetFrom` from both memory and disk.
 
+**Same-branch guard**: When the old base and the fallback resolve to the same branch (e.g. both are the project default `develop`), no reset is recorded and no banner is shown — "reset to itself" is a no-op.
+
+**Auto-recovery**: On each subsequent polling cycle, if a persisted `baseBranchResetFrom` exists, the original old base is re-checked via `branchExists`. If it has come back (e.g. after a `git fetch` resolved a transient missing-ref), the reset is automatically cleared — both `baseBranchResetFrom` and `detectedBaseBranch` are wiped without requiring user acknowledgment. If the old base is still missing, the banner persists until the user explicitly acknowledges it.
+
 `GitService.detectBaseBranch(worktreePath:currentBranch:)` still exists in GitService but is no longer called from the polling loop or resolution path.
 
 ### Manual Base Branch Override

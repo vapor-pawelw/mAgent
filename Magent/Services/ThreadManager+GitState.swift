@@ -155,6 +155,8 @@ extension ThreadManager {
             let resolvedBaseBranch: String
             // Non-nil when the originally resolved base branch was missing and we fell back.
             let baseBranchFallback: BaseBranchReset?
+            // The original old base from a previous reset was found to exist again (transient issue resolved).
+            let oldBaseRestored: Bool
             // hasEverDoneWork was false in snapshot but is now true.
             let newlyHasEverDoneWork: Bool
             // We found commits ahead this cycle — delivery is false by definition.
@@ -170,6 +172,7 @@ extension ThreadManager {
             let resolvedBaseBranch: String
             let fallbackBaseBranch: String    // project default, used if resolvedBaseBranch is missing
             let forkPoint: String?            // for migration check
+            let persistedResetOldBase: String? // original base from a previous reset, to check if it came back
         }
 
         var inputs: [ThreadInput] = []
@@ -189,7 +192,8 @@ extension ThreadManager {
                 thread: thread,
                 resolvedBaseBranch: resolved,
                 fallbackBaseBranch: resolveBaseBranchFromConfig(for: thread, settings: settings),
-                forkPoint: meta?.forkPointCommit
+                forkPoint: meta?.forkPointCommit,
+                persistedResetOldBase: meta?.baseBranchResetFrom
             ))
         }
 
@@ -202,10 +206,12 @@ extension ThreadManager {
                 let snapshotIsDirty = thread.isDirty
                 let initialBase = input.resolvedBaseBranch
                 let fallbackBase = input.fallbackBaseBranch
+                let persistedOldBase = input.persistedResetOldBase
                 group.addTask {
                     // Phase 0: validate base branch exists; fall back to project default if missing.
                     var resolvedBase = initialBase
                     var baseBranchFallback: BaseBranchReset?
+                    var oldBaseRestored = false
                     // Check both the ref as-is and with origin/ prefix.
                     // baseBranch can be stored as "main", "origin/main", or "develop".
                     var baseExists = await self.git.branchExists(
@@ -221,6 +227,20 @@ extension ThreadManager {
                     if !baseExists {
                         resolvedBase = fallbackBase
                         baseBranchFallback = BaseBranchReset(oldBase: initialBase, newBase: fallbackBase)
+                    } else if let oldBase = persistedOldBase, !oldBase.isEmpty {
+                        // Current base exists, but we have a persisted reset from a previous cycle.
+                        // Check if the original old base came back (transient fetch issue resolved).
+                        var oldExists = await self.git.branchExists(
+                            repoPath: thread.worktreePath,
+                            branchName: oldBase
+                        )
+                        if !oldExists && !oldBase.hasPrefix("origin/") {
+                            oldExists = await self.git.branchExists(
+                                repoPath: thread.worktreePath,
+                                branchName: "origin/\(oldBase)"
+                            )
+                        }
+                        oldBaseRestored = oldExists
                     }
 
                     // Phase 1: hasEverDoneWork check (only if not already set in snapshot).
@@ -266,6 +286,7 @@ extension ThreadManager {
                         currentBranch: thread.currentBranch,
                         resolvedBaseBranch: resolvedBase,
                         baseBranchFallback: baseBranchFallback,
+                        oldBaseRestored: oldBaseRestored,
                         newlyHasEverDoneWork: newlyHasEverDoneWork,
                         knownHasCommitsAhead: knownHasCommitsAhead,
                         isFullyDelivered: isFullyDelivered
@@ -285,7 +306,8 @@ extension ThreadManager {
 
             // When base branch was missing, update the cache to the fallback value
             // and record the reset so we can show a banner for the selected thread.
-            if let fallback = result.baseBranchFallback {
+            if let fallback = result.baseBranchFallback,
+               fallback.oldBase != fallback.newBase {
                 if var projectEntry = cacheByProjectId[result.projectId] {
                     var meta = projectEntry.cache.worktrees[result.worktreeKey] ?? WorktreeMetadata()
                     meta.detectedBaseBranch = fallback.newBase
@@ -298,6 +320,18 @@ extension ThreadManager {
                     oldBase: fallback.oldBase,
                     newBase: fallback.newBase
                 )
+            } else if result.oldBaseRestored {
+                // The original old base branch came back (transient fetch issue resolved) —
+                // auto-clear the stale reset without requiring user acknowledgment.
+                baseBranchResets.removeValue(forKey: threads[i].id)
+                if var projectEntry = cacheByProjectId[result.projectId] {
+                    var meta = projectEntry.cache.worktrees[result.worktreeKey] ?? WorktreeMetadata()
+                    meta.baseBranchResetFrom = nil
+                    meta.detectedBaseBranch = nil
+                    projectEntry.cache.worktrees[result.worktreeKey] = meta
+                    projectEntry.dirty = true
+                    cacheByProjectId[result.projectId] = projectEntry
+                }
             }
 
             if result.newlyHasEverDoneWork && !threads[i].hasEverDoneWork {
