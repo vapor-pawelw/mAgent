@@ -724,7 +724,7 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func refreshTabStatusIndicators() {
+    func refreshTabStatusIndicators() {
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
             if case .terminal(let sessionName) = slot {
                 tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
@@ -732,11 +732,13 @@ extension ThreadDetailViewController {
                 tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
                 tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
                 tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
+                tabItems[i].showKeepAliveIcon = thread.protectedTmuxSessions.contains(sessionName)
             } else {
                 tabItems[i].hasUnreadCompletion = false
                 tabItems[i].hasWaitingForInput = false
                 tabItems[i].hasBusy = false
                 tabItems[i].hasRateLimit = false
+                tabItems[i].showKeepAliveIcon = false
             }
         }
     }

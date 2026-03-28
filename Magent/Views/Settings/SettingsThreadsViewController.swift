@@ -19,6 +19,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var maxIdleSessionsCheckbox: NSButton!
     private var maxIdleSessionsStepper: NSStepper!
     private var maxIdleSessionsValueLabel: NSTextField!
+    private var protectPinnedCheckbox: NSButton!
     private var autoReorderOnCompletionCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
@@ -328,23 +329,31 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         maxIdleSessionsStepper.minValue = 1
         maxIdleSessionsStepper.maxValue = 100
         maxIdleSessionsStepper.increment = 1
-        maxIdleSessionsStepper.integerValue = settings.maxIdleSessions ?? 10
+        maxIdleSessionsStepper.integerValue = settings.maxIdleSessions ?? 30
         maxIdleSessionsStepper.isEnabled = isLimited
         maxIdleSessionsStepper.target = self
         maxIdleSessionsStepper.action = #selector(maxIdleSessionsStepperChanged)
         maxIdleRow.addArrangedSubview(maxIdleSessionsStepper)
 
-        maxIdleSessionsValueLabel = NSTextField(labelWithString: "\(settings.maxIdleSessions ?? 10)")
+        maxIdleSessionsValueLabel = NSTextField(labelWithString: "\(settings.maxIdleSessions ?? 30)")
         maxIdleSessionsValueLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
         maxIdleSessionsValueLabel.textColor = isLimited ? .labelColor : .tertiaryLabelColor
         maxIdleRow.addArrangedSubview(maxIdleSessionsValueLabel)
 
         sessionSection.addArrangedSubview(maxIdleRow)
 
-        let maxIdleDesc = NSTextField(wrappingLabelWithString: "Automatically kills tmux sessions that haven't been viewed in over an hour when the total exceeds the limit. Sessions are recreated on demand when you revisit the thread.")
+        let maxIdleDesc = NSTextField(wrappingLabelWithString: "Automatically kills tmux sessions that exceed the limit when they have been non-busy for 10+ minutes and unvisited for 1+ hour. Pinned and shielded (Keep Alive) sessions are protected. Sessions are recreated on demand when you revisit the thread. Useful for keeping system resources low when running many threads.")
         maxIdleDesc.font = .systemFont(ofSize: 11)
         maxIdleDesc.textColor = NSColor(resource: .textSecondary)
         sessionSection.addArrangedSubview(maxIdleDesc)
+
+        protectPinnedCheckbox = NSButton(
+            checkboxWithTitle: "Protect pinned threads and tabs from eviction",
+            target: self,
+            action: #selector(protectPinnedToggled)
+        )
+        protectPinnedCheckbox.state = settings.protectPinnedFromEviction ? .on : .off
+        sessionSection.addArrangedSubview(protectPinnedCheckbox)
 
         let (recentArchivedCard, recentArchivedSection) = createSectionCard(
             title: "Recently Archived",
@@ -775,6 +784,11 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         }
         maxIdleSessionsStepper.isEnabled = isLimited
         maxIdleSessionsValueLabel.textColor = isLimited ? .labelColor : .tertiaryLabelColor
+        persistSettings(notify: true)
+    }
+
+    @objc private func protectPinnedToggled() {
+        settings.protectPinnedFromEviction = protectPinnedCheckbox.state == .on
         persistSettings(notify: true)
     }
 

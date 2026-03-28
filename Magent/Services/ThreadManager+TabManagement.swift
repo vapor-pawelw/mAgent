@@ -370,6 +370,7 @@ extension ThreadManager {
 
         // Also remove from pinned, agent, unread completion, waiting, and custom tab names if present
         threads[idx].pinnedTmuxSessions.removeAll { $0 == sessionName }
+        threads[idx].protectedTmuxSessions.remove(sessionName)
         threads[idx].agentTmuxSessions.removeAll { $0 == sessionName }
         threads[idx].sessionConversationIDs.removeValue(forKey: sessionName)
         threads[idx].sessionAgentTypes.removeValue(forKey: sessionName)

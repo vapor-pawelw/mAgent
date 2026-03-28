@@ -950,6 +950,10 @@ extension ThreadManager {
                 $0 == sessionName ? resolvedSessionName : $0
             }
         }
+        if currentThread.protectedTmuxSessions.contains(sessionName) {
+            threads[index].protectedTmuxSessions.remove(sessionName)
+            threads[index].protectedTmuxSessions.insert(resolvedSessionName)
+        }
         if currentThread.lastSelectedTabIdentifier == sessionName {
             threads[index].lastSelectedTabIdentifier = resolvedSessionName
         }

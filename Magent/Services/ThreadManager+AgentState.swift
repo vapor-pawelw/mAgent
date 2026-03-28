@@ -21,7 +21,7 @@ extension ThreadManager {
             guard !thread.isArchived else { continue }
 
             let currentDead = Set(thread.tmuxSessionNames.filter {
-                !liveSessions.contains($0) && !evictedIdleSessions.contains($0)
+                !liveSessions.contains($0)
             })
             guard currentDead != thread.deadSessions else { continue }
 
@@ -30,10 +30,12 @@ extension ThreadManager {
             changed = true
 
             // Auto-recreate the currently visible session so the user isn't
-            // stuck on a dead terminal. Other dead sessions stay dead until selected.
+            // stuck on a dead terminal — but not if it was intentionally evicted.
+            // Other dead sessions stay dead until selected.
             if let visibleSession = thread.lastSelectedTabIdentifier,
                thread.id == activeThreadId,
-               newlyDead.contains(visibleSession) {
+               newlyDead.contains(visibleSession),
+               !evictedIdleSessions.contains(visibleSession) {
                 _ = await recreateSessionIfNeeded(
                     sessionName: visibleSession,
                     thread: thread

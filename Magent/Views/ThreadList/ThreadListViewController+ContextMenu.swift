@@ -33,6 +33,16 @@ extension ThreadListViewController {
         pinItem.representedObject = thread.id
         menu.addItem(pinItem)
 
+        // Keep Alive
+        let allProtected = !thread.tmuxSessionNames.isEmpty
+            && thread.tmuxSessionNames.allSatisfy { thread.protectedTmuxSessions.contains($0) }
+        let keepAliveTitle = allProtected ? "Remove Keep Alive" : "Keep Alive"
+        let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(toggleThreadKeepAlive(_:)), keyEquivalent: "")
+        keepAliveItem.target = self
+        keepAliveItem.image = NSImage(systemSymbolName: allProtected ? "shield.slash" : "shield.fill", accessibilityDescription: nil)
+        keepAliveItem.representedObject = thread.id
+        menu.addItem(keepAliveItem)
+
         // Jira (below pin)
         if let jiraItem = buildJiraMenuItem(for: thread, settings: settings) {
             menu.addItem(jiraItem)
@@ -787,6 +797,11 @@ extension ThreadListViewController {
     @objc private func toggleThreadPin(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         threadManager.toggleThreadPin(threadId: threadId)
+    }
+
+    @objc private func toggleThreadKeepAlive(_ sender: NSMenuItem) {
+        guard let threadId = sender.representedObject as? UUID else { return }
+        threadManager.toggleThreadKeepAlive(threadId: threadId)
     }
 
     @objc private func markThreadAsRead(_ sender: NSMenuItem) {

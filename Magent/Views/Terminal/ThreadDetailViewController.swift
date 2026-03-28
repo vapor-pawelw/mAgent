@@ -274,6 +274,14 @@ final class ThreadDetailViewController: NSViewController {
         ensureLoadingOverlay()
         currentTerminalMouseWheelBehavior = PersistenceService.shared.loadSettings().terminalMouseWheelBehavior
 
+        // Observe Keep Alive changes (from sidebar thread context menu)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleKeepAliveChanged(_:)),
+            name: .magentKeepAliveChanged,
+            object: nil
+        )
+
         // Observe dead session notifications for mid-use terminal replacement
         NotificationCenter.default.addObserver(
             self,
@@ -1077,6 +1085,18 @@ final class ThreadDetailViewController: NSViewController {
             let newIndex = min(displayIndex, tabItems.count - 1)
             selectTab(at: newIndex)
         }
+    }
+
+    @objc private func handleKeepAliveChanged(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let threadId = userInfo["threadId"] as? UUID,
+              threadId == thread.id else { return }
+        // Refresh from the manager's fresh state.
+        if let freshThread = threadManager.threads.first(where: { $0.id == thread.id }) {
+            thread.protectedTmuxSessions = freshThread.protectedTmuxSessions
+        }
+        refreshTabStatusIndicators()
+        rebindAllTabActions()
     }
 
     @objc private func handleDeadSessionsNotification(_ notification: Notification) {

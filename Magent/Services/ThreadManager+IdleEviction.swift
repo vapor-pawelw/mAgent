@@ -5,12 +5,14 @@ extension ThreadManager {
 
     /// Evicts the oldest idle tmux sessions when the number of idle sessions
     /// exceeds `AppSettings.maxIdleSessions`.  Only sessions that have been
-    /// idle for at least 1 minute and not visited for at least 1 hour are
-    /// counted as idle.  Main-thread sessions and the currently selected
-    /// session are always exempt.
+    /// non-busy for at least 10 minutes and not visited for at least 1 hour are
+    /// counted as idle.  Main-thread sessions, the currently selected session,
+    /// Keep Alive (shielded) sessions, and pinned sessions (when enabled) are
+    /// always exempt.
     func evictIdleSessionsIfNeeded() async {
         let settings = persistence.loadSettings()
         guard let maxIdle = settings.maxIdleSessions else { return }
+        let protectPinned = settings.protectPinnedFromEviction
 
         // Gather all live tmux sessions referenced by non-archived threads.
         let liveSessions: Set<String>
@@ -21,7 +23,7 @@ extension ThreadManager {
         }
 
         let now = Date()
-        let minIdleDuration: TimeInterval = 60          // 1 minute since last busy
+        let minIdleDuration: TimeInterval = 600         // 10 minutes since last busy
         let minUnvisitedDuration: TimeInterval = 3600    // 1 hour since last visit
 
         // Find the currently visible session so we never evict it.
@@ -44,6 +46,12 @@ extension ThreadManager {
 
                 // Already evicted — not live for our purposes.
                 if evictedIdleSessions.contains(session) { continue }
+
+                // User marked as "Keep Alive" — never evict.
+                if thread.protectedTmuxSessions.contains(session) { continue }
+
+                // Pinned threads/tabs are protected when the setting is enabled.
+                if protectPinned && (thread.isPinned || thread.pinnedTmuxSessions.contains(session)) { continue }
 
                 // Currently busy — not idle.
                 if thread.busySessions.contains(session) { continue }
@@ -73,10 +81,27 @@ extension ThreadManager {
         let toEvict = idleCandidates.prefix(excessCount)
         guard !toEvict.isEmpty else { return }
 
+        // Evict cached Ghostty surfaces before killing tmux sessions.
+        let sessionNames = toEvict.map(\.session)
+        await MainActor.run {
+            ReusableTerminalViewCache.shared.evictSessions(sessionNames)
+        }
+
         for candidate in toEvict {
             NSLog("[IdleEviction] Evicting idle session: \(candidate.session) (last visited: \(candidate.lastVisited))")
-            evictedIdleSessions.insert(candidate.session)
-            try? await tmux.killSession(name: candidate.session)
+            do {
+                try await tmux.killSession(name: candidate.session)
+                evictedIdleSessions.insert(candidate.session)
+                if let idx = threads.firstIndex(where: { !$0.isArchived && $0.tmuxSessionNames.contains(candidate.session) }) {
+                    threads[idx].deadSessions.insert(candidate.session)
+                }
+            } catch {
+                NSLog("[IdleEviction] Failed to kill session \(candidate.session): \(error)")
+            }
+        }
+
+        if !toEvict.isEmpty {
+            delegate?.threadManager(self, didUpdateThreads: threads)
         }
 
         NSLog("[IdleEviction] Evicted \(toEvict.count) idle session(s), idle count was \(idleCount), limit \(maxIdle)")
