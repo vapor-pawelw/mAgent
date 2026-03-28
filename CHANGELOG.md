@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Sessions
+- Status bar now shows active session count (live/total when some are suspended). Click to see breakdown and one-click "Close all idle sessions" to free memory/CPU — tab metadata is preserved and sessions are lazily recreated when you revisit them.
+- Dead sessions are no longer eagerly recreated — only the currently visible session auto-recovers. Background dead sessions stay suspended (dimmed in sidebar and tab bar) until selected, reducing unnecessary resource usage.
 - New "Limit concurrent idle sessions" setting (Settings > Threads > Session Management) automatically kills tmux sessions that haven't been viewed in over an hour when idle count exceeds the configured limit. Sessions are transparently recreated when you revisit the thread. Defaults to unlimited.
 
 ### Performance
