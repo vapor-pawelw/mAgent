@@ -431,7 +431,7 @@ private final class SessionCleanupPopoverViewController: NSViewController {
         stack.addArrangedSubview(liveLabel)
 
         if protectedSessions > 0 {
-            let protectedLabel = NSTextField(labelWithString: "\(protectedSessions) protected (busy/waiting/shielded/pinned)")
+            let protectedLabel = NSTextField(labelWithString: "\(protectedSessions) protected (busy/waiting/shielded/pinned/recently active)")
             protectedLabel.font = .systemFont(ofSize: 11)
             protectedLabel.textColor = NSColor(resource: .textSecondary)
             stack.addArrangedSubview(protectedLabel)
