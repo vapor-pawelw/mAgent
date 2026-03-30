@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Removed "Show Diff" panel from conflict dialogs — conflicts are now handled by the merge tool or agent instead.
 
 ### CLI
+- IPC helper scripts (`magent-cli`, bell watcher, URL capture) are now automatically reinstalled if macOS purges `/tmp` while Magent is running.
 - `magent-cli docs` now includes a "Common user intents" section teaching agents how to handle "review thread" (create a review tab with rate-limit fallback) and "archive thread" (commit + archive via CLI).
 - `create-thread` and `send-prompt` now support `--prompt-file <path>` for multi-line prompts, avoiding shell escaping issues.
 - Fixed `--prompt` failing with "Invalid JSON" when the prompt text contains newlines, carriage returns, or other control characters.
@@ -37,7 +38,6 @@ All notable changes to this project will be documented in this file.
 - Dead-session threads now show a gray icon and dimmed description text, making them visually distinct from hidden threads (which dim the entire row).
 
 ### Sessions
-<<<<<<< HEAD
 - New "Kill Session" option in the tab right-click menu lets you manually kill a single tmux session without closing the tab.
 - New "Kill All Sessions" option in the thread right-click menu kills all live tmux sessions in a thread at once.
 - Idle eviction now protects sessions during Magent setup/injection and while rate-limited, preventing premature kills of sessions that are still initializing or waiting on API limits.

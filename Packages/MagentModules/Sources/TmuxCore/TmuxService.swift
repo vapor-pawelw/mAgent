@@ -107,6 +107,13 @@ public final class TmuxService: Sendable {
         }
     }
 
+    /// Re-installs `/tmp` helper scripts if they were purged by macOS.
+    /// Called periodically by the IPC watchdog.
+    public func ensureHelperScriptsExist() {
+        installBellWatcherScript()
+        installMouseOpenableURLCaptureScript()
+    }
+
     private func configureBellMonitoring() async {
         // Ensure the event log file exists so pipe-pane can append to it.
         // Never truncate on startup — accumulated events are consumed by

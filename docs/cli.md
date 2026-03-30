@@ -3,7 +3,7 @@
 mAgent installs a `magent-cli` script at `/tmp/magent-cli` on launch. It communicates with the running app over a Unix domain socket (`/tmp/magent.sock`).
 It also installs launcher commands (`magent`, `magent-cli`, `magent-tmux`) into common user PATH directories when writable.
 
-The CLI is auto-updated when the app version changes.
+The CLI is auto-updated when the app version changes. A background watchdog checks every 30 seconds and reinstalls the script if macOS purges `/tmp` while the app is running. The same watchdog covers tmux helper scripts (bell watcher, URL capture).
 
 ## Interactive Commands
 

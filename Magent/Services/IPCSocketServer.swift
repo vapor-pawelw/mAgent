@@ -1,5 +1,6 @@
 import Foundation
 import MagentCore
+import TmuxCore
 
 actor IPCSocketServer {
 
@@ -9,6 +10,7 @@ actor IPCSocketServer {
 
     private var serverFD: Int32 = -1
     private var isRunning = false
+    private var cliWatchdogTask: Task<Void, Never>?
 
     // MARK: - Lifecycle
 
@@ -57,6 +59,7 @@ actor IPCSocketServer {
 
         isRunning = true
         Self.installCLIScript()
+        startCLIWatchdog()
         NSLog("[IPC] Server listening on \(Self.socketPath)")
 
         // Accept loop on background queue
@@ -69,6 +72,8 @@ actor IPCSocketServer {
     func stop() {
         guard isRunning else { return }
         isRunning = false
+        cliWatchdogTask?.cancel()
+        cliWatchdogTask = nil
         if serverFD >= 0 {
             close(serverFD)
             serverFD = -1
@@ -147,6 +152,26 @@ actor IPCSocketServer {
         toWrite.append(UInt8(ascii: "\n"))
         toWrite.withUnsafeBytes { ptr in
             _ = Darwin.write(fd, ptr.baseAddress!, ptr.count)
+        }
+    }
+
+    // MARK: - CLI Watchdog
+
+    /// Periodically checks that `/tmp/magent-cli` still exists (macOS can purge `/tmp`)
+    /// and reinstalls it if missing.
+    private func startCLIWatchdog() {
+        cliWatchdogTask?.cancel()
+        cliWatchdogTask = Task.detached { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { break }
+                if !FileManager.default.fileExists(atPath: Self.cliPath) {
+                    NSLog("[IPC] CLI script missing at %@, reinstalling", Self.cliPath)
+                    Self.installCLIScript()
+                }
+                TmuxService.shared.ensureHelperScriptsExist()
+                guard await self?.isRunning == true else { break }
+            }
         }
     }
 
