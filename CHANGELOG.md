@@ -36,6 +36,7 @@ All notable changes to this project will be documented in this file.
 - Thread-level keep alive hides per-tab shield icons and per-tab keep alive menu items (redundant).
 - Sidebar keep alive shield is hidden on pinned threads when "Protect pinned from eviction" is enabled (protection still active, just no visual clutter).
 - New "Protect pinned threads and tabs from eviction" setting (Settings > Threads, enabled by default) — pinned threads and pinned tabs are automatically protected from cleanup.
+- Manual session cleanup now protects sessions that were busy within the last 5 minutes, preventing accidental closure of recently active agents.
 - Closing idle sessions from the status bar now shows a confirmation alert listing which threads/tabs will be killed, with a scrollable breakdown.
 - Idle session auto-eviction now enabled by default (limit: 30 sessions), with a more conservative 10-minute non-busy threshold (previously 1 minute).
 - Session count indicator moved to leftmost position in the status bar for better visibility, with a brighter label color in dark mode.

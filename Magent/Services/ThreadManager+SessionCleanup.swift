@@ -48,6 +48,11 @@ extension ThreadManager {
                 return true
             }
         }
+        // Sessions that were busy within the last 5 minutes are protected.
+        if let lastBusy = sessionLastBusyAt[sessionName],
+           Date().timeIntervalSince(lastBusy) < 300 {
+            return true
+        }
         return thread.busySessions.contains(sessionName)
             || thread.magentBusySessions.contains(sessionName)
             || thread.waitingForInputSessions.contains(sessionName)
