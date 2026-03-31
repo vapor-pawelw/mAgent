@@ -5,38 +5,11 @@
       "hidden" : false,
       "layers" : [
         {
-          "blend-mode-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : "darken"
-            }
-          ],
-          "fill-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : "none"
-            }
-          ],
-          "glass" : true,
+          "blend-mode" : "normal",
+          "glass" : false,
           "hidden" : false,
-          "image-name" : "m 2.jpg",
-          "name" : "m 2",
-          "opacity-specializations" : [
-            {
-              "value" : 1
-            },
-            {
-              "appearance" : "dark",
-              "value" : 1
-            }
-          ],
-          "position" : {
-            "scale" : 2.5,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
+          "image-name" : "ChatGPT Image 31 mar 2026, 10_14_12.png",
+          "name" : "ChatGPT Image 31 mar 2026, 10_14_12"
         }
       ],
       "shadow" : {
