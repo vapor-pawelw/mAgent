@@ -5,113 +5,83 @@
 <h1 align="center">mAgent</h1>
 
 <p align="center">
-  A native macOS app for managing coding agents as parallel work sessions.<br>
-  Each thread is a git worktree with embedded terminals, agent tabs, and full lifecycle management.
+  Native macOS app for running coding agents in parallel git worktrees.<br>
+  Each thread is a worktree + embedded terminal + agent session.
 </p>
 
-## 📦 Installation
+<p align="center">
+  <img src="docs/screenshots/main-view.png" alt="mAgent main view" width="800">
+</p>
 
-### Homebrew
+## Install
 
+**Homebrew:**
 ```bash
-brew tap vapor-pawelw/magent
-brew install --cask magent
+brew tap vapor-pawelw/tap && brew install --cask magent
 ```
 
-To update: `brew upgrade magent`
+**Manual:** grab the `.dmg` from [Releases](https://github.com/vapor-pawelw/magent/releases).
 
-### GitHub Releases
+Requires **macOS 14+**, **tmux** (`brew install tmux`), and **git**.
 
-Download the latest `.dmg` from [Releases](https://github.com/vapor-pawelw/magent-releases/releases), open it, and drag `Magent.app` to `/Applications`.
+## Threads & Worktrees
 
-> On first launch, macOS will show a Gatekeeper warning since the app is not notarized.
-> Right-click the app → **Open** → click **Open** in the dialog to allow it.
+Create a thread and get a git worktree, branch, and agent session instantly. Threads auto-name themselves and rename the branch based on your first prompt.
 
-## ✨ Features
+Organize with color-coded Kanban sections (TODO, In Progress, Reviewing, Done), drag-to-reorder, pinning, and auto-assigned work type icons. The sidebar shows live status at a glance: busy, waiting for input, rate-limited, unread completions, and uncommitted changes.
 
-### 🧵 Thread Management
+<p align="center">
+  <img src="docs/screenshots/new-thread.png" alt="New thread dialog" width="600">
+</p>
 
-Every thread maps 1:1 to a git worktree. Create a thread, get a fresh branch and workspace instantly.
+## Multi-Agent Terminal
 
-- **Auto-naming** — random names (e.g. `swift-falcon`) that auto-rename based on the first agent prompt
-- **Sections** — color-coded Kanban columns (TODO, In Progress, Reviewing, Done) with per-project overrides
-- **Archive & delete** — archive removes the worktree but keeps the branch; delete removes both
-- **Pinning** — pin important threads to the top
-- **Status indicators** — busy, waiting for input, unread completions, uncommitted changes — all at a glance
-- **Delivery tracking** — see when all commits have been cherry-picked to the base branch
+GPU-accelerated embedded terminal (libghostty) with tmux for session persistence. Run Claude Code, Codex, or any custom CLI as your agent, with per-project defaults.
 
-### 🤖 Multi-Agent Support
+Each thread supports multiple tabs: agent, terminal, web, and draft. Tabs can be pinned, reordered, and renamed. Agent completion is detected automatically with configurable sounds and system notifications.
 
-Run Claude Code, Codex, or any custom command as your coding agent.
+<p align="center">
+  <img src="docs/screenshots/agent-working.png" alt="Agent working in terminal" width="800">
+</p>
 
-- **Claude Code** — `--dangerously-skip-permissions` mode and `/resume` for session restoration
-- **Codex** — standard, `--yolo`, and `--full-auto` modes
-- **Custom agents** — any CLI tool works
-- **Per-project defaults** — different agents for different repos
-- **Auto-trust** — trust settings auto-configured for new worktrees
-- **Context transfer** — hand off context between agent tabs via transient markdown files stored alongside worktrees, outside the repo
+## Git Integration
 
-### 🖥️ Terminal
+Branch stacking with base branch selection and automatic retargeting when parent branches rename. PR detection and creation for GitHub, GitLab, and Bitbucket with review status badges. Bidirectional file sync between worktrees with merge tool support.
 
-GPU-accelerated embedded terminal powered by libghostty, with tmux for session persistence.
+One-click code review tabs, delivery tracking (cherry-pick detection), diff stats, and automatic worktree recovery.
 
-- **Ghostty rendering** — native GPU-accelerated terminal via libghostty
-- **tmux multiplexing** — sessions survive app restarts and support remote SSH attachment
-- **Multiple tabs** — agent tabs, terminal tabs, or mixed per thread
-- **Tab management** — rename, reorder, pin, close
-- **Bell detection** — agent completion detection via BEL character monitoring
+<p align="center">
+  <img src="docs/screenshots/context-menu.png" alt="Thread context menu" width="800">
+</p>
 
-### 🔀 Git Integration
+## Smart Session Management
 
-Deep git awareness without getting in the way.
+Idle sessions are automatically evicted to keep resource usage low, with configurable limits and Keep Alive protection for important threads. Rate limits are detected from terminal output with countdown timers and sound alerts when limits lift.
 
-- **Worktree lifecycle** — create, rename, archive, delete with automatic branch management
-- **Branch tracking** — branch names, dirty state, merge status at a glance
-- **PR/MR links** — open pull requests from the toolbar (GitHub, GitLab, Bitbucket)
-- **Diff stats** — per-file additions/deletions with staged/unstaged/untracked breakdown
-- **Worktree recovery** — missing worktrees are auto-recreated from the branch
+A persistent status bar shows active sessions, rate limit state, and thread counts.
 
-### 🎫 Jira Integration (Debug builds only for now)
+<p align="center">
+  <img src="docs/screenshots/prompt-toc.png" alt="Prompt Table of Contents" width="800">
+</p>
 
-Link threads to Jira tickets for project tracking.
+## CLI Automation
 
-Release builds currently hide Jira integration while the code remains available in local debug builds.
-
-- **Ticket association** — attach a Jira ticket key to any thread
-- **Assignment tracking** — visual indicator when a ticket becomes unassigned
-- **Sidebar display** — ticket keys shown alongside thread names
-
-### ⚡ CLI Automation
-
-Full programmatic control via `magent-cli` over a Unix domain socket. Manage threads, tabs, and sections from scripts or other agents.
+Full programmatic control via `magent-cli` over a Unix domain socket.
 
 ```bash
 magent-cli create-thread --project myapp --agent claude --prompt "Add auth"
-magent-cli thread-info --thread swift-falcon
-magent-cli send-prompt --thread swift-falcon --prompt "Now add tests"
-magent-cli move-thread --thread swift-falcon --section "In Progress"
-magent-cli archive-thread --thread swift-falcon
+magent-cli send-prompt --thread omanyte --prompt "Now add tests"
+magent-cli move-thread --thread omanyte --section "In Progress"
+magent-cli batch-create --file threads.json
+magent-cli archive-thread --thread omanyte
 ```
 
-See the full command reference in [docs/cli.md](docs/cli.md).
+See [docs/cli.md](docs/cli.md) for the full command reference.
 
-### 🔔 Notifications
+## Building from Source
 
-- **Dock badge** — count of threads with unread completions or waiting for input
-- **System notifications** — native macOS notifications for agent events
-- **Completion sounds** — configurable sound on agent completion
-- **In-app banners** — slide-down status messages with action buttons
+See [docs/building.md](docs/building.md).
 
-## 🛠️ Requirements
-
-- **macOS 14.0+** (Sonoma or later)
-- **tmux** — `brew install tmux`
-- **git** — included with Xcode Command Line Tools
-
-## 🏗️ Building from Source
-
-See [docs/building.md](docs/building.md) for prerequisites and build instructions.
-
-## 📄 License
+## License
 
 [Apache License 2.0](./LICENSE)

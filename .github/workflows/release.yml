@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 env:
-  RELEASE_REPO: vapor-pawelw/magent-releases
+  RELEASE_REPO: vapor-pawelw/magent
 
 permissions:
   contents: write
@@ -102,7 +102,7 @@ jobs:
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           NOTES_FILE=$(mktemp)
@@ -157,25 +157,25 @@ jobs:
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
           echo "SHA256: $SHA"
 
-      - name: Checkout homebrew-magent
+      - name: Checkout homebrew-tap
         uses: actions/checkout@v4
         with:
-          repository: vapor-pawelw/homebrew-magent
+          repository: vapor-pawelw/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-magent
+          path: homebrew-tap
 
       - name: Update cask formula
         run: |
           VERSION="${{ steps.release.outputs.version }}"
           SHA="${{ steps.sha.outputs.sha256 }}"
           ASSET_URL="${{ steps.release.outputs.asset_url }}"
-          sed -i "s/version \".*\"/version \"$VERSION\"/" homebrew-magent/Casks/magent.rb
-          sed -i "s/sha256 \".*\"/sha256 \"$SHA\"/" homebrew-magent/Casks/magent.rb
-          sed -i "s|url \".*\".*|url \"$ASSET_URL\"|" homebrew-magent/Casks/magent.rb
-          cat homebrew-magent/Casks/magent.rb
+          sed -i "s/version \".*\"/version \"$VERSION\"/" homebrew-tap/Casks/magent.rb
+          sed -i "s/sha256 \".*\"/sha256 \"$SHA\"/" homebrew-tap/Casks/magent.rb
+          sed -i "s|url \".*\".*|url \"$ASSET_URL\"|" homebrew-tap/Casks/magent.rb
+          cat homebrew-tap/Casks/magent.rb
 
       - name: Commit and push cask update
-        working-directory: homebrew-magent
+        working-directory: homebrew-tap
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

@@ -3,8 +3,8 @@
 set -euo pipefail
 
 RELEASE_WORKFLOW_NAME="Release"
-DEFAULT_RELEASE_REPO="vapor-pawelw/magent-releases"
-DEFAULT_HOMEBREW_TAP_REPO="vapor-pawelw/homebrew-magent"
+DEFAULT_RELEASE_REPO="vapor-pawelw/magent"
+DEFAULT_HOMEBREW_TAP_REPO="vapor-pawelw/homebrew-tap"
 CHANGELOG_FILE="CHANGELOG.md"
 CHANGELOG_UNRELEASED_PLACEHOLDER="- _No notable changes yet._"
 
