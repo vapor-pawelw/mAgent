@@ -101,17 +101,21 @@ Right-clicking a TOC entry shows a context menu with "Rename thread from this pr
 
 **Error handling:** If all agents fail, throws `nameGenerationFailed`. The banner reads "Could not generate a thread name. Ensure Claude or Codex is configured and reachable, then try again." (not "unique thread name" — that wording was misleading since the failure here is agent availability, not duplicate names).
 
-## Three auto-rename trigger paths
+## Four auto-rename trigger paths
 
-There are three independent paths that can fire auto-rename for a thread's first prompt:
+There are four independent paths that can fire auto-rename for a thread's first prompt:
 
 1. **Early path (launch sheet):** `createThread` fires `autoRenameThreadAfterFirstPromptIfNeeded` in an unstructured `Task` immediately after the tmux session is created, using the prompt captured from the launch sheet. This path bypasses the agent-process-detection gate because the agent is not yet running at that point — the prompt is already known from the sheet. It typically completes before the agent has even started processing.
 
-2. **TOC path (confirmed pane):** Fires when the prompt TOC parser in `ThreadDetailViewController+PromptTOC` confirms a new submitted prompt in the pane. This path goes through the agent-process-detection gate. **Requires the thread to be selected** — `ThreadDetailViewController` must exist for TOC parsing to run.
+2. **Draft path (draft tab):** When a thread is created with the "Draft" checkbox checked, the prompt is not submitted to an agent — it's stored as a `PersistedDraftTab`. `ThreadListViewController+SidebarActions` calls `autoRenameThreadFromDraftPromptIfNeeded` (awaited, not fire-and-forget) immediately after adding the draft tab. This path uses `performAutoRename` with `requireSession: nil` (no tmux session exists yet) and `prefixDraft: true` to prepend "DRAFT: " to the generated description. When the draft is later consumed ("Start Agent") or discarded, `stripDraftDescriptionPrefixIfNeeded` removes the prefix if no draft tabs remain.
 
-3. **Bell path (non-visible threads):** Fires from `checkForAgentCompletions` in `ThreadManager+AgentState` when a bell event arrives for a thread that hasn't been auto-renamed yet. Uses `triggerAutoRenameFromBellIfNeeded` (in `ThreadManager+Rename`) which captures pane content via `tmux.capturePane`, extracts the first prompt with a lightweight marker-based parser (`extractFirstPromptFromPane`), verifies an agent is running, and calls `autoRenameThreadAfterFirstPromptIfNeeded`. This covers threads that were never displayed — e.g. created, then the user switched to another thread before the agent finished its first turn. Spawned as a fire-and-forget `Task` to avoid blocking the completion notification flow.
+3. **TOC path (confirmed pane):** Fires when the prompt TOC parser in `ThreadDetailViewController+PromptTOC` confirms a new submitted prompt in the pane. This path goes through the agent-process-detection gate. **Requires the thread to be selected** — `ThreadDetailViewController` must exist for TOC parsing to run.
 
-**Deduplication:** All three paths share the `didAutoRenameFromFirstPrompt` flag. Whichever fires first and succeeds sets the flag; the other paths see it set and exit early. `autoRenameInProgress` prevents concurrent AI calls from multiple paths running simultaneously.
+4. **Bell path (non-visible threads):** Fires from `checkForAgentCompletions` in `ThreadManager+AgentState` when a bell event arrives for a thread that hasn't been auto-renamed yet. Uses `triggerAutoRenameFromBellIfNeeded` (in `ThreadManager+Rename`) which captures pane content via `tmux.capturePane`, extracts the first prompt with a lightweight marker-based parser (`extractFirstPromptFromPane`), verifies an agent is running, and calls `autoRenameThreadAfterFirstPromptIfNeeded`. This covers threads that were never displayed — e.g. created, then the user switched to another thread before the agent finished its first turn. Spawned as a fire-and-forget `Task` to avoid blocking the completion notification flow.
+
+**Deduplication:** All four paths share the `didAutoRenameFromFirstPrompt` flag. Whichever fires first and succeeds sets the flag; the other paths see it set and exit early. `autoRenameInProgress` prevents concurrent AI calls from multiple paths running simultaneously.
+
+**Shared implementation:** Paths 1–2 (early and draft) and paths 3–4 (TOC and bell, which both call `autoRenameThreadAfterFirstPromptIfNeeded`) all converge on the private `performAutoRename(threadId:requireSession:prompt:prefixDraft:)` helper. The only differences are whether a tmux session is required and whether the "DRAFT: " prefix is applied.
 
 **Rename payload cache:** All paths check `promptRenameResultCache` (keyed by `threadId + normalizedPrompt`) before calling the agent. If an earlier path already cached a result, later paths reuse it instantly. See architecture.md §4.2 for details.
 
