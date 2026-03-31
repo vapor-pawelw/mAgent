@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Tab
+- Option+middle-click on a tab now closes it immediately without a confirmation alert.
 
 ## 1.4.0 - 2026-03-31
 
