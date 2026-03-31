@@ -470,11 +470,20 @@ extension ThreadListViewController {
                    !desc.isEmpty {
                     try? self.threadManager.setTaskDescription(threadId: created.id, description: desc)
                 }
-                // If this is a draft, add a persisted draft tab to the newly created thread.
+                // If this is a draft, add a persisted draft tab to the newly created thread
+                // and trigger auto-rename from the draft prompt text.
                 if let (agentType, prompt) = draftPrompt {
                     let identifier = "draft:\(UUID().uuidString)"
                     let draftTab = PersistedDraftTab(identifier: identifier, agentType: agentType, prompt: prompt)
                     self.threadManager.updatePersistedDraftTabs(for: created.id, draftTabs: [draftTab])
+
+                    let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmedPrompt.isEmpty {
+                        _ = await self.threadManager.autoRenameThreadFromDraftPromptIfNeeded(
+                            threadId: created.id,
+                            prompt: trimmedPrompt
+                        )
+                    }
                 }
                 await MainActor.run {
                     self.isCreatingThread = false

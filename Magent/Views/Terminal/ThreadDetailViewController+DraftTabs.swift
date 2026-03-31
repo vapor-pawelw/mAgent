@@ -172,6 +172,9 @@ extension ThreadDetailViewController {
 
         persistDraftTabs()
 
+        // Strip "DRAFT: " prefix if no draft tabs remain.
+        threadManager.stripDraftDescriptionPrefixIfNeeded(threadId: thread.id)
+
         if tabItems.isEmpty {
             showEmptyState()
         } else {
@@ -202,6 +205,9 @@ extension ThreadDetailViewController {
 
         rebindAllTabActions()
         rebuildTabBar()
+
+        // Strip "DRAFT: " prefix from description now that the draft is consumed.
+        threadManager.stripDraftDescriptionPrefixIfNeeded(threadId: thread.id)
 
         // Create actual agent tab with the prompt
         addTabFromDraft(agentType: agentType, prompt: prompt)
