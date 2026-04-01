@@ -28,6 +28,8 @@ final class ThreadManager {
         let prompt: String
         let agentType: AgentType?
         let projectId: UUID
+        let modelId: String?
+        let reasoningLevel: String?
     }
 
     static let shared = ThreadManager()

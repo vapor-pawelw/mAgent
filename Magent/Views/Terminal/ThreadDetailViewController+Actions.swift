@@ -456,7 +456,11 @@ extension ThreadDetailViewController {
     @objc func addTabTapped() {
         let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
         if isOptionPressed {
-            addTab(using: nil, useAgentCommand: true)
+            // Fast path: use last-selected model/reasoning for the resolved agent type
+            let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
+            let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         } else {
             presentNewTabSheet()
         }
@@ -500,7 +504,9 @@ extension ThreadDetailViewController {
                     initialPrompt: result.prompt,
                     shouldSubmitInitialPrompt: true,
                     customTitle: result.tabTitle,
-                    pendingPromptFileURL: result.pendingPromptFileURL
+                    pendingPromptFileURL: result.pendingPromptFileURL,
+                    modelId: result.modelId,
+                    reasoningLevel: result.reasoningLevel
                 )
             }
         }
@@ -513,7 +519,9 @@ extension ThreadDetailViewController {
         shouldSubmitInitialPrompt: Bool = true,
         customTitle: String? = nil,
         pendingPromptFileURL: URL? = nil,
-        tabNameSuffix: String? = nil
+        tabNameSuffix: String? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
     ) {
         // Phase 1: Immediately add a tab item and show "Creating tab..." overlay so
         // the tab appears in the bar without waiting for tmux session creation.
@@ -552,7 +560,9 @@ extension ThreadDetailViewController {
                     shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
                     customTitle: customTitle,
                     tabNameSuffix: tabNameSuffix,
-                    pendingPromptFileURL: pendingPromptFileURL
+                    pendingPromptFileURL: pendingPromptFileURL,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel
                 )
                 // Skip recreateSessionIfNeeded — the session was just created by addTab().
                 // Calling it here risks a race: the pane path check can fail during shell
@@ -618,7 +628,10 @@ extension ThreadDetailViewController {
     func addTabFromKeyboard() {
         let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
         if isOptionPressed {
-            addTab(using: nil, useAgentCommand: true)
+            let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
+            let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         } else {
             presentNewTabSheet()
         }
@@ -980,9 +993,14 @@ extension ThreadDetailViewController: NSMenuDelegate {
         case .terminal:
             addTab(using: nil, useAgentCommand: false)
         case .agent(let agentType):
-            addTab(using: agentType, useAgentCommand: true)
+            let modelId = AgentLastSelectionStore.lastModel(for: agentType)
+            let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType)
+            addTab(using: agentType, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         case .projectDefault:
-            addTab(using: nil, useAgentCommand: true)
+            let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
+            let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         case .web:
             let blankURL = URL(string: "about:blank")!
             openWebTab(url: blankURL, identifier: "web:\(UUID().uuidString)", title: "Web", iconType: .web)

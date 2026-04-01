@@ -13,7 +13,9 @@ extension ThreadManager {
         shouldSubmitInitialPrompt: Bool = true,
         customTitle: String? = nil,
         tabNameSuffix: String? = nil,
-        pendingPromptFileURL: URL? = nil
+        pendingPromptFileURL: URL? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
     ) async throws -> Tab {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
             throw ThreadManagerError.threadNotFound
@@ -63,7 +65,9 @@ extension ThreadManager {
                     projectId: currentThread.projectId,
                     agentType: selectedAgentType,
                     envExports: shellExportCommand(for: sessionEnvironment),
-                    workingDirectory: projectPath
+                    workingDirectory: projectPath,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel
                 )
                 requestedTabBaseName = TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
             } else {
@@ -115,7 +119,9 @@ extension ThreadManager {
                     projectId: currentThread.projectId,
                     agentType: selectedAgentType,
                     envExports: shellExportCommand(for: sessionEnvironment),
-                    workingDirectory: currentThread.worktreePath
+                    workingDirectory: currentThread.worktreePath,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel
                 )
                 requestedTabBaseName = TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
             } else {

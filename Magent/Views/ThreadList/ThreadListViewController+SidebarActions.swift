@@ -18,7 +18,10 @@ extension ThreadListViewController {
         guard let project = projectFromProjectHeaderButton(sender) else { return }
         let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
         if isOptionPressed {
-            createThread(for: project, requestedAgentType: nil, useAgentCommand: true)
+            let resolvedAgent = threadManager.effectiveAgentType(for: project.id)
+            let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            createThread(for: project, requestedAgentType: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         } else {
             presentNewThreadSheet(for: project, anchorView: sender)
         }
@@ -312,7 +315,9 @@ extension ThreadListViewController {
                 insertAfterThreadId: effectiveInsertAfter,
                 insertAtTopOfVisibleGroup: insertAtTop,
                 initialWebURL: result.initialWebURL,
-                draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "") } : nil
+                draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "") } : nil,
+                modelId: result.modelId,
+                reasoningLevel: result.reasoningLevel
             )
         }
     }
@@ -351,9 +356,14 @@ extension ThreadListViewController {
         case .terminal:
             createThread(for: project, requestedAgentType: nil, useAgentCommand: false, baseBranch: baseBranch)
         case .agent(let agentType):
-            createThread(for: project, requestedAgentType: agentType, useAgentCommand: true, baseBranch: baseBranch)
+            let modelId = AgentLastSelectionStore.lastModel(for: agentType)
+            let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType)
+            createThread(for: project, requestedAgentType: agentType, useAgentCommand: true, baseBranch: baseBranch, modelId: modelId, reasoningLevel: reasoning)
         case .projectDefault:
-            createThread(for: project, requestedAgentType: nil, useAgentCommand: true, baseBranch: baseBranch)
+            let resolvedAgent = threadManager.effectiveAgentType(for: project.id)
+            let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            createThread(for: project, requestedAgentType: nil, useAgentCommand: true, baseBranch: baseBranch, modelId: modelId, reasoningLevel: reasoning)
         case .web:
             presentNewThreadSheet(for: project, anchorView: outlineView)
         }
@@ -403,13 +413,18 @@ extension ThreadListViewController {
         let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
         if isOptionPressed {
             let isPinnedSource = sourceInSameProject?.sidebarListState == .pinned
+            let resolvedAgent = threadManager.effectiveAgentType(for: project.id)
+            let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
             createThread(
                 for: project,
                 requestedAgentType: nil,
                 useAgentCommand: true,
                 requestedSectionId: sourceInSameProject?.sectionId,
                 insertAfterThreadId: isPinnedSource ? nil : sourceInSameProject?.id,
-                insertAtTopOfVisibleGroup: isPinnedSource
+                insertAtTopOfVisibleGroup: isPinnedSource,
+                modelId: modelId,
+                reasoningLevel: reasoning
             )
         } else {
             presentNewThreadSheet(for: project, anchorView: outlineView, sourceThread: sourceInSameProject)
@@ -430,7 +445,9 @@ extension ThreadListViewController {
         insertAfterThreadId: UUID? = nil,
         insertAtTopOfVisibleGroup: Bool = false,
         initialWebURL: URL? = nil,
-        draftPrompt: (AgentType, String)? = nil
+        draftPrompt: (AgentType, String)? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
     ) {
         isCreatingThread = true
         reloadData()
@@ -448,7 +465,9 @@ extension ThreadListViewController {
                     requestedSectionId: requestedSectionId,
                     insertAfterThreadId: insertAfterThreadId,
                     insertAtTopOfVisibleGroup: insertAtTopOfVisibleGroup,
-                    initialWebURL: initialWebURL
+                    initialWebURL: initialWebURL,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel
                 )
                 if let desc = taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !desc.isEmpty {
@@ -528,7 +547,9 @@ extension ThreadListViewController {
                 prompt: record.prompt,
                 description: record.description,
                 branchName: record.branchName,
-                agentType: record.agentType
+                agentType: record.agentType,
+                modelId: record.modelId,
+                reasoningLevel: record.reasoningLevel
             )
             BannerManager.shared.show(
                 message: "Unsubmitted thread prompt recovered — Project: \(project.name)\(countSuffix)",
@@ -567,7 +588,9 @@ extension ThreadListViewController {
                     tempFileURL: url,
                     prompt: record.prompt,
                     agentType: record.agentType,
-                    projectId: project.id
+                    projectId: project.id,
+                    modelId: record.modelId,
+                    reasoningLevel: record.reasoningLevel
                 )
             )
             next()
@@ -609,7 +632,9 @@ extension ThreadListViewController {
                 shouldSubmitInitialPrompt: true,
                 taskDescription: result.description,
                 requestedBranchName: result.branchName,
-                pendingPromptFileURL: result.pendingPromptFileURL
+                pendingPromptFileURL: result.pendingPromptFileURL,
+                modelId: result.modelId,
+                reasoningLevel: result.reasoningLevel
             )
         }
     }

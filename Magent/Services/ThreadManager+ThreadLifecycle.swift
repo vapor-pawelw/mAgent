@@ -21,7 +21,9 @@ extension ThreadManager {
         insertAfterThreadId: UUID? = nil,
         insertAtTopOfVisibleGroup: Bool = false,
         skipAutoSelect: Bool = false,
-        initialWebURL: URL? = nil
+        initialWebURL: URL? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
     ) async throws -> MagentThread {
         var name = ""
         var foundUnique = false
@@ -268,7 +270,9 @@ extension ThreadManager {
                     projectId: project.id,
                     agentType: selectedAgentType,
                     envExports: envExports,
-                    workingDirectory: worktreePath
+                    workingDirectory: worktreePath,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel
                 )
             } else {
                 startCmd = terminalStartCommand(
