@@ -27,7 +27,7 @@ Typical use cases:
 
 - Each thread gets its own copy of the configured file/directory
 - New threads seed from the resolved base-branch sync target
-- Manual Local Sync and archive merge-back apply to copy entries
+- Local Sync and archive merge-back apply to copy entries
 - Copy entries participate in baseline hashing and conflict prompts
 
 ### Shared Link
@@ -69,28 +69,28 @@ When forking a thread (Fork Thread), the new thread's sync snapshot is built by 
 
 ## Manual Resync
 
-When a project has at least one `Copy` local sync entry configured and at least one other active worktree in that project, Magent shows a top-bar resync button (↺). The current worktree is never offered as a target.
+When a project has at least one `Copy` local sync entry configured and at least one other active worktree in that project, Magent shows a top-bar sync button (↺). The current worktree is never offered as a target, and projects with only `Shared Link` entries do not show the button at all.
 
 Non-main threads use a quick-action menu first:
 
-**Default click** — syncs with the base branch's worktree (or project root as fallback):
+**Default click** — opens a menu with reconcile first, then pull/push:
 
-- **`<base-worktree> → <this-worktree>`**: copies from the resolved sync target into this thread
-- **`<this-worktree> → <base-worktree>`**: pushes from this worktree into the resolved sync target
 - **`Reconcile <this-worktree> with <base-worktree>…`**: opens an agent tab for fully agentic two-way reconciliation between the current worktree and the resolved sync target
+- separator
+- **`Pull into this worktree`**: copies from the resolved sync target into this thread
+- **`Push from this worktree`**: pushes from this worktree into the resolved sync target
 
-When no sibling thread owns the base branch, labels show "Project" (e.g. `Project → primeape`).
+When no sibling thread owns the base branch, labels show "Repo root" (e.g. `Repo root` as the sync source/target).
 
 **Option-click** — always syncs with the main repo regardless of base branch:
 
-- **`Project → <this-worktree>`**: copies from the project repo root into this thread
-- **`<this-worktree> → Project`**: pushes from this worktree to the project repo root
-- **`Reconcile <this-worktree> with Project…`**: opens an agent tab for fully agentic two-way reconciliation between the current worktree and the main repo copy
+- **`Pull into this worktree`**: copies from the project repo root into this thread
+- **`Push from this worktree`**: pushes from this worktree to the project repo root
+- **`Reconcile <this-worktree> with Repo root…`**: opens an agent tab for fully agentic two-way reconciliation between the current worktree and the repo root copy
 
-When there are more than two active worktrees in the project, the quick-action menu also includes **`Other…`**, which opens a manual picker. When only one other worktree exists, `Other…` is hidden since the direct menu items already cover it.
+When there are more than two active worktrees in the project, the quick-action menu also includes **`Choose another worktree…`**, which opens a manual picker. When only one other worktree exists, it is hidden since the direct menu items already cover it.
 
-- Direction selector: `Sync into this worktree` or `Sync from this worktree`
-- Direction selector also includes `Reconcile both ways with agent`
+- Direction selector: `Reconcile with agent`, `Pull into this worktree`, or `Push from this worktree`
 - Worktree selector: `NSComboBox` listing every other non-bare git worktree in the repo, including the main worktree when the current thread is not main
 - Default target: the same resolved base-branch sync target used by the quick menu when present; otherwise the first available other worktree
 

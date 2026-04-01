@@ -8,9 +8,9 @@ private struct ManualLocalSyncTarget {
 }
 
 private enum ManualLocalSyncDirection: Int {
-    case intoCurrentWorktree = 0
-    case fromCurrentWorktree = 1
-    case reconcileBothWays = 2
+    case reconcileBothWays = 0
+    case intoCurrentWorktree = 1
+    case fromCurrentWorktree = 2
 }
 
 extension ThreadDetailViewController {
@@ -94,6 +94,13 @@ extension ThreadDetailViewController {
         let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         let settings = PersistenceService.shared.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else { return }
+        guard project.hasCopyLocalFileSyncEntries else {
+            BannerManager.shared.show(
+                message: "Local Sync is only available when the project has at least one Copy path.",
+                style: .warning
+            )
+            return
+        }
 
         if currentThread.isMain {
             presentManualLocalSyncPicker(for: currentThread, project: project)
@@ -110,7 +117,7 @@ extension ThreadDetailViewController {
         if isOptionPressed {
             // Option held: always sync with main repo
             syncPath = nil
-            syncLabel = "Project"
+            syncLabel = "Repo root"
         } else {
             // Default: sync with base branch worktree (falls back to project repo)
             let (resolvedPath, resolvedLabel) = threadManager.resolveBaseBranchSyncTarget(for: currentThread, project: project)
@@ -119,30 +126,11 @@ extension ThreadDetailViewController {
                 syncLabel = resolvedLabel
             } else {
                 syncPath = nil
-                syncLabel = "Project"
+                syncLabel = "Repo root"
             }
         }
 
         let menu = NSMenu()
-
-        let intoWorktreeItem = NSMenuItem(
-            title: "\(syncLabel) \u{2192} \(thisName)",
-            action: #selector(resyncIntoWorktreeTapped(_:)),
-            keyEquivalent: ""
-        )
-        intoWorktreeItem.target = self
-        intoWorktreeItem.representedObject = syncPath
-
-        let fromWorktreeItem = NSMenuItem(
-            title: "\(thisName) \u{2192} \(syncLabel)",
-            action: #selector(resyncFromWorktreeTapped(_:)),
-            keyEquivalent: ""
-        )
-        fromWorktreeItem.target = self
-        fromWorktreeItem.representedObject = syncPath
-
-        menu.addItem(intoWorktreeItem)
-        menu.addItem(fromWorktreeItem)
 
         let reconcileItem = NSMenuItem(
             title: "Reconcile \(thisName) with \(syncLabel)\u{2026}",
@@ -152,8 +140,28 @@ extension ThreadDetailViewController {
         reconcileItem.target = self
         reconcileItem.representedObject = syncPath
         menu.addItem(reconcileItem)
+        menu.addItem(.separator())
 
-        // Only show "Other…" if there are additional worktrees beyond the default sync target
+        let intoWorktreeItem = NSMenuItem(
+            title: "Pull into this worktree",
+            action: #selector(resyncIntoWorktreeTapped(_:)),
+            keyEquivalent: ""
+        )
+        intoWorktreeItem.target = self
+        intoWorktreeItem.representedObject = syncPath
+
+        let fromWorktreeItem = NSMenuItem(
+            title: "Push from this worktree",
+            action: #selector(resyncFromWorktreeTapped(_:)),
+            keyEquivalent: ""
+        )
+        fromWorktreeItem.target = self
+        fromWorktreeItem.representedObject = syncPath
+
+        menu.addItem(intoWorktreeItem)
+        menu.addItem(fromWorktreeItem)
+
+        // Only show "Choose another worktree…" if there are additional worktrees beyond the default sync target
         let otherWorktreeCount = threadManager.threads.filter { thread in
             thread.projectId == currentThread.projectId
             && thread.id != currentThread.id
@@ -162,7 +170,7 @@ extension ThreadDetailViewController {
         if otherWorktreeCount > 1 {
             menu.addItem(.separator())
             let otherItem = NSMenuItem(
-                title: "Other…",
+                title: "Choose another worktree…",
                 action: #selector(resyncOtherLocalPathsTapped(_:)),
                 keyEquivalent: ""
             )
@@ -181,7 +189,7 @@ extension ThreadDetailViewController {
     /// when nil, the project repo root is used.
     @objc private func resyncIntoWorktreeTapped(_ sender: NSMenuItem) {
         let sourceRootOverride = sender.representedObject as? String
-        let sourceLabel = sourceRootOverride.map { ($0 as NSString).lastPathComponent } ?? "the main repo"
+        let sourceLabel = sourceRootOverride.map { ($0 as NSString).lastPathComponent } ?? "repo root"
         performResyncIntoWorktree(sourceLabel: sourceLabel, sourceRootOverride: sourceRootOverride)
     }
 
@@ -190,7 +198,7 @@ extension ThreadDetailViewController {
     /// when nil, the project repo root is used.
     @objc private func resyncFromWorktreeTapped(_ sender: NSMenuItem) {
         let destinationRootOverride = sender.representedObject as? String
-        let destLabel = destinationRootOverride.map { ($0 as NSString).lastPathComponent } ?? "the main repo"
+        let destLabel = destinationRootOverride.map { ($0 as NSString).lastPathComponent } ?? "repo root"
         performResyncFromWorktree(destLabel: destLabel, destinationRootOverride: destinationRootOverride)
     }
 
@@ -257,8 +265,8 @@ extension ThreadDetailViewController {
         targets: [ManualLocalSyncTarget]
     ) {
         let alert = NSAlert()
-        alert.messageText = "Manual Local Sync"
-        alert.informativeText = "Choose whether to run a one-way sync or a two-way agentic reconcile, then pick the target worktree."
+        alert.messageText = "Choose Worktree"
+        alert.informativeText = "Choose a source or destination worktree, or use the agent to reconcile both sides."
         alert.addButton(withTitle: "Continue")
         alert.addButton(withTitle: "Cancel")
 
@@ -270,11 +278,11 @@ extension ThreadDetailViewController {
 
         let directionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         directionPopup.addItems(withTitles: [
-            "Sync into this worktree",
-            "Sync from this worktree",
-            "Reconcile both ways with agent"
+            "Reconcile with agent",
+            "Pull into this worktree",
+            "Push from this worktree"
         ])
-        directionPopup.selectItem(at: ManualLocalSyncDirection.intoCurrentWorktree.rawValue)
+        directionPopup.selectItem(at: ManualLocalSyncDirection.reconcileBothWays.rawValue)
 
         let targetLabel = NSTextField(labelWithString: "Worktree:")
         targetLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
@@ -328,10 +336,6 @@ extension ThreadDetailViewController {
         let direction = ManualLocalSyncDirection(rawValue: directionPopup.indexOfSelectedItem) ?? .intoCurrentWorktree
 
         switch direction {
-        case .intoCurrentWorktree:
-            performResyncIntoWorktree(sourceLabel: target.label, sourceRootOverride: target.path)
-        case .fromCurrentWorktree:
-            performResyncFromWorktree(destLabel: target.label, destinationRootOverride: target.path)
         case .reconcileBothWays:
             openAgenticReconcile(
                 currentThread: currentThread,
@@ -339,6 +343,10 @@ extension ThreadDetailViewController {
                 targetPath: target.path,
                 targetLabel: target.label
             )
+        case .intoCurrentWorktree:
+            performResyncIntoWorktree(sourceLabel: target.label, sourceRootOverride: target.path)
+        case .fromCurrentWorktree:
+            performResyncFromWorktree(destLabel: target.label, destinationRootOverride: target.path)
         }
     }
 
@@ -592,7 +600,7 @@ extension ThreadDetailViewController {
 
     private func localSyncTargetLabel(for path: String, projectRepoPath: String) -> String {
         if path == projectRepoPath {
-            return "Project"
+            return "Repo root"
         }
         return (path as NSString).lastPathComponent
     }
@@ -609,7 +617,7 @@ extension ThreadDetailViewController {
         resyncLocalPathsButton.isEnabled = true
         resyncLocalPathsButton.image = NSImage(
             systemSymbolName: "arrow.triangle.2.circlepath",
-            accessibilityDescription: "Resync Local Paths"
+            accessibilityDescription: "Sync local-only files"
         )
         resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
     }

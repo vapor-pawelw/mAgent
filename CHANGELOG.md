@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - New `keep-alive-thread`, `keep-alive-tab`, and `keep-alive-section` commands to enable/disable Keep Alive protection (`--remove` to disable).
 
 ### Local Sync
+- Local Sync now uses clearer pull/push/reconcile wording in the top-bar menu, shows `Repo root` instead of `Project`, and hides the button entirely when a project only has `Shared Link` entries.
 - Project settings now use a row-based `Local Sync Paths` editor with per-path modes: `Copy` or `Shared Link`.
 - `Shared Link` local sync entries now create direct symlinks to the main repo copy during thread creation and forked-thread setup, while archive/push-back remains limited to `Copy` entries.
 - Local Sync menus now separate one-way sync from two-way agentic reconcile, and conflict dialogs rename `Agentic Merge` to `Resolve with Agent` so the chosen direction remains clear.
