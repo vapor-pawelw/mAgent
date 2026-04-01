@@ -250,7 +250,7 @@ Restore is a coordinated app-state transition, not just a filesystem copy:
 - The Settings restore action must stop background pollers/timers that can write state (`ThreadManager` session monitor, update polling, periodic backup timer).
 - Cancel any pending debounced thread save before touching snapshot files.
 - Block writes for every restorable critical file while the restore is in progress so UI or background code cannot immediately overwrite the restored snapshot.
-- Restore uses replacement semantics for the critical-file set. If the chosen snapshot does not contain one of those files, the current on-disk copy should be removed rather than silently preserved from a newer state.
+- Restore only replaces files that are actually present in the chosen snapshot. If the snapshot is partial, any missing files stay on disk so a partial backup cannot destroy newer local state by omission alone.
 - Every restore first creates a `pre-restore-<timestamp>` safety snapshot of the current state, and those safety snapshots must stay visible in the restore picker so the user can undo a bad restore.
 
 ### 5. Persistence Model
@@ -277,6 +277,8 @@ On launch, `AppCoordinator.start()` calls `tryLoadSettings()` / `tryLoadThreads(
 1. Writes to the affected file are **blocked** so no save can overwrite it.
 2. A modal alert explains which files failed and why.
 3. The user can **Quit** (file stays untouched for manual recovery) or **Continue with Reset** (file is backed up as `<name>.corrupted.<timestamp>.json`, writes unblocked, app proceeds with defaults).
+
+If threads load successfully but settings are missing or no longer cover the live project IDs, Magent first tries to recover `settings.json` from the rolling backup before falling back to onboarding/default settings. This keeps existing threads attached to their projects after a missing-settings failure.
 
 Non-critical caches (Jira, PR, rate-limit, etc.) keep silent fallback to empty — they are regenerated from APIs.
 

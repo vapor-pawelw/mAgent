@@ -249,7 +249,8 @@ public final class BackupService {
 
     // MARK: - Restore
 
-    /// Restores files from a snapshot, replacing the current critical files.
+    /// Restores files from a snapshot, replacing the current critical files that are
+    /// actually present in that snapshot.
     /// A safety snapshot of the current state is taken first so the user can undo.
     /// Returns the safety snapshot directory name on success.
     @discardableResult
@@ -266,17 +267,25 @@ public final class BackupService {
         }
         logger.info("Safety snapshot created: \(safetyTimestamp)")
 
-        // 2. Replace current critical files with the selected snapshot contents
+        // 2. Replace only the files that are present in the selected snapshot.
+        //    Leaving missing files untouched avoids turning a partial snapshot into
+        //    destructive data loss during restore.
         let snapshotFiles = Set(snapshot.files)
-        for fileName in criticalFiles {
+        for fileName in criticalFiles where snapshotFiles.contains(fileName) {
             let snapshotFileURL = snapshot.url.appendingPathComponent(fileName)
             let targetURL = appSupportURL.appendingPathComponent(fileName)
 
             if fileManager.fileExists(atPath: targetURL.path) {
                 try fileManager.removeItem(at: targetURL)
             }
-            guard snapshotFiles.contains(fileName) else { continue }
             try fileManager.copyItem(at: snapshotFileURL, to: targetURL)
+        }
+
+        let missingFiles = criticalFiles.filter { !snapshotFiles.contains($0) }
+        if !missingFiles.isEmpty {
+            logger.error(
+                "Restored partial snapshot \(snapshot.url.lastPathComponent); left current copies in place for: \(missingFiles.joined(separator: ", "))"
+            )
         }
 
         logger.info("Restored from snapshot: \(snapshot.url.lastPathComponent)")

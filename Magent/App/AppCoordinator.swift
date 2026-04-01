@@ -12,12 +12,24 @@ final class AppCoordinator {
     private(set) var statusBar: StatusBarView?
 
     func start() {
+        let initialThreadsOutcome = persistence.tryLoadThreads()
+        let activeThreadProjectIDs: Set<UUID>
+        switch initialThreadsOutcome {
+        case .loaded(let threads):
+            activeThreadProjectIDs = Set(threads.filter { !$0.isArchived }.map(\.projectId))
+        case .fileNotFound, .decodeFailed:
+            activeThreadProjectIDs = []
+        }
+
+        _ = persistence.recoverSettingsFromRollingBackupIfNeeded(activeThreadProjectIDs: activeThreadProjectIDs)
+
         // Validate critical persistence files before showing the UI.
         // If any file is corrupted or incompatible, block writes and let the
         // user decide: quit (to fix manually) or continue with defaults.
         var failures: [PersistenceLoadFailure] = []
 
-        switch persistence.tryLoadSettings() {
+        let settingsOutcome = persistence.tryLoadSettings()
+        switch settingsOutcome {
         case .loaded: break
         case .fileNotFound: break
         case .decodeFailed(let failure):
@@ -25,12 +37,22 @@ final class AppCoordinator {
             failures.append(failure)
         }
 
-        switch persistence.tryLoadThreads() {
+        let threadsOutcome = persistence.tryLoadThreads()
+        switch threadsOutcome {
         case .loaded: break
         case .fileNotFound: break
         case .decodeFailed(let failure):
             persistence.blockWrites(for: failure.fileName)
             failures.append(failure)
+        }
+
+        if failures.isEmpty, shouldTreatSettingsAsIncomplete(settingsOutcome, threadsOutcome: threadsOutcome) {
+            persistence.blockWrites(for: "settings.json")
+            let shouldContinue = presentIncompleteSettingsAlert()
+            if !shouldContinue {
+                NSApp.terminate(nil)
+                return
+            }
         }
 
         if !failures.isEmpty {
@@ -172,6 +194,44 @@ final class AppCoordinator {
 
         let response = alert.runModal()
         return response == .alertFirstButtonReturn
+    }
+
+    private func shouldTreatSettingsAsIncomplete(
+        _ settingsOutcome: LoadOutcome<AppSettings>,
+        threadsOutcome: LoadOutcome<[MagentThread]>
+    ) -> Bool {
+        guard case .loaded(let threads) = threadsOutcome,
+              threads.contains(where: { !$0.isArchived }) else {
+            return false
+        }
+
+        switch settingsOutcome {
+        case .fileNotFound:
+            return true
+        case .loaded(let settings):
+            return !settings.isConfigured || settings.projects.isEmpty
+        case .decodeFailed:
+            return false
+        }
+    }
+
+    private func presentIncompleteSettingsAlert() -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Found threads, but settings are incomplete"
+        alert.informativeText = """
+        Magent found existing thread data, but settings.json is missing or does not contain \
+        any configured projects. Showing onboarding in this state would strand those threads.
+
+        Magent has blocked writes to settings.json for this launch so the existing recovery \
+        files are not overwritten. Quit now and restore from the rolling backup or a known-good \
+        snapshot, or continue without saving settings changes.
+
+        File location: ~/Library/Application Support/Magent
+        """
+        alert.addButton(withTitle: "Continue Without Saving")
+        alert.addButton(withTitle: "Quit Magent")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func ensureWindowIsVisibleOnCurrentScreens(_ window: NSWindow) {

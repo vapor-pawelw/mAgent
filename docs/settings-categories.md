@@ -32,6 +32,8 @@
 - Added a `Data Backup` card to `Settings > General` with a `Restore from Backup…` action.
 - Magent now keeps rolling `.bak` copies of `threads.json`, `settings.json`, and `agent-launch-prompt-drafts.json` before overwriting them, and also writes 30-minute snapshot directories under Application Support.
 - Restore now lists both periodic snapshots and pre-restore safety backups, then relaunches the app after replacing the current persistence files.
+- If the selected snapshot is partial, missing files are left untouched instead of being deleted during restore.
+- On launch, Magent may recover `settings.json` from the rolling backup when active thread data exists but the current settings file is missing or incomplete.
 
 ## Implementation Notes
 

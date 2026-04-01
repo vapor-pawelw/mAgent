@@ -103,6 +103,10 @@ public final class PersistenceService {
         appSupportURL.appendingPathComponent("settings.json")
     }
 
+    private var settingsBackupURL: URL {
+        appSupportURL.appendingPathComponent("settings.bak.json")
+    }
+
     private var agentLaunchPromptDraftsURL: URL {
         appSupportURL.appendingPathComponent("agent-launch-prompt-drafts.json")
     }
@@ -311,6 +315,70 @@ public final class PersistenceService {
         }
 
         return settings
+    }
+
+    public struct SettingsRollingRecoveryResult: Sendable {
+        public let sourceFileName: String
+        public let previousCoverageCount: Int
+        public let recoveredCoverageCount: Int
+    }
+
+    /// When active threads exist but the current settings file is missing, empty, or no
+    /// longer references those projects, try to restore the last rolling backup before
+    /// the app falls back to onboarding/default settings.
+    public func recoverSettingsFromRollingBackupIfNeeded(
+        activeThreadProjectIDs: Set<UUID>
+    ) -> SettingsRollingRecoveryResult? {
+        guard !activeThreadProjectIDs.isEmpty else { return nil }
+
+        let currentSettings = tryLoadSettings()
+        let currentCoverageCount: Int
+        switch currentSettings {
+        case .loaded(let settings):
+            currentCoverageCount = Set(settings.projects.map(\.id)).intersection(activeThreadProjectIDs).count
+        case .fileNotFound, .decodeFailed:
+            currentCoverageCount = 0
+        }
+
+        guard currentCoverageCount < activeThreadProjectIDs.count else { return nil }
+
+        let backupSettings: AppSettings
+        switch decodeVersioned(
+            AppSettings.self,
+            from: settingsBackupURL,
+            currentVersion: SchemaVersion.settings,
+            migrations: settingsMigrations
+        ) {
+        case .loaded(let settings):
+            backupSettings = settings
+        case .fileNotFound, .decodeFailed:
+            return nil
+        }
+
+        let recoveredCoverageCount = Set(backupSettings.projects.map(\.id)).intersection(activeThreadProjectIDs).count
+        guard backupSettings.isConfigured,
+              !backupSettings.projects.isEmpty,
+              recoveredCoverageCount > currentCoverageCount else {
+            return nil
+        }
+
+        do {
+            let envelope = VersionedEnvelope(schemaVersion: SchemaVersion.settings, data: backupSettings)
+            let data = try encoder.encode(envelope)
+            try data.write(to: settingsURL, options: .atomic)
+            _cachedSettings = backupSettings
+            logger.info(
+                "Recovered settings.json from \(self.settingsBackupURL.lastPathComponent) (\(currentCoverageCount) -> \(recoveredCoverageCount) matching project ids)"
+            )
+            return SettingsRollingRecoveryResult(
+                sourceFileName: settingsBackupURL.lastPathComponent,
+                previousCoverageCount: currentCoverageCount,
+                recoveredCoverageCount: recoveredCoverageCount
+            )
+        } catch {
+            logger.error("Failed to recover settings from \(self.settingsBackupURL.lastPathComponent): \(error.localizedDescription)")
+            return nil
+        }
     }
 
     public func saveSettings(_ settings: AppSettings) throws {
