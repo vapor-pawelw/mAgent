@@ -64,6 +64,38 @@ struct PendingInitialPrompt: Codable {
     let branchName: String?
     let agentType: AgentType?
     let createdAt: Date
+    /// Selected model id at submission time (e.g. "opus", "gpt-5.4"). Nil = agent default.
+    let modelId: String?
+    /// Selected reasoning level at submission time (e.g. "high", "max"). Nil = agent default.
+    let reasoningLevel: String?
+
+    init(scopeKind: ScopeKind, projectId: UUID?, threadId: UUID?, prompt: String, description: String?, branchName: String?, agentType: AgentType?, createdAt: Date, modelId: String? = nil, reasoningLevel: String? = nil) {
+        self.scopeKind = scopeKind
+        self.projectId = projectId
+        self.threadId = threadId
+        self.prompt = prompt
+        self.description = description
+        self.branchName = branchName
+        self.agentType = agentType
+        self.createdAt = createdAt
+        self.modelId = modelId
+        self.reasoningLevel = reasoningLevel
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        scopeKind = try container.decode(ScopeKind.self, forKey: .scopeKind)
+        projectId = try container.decodeIfPresent(UUID.self, forKey: .projectId)
+        threadId = try container.decodeIfPresent(UUID.self, forKey: .threadId)
+        prompt = try container.decode(String.self, forKey: .prompt)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        branchName = try container.decodeIfPresent(String.self, forKey: .branchName)
+        agentType = try container.decodeIfPresent(AgentType.self, forKey: .agentType)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        // Backwards-compatible: old temp files won't have these keys.
+        modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
+        reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
+    }
 }
 
 /// Manages crash-recovery temp files for submitted (but not yet injected) initial prompts.
@@ -85,7 +117,9 @@ enum PendingInitialPromptStore {
         description: String?,
         branchName: String?,
         agentType: AgentType?,
-        scope: AgentLaunchPromptDraftScope
+        scope: AgentLaunchPromptDraftScope,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
     ) -> URL? {
         let scopeKind: PendingInitialPrompt.ScopeKind
         let projectId: UUID?
@@ -102,7 +136,9 @@ enum PendingInitialPromptStore {
             description: description.flatMap { $0.isEmpty ? nil : $0 },
             branchName: branchName.flatMap { $0.isEmpty ? nil : $0 },
             agentType: agentType,
-            createdAt: Date()
+            createdAt: Date(),
+            modelId: modelId,
+            reasoningLevel: reasoningLevel
         )
         let url = URL(fileURLWithPath: "/tmp/magent-pending-prompt-\(UUID().uuidString).json")
         guard let data = try? encoder.encode(record) else { return nil }
@@ -158,6 +194,8 @@ struct AgentLaunchSheetPrefill {
     let description: String?
     let branchName: String?
     let agentType: AgentType?
+    let modelId: String?
+    let reasoningLevel: String?
 }
 
 enum AgentLastSelectionStore {
@@ -173,6 +211,32 @@ enum AgentLastSelectionStore {
     static func save(_ selectionRaw: String, for scope: AgentLaunchPromptDraftScope) {
         var selections = persistence.loadAgentLastSelections()
         selections[globalKey] = selectionRaw
+        persistence.saveAgentLastSelections(selections)
+    }
+
+    // MARK: - Per-Agent Model & Reasoning
+
+    /// Keys for per-agent model/reasoning last selections, stored alongside the type selections.
+    private static func modelKey(for agentType: AgentType) -> String { "model:\(agentType.rawValue)" }
+    private static func reasoningKey(for agentType: AgentType) -> String { "reasoning:\(agentType.rawValue)" }
+
+    static func lastModel(for agentType: AgentType) -> String? {
+        persistence.loadAgentLastSelections()[modelKey(for: agentType)]
+    }
+
+    static func lastReasoning(for agentType: AgentType) -> String? {
+        persistence.loadAgentLastSelections()[reasoningKey(for: agentType)]
+    }
+
+    static func saveModel(_ modelId: String?, for agentType: AgentType) {
+        var selections = persistence.loadAgentLastSelections()
+        selections[modelKey(for: agentType)] = modelId
+        persistence.saveAgentLastSelections(selections)
+    }
+
+    static func saveReasoning(_ level: String?, for agentType: AgentType) {
+        var selections = persistence.loadAgentLastSelections()
+        selections[reasoningKey(for: agentType)] = level
         persistence.saveAgentLastSelections(selections)
     }
 }
@@ -277,6 +341,10 @@ struct AgentLaunchSheetResult {
     let initialWebURL: URL?
     /// When true, the prompt should be saved as a draft tab instead of being executed immediately.
     let isDraft: Bool
+    /// Selected model id (e.g. "opus", "gpt-5.4"), nil means use agent default.
+    let modelId: String?
+    /// Selected reasoning level (e.g. "high", "max"), nil means use agent default.
+    let reasoningLevel: String?
 }
 
 /// A rounded chip view that shows accent-tinted background, adapting correctly to light/dark mode.
@@ -309,6 +377,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private var draftCheckboxRow: NSView?
     private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
     private let switchToNewThreadCheckbox = NSButton(checkboxWithTitle: "Switch to new thread", target: nil, action: nil)
+    private let modelPicker = NSPopUpButton()
+    private let reasoningPicker = NSPopUpButton()
+    private var modelReasoningRow: NSStackView?
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     private let acceptButton: NSButton
     private var promptScrollView: NSScrollView!
@@ -362,16 +433,19 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
+        AgentModelsService.shared.refreshIfThrottled()
         buildPickerItems()
         setupUI()
         if let prefill = config.recoveryPrefill {
             // Recovery mode: pre-select the recovered agent type, then populate fields.
             // Skip draft loading — we're restoring submitted content, not a mid-edit draft.
             applyRecoveryAgentSelection(prefill)
+            syncModelReasoningToCurrentAgent()
             previousMode = currentMode
             applyRecoveryPrefill(prefill)
         } else {
             applyLastSelection()
+            syncModelReasoningToCurrentAgent()
             // Sync previousMode to the restored selection before loading draft
             previousMode = currentMode
             loadDraft(mode: currentMode)
@@ -532,6 +606,36 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         agentPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
         agentRow.addArrangedSubview(agentPicker)
         stack.addArrangedSubview(agentRow)
+
+        // Model + Reasoning picker row (inline, compact)
+        let mrRow = NSStackView()
+        mrRow.orientation = .horizontal
+        mrRow.alignment = .centerY
+        mrRow.spacing = 8
+
+        let modelLabel = makeFormLabel("Model")
+        modelLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([modelLabel.widthAnchor.constraint(equalToConstant: Self.formLabelWidth)])
+        mrRow.addArrangedSubview(modelLabel)
+
+        modelPicker.target = self
+        modelPicker.action = #selector(modelPickerChanged)
+        modelPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        mrRow.addArrangedSubview(modelPicker)
+
+        let reasoningLabel = makeFormLabel("Reasoning")
+        mrRow.addArrangedSubview(reasoningLabel)
+
+        reasoningPicker.target = self
+        reasoningPicker.action = #selector(reasoningPickerChanged)
+        reasoningPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        mrRow.addArrangedSubview(reasoningPicker)
+
+        stack.addArrangedSubview(mrRow)
+        modelReasoningRow = mrRow
+        populateModelReasoningPickers()
+        applyLastModelReasoningSelection()
+        updateModelReasoningVisibility()
 
         // Prompt label
         promptLabel = makeFormLabel(promptLabelText)
@@ -750,7 +854,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ] + (contextChip.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
           + (projectPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
-          + (sectionPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
+          + (sectionPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
+          + (modelReasoningRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
 
         if let titleRow {
             NSLayoutConstraint.activate([
@@ -1135,8 +1240,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     @objc private func agentPickerChanged() {
         let newMode = currentMode
+        populateModelReasoningPickers()
+        applyLastModelReasoningSelection()
+        updateModelReasoningVisibility()
         guard newMode != previousMode else {
             updatePromptAreaEnabled()
+            resizeWindowToFitContent()
             return
         }
         // Save current text to the mode we're leaving, then load the new mode's draft
@@ -1145,6 +1254,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         loadDraft(mode: newMode)
         applyPrefillIfNeeded()
         updatePromptAreaEnabled()
+        resizeWindowToFitContent()
     }
 
     private func selectedPickerItem() -> PickerItem? {
@@ -1168,6 +1278,114 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         if !isAgent {
             draftCheckbox.state = .off
         }
+    }
+
+    // MARK: - Model & Reasoning pickers
+
+    /// Returns the currently selected agent type (non-custom), or nil for terminal/web/custom.
+    private var selectedAgentTypeForModelPicker: AgentType? {
+        guard let item = selectedPickerItem() else { return nil }
+        if case .agent(let type, _) = item, type != .custom { return type }
+        return nil
+    }
+
+    private var selectedModelId: String? {
+        guard modelPicker.indexOfSelectedItem > 0 else { return nil } // index 0 = "Default"
+        return modelPicker.selectedItem?.representedObject as? String
+    }
+
+    private var selectedReasoningLevel: String? {
+        guard reasoningPicker.indexOfSelectedItem > 0 else { return nil } // index 0 = "Default"
+        return reasoningPicker.selectedItem?.representedObject as? String
+    }
+
+    private func populateModelReasoningPickers() {
+        modelPicker.removeAllItems()
+        reasoningPicker.removeAllItems()
+
+        guard let agentType = selectedAgentTypeForModelPicker,
+              let agentConfig = AgentModelsService.shared.config(for: agentType) else {
+            return
+        }
+
+        // Model picker: Default + models from manifest
+        modelPicker.addItem(withTitle: "Default")
+        modelPicker.lastItem?.representedObject = nil
+        for model in agentConfig.models {
+            modelPicker.addItem(withTitle: model.label)
+            modelPicker.lastItem?.representedObject = model.id as NSString
+        }
+
+        // Reasoning picker: populated based on current model
+        populateReasoningPicker(agentConfig: agentConfig, modelId: nil)
+    }
+
+    private func populateReasoningPicker(agentConfig: AgentModelConfig, modelId: String?) {
+        let previousSelection = reasoningPicker.selectedItem?.representedObject as? String
+        reasoningPicker.removeAllItems()
+        reasoningPicker.addItem(withTitle: "Default")
+        reasoningPicker.lastItem?.representedObject = nil
+        let levels = agentConfig.effectiveReasoningLevels(for: modelId)
+        for level in levels {
+            reasoningPicker.addItem(withTitle: level.capitalized)
+            reasoningPicker.lastItem?.representedObject = level as NSString
+        }
+        // Restore previous selection if still valid
+        if let previousSelection {
+            let matchIndex = reasoningPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == previousSelection })
+            if let matchIndex {
+                reasoningPicker.selectItem(at: matchIndex)
+            }
+        }
+    }
+
+    private func applyLastModelReasoningSelection() {
+        guard PersistenceService.shared.loadSettings().rememberLastTypeSelection else { return }
+        guard let agentType = selectedAgentTypeForModelPicker else { return }
+
+        if let lastModel = AgentLastSelectionStore.lastModel(for: agentType) {
+            let matchIndex = modelPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == lastModel })
+            if let matchIndex {
+                modelPicker.selectItem(at: matchIndex)
+                // Refresh reasoning levels for the selected model
+                if let agentConfig = AgentModelsService.shared.config(for: agentType) {
+                    populateReasoningPicker(agentConfig: agentConfig, modelId: lastModel)
+                }
+            }
+        }
+        if let lastReasoning = AgentLastSelectionStore.lastReasoning(for: agentType) {
+            let matchIndex = reasoningPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == lastReasoning })
+            if let matchIndex {
+                reasoningPicker.selectItem(at: matchIndex)
+            }
+        }
+    }
+
+    private func updateModelReasoningVisibility() {
+        let visible = selectedAgentTypeForModelPicker != nil
+        modelReasoningRow?.isHidden = !visible
+    }
+
+    /// Resync model/reasoning pickers after programmatic agent picker changes
+    /// (e.g. applyLastSelection, applyRecoveryAgentSelection).
+    private func syncModelReasoningToCurrentAgent() {
+        populateModelReasoningPickers()
+        applyLastModelReasoningSelection()
+        updateModelReasoningVisibility()
+    }
+
+    @objc private func modelPickerChanged() {
+        guard let agentType = selectedAgentTypeForModelPicker,
+              let agentConfig = AgentModelsService.shared.config(for: agentType) else { return }
+        let modelId = selectedModelId
+        populateReasoningPicker(agentConfig: agentConfig, modelId: modelId)
+        // Save immediately so fast-path picks it up
+        AgentLastSelectionStore.saveModel(modelId, for: agentType)
+    }
+
+    @objc private func reasoningPickerChanged() {
+        guard let agentType = selectedAgentTypeForModelPicker else { return }
+        AgentLastSelectionStore.saveReasoning(selectedReasoningLevel, for: agentType)
     }
 
     // MARK: - NSTextViewDelegate
@@ -1282,6 +1500,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
 
+        // Save model/reasoning selections for the current agent
+        let chosenModelId = selectedModelId
+        let chosenReasoningLevel = selectedReasoningLevel
+        if let agentType = selectedAgentTypeForModelPicker {
+            AgentLastSelectionStore.saveModel(chosenModelId, for: agentType)
+            AgentLastSelectionStore.saveReasoning(chosenReasoningLevel, for: agentType)
+        }
+
         // Write crash-recovery temp file before clearing the draft, so the submitted
         // content is safe even if the app crashes during thread/tab creation.
         // Web tabs don't go through tmux injection, so skip crash-recovery for them.
@@ -1302,7 +1528,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 description: rawDesc.isEmpty ? nil : rawDesc,
                 branchName: rawBranch.isEmpty ? nil : rawBranch,
                 agentType: agentType,
-                scope: currentDraftScope
+                scope: currentDraftScope,
+                modelId: chosenModelId,
+                reasoningLevel: chosenReasoningLevel
             )
         }
 
@@ -1343,7 +1571,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 selectedProject: selectedProject,
                 selectedSectionId: selectedSectionId,
                 initialWebURL: nil,
-                isDraft: false
+                isDraft: false,
+                modelId: nil,
+                reasoningLevel: nil
             ))
         case .agent(let type, _):
             finish(with: AgentLaunchSheetResult(
@@ -1358,7 +1588,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 selectedProject: selectedProject,
                 selectedSectionId: selectedSectionId,
                 initialWebURL: nil,
-                isDraft: isDraft
+                isDraft: isDraft,
+                modelId: chosenModelId,
+                reasoningLevel: chosenReasoningLevel
             ))
         case .web:
             let url = WebURLNormalizer.normalize(rawPrompt) ?? URL(string: "about:blank")!
@@ -1374,7 +1606,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 selectedProject: selectedProject,
                 selectedSectionId: selectedSectionId,
                 initialWebURL: url,
-                isDraft: false
+                isDraft: false,
+                modelId: nil,
+                reasoningLevel: nil
             ))
         }
     }
