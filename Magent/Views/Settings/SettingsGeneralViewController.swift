@@ -14,6 +14,7 @@ final class SettingsGeneralViewController: NSViewController {
     private var updateChangelogTextView: NSTextView!
     private var isUpdateChangelogExpanded = false
     private var syncLocalPathsOnArchiveCheckbox: NSButton!
+    private var createBackupButton: NSButton!
     private var restoreFromBackupButton: NSButton!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
@@ -204,9 +205,18 @@ final class SettingsGeneralViewController: NSViewController {
         // --- Data Backup card (last-resort restore) ---
         let (backupCard, backupSection) = createSectionCard(
             title: "Data Backup",
-            description: "Magent automatically snapshots critical data (threads, settings, drafts) every 30 minutes. If something goes wrong, you can restore from a previous snapshot."
+            description: "Magent automatically snapshots critical data (threads, settings, drafts) every 30 minutes. You can also create a snapshot manually or restore from a previous snapshot."
         )
         stackView.addArrangedSubview(backupCard)
+
+        createBackupButton = NSButton(
+            title: "Back Up Now",
+            target: self,
+            action: #selector(createBackupNowTapped)
+        )
+        createBackupButton.bezelStyle = .rounded
+        createBackupButton.controlSize = .small
+        backupSection.addArrangedSubview(createBackupButton)
 
         restoreFromBackupButton = NSButton(
             title: "Restore from Backup\u{2026}",
@@ -345,6 +355,22 @@ final class SettingsGeneralViewController: NSViewController {
         refreshUpdateChangelogDisclosure()
     }
 
+    @objc private func createBackupNowTapped() {
+        let copiedCount = BackupService.shared.createSnapshot()
+        let message: String
+        let style: BannerStyle
+
+        if copiedCount > 0 {
+            message = copiedCount == 1 ? "Created a manual backup snapshot with 1 file." : "Created a manual backup snapshot with \(copiedCount) files."
+            style = .info
+        } else {
+            message = "No current data files were available to back up."
+            style = .warning
+        }
+
+        BannerManager.shared.show(message: message, style: style, duration: 4.0)
+    }
+
     private func refreshUpdateControls() {
         guard isViewLoaded else { return }
 
@@ -397,7 +423,7 @@ final class SettingsGeneralViewController: NSViewController {
         guard !snapshots.isEmpty else {
             let alert = NSAlert()
             alert.messageText = "No Backups Available"
-            alert.informativeText = "No backup snapshots were found. Snapshots are created automatically every 30 minutes while Magent is running."
+            alert.informativeText = "No backup snapshots were found. Snapshots are created automatically every 30 minutes while Magent is running, and you can create one immediately with Back Up Now."
             alert.alertStyle = .informational
             alert.addButton(withTitle: "OK")
             alert.runModal()

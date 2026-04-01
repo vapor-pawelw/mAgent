@@ -81,7 +81,9 @@ public final class BackupService {
     }
 
     /// Creates a timestamped snapshot directory and copies all critical files into it.
-    public func createSnapshot() {
+    /// Returns the number of files copied into the snapshot.
+    @discardableResult
+    public func createSnapshot() -> Int {
         let timestamp = snapshotDirectoryName(for: Date())
         let snapshotDir = backupsURL.appendingPathComponent(timestamp, isDirectory: true)
 
@@ -89,7 +91,7 @@ public final class BackupService {
             try fileManager.createDirectory(at: snapshotDir, withIntermediateDirectories: true)
         } catch {
             logger.error("Failed to create snapshot directory: \(error.localizedDescription)")
-            return
+            return 0
         }
 
         var copiedCount = 0
@@ -114,6 +116,7 @@ public final class BackupService {
         }
 
         pruneSnapshots()
+        return copiedCount
     }
 
     // MARK: - Pruning

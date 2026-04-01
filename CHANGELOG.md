@@ -33,7 +33,7 @@ All notable changes to this project will be documented in this file.
 - Fixed GitLab MR sync falsely failing on `glab` setups that reject `glab mr list --state ...`; Magent now uses the default open-MR listing and only falls back to `--all`.
 
 ### Settings
-- `Settings > General` now includes a `Data Backup` card. Magent keeps rolling backups of `threads.json`, `settings.json`, and prompt drafts on every save, takes 30-minute snapshots while the app is running, and lets you restore from those snapshots with an automatic safety backup before relaunch.
+- `Settings > General` now includes a `Data Backup` card with `Back Up Now` and `Restore from Backup…` actions. Magent keeps rolling backups of `threads.json`, `settings.json`, and prompt drafts on every save, takes 30-minute snapshots while the app is running, and lets you restore from those snapshots with an automatic safety backup before relaunch.
 - Launch now recovers `settings.json` from the rolling backup when thread data exists but the current settings file is missing or no longer references those projects, so existing threads do not get stranded in onboarding.
 - Backup restore now leaves any current file in place when the selected snapshot does not contain that file, instead of deleting it as part of the restore.
 - Moved `Inject Magent IPC instructions into agent prompts` and `Track agent rate limits` out of `Agent Permissions` into a dedicated `Agent Behavior` section in Settings > Agents.

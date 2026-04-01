@@ -5,7 +5,7 @@
 - App-wide preferences stay in `Settings > General`.
 - Terminal-specific preferences now live in `Settings > Terminal`.
 - Thread-focused preferences now live in `Settings > Threads`.
-- `General` currently owns update controls, archive defaults, the keyboard shortcuts reference card, the Data Backup restore card, and the environment-variable reference used by startup injection settings.
+- `General` currently owns update controls, archive defaults, the keyboard shortcuts reference card, the Data Backup backup/restore card, and the environment-variable reference used by startup injection settings.
 - `Terminal` owns app/terminal light-dark appearance, the "Don't override agent color theme" toggle, Ghostty mouse-wheel override behavior, and terminal overlay visibility toggles.
 - `Threads` owns thread naming defaults, thread sections, recently archived thread restore history, startup injection fields, the review prompt, sidebar display options (narrow threads, PR/Jira status badge toggles, busy/idle duration toggle), and session management (idle session eviction limit — defaults to 30 — plus "Protect pinned threads and tabs from eviction" toggle).
 - Section color editing now reuses a single system color picker per settings screen, so switching to another section keeps the earlier section's custom dot color intact instead of resetting it.
@@ -29,7 +29,7 @@
 - Added a `Recently Archived` card to `Settings > Threads` that lists up to 10 archived threads and provides inline restore actions.
 
 ### Data backup restore (auto-backup-critical-config)
-- Added a `Data Backup` card to `Settings > General` with a `Restore from Backup…` action.
+- Added a `Data Backup` card to `Settings > General` with `Back Up Now` and `Restore from Backup…` actions.
 - Magent now keeps rolling `.bak` copies of `threads.json`, `settings.json`, and `agent-launch-prompt-drafts.json` before overwriting them, and also writes 30-minute snapshot directories under Application Support.
 - Restore now lists both periodic snapshots and pre-restore safety backups, then relaunches the app after replacing the current persistence files.
 - If the selected snapshot is partial, missing files are left untouched instead of being deleted during restore.
@@ -39,7 +39,7 @@
 
 - Category registration and the sidebar/detail controller wiring live in `Magent/Views/Settings/SettingsViewController.swift`.
 - `Magent/Views/Settings/SettingsGeneralViewController.swift` is intentionally limited to app-level preferences.
-- The backup restore action is coordinated from `SettingsGeneralViewController`, but it must first stop background pollers and block writes for the restorable persistence files before `BackupService.restoreSnapshot(_:)` swaps files on disk.
+- The backup actions are coordinated from `SettingsGeneralViewController`, but restore must first stop background pollers and block writes for the restorable persistence files before `BackupService.restoreSnapshot(_:)` swaps files on disk. The manual snapshot button can call `BackupService.createSnapshot()` directly because it only reads the current persistence files.
 - `Magent/Views/Settings/SettingsTerminalViewController.swift` owns terminal-scoped preferences and posts `magentSettingsDidChange` so open windows update immediately.
 - `Magent/Views/Settings/SettingsThreadsViewController.swift` owns thread-scoped preferences, and `Magent/Views/Settings/SettingsThreadsViewController+Sections.swift` owns the thread-sections table behavior.
 - The recently archived list reads from persisted threads, sorts by `archivedAt`, and listens for a shared archive-state notification so it refreshes while Settings is open.

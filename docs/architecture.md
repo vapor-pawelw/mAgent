@@ -244,6 +244,7 @@ Magent keeps two layers of backup protection for critical app-state files in App
 
 - Rolling backups: before overwriting `threads.json`, `settings.json`, or `agent-launch-prompt-drafts.json`, keep the previous file as `<name>.bak.json`.
 - Periodic snapshots: every 30 minutes while the app is running, copy the currently present critical files into `Application Support/Magent/backups/<timestamp>/`.
+- Settings exposes a manual `Back Up Now` action that creates the same snapshot format on demand.
 
 Restore is a coordinated app-state transition, not just a filesystem copy:
 
