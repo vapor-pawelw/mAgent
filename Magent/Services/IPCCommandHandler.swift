@@ -39,6 +39,8 @@ final class IPCCommandHandler {
             return setDescription(request)
         case "set-thread-icon":
             return setThreadIcon(request)
+        case "set-base-branch":
+            return setBaseBranch(request)
         case "hide-thread":
             return setThreadHidden(request, hidden: true)
         case "unhide-thread":
@@ -61,6 +63,12 @@ final class IPCCommandHandler {
             return handleHideSection(request)
         case "show-section":
             return handleShowSection(request)
+        case "keep-alive-thread":
+            return setThreadKeepAlive(request, enabled: request.remove != true)
+        case "keep-alive-tab":
+            return setTabKeepAlive(request, enabled: request.remove != true)
+        case "keep-alive-section":
+            return setSectionKeepAlive(request, enabled: request.remove != true)
         case "move-thread":
             return await handleMoveThread(request)
         default:
@@ -910,6 +918,30 @@ final class IPCCommandHandler {
         return IPCResponse(ok: true, id: request.id, thread: info)
     }
 
+    private func setBaseBranch(_ request: IPCRequest) -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        guard let baseBranch = request.baseBranch?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !baseBranch.isEmpty else {
+            return .failure("Missing required field: baseBranch", id: request.id)
+        }
+
+        threadManager.setBaseBranch(baseBranch, for: thread.id)
+
+        let settings = persistence.loadSettings()
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        let resolvedBase = threadManager.resolveBaseBranch(for: updated)
+        let info = IPCThreadInfo(thread: updated, projectName: projectName, baseBranch: resolvedBase)
+        return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
     private func setThreadHidden(_ request: IPCRequest, hidden: Bool) -> IPCResponse {
         let thread: MagentThread
         switch resolveThread(request) {
@@ -939,6 +971,98 @@ final class IPCCommandHandler {
         return IPCResponse(ok: true, id: request.id, thread: info)
     }
 
+    private func setThreadKeepAlive(_ request: IPCRequest, enabled: Bool) -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        guard thread.isKeepAlive != enabled else {
+            let settings = persistence.loadSettings()
+            let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+            let info = IPCThreadInfo(thread: thread, projectName: projectName)
+            return IPCResponse(ok: true, id: request.id, thread: info)
+        }
+
+        threadManager.toggleThreadKeepAlive(threadId: thread.id)
+
+        let settings = persistence.loadSettings()
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        let info = IPCThreadInfo(thread: updated, projectName: projectName)
+        return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
+    private func setTabKeepAlive(_ request: IPCRequest, enabled: Bool) -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        guard let sessionName = request.sessionName, !sessionName.isEmpty else {
+            return .failure("Missing required field: sessionName (pass via --session)", id: request.id)
+        }
+
+        guard thread.tmuxSessionNames.contains(sessionName) else {
+            return .failure("Session not found in thread: \(sessionName)", id: request.id)
+        }
+
+        let isProtected = thread.protectedTmuxSessions.contains(sessionName)
+        guard isProtected != enabled else {
+            let settings = persistence.loadSettings()
+            let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+            let info = IPCThreadInfo(thread: thread, projectName: projectName)
+            return IPCResponse(ok: true, id: request.id, thread: info)
+        }
+
+        threadManager.toggleSessionKeepAlive(threadId: thread.id, sessionName: sessionName)
+
+        let settings = persistence.loadSettings()
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        let info = IPCThreadInfo(thread: updated, projectName: projectName)
+        return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
+    private func setSectionKeepAlive(_ request: IPCRequest, enabled: Bool) -> IPCResponse {
+        guard let sectionName = request.sectionName, !sectionName.isEmpty else {
+            return .failure("Missing required field: sectionName", id: request.id)
+        }
+
+        var settings = persistence.loadSettings()
+        let (project, error) = resolveProjectForSection(request, settings: settings)
+        if let error { return error }
+
+        if let project {
+            let projectIndex = settings.projects.firstIndex(where: { $0.id == project.id })!
+            var sections = settings.projects[projectIndex].threadSections ?? settings.threadSections
+            guard let sectionIndex = sections.firstIndex(where: { $0.name.caseInsensitiveCompare(sectionName) == .orderedSame }) else {
+                return .failure("Section not found: \(sectionName)", id: request.id)
+            }
+            guard sections[sectionIndex].isKeepAlive != enabled else { return .success(id: request.id) }
+            sections[sectionIndex].isKeepAlive = enabled
+            settings.projects[projectIndex].threadSections = sections
+            try? persistence.saveSettings(settings)
+        } else {
+            guard let sectionIndex = settings.threadSections.firstIndex(where: { $0.name.caseInsensitiveCompare(sectionName) == .orderedSame }) else {
+                return .failure("Section not found: \(sectionName)", id: request.id)
+            }
+            guard settings.threadSections[sectionIndex].isKeepAlive != enabled else { return .success(id: request.id) }
+            settings.threadSections[sectionIndex].isKeepAlive = enabled
+            try? persistence.saveSettings(settings)
+        }
+
+        notifySectionsDidChange()
+        NotificationCenter.default.post(name: .magentKeepAliveChanged, object: nil)
+        return .success(id: request.id)
+    }
+
     private func currentThread(_ request: IPCRequest) -> IPCResponse {
         guard let sessionName = request.sessionName, !sessionName.isEmpty else {
             return .failure("Missing required field: sessionName", id: request.id)
@@ -950,7 +1074,8 @@ final class IPCCommandHandler {
 
         let settings = persistence.loadSettings()
         let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
-        let info = IPCThreadInfo(thread: thread, projectName: projectName)
+        let resolvedBase = threadManager.resolveBaseBranch(for: thread)
+        let info = IPCThreadInfo(thread: thread, projectName: projectName, baseBranch: resolvedBase)
         return IPCResponse(ok: true, id: request.id, thread: info)
     }
 

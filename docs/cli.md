@@ -150,7 +150,7 @@ The response includes a `status` object with all UI-visible indicators:
 
 ### current-thread
 
-Identify the current thread from inside a tmux session.
+Identify the current thread from inside a tmux session. Returns the thread's resolved base branch in the `baseBranch` field.
 
 ```bash
 magent-cli current-thread
@@ -206,6 +206,41 @@ Set a thread icon manually.
 
 ```bash
 magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
+```
+
+### set-base-branch
+
+Set the base branch for a thread. This overrides automatic base branch resolution.
+
+```bash
+magent-cli set-base-branch --thread <name> --base-branch <branch>
+```
+
+### keep-alive-thread
+
+Enable or disable Keep Alive on a thread. When enabled, all sessions in the thread are protected from idle eviction.
+
+```bash
+magent-cli keep-alive-thread --thread <name>
+magent-cli keep-alive-thread --thread <name> --remove
+```
+
+### keep-alive-tab
+
+Enable or disable Keep Alive on a single tab/session. Protected sessions are exempt from both manual cleanup and auto idle eviction.
+
+```bash
+magent-cli keep-alive-tab --thread <name> --session <name>
+magent-cli keep-alive-tab --thread <name> --session <name> --remove
+```
+
+### keep-alive-section
+
+Enable or disable Keep Alive on a section. When enabled, all threads in that section are protected from eviction.
+
+```bash
+magent-cli keep-alive-section --name <name> [--project <name>]
+magent-cli keep-alive-section --name <name> [--project <name>] --remove
 ```
 
 ### hide-thread

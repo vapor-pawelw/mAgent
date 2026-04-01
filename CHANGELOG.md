@@ -7,6 +7,11 @@ All notable changes to this project will be documented in this file.
 ### General
 - Updated app icon.
 
+### CLI
+- `current-thread` now returns the resolved base branch in the response.
+- New `set-base-branch` command to override a thread's base branch.
+- New `keep-alive-thread`, `keep-alive-tab`, and `keep-alive-section` commands to enable/disable Keep Alive protection (`--remove` to disable).
+
 ### Tab
 - New "Switch to new tab" checkbox in the New Tab prompt sheet — works like the existing "Switch to new thread" option, remembers the last selection, and defaults to on.
 - Option+middle-click on a tab now closes it immediately without a confirmation alert.

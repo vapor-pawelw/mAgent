@@ -21,8 +21,11 @@ public enum IPCAgentDocs {
     /tmp/magent-cli rename-branch --thread <name> --name <text>
     /tmp/magent-cli set-description --thread <name> [--description <text> | --clear]
     /tmp/magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
+    /tmp/magent-cli set-base-branch --thread <name> --base-branch <branch>
     /tmp/magent-cli hide-thread --thread <name>
     /tmp/magent-cli unhide-thread --thread <name>
+    /tmp/magent-cli keep-alive-thread --thread <name> [--remove]
+    /tmp/magent-cli keep-alive-tab --thread <name> --session <name> [--remove]
     /tmp/magent-cli thread-info --thread <name>
     /tmp/magent-cli list-sections [--project <name>]
     /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
@@ -31,6 +34,7 @@ public enum IPCAgentDocs {
     /tmp/magent-cli rename-section --name <name> --new-name <text> [--color <hex>] [--project <name>]
     /tmp/magent-cli hide-section --name <name> [--project <name>]
     /tmp/magent-cli show-section --name <name> [--project <name>]
+    /tmp/magent-cli keep-alive-section --name <name> [--project <name>] [--remove]
     """
 
     /// Usage guidance appended after the command listing.
@@ -87,7 +91,7 @@ public enum IPCAgentDocs {
 
     public static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     public static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    public static let codexIPCVersion = "<!-- magent-ipc-v18 -->"
+    public static let codexIPCVersion = "<!-- magent-ipc-v19 -->"
 
     /// Lightweight Codex `AGENTS.md` hint that points to on-demand docs.
     public static let codexAgentsMdBlock: String = """

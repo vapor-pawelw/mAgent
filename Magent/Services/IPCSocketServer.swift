@@ -1011,6 +1011,18 @@ actor IPCSocketServer {
             [ -n "$thread" ] && [ -n "$icon" ] || die "Usage: magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>"
             send_request "{$(json_kv command set-thread-icon),$(json_kv threadName "$thread"),$(json_kv icon "$icon")}"
             ;;
+        set-base-branch)
+            thread=""; base_branch=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread)      thread="$2"; shift 2 ;;
+                    --base-branch) base_branch="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] && [ -n "$base_branch" ] || die "Usage: magent-cli set-base-branch --thread <name> --base-branch <branch>"
+            send_request "{$(json_kv command set-base-branch),$(json_kv threadName "$thread"),$(json_kv baseBranch "$base_branch")}"
+            ;;
         hide-thread)
             thread=""
             while [ $# -gt 0 ]; do
@@ -1171,6 +1183,54 @@ actor IPCSocketServer {
             json="$json}"
             send_request "$json"
             ;;
+        keep-alive-thread)
+            thread=""; remove=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    --remove) remove="1"; shift 1 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli keep-alive-thread --thread <name> [--remove]"
+            json="{$(json_kv command keep-alive-thread),$(json_kv threadName "$thread")"
+            [ -n "$remove" ] && json="$json,\"remove\":true"
+            json="$json}"
+            send_request "$json"
+            ;;
+        keep-alive-tab)
+            thread=""; session=""; remove=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread)  thread="$2"; shift 2 ;;
+                    --session) session="$2"; shift 2 ;;
+                    --remove)  remove="1"; shift 1 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] && [ -n "$session" ] || die "Usage: magent-cli keep-alive-tab --thread <name> --session <name> [--remove]"
+            json="{$(json_kv command keep-alive-tab),$(json_kv threadName "$thread"),$(json_kv sessionName "$session")"
+            [ -n "$remove" ] && json="$json,\"remove\":true"
+            json="$json}"
+            send_request "$json"
+            ;;
+        keep-alive-section)
+            section_name=""; project=""; remove=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --name)    section_name="$2"; shift 2 ;;
+                    --project) project="$2"; shift 2 ;;
+                    --remove)  remove="1"; shift 1 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$section_name" ] || die "Usage: magent-cli keep-alive-section --name <name> [--project <name>] [--remove]"
+            json="{$(json_kv command keep-alive-section),$(json_kv sectionName "$section_name")"
+            [ -n "$project" ] && json="$json,$(json_kv project "$project")"
+            [ -n "$remove" ] && json="$json,\"remove\":true"
+            json="$json}"
+            send_request "$json"
+            ;;
         docs|ipc-docs)
             cat <<'MAGENT_IPC_DOCS'
         \#(IPCAgentDocs.cliReferenceText)
@@ -1205,10 +1265,16 @@ actor IPCSocketServer {
             echo "  rename-thread-exact  --thread <name> --name <text>         (alias for rename-branch)"
             echo "  set-description      --thread <name> [--description <text> | --clear]"
             echo "  set-thread-icon      --thread <name> --icon <type>         (set thread icon: feature|fix|improvement|refactor|test|other)"
+            echo "  set-base-branch      --thread <name> --base-branch <branch>"
             echo "  hide-thread         --thread <name>                        (move thread to dimmed bottom group)"
             echo "  unhide-thread       --thread <name>                        (restore thread to normal group)"
             echo "  thread-info          (--thread <name> | --thread-id <id>)  (full thread details)"
             echo "  move-thread          --thread <name> --section <name>      (move thread to section)"
+            echo ""
+            echo "Keep Alive commands:"
+            echo "  keep-alive-thread    --thread <name> [--remove]                          (protect all sessions from eviction)"
+            echo "  keep-alive-tab       --thread <name> --session <name> [--remove]         (protect single session)"
+            echo "  keep-alive-section   --name <name> [--project <name>] [--remove]         (protect all threads in section)"
             echo ""
             echo "Section commands:"
             echo "  list-sections        [--project <name>]"

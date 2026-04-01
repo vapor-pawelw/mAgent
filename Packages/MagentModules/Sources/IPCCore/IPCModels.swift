@@ -25,6 +25,7 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public var skipLocalSync: Bool?
     public var noSelect: Bool?
     public var noSubmit: Bool?
+    public var remove: Bool?
     public var threads: [IPCBatchThreadSpec]?
     /// Thread ID to inherit base branch and section from. Injected automatically by
     /// the CLI from `$MAGENT_THREAD_ID` unless `--from-thread none` is passed.
@@ -172,11 +173,12 @@ public nonisolated struct IPCThreadInfo: Encodable, Sendable {
     public var tabs: [IPCTabInfo]?
     public var status: IPCThreadStatus?
     public var agentType: String?
+    public var baseBranch: String?
     public var prLabel: String?
     public var prStatusText: String?
     public var jiraTicketKey: String?
 
-    public init(thread: MagentThread, projectName: String) {
+    public init(thread: MagentThread, projectName: String, baseBranch: String? = nil) {
         self.id = thread.id.uuidString
         self.name = thread.name
         self.projectName = projectName
@@ -184,6 +186,7 @@ public nonisolated struct IPCThreadInfo: Encodable, Sendable {
         self.tmuxSession = thread.tmuxSessionNames.first ?? ""
         self.isMain = thread.isMain
         self.taskDescription = thread.taskDescription
+        self.baseBranch = baseBranch
     }
 
     public init(thread: MagentThread, projectName: String, sectionName: String?, tabs: [IPCTabInfo], status: IPCThreadStatus? = nil) {
