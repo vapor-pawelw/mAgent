@@ -483,12 +483,12 @@ final class ThreadDetailViewController: NSViewController {
         resyncLocalPathsButton.bezelStyle = .texturedRounded
         resyncLocalPathsButton.image = NSImage(
             systemSymbolName: "arrow.triangle.2.circlepath",
-            accessibilityDescription: "Resync Local Paths"
+            accessibilityDescription: "Sync local-only files"
         )
         resyncLocalPathsButton.imageScaling = .scaleProportionallyDown
         resyncLocalPathsButton.target = self
         resyncLocalPathsButton.action = #selector(resyncLocalPathsTapped)
-        resyncLocalPathsButton.toolTip = "Resync Local Sync Paths"
+        resyncLocalPathsButton.toolTip = "Sync local-only files"
         resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
 
 
@@ -1358,7 +1358,7 @@ final class ThreadDetailViewController: NSViewController {
             )
             resyncLocalPathsButton.image = NSImage(
                 systemSymbolName: "arrow.triangle.2.circlepath",
-                accessibilityDescription: "Resync Local Paths"
+                accessibilityDescription: "Sync local-only files"
             )
             addTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Tab")
             updatePromptTOCToggleButtonState(canShow: promptTOCCanShowForCurrentTab)

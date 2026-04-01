@@ -576,7 +576,7 @@ extension SettingsProjectsViewController {
         stackView.addArrangedSubview(titleLabel)
 
         let descLabel = NSTextField(
-            wrappingLabelWithString: "Repo-relative files/directories for local-only assets. Copy gives each thread its own version seeded from the base branch source. Shared Link creates a live symlink to the main repo copy."
+            wrappingLabelWithString: "Repo-relative files/directories for local-only assets. Copy gives each thread its own version seeded from the base branch source. Shared Link creates a live symlink to the main repo copy, so only Copy entries participate in Local Sync."
         )
         descLabel.font = .systemFont(ofSize: 11)
         descLabel.textColor = NSColor(resource: .textSecondary)
