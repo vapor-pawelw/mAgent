@@ -25,6 +25,7 @@ All notable changes to this project will be documented in this file.
 - Fixed unwanted slow scroll animation when switching to an agent tab — the CAMetalLayer-backed terminal surface could trigger implicit Core Animation transitions on visibility toggle, causing content to visually slide down from the top.
 
 ### Agents
+- New Model and Reasoning pickers in the launch sheet let you choose which model tier (e.g. Opus/Sonnet/Haiku for Claude, GPT 5.4/Mini for Codex) and reasoning level to use per session. Selections are remembered per agent and applied to fast-path creation (Option+click, context menu, keyboard shortcut). Available models auto-update from a remote manifest without requiring an app update.
 - Fixed agent completion notifications sometimes not appearing — bell events could be lost during the read-then-truncate of the event log, and accumulated events were wiped on app relaunch before they could be consumed.
 - Codex sessions inside tmux now keep their full color palette more reliably instead of appearing bland when Magent inherits color-disabling shell environment from the parent terminal.
 - Fixed agent session resume when a tmux session is killed — previously always launched a fresh agent instead of resuming the existing conversation via `--resume`.
