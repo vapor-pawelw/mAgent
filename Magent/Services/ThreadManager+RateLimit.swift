@@ -203,10 +203,13 @@ extension ThreadManager {
                         updatedRateLimits[sessionName] = info
                         changedThreadIds.insert(threadId)
                     }
-                    if globalAgentRateLimits[sessionAgent] != info {
-                        globalAgentRateLimits[sessionAgent] = info
-                        didChangeGlobalCache = true
-                    }
+                    updateGlobalRateLimit(
+                        info,
+                        for: sessionAgent,
+                        now: now,
+                        didChangeGlobalCache: &didChangeGlobalCache,
+                        newlyDetectedAgents: &newlyDetectedAgents
+                    )
                     continue
                 }
 
@@ -233,14 +236,13 @@ extension ThreadManager {
                     updatedRateLimits[sessionName] = info
                     changedThreadIds.insert(threadId)
                 }
-                let hadActiveGlobalRateLimit = activeGlobalRateLimit(for: sessionAgent, now: now) != nil
-                if globalAgentRateLimits[sessionAgent] != info {
-                    globalAgentRateLimits[sessionAgent] = info
-                    didChangeGlobalCache = true
-                }
-                if !hadActiveGlobalRateLimit {
-                    newlyDetectedAgents.insert(sessionAgent)
-                }
+                updateGlobalRateLimit(
+                    info,
+                    for: sessionAgent,
+                    now: now,
+                    didChangeGlobalCache: &didChangeGlobalCache,
+                    newlyDetectedAgents: &newlyDetectedAgents
+                )
             }
 
             for sessionName in Array(updatedRateLimits.keys) where !validSessions.contains(sessionName) {
@@ -255,6 +257,8 @@ extension ThreadManager {
                 changedThreadIds.insert(threadId)
             }
         }
+
+        propagateActiveGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds)
 
         if !changedThreadIds.isEmpty {
             await MainActor.run {
@@ -287,10 +291,115 @@ extension ThreadManager {
         return agent == .claude || agent == .codex
     }
 
+    private func mergedRateLimitInfo(existing: AgentRateLimitInfo, candidate: AgentRateLimitInfo) -> AgentRateLimitInfo {
+        if existing.isPromptBased && candidate.isPromptBased {
+            return existing
+        }
+        if existing.isPromptBased != candidate.isPromptBased {
+            return existing.isPromptBased ? candidate : existing
+        }
+        if candidate.resetAt != existing.resetAt {
+            return candidate.resetAt > existing.resetAt ? candidate : existing
+        }
+        return candidate.detectedAt >= existing.detectedAt ? candidate : existing
+    }
+
     private func activeGlobalRateLimit(for agent: AgentType, now: Date) -> AgentRateLimitInfo? {
         guard let info = globalAgentRateLimits[agent] else { return nil }
         guard info.resetAt > now else { return nil }
         return info
+    }
+
+    private func updateGlobalRateLimit(
+        _ info: AgentRateLimitInfo,
+        for agent: AgentType,
+        now: Date,
+        didChangeGlobalCache: inout Bool,
+        newlyDetectedAgents: inout Set<AgentType>
+    ) {
+        let hadActiveGlobalRateLimit = activeGlobalRateLimit(for: agent, now: now) != nil
+        let nextInfo: AgentRateLimitInfo
+        if let existing = activeGlobalRateLimit(for: agent, now: now) {
+            nextInfo = mergedRateLimitInfo(existing: existing, candidate: info)
+        } else {
+            nextInfo = info
+        }
+
+        if globalAgentRateLimits[agent] != nextInfo {
+            globalAgentRateLimits[agent] = nextInfo
+            didChangeGlobalCache = true
+        }
+        if !hadActiveGlobalRateLimit {
+            newlyDetectedAgents.insert(agent)
+        }
+    }
+
+    @discardableResult
+    func applyRateLimitMarker(
+        _ info: AgentRateLimitInfo,
+        for agent: AgentType,
+        changedThreadIds: inout Set<UUID>
+    ) -> Bool {
+        var changed = false
+
+        for i in threads.indices where !threads[i].isArchived {
+            var updatedRateLimits = threads[i].rateLimitedSessions
+
+            for sessionName in threads[i].agentTmuxSessions {
+                guard agentType(for: threads[i], sessionName: sessionName) == agent else { continue }
+                let nextInfo: AgentRateLimitInfo
+                if let existing = updatedRateLimits[sessionName] {
+                    nextInfo = mergedRateLimitInfo(existing: existing, candidate: info)
+                } else {
+                    nextInfo = info
+                }
+
+                if updatedRateLimits[sessionName] != nextInfo {
+                    updatedRateLimits[sessionName] = nextInfo
+                    changed = true
+                }
+            }
+
+            if updatedRateLimits != threads[i].rateLimitedSessions {
+                threads[i].rateLimitedSessions = updatedRateLimits
+                changedThreadIds.insert(threads[i].id)
+            }
+        }
+
+        return changed
+    }
+
+    @discardableResult
+    func clearPromptRateLimitMarkers(for agent: AgentType, changedThreadIds: inout Set<UUID>) -> Bool {
+        var changed = false
+
+        for i in threads.indices where !threads[i].isArchived {
+            var updatedRateLimits = threads[i].rateLimitedSessions
+            let promptKeys = updatedRateLimits.keys.filter { sessionName in
+                guard let existing = updatedRateLimits[sessionName], existing.isPromptBased else { return false }
+                return agentType(for: threads[i], sessionName: sessionName) == agent
+            }
+
+            guard !promptKeys.isEmpty else { continue }
+            for key in promptKeys {
+                updatedRateLimits.removeValue(forKey: key)
+            }
+
+            if updatedRateLimits != threads[i].rateLimitedSessions {
+                threads[i].rateLimitedSessions = updatedRateLimits
+                changedThreadIds.insert(threads[i].id)
+                changed = true
+            }
+        }
+
+        return changed
+    }
+
+    private func propagateActiveGlobalRateLimits(now: Date, changedThreadIds: inout Set<UUID>) {
+        for agent in [AgentType.claude, .codex] {
+            guard let info = activeGlobalRateLimit(for: agent, now: now) else { continue }
+            _ = applyRateLimitMarker(info, for: agent, changedThreadIds: &changedThreadIds)
+        }
     }
 
     @discardableResult
@@ -566,20 +675,25 @@ extension ThreadManager {
     }
 
     private func claudeInteractiveRateLimitDetection(in tail: [String], now: Date) -> RateLimitDetection? {
-        guard let choiceIndex = tail.lastIndex(where: { line in
-            let normalized = line
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            return normalized.contains("1. stop and wait for limit to reset")
-                || normalized.contains("1. stop and wait for limits to reset")
-        }) else {
+        guard let choiceIndex = tail.lastIndex(where: { isClaudeRateLimitWaitChoiceLine($0) }) else {
             return nil
         }
 
         let lookbackStart = max(tail.startIndex, choiceIndex - Self.claudePromptDeadlineLookbackLines)
-        guard lookbackStart < choiceIndex else { return nil }
+        let choiceLine = tail[choiceIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+        let switchChoiceLine: String? = {
+            let nextIndex = choiceIndex + 1
+            guard nextIndex < tail.endIndex else { return nil }
+            let line = tail[nextIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            return isClaudeRateLimitSwitchChoiceLine(line) ? line : nil
+        }()
 
-        for candidateIndex in stride(from: choiceIndex - 1, through: lookbackStart, by: -1) {
+        var candidateIndices = [choiceIndex]
+        if lookbackStart < choiceIndex {
+            candidateIndices.append(contentsOf: stride(from: choiceIndex - 1, through: lookbackStart, by: -1))
+        }
+
+        for candidateIndex in candidateIndices {
             let deadlineLine = tail[candidateIndex].trimmingCharacters(in: .whitespacesAndNewlines)
             guard !deadlineLine.isEmpty else { continue }
 
@@ -591,10 +705,16 @@ extension ThreadManager {
                 || normalized.contains("until")
             guard hasResetKeyword else { continue }
 
-            var focusLines = [deadlineLine, "1. Stop and wait for limit to reset"]
+            var focusLines = [deadlineLine]
+            if deadlineLine != choiceLine {
+                focusLines.append(choiceLine)
+            }
+            if let switchChoiceLine, !switchChoiceLine.isEmpty {
+                focusLines.append(switchChoiceLine)
+            }
             if let contextIndex = stride(from: candidateIndex, through: lookbackStart, by: -1).first(where: { idx in
                 let context = tail[idx].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                return context.contains("limit") || context.contains("rate")
+                return context.contains("limit") || context.contains("rate") || context.contains("quota")
             }) {
                 let contextLine = tail[contextIndex].trimmingCharacters(in: .whitespacesAndNewlines)
                 if !contextLine.isEmpty, contextLine != deadlineLine {
@@ -607,7 +727,7 @@ extension ThreadManager {
 
             let resetDescription = extractRateLimitResetDescription(from: focusText)
             let fingerprint = rateLimitFingerprint(
-                from: "\(deadlineLine)\n1. Stop and wait for limit to reset",
+                from: focusText,
                 fallback: resetDescription
             )
             return RateLimitDetection(
@@ -618,6 +738,35 @@ extension ThreadManager {
             )
         }
         return nil
+    }
+
+    private func isClaudeRateLimitWaitChoiceLine(_ line: String) -> Bool {
+        let normalized = line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard normalized.range(of: #"^\d+\.\s*stop and wait\b"#, options: .regularExpression) != nil else {
+            return false
+        }
+        return normalized.contains("reset")
+            || normalized.contains("limit")
+            || normalized.contains("quota")
+            || normalized.contains("until")
+            || normalized.contains("available")
+            || normalized.contains("try again")
+            || normalized.contains("retry")
+    }
+
+    private func isClaudeRateLimitSwitchChoiceLine(_ line: String) -> Bool {
+        let normalized = line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard normalized.range(of: #"^\d+\.\s*switch to\b"#, options: .regularExpression) != nil else {
+            return false
+        }
+        return normalized.contains("extra usage")
+            || normalized.contains("max")
+            || normalized.contains("pro")
+            || normalized.contains("plan")
     }
 
     private func parseResetDate(

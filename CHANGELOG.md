@@ -22,6 +22,10 @@ All notable changes to this project will be documented in this file.
 - New "Switch to new tab" checkbox in the New Tab prompt sheet — works like the existing "Switch to new thread" option, remembers the last selection, and defaults to on.
 - Option+middle-click on a tab now closes it immediately without a confirmation alert.
 
+### Agents
+- Rate-limit markers now propagate across every tab using the same agent, so a Claude or Codex limit is shown consistently across the app instead of only on the session that surfaced it.
+- Fixed Claude interactive rate-limit prompts sometimes being missed when only the wait/switch options were visible, so blocked Claude tabs show the rate-limit marker more reliably.
+
 ### Settings
 - Moved `Inject Magent IPC instructions into agent prompts` and `Track agent rate limits` out of `Agent Permissions` into a dedicated `Agent Behavior` section in Settings > Agents.
 
