@@ -123,18 +123,52 @@ extension ThreadManager {
     }
 
     private func isInteractiveRateLimitPromptText(_ text: String) -> Bool {
+        let lines = text
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
         let normalized = text.lowercased()
         let hasLimitContext = normalized.contains("limit")
             || normalized.contains("rate")
             || normalized.contains("quota")
-        let hasWaitChoice = normalized.contains("stop and wait for limit to reset")
-            || normalized.contains("stop and wait for limits to reset")
+        let hasWaitChoice = lines.contains(where: isClaudeRateLimitWaitChoiceLine)
             || normalized.contains("stop and wait")
-        let hasSwitchChoice = normalized.contains("switch to extra usage")
+        let hasSwitchChoice = lines.contains(where: isClaudeRateLimitSwitchChoiceLine)
+            || normalized.contains("switch to extra usage")
             || normalized.contains("switch to max")
             || normalized.contains("switch to pro")
 
-        return hasLimitContext && (hasWaitChoice || hasSwitchChoice)
+        return (hasWaitChoice && hasSwitchChoice)
+            || (hasLimitContext && (hasWaitChoice || hasSwitchChoice))
+    }
+
+    private func isClaudeRateLimitWaitChoiceLine(_ line: String) -> Bool {
+        let normalized = line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard normalized.range(of: #"^\d+\.\s*stop and wait\b"#, options: .regularExpression) != nil else {
+            return false
+        }
+        return normalized.contains("reset")
+            || normalized.contains("limit")
+            || normalized.contains("quota")
+            || normalized.contains("until")
+            || normalized.contains("available")
+            || normalized.contains("try again")
+            || normalized.contains("retry")
+    }
+
+    private func isClaudeRateLimitSwitchChoiceLine(_ line: String) -> Bool {
+        let normalized = line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard normalized.range(of: #"^\d+\.\s*switch to\b"#, options: .regularExpression) != nil else {
+            return false
+        }
+        return normalized.contains("extra usage")
+            || normalized.contains("max")
+            || normalized.contains("pro")
+            || normalized.contains("plan")
     }
 
     private func sendAgentWaitingNotification(for thread: MagentThread, projectName: String, playSound: Bool, sessionName: String) {

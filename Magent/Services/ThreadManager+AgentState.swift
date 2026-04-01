@@ -215,6 +215,7 @@ extension ThreadManager {
         var changed = false
         var busyChangedThreadIds = Set<UUID>()
         var rateLimitChangedThreadIds = Set<UUID>()
+        var agentsWithVisibleRateLimitPrompt = Set<AgentType>()
 
         func publishBusySyncChangesIfNeeded() async {
             // Tick debounce timers for ALL threads every pass so pending
@@ -351,10 +352,16 @@ extension ThreadManager {
 
                     let content = await tmux.cachedCapturePane(sessionName: session)
                     if let content, isAtRateLimitPrompt(content) {
+                        agentsWithVisibleRateLimitPrompt.insert(.claude)
                         guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                        if setPromptRateLimitMarker(threadId: threadId, session: session) {
+                        let promptMarker = AgentRateLimitInfo(
+                            resetAt: Date.distantFuture,
+                            resetDescription: nil,
+                            detectedAt: Date(),
+                            isPromptBased: true
+                        )
+                        if applyRateLimitMarker(promptMarker, for: .claude, changedThreadIds: &rateLimitChangedThreadIds) {
                             changed = true
-                            rateLimitChangedThreadIds.insert(threadId)
                         }
                         if threads[i].busySessions.contains(session) {
                             threads[i].busySessions.remove(session)
@@ -372,10 +379,6 @@ extension ThreadManager {
                             threads[i].busySessions.remove(session)
                             changed = true
                             busyChangedThreadIds.insert(threads[i].id)
-                        }
-                        if clearPromptRateLimitMarker(threadId: threadId, session: session) {
-                            changed = true
-                            rateLimitChangedThreadIds.insert(threadId)
                         }
                         // Check for unsubmitted typed input at the idle prompt.
                         if await syncUnsubmittedInputState(threadId: threadId, sessionName: session, agentType: .claude) {
@@ -395,10 +398,6 @@ extension ThreadManager {
                             threads[i].hasUnsubmittedInputSessions.remove(session)
                             changed = true
                             busyChangedThreadIds.insert(threads[i].id)
-                        }
-                        if clearPromptRateLimitMarker(threadId: threadId, session: session) {
-                            changed = true
-                            rateLimitChangedThreadIds.insert(threadId)
                         }
                         let recoveredIds = await clearRateLimitAfterRecovery(
                             threadId: threadId,
@@ -431,12 +430,13 @@ extension ThreadManager {
                         changed = true
                         busyChangedThreadIds.insert(threads[i].id)
                     }
-                    if clearPromptRateLimitMarker(threadId: threadId, session: session) {
-                        changed = true
-                        rateLimitChangedThreadIds.insert(threadId)
-                    }
                 }
             }
+        }
+
+        if !agentsWithVisibleRateLimitPrompt.contains(.claude),
+           clearPromptRateLimitMarkers(for: .claude, changedThreadIds: &rateLimitChangedThreadIds) {
+            changed = true
         }
 
         // Stamp sessionLastBusyAt for all currently-busy sessions so idle eviction
@@ -520,48 +520,44 @@ extension ThreadManager {
         let hasLimitContext = normalized.contains("limit")
             || normalized.contains("rate")
             || normalized.contains("quota")
-        let hasWaitChoice = normalized.contains("stop and wait for limit to reset")
-            || normalized.contains("stop and wait for limits to reset")
+        let hasWaitChoice = recentLines.contains(where: isClaudeRateLimitWaitChoiceLine)
             || normalized.contains("stop and wait")
-        let hasSwitchChoice = normalized.contains("switch to extra usage")
+        let hasSwitchChoice = recentLines.contains(where: isClaudeRateLimitSwitchChoiceLine)
+            || normalized.contains("switch to extra usage")
             || normalized.contains("switch to max")
             || normalized.contains("switch to pro")
 
-        return hasLimitContext && (hasWaitChoice || hasSwitchChoice)
+        return (hasWaitChoice && hasSwitchChoice)
+            || (hasLimitContext && (hasWaitChoice || hasSwitchChoice))
     }
 
-    /// Sets a prompt-based rate-limit marker for the session. Returns true if
-    /// the rate-limit state changed (for notification tracking).
-    /// Does not overwrite text-based markers from checkForRateLimitedSessions.
-    @discardableResult
-    private func setPromptRateLimitMarker(threadId: UUID, session: String) -> Bool {
-        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { return false }
-        if let existing = threads[i].rateLimitedSessions[session], !existing.isPromptBased {
-            return false // don't overwrite text-based marker
+    private func isClaudeRateLimitWaitChoiceLine(_ line: String) -> Bool {
+        let normalized = line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard normalized.range(of: #"^\d+\.\s*stop and wait\b"#, options: .regularExpression) != nil else {
+            return false
         }
-        let marker = AgentRateLimitInfo(
-            resetAt: Date.distantFuture,
-            resetDescription: nil,
-            detectedAt: Date(),
-            isPromptBased: true
-        )
-        if threads[i].rateLimitedSessions[session] != marker {
-            threads[i].rateLimitedSessions[session] = marker
-            return true
-        }
-        return false
+        return normalized.contains("reset")
+            || normalized.contains("limit")
+            || normalized.contains("quota")
+            || normalized.contains("until")
+            || normalized.contains("available")
+            || normalized.contains("try again")
+            || normalized.contains("retry")
     }
 
-    /// Clears a prompt-based rate-limit marker for the session. Returns true if
-    /// a prompt-based marker was actually removed.
-    @discardableResult
-    private func clearPromptRateLimitMarker(threadId: UUID, session: String) -> Bool {
-        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { return false }
-        if let existing = threads[i].rateLimitedSessions[session], existing.isPromptBased {
-            threads[i].rateLimitedSessions.removeValue(forKey: session)
-            return true
+    private func isClaudeRateLimitSwitchChoiceLine(_ line: String) -> Bool {
+        let normalized = line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard normalized.range(of: #"^\d+\.\s*switch to\b"#, options: .regularExpression) != nil else {
+            return false
         }
-        return false
+        return normalized.contains("extra usage")
+            || normalized.contains("max")
+            || normalized.contains("pro")
+            || normalized.contains("plan")
     }
 
     private func paneShowsEscToInterrupt(sessionName: String) async -> Bool {
