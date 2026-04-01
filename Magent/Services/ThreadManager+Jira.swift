@@ -30,35 +30,46 @@ extension ThreadManager {
 
     // MARK: - Auto-sync Tick
 
-    /// Returns `true` if the sync completed without errors.
+    /// Returns a summary of any Jira sync failures encountered during the pass.
     @discardableResult
-    func runJiraSyncTick() async -> Bool {
+    func runJiraSyncTick() async -> StatusSyncResult {
         let settings = persistence.loadSettings()
-        var allOk = true
+        var failureCount = 0
+        var failureDetails: [String] = []
         for project in settings.projects where project.jiraSyncEnabled {
-            let ok = await syncJiraForProject(project, settings: settings)
-            if !ok { allOk = false }
+            let result = await syncJiraForProject(project, settings: settings)
+            if result.hadErrors {
+                failureCount += 1
+                if let summary = result.failureSummary, failureDetails.count < 3 {
+                    failureDetails.append(summary)
+                }
+            }
         }
-        return allOk
+        guard failureCount > 0 else { return .success }
+        return .failure(statusSyncFailureSummary(
+            title: "Jira sync failed",
+            details: failureDetails,
+            totalCount: failureCount
+        ))
     }
 
     // MARK: - Per-project Sync
 
-    /// Returns `true` if the sync completed without errors.
+    /// Returns a summary of the per-project Jira sync failure when one occurs.
     @discardableResult
-    private func syncJiraForProject(_ project: Project, settings: AppSettings) async -> Bool {
-        guard let projectKey = project.jiraProjectKey, !projectKey.isEmpty else { return true }
-        guard let assigneeId = project.jiraAssigneeAccountId, !assigneeId.isEmpty else { return true }
+    private func syncJiraForProject(_ project: Project, settings: AppSettings) async -> StatusSyncResult {
+        guard let projectKey = project.jiraProjectKey, !projectKey.isEmpty else { return .success }
+        guard let assigneeId = project.jiraAssigneeAccountId, !assigneeId.isEmpty else { return .success }
 
         let siteURL = project.jiraSiteURL ?? settings.jiraSiteURL
-        guard !siteURL.isEmpty else { return true }
+        guard !siteURL.isEmpty else { return .success }
 
         // Auto-create project sections from Jira if none exist.
         // Return after creating — the next sync tick will match tickets using the persisted sections.
         if project.threadSections == nil {
             do {
                 let sections = try await syncSectionsFromJira(project: project)
-                guard !sections.isEmpty else { return true }
+                guard !sections.isEmpty else { return .success }
                 var updatedSettings = persistence.loadSettings()
                 if let idx = updatedSettings.projects.firstIndex(where: { $0.id == project.id }) {
                     updatedSettings.projects[idx].threadSections = sections
@@ -68,10 +79,9 @@ extension ThreadManager {
                     }
                 }
             } catch {
-                // Can't sync without sections — skip this project
-                return false
+                return .failure("\(project.name): failed to sync Jira sections (\(error.localizedDescription))")
             }
-            return true
+            return .success
         }
 
         let jql = "project = \(projectKey) AND assignee = \"\(assigneeId)\" AND statusCategory != Done ORDER BY updated DESC"
@@ -90,10 +100,9 @@ extension ThreadManager {
                     isDismissible: true
                 )
             }
-            return false
+            return .failure("\(project.name): Jira auth expired. Re-authenticate in Settings > Jira.")
         } catch {
-            // Transient error — skip this tick
-            return false
+            return .failure("\(project.name): \(error.localizedDescription)")
         }
 
         let ticketKeys = Set(tickets.map(\.key))
@@ -149,7 +158,7 @@ extension ThreadManager {
         } else {
             _mismatchBannerShownProjectIds.remove(project.id)
         }
-        return true
+        return .success
     }
 
     // MARK: - Thread Creation for Tickets
@@ -290,7 +299,7 @@ extension ThreadManager {
     }
 
     @discardableResult
-    func runJiraSyncTick() async -> Bool { true }
+    func runJiraSyncTick() async -> StatusSyncResult { .success }
 
     func excludeJiraTicket(key: String, projectId: UUID) {}
 }

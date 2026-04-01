@@ -12,6 +12,17 @@ protocol ThreadManagerDelegate: AnyObject {
 }
 
 final class ThreadManager {
+    struct StatusSyncResult {
+        let hadErrors: Bool
+        let failureSummary: String?
+
+        static let success = StatusSyncResult(hadErrors: false, failureSummary: nil)
+
+        static func failure(_ summary: String?) -> StatusSyncResult {
+            StatusSyncResult(hadErrors: true, failureSummary: summary)
+        }
+    }
+
     struct InitialPromptInjectionFailureInfo {
         let prompt: String
         let shouldSubmitInitialPrompt: Bool
@@ -108,6 +119,8 @@ final class ThreadManager {
     var lastStatusSyncAt: Date?
     /// Whether the last sync pass encountered errors (network, auth, etc.).
     var lastStatusSyncFailed = false
+    /// Human-readable summary of the most recent sync failure, used by the status bar.
+    var lastStatusSyncFailureSummary: String?
     /// Tracks when each tmux session was last scanned for rate-limit text.
     /// Used to throttle non-active-session scans to once every 15 seconds.
     var lastRateLimitScanBySession: [String: Date] = [:]
@@ -220,9 +233,10 @@ final class ThreadManager {
         await refreshBranchStates()
         await verifyDetectedJiraTickets()
         populatePRInfoFromCache()
-        let prSyncOk = await runPRSyncTick()
+        let prSyncResult = await runPRSyncTick()
         lastStatusSyncAt = Date()
-        lastStatusSyncFailed = !prSyncOk
+        lastStatusSyncFailed = prSyncResult.hadErrors
+        lastStatusSyncFailureSummary = prSyncResult.failureSummary
 
         await MainActor.run {
             updateDockBadge()
@@ -264,5 +278,38 @@ final class ThreadManager {
         if changed {
             try? persistence.saveActiveThreads(threads)
         }
+    }
+}
+
+extension ThreadManager {
+    func statusSyncFailureSummary(title: String, details: [String], totalCount: Int? = nil) -> String {
+        let cleanedDetails = details
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let resolvedTotal = max(totalCount ?? cleanedDetails.count, cleanedDetails.count)
+
+        guard !cleanedDetails.isEmpty else {
+            return resolvedTotal > 0 ? "\(title) (\(resolvedTotal) error\(resolvedTotal == 1 ? "" : "s"))." : "\(title)."
+        }
+
+        var lines = ["\(title):"]
+        for detail in cleanedDetails.prefix(3) {
+            lines.append("- \(detail)")
+        }
+
+        let remaining = resolvedTotal - min(cleanedDetails.count, 3)
+        if remaining > 0 {
+            lines.append("- \(remaining) more error\(remaining == 1 ? "" : "s")")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    func mergeStatusSyncFailureSummaries(_ summaries: [String]) -> String? {
+        let cleaned = summaries
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return nil }
+        return cleaned.joined(separator: "\n\n")
     }
 }

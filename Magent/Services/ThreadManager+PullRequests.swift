@@ -105,10 +105,10 @@ extension ThreadManager {
         )
     }
 
-    /// Returns `true` if the sync completed without errors.
+    /// Returns a summary of any PR sync failures encountered during the pass.
     @discardableResult
-    func runPRSyncTick() async -> Bool {
-        guard !isPRSyncRunning else { return true }
+    func runPRSyncTick() async -> StatusSyncResult {
+        guard !isPRSyncRunning else { return .success }
         isPRSyncRunning = true
         defer { isPRSyncRunning = false }
 
@@ -120,6 +120,8 @@ extension ThreadManager {
         let snapshot = threads.filter { !$0.isArchived && !$0.isMain }
         var changed = false
         var hadErrors = false
+        var errorCount = 0
+        var failureDetails: [String] = []
         for thread in snapshot {
             guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else {
                 continue
@@ -155,6 +157,12 @@ extension ThreadManager {
                 }
             } catch {
                 hadErrors = true
+                errorCount += 1
+                if failureDetails.count < 3 {
+                    let trimmedMessage = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let message = trimmedMessage.isEmpty ? "Unknown error." : trimmedMessage
+                    failureDetails.append("\(project.name) / \(branch): \(message)")
+                }
                 info = nil
                 status = .unavailable
             }
@@ -178,7 +186,12 @@ extension ThreadManager {
         }
 
         prunePRCache()
-        return !hadErrors
+        guard hadErrors else { return .success }
+        return .failure(statusSyncFailureSummary(
+            title: "PR sync failed",
+            details: failureDetails,
+            totalCount: errorCount
+        ))
     }
 
     /// Refreshes PR status for a single thread (called on thread selection).

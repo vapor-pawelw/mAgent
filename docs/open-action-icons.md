@@ -25,3 +25,4 @@
 - The app target uses an explicit source allowlist in `Project.swift`, not a blanket `Magent/Utilities/**` glob. Adding a new utility file requires adding it to the `sources` array or the app target will compile without seeing it.
 - When adding new "open" actions that mirror an existing toolbar button, route them through `OpenActionIcons` instead of duplicating one-off `NSWorkspace` / `NSImage(named:)` code. That keeps menus and buttons visually in sync and avoids provider-specific styling drift.
 - Do not assume periodic PR/MR refresh alone will populate `pullRequestInfo` quickly enough for launch-time UI. Keep startup restore triggering a PR/MR sync, and keep direct-open actions able to resolve the live PR/MR URL on demand.
+- GitLab MR lookup via `glab mr list` should treat "open" as the default list mode. Do not add a `--state opened` flag here — some `glab` builds reject it and will flip the global sync status into a false failure state.

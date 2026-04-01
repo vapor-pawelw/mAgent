@@ -57,6 +57,7 @@ extension ThreadManager {
 
             var didRunStatusSync = false
             var syncHadErrors = false
+            var syncFailureSummaries: [String] = []
 
             // Refresh dirty and delivered states every 10th tick (~50 seconds)
             dirtyCheckTickCounter += 1
@@ -71,8 +72,13 @@ extension ThreadManager {
             _jiraSyncTickCounter += 1
             if _jiraSyncTickCounter >= 60 {
                 _jiraSyncTickCounter = 0
-                let jiraOk = await runJiraSyncTick()
-                if !jiraOk { syncHadErrors = true }
+                let jiraResult = await runJiraSyncTick()
+                if jiraResult.hadErrors {
+                    syncHadErrors = true
+                    if let summary = jiraResult.failureSummary {
+                        syncFailureSummaries.append(summary)
+                    }
+                }
                 didRunStatusSync = true
             }
 
@@ -81,14 +87,22 @@ extension ThreadManager {
             _prSyncTickCounter += 1
             if _prSyncTickCounter >= 60 {
                 _prSyncTickCounter = 0
-                let prOk = await runPRSyncTick()
-                if !prOk { syncHadErrors = true }
+                let prResult = await runPRSyncTick()
+                if prResult.hadErrors {
+                    syncHadErrors = true
+                    if let summary = prResult.failureSummary {
+                        syncFailureSummaries.append(summary)
+                    }
+                }
                 didRunStatusSync = true
             }
 
             if didRunStatusSync {
                 lastStatusSyncAt = Date()
                 lastStatusSyncFailed = syncHadErrors
+                lastStatusSyncFailureSummary = syncHadErrors
+                    ? mergeStatusSyncFailureSummaries(syncFailureSummaries)
+                    : nil
                 await MainActor.run {
                     NotificationCenter.default.post(name: .magentStatusSyncCompleted, object: nil)
                 }
@@ -100,11 +114,14 @@ extension ThreadManager {
     /// Skips if a sync pass is already in progress.
     func forceRefreshStatuses() {
         Task {
-            let prOk = await runPRSyncTick()
-            let jiraOk = await runJiraSyncTick()
+            let prResult = await runPRSyncTick()
+            let jiraResult = await runJiraSyncTick()
             await verifyDetectedJiraTickets()
             lastStatusSyncAt = Date()
-            lastStatusSyncFailed = !prOk || !jiraOk
+            lastStatusSyncFailed = prResult.hadErrors || jiraResult.hadErrors
+            lastStatusSyncFailureSummary = lastStatusSyncFailed
+                ? mergeStatusSyncFailureSummaries([prResult.failureSummary, jiraResult.failureSummary].compactMap { $0 })
+                : nil
             // Reset counters so the next periodic tick doesn't re-run immediately.
             _prSyncTickCounter = 0
             _jiraSyncTickCounter = 0

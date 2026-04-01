@@ -6,6 +6,16 @@ public enum PRFetchError: Error {
     case cliFailure(stderr: String)
 }
 
+extension PRFetchError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .cliFailure(let stderr):
+            let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "Pull request lookup command failed." : trimmed
+        }
+    }
+}
+
 public final class GitService: Sendable {
 
     public static let shared = GitService()
@@ -356,9 +366,9 @@ public final class GitService: Sendable {
         let quotedBranch = ShellExecutor.shellQuote(branch)
         var hadSuccessfulLookup = false
 
-        // Prefer open MRs; fall back to all states if none found.
-        for mrState in ["opened", "all"] {
-            let flag = mrState == "all" ? "--all" : "--state \(mrState)"
+        // Prefer open MRs (the default for `glab mr list`); fall back to all states if none found.
+        for includeAll in [false, true] {
+            let flag = includeAll ? "--all" : ""
             let cmd = "glab mr list --repo \(quotedRepo) --source-branch \(quotedBranch) \(flag) --output json --per-page 1"
             let result = await ShellExecutor.execute(cmd)
             guard result.exitCode == 0 else {

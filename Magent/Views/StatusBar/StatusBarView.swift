@@ -865,13 +865,23 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         }
     }
 
-    private var syncTooltip: String {
+    private var baseSyncTooltip: String {
         let hasJira = PersistenceService.shared.loadSettings().projects.contains(where: \.jiraSyncEnabled)
         if hasJira {
             return "Periodically syncs PR status (GitHub) and Jira ticket info for all active threads. Right-click to refresh manually."
         } else {
             return "Periodically syncs PR status (GitHub) for all active threads. Right-click to refresh manually."
         }
+    }
+
+    private func syncTooltip(for threadManager: ThreadManager) -> String {
+        guard threadManager.lastStatusSyncFailed,
+              let failureSummary = threadManager.lastStatusSyncFailureSummary,
+              !failureSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return baseSyncTooltip
+        }
+
+        return "\(baseSyncTooltip)\n\nLast failure:\n\(failureSummary)"
     }
 
     private func updateSyncStatus() {
@@ -881,7 +891,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             if !tm.threads.isEmpty {
                 syncStatusLabel.stringValue = "Syncing…"
                 syncStatusLabel.textColor = .tertiaryLabelColor
-                syncStatusLabel.toolTip = syncTooltip
+                syncStatusLabel.toolTip = syncTooltip(for: tm)
                 syncRefreshButton.isHidden = true
             } else {
                 syncStatusLabel.stringValue = ""
@@ -898,7 +908,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             syncStatusLabel.stringValue = "Synced \(Self.relativeTimeString(from: lastSync))"
             syncStatusLabel.textColor = .tertiaryLabelColor
         }
-        syncStatusLabel.toolTip = syncTooltip
+        syncStatusLabel.toolTip = syncTooltip(for: tm)
         syncRefreshButton.isHidden = false
     }
 
@@ -1079,6 +1089,27 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let refreshItem = NSMenuItem(title: "Refresh Now", action: #selector(syncRefreshTapped), keyEquivalent: "")
         refreshItem.target = self
         menu.addItem(refreshItem)
+
+        if ThreadManager.shared.lastStatusSyncFailed,
+           let failureSummary = ThreadManager.shared.lastStatusSyncFailureSummary {
+            let lines = failureSummary
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !lines.isEmpty {
+                menu.addItem(.separator())
+
+                let headerItem = NSMenuItem(title: "Last Failure", action: nil, keyEquivalent: "")
+                headerItem.isEnabled = false
+                menu.addItem(headerItem)
+
+                for line in lines.prefix(6) {
+                    let lineItem = NSMenuItem(title: line, action: nil, keyEquivalent: "")
+                    lineItem.isEnabled = false
+                    menu.addItem(lineItem)
+                }
+            }
+        }
 
         syncStatusLabel.menu = menu
     }

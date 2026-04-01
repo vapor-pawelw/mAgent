@@ -26,11 +26,17 @@ All notable changes to this project will be documented in this file.
 - Rate-limit markers now propagate across every tab using the same agent, so a Claude or Codex limit is shown consistently across the app instead of only on the session that surfaced it.
 - Fixed Claude interactive rate-limit prompts sometimes being missed when only the wait/switch options were visible, so blocked Claude tabs show the rate-limit marker more reliably.
 
+### Pull Requests
+- Fixed GitLab MR sync falsely failing on `glab` setups that reject `glab mr list --state ...`; Magent now uses the default open-MR listing and only falls back to `--all`.
+
 ### Settings
 - Moved `Inject Magent IPC instructions into agent prompts` and `Track agent rate limits` out of `Agent Permissions` into a dedicated `Agent Behavior` section in Settings > Agents.
 
 ### Local Sync
 - Agentic Merge now falls back to the first enabled non-rate-limited agent when the project's default agent is currently rate-limited.
+
+### Status Bar
+- When the bottom-right sync status fails, hover text and the sync right-click menu now show the last error reason instead of only `Sync failed`.
 ## 1.4.0 - 2026-03-31
 
 
