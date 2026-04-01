@@ -22,6 +22,8 @@ extension ThreadManager {
         insertAtTopOfVisibleGroup: Bool = false,
         skipAutoSelect: Bool = false,
         initialWebURL: URL? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil,
         localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil
     ) async throws -> MagentThread {
         var name = ""
@@ -286,7 +288,9 @@ extension ThreadManager {
                     projectId: project.id,
                     agentType: selectedAgentType,
                     envExports: envExports,
-                    workingDirectory: worktreePath
+                    workingDirectory: worktreePath,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel
                 )
             } else {
                 startCmd = terminalStartCommand(

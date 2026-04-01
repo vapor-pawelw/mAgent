@@ -83,7 +83,7 @@ Before the app is usable, the user must complete a configuration step:
 1. User taps **"+"** button
 2. If **1 project** is configured → immediately create thread for that project
 3. If **multiple projects** → show a project selection menu first
-4. The new-thread sheet offers optional fields: **Description**, **Branch**, **Base branch** (combo box with type-ahead — lists local branches sorted most-recently-modified first, with default branch shown as placeholder; field left empty defaults to the project's default branch, falling back to "main"; validates branch existence on accept), **Prompt**, agent type picker, project picker (multi-project setups), and section picker. A "Switch to new thread" checkbox (default: on, persisted) controls whether focus switches to the new thread.
+4. The new-thread sheet offers optional fields: **Description**, **Branch**, **Base branch** (combo box with type-ahead — lists local branches sorted most-recently-modified first, with default branch shown as placeholder; field left empty defaults to the project's default branch, falling back to "main"; validates branch existence on accept), **Prompt**, agent type picker, **Model** picker, **Reasoning** picker, project picker (multi-project setups), and section picker. A "Switch to new thread" checkbox (default: on, persisted) controls whether focus switches to the new thread. Model and Reasoning pickers are populated from `AgentModelsService` (see architecture doc); each agent remembers the last-used selection via `AgentLastSelectionStore`.
 5. The thread appears in the sidebar immediately and is auto-selected by default; a "Creating thread..." overlay is shown in the detail area while background setup runs.
 6. A new git worktree is created for the selected project (background), branching from the chosen base branch
 7. If the project has local sync paths configured, each entry is applied into the new worktree according to its mode: `Copy` entries are seeded from the resolved copy source, `Shared Link` entries become direct symlinks to the main repo copy, and the normalized entry list is snapshotted onto the thread (background)
@@ -226,6 +226,7 @@ For the main thread, the sidebar uses these rules:
 - **Worktrees path**: Per-project or global path for worktrees (default: `<parent>/<repo>-worktrees/`)
 - **Local sync paths** (per project): Line-separated repo-relative files/directories copied into new thread worktrees and merged back on archive
 - **Agent command**: The command to run in new threads (e.g. `claude`, `aider`, custom)
+- **Model / Reasoning**: Per-agent model and reasoning-effort selection shown in the launch sheet; populated from the bundled/cached `agent-models.json` manifest (refreshed from GitHub in the background). Last selection per agent is persisted and reused for fast-path thread creation (Option+click, context menu, keyboard shortcut).
 - **Dependencies**: Check/install tmux, verify ghostty availability
 - **tmux configuration**: Optional custom tmux config or prefix key
 
