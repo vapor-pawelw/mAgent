@@ -53,7 +53,7 @@ Rate limits are tracked **per agent type** (Claude, Codex), not per session. Whe
 
 That propagation is applied to the per-tab/thread markers too, not just the status-bar summary. Once any Claude or Codex session detects a concrete limit, every tab using that agent gets the red hourglass marker until the limit expires or is lifted manually.
 
-Claude's prompt-only blocker follows the same rule: if any Claude session is currently showing the interactive wait/switch prompt, Magent mirrors a prompt-based rate-limit marker onto all Claude tabs for that tick so the thread list, tab bar, and cleanup protection stay in sync.
+Claude's prompt-only blocker follows the same rule: if any Claude session is currently showing the interactive wait/switch prompt **and** the pane's reset time is still in the future, Magent mirrors a prompt-based rate-limit marker onto all Claude tabs for that tick so the thread list, tab bar, and cleanup protection stay in sync. If the reset time has expired (e.g., the user opened `/rate-limit-options` after the limit lifted), the prompt is treated as stale — no markers are applied and the session is treated as idle.
 
 Once Magent has matched a non-ignored rate-limit fingerprint and anchored a concrete `resetAt`, that rate limit stays active until the timer expires or you lift it manually.
 Newer pane output such as `/status` must not auto-clear an already-anchored limit just because the latest block no longer shows the original rate-limit text.

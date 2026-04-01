@@ -25,6 +25,7 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - Rate-limit markers now propagate across every tab using the same agent, so a Claude or Codex limit is shown consistently across the app instead of only on the session that surfaced it.
 - Fixed Claude interactive rate-limit prompts sometimes being missed when only the wait/switch options were visible, so blocked Claude tabs show the rate-limit marker more reliably.
+- Fixed stale rate-limit prompts (visible after the limit has lifted) keeping all Claude tabs marked as rate-limited indefinitely.
 
 ### Pull Requests
 - Fixed GitLab MR sync falsely failing on `glab` setups that reject `glab mr list --state ...`; Magent now uses the default open-MR listing and only falls back to `--all`.

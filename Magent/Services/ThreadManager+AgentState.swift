@@ -351,27 +351,56 @@ extension ThreadManager {
                     if recentlyCompleted { continue }
 
                     let content = await tmux.cachedCapturePane(sessionName: session)
-                    if let content, isAtRateLimitPrompt(content) {
-                        agentsWithVisibleRateLimitPrompt.insert(.claude)
-                        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                        let promptMarker = AgentRateLimitInfo(
-                            resetAt: Date.distantFuture,
-                            resetDescription: nil,
-                            detectedAt: Date(),
-                            isPromptBased: true
-                        )
-                        if applyRateLimitMarker(promptMarker, for: .claude, changedThreadIds: &rateLimitChangedThreadIds) {
-                            changed = true
-                        }
-                        if threads[i].busySessions.contains(session) {
-                            threads[i].busySessions.remove(session)
-                            changed = true
-                            busyChangedThreadIds.insert(threads[i].id)
-                        }
-                        if threads[i].hasUnsubmittedInputSessions.contains(session) {
-                            threads[i].hasUnsubmittedInputSessions.remove(session)
-                            changed = true
-                            busyChangedThreadIds.insert(threads[i].id)
+                    let showsRateLimitPrompt = content.map { isAtRateLimitPrompt($0) } ?? false
+                    if showsRateLimitPrompt {
+                        // Check the actual pane content (120 lines) to see if the
+                        // rate limit reset time is still in the future. This works
+                        // regardless of whether rate-limit detection is enabled,
+                        // and avoids treating stale prompts (e.g. /rate-limit-options
+                        // opened after the limit lifted) as active rate limits.
+                        let widerContent = await tmux.cachedCapturePane(sessionName: session, lastLines: 120)
+                        let isActiveLimit = widerContent.map {
+                            paneHasActiveNonIgnoredRateLimit(for: .claude, paneContent: $0)
+                        } ?? false
+
+                        if isActiveLimit {
+                            agentsWithVisibleRateLimitPrompt.insert(.claude)
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                            let promptMarker = AgentRateLimitInfo(
+                                resetAt: Date.distantFuture,
+                                resetDescription: nil,
+                                detectedAt: Date(),
+                                isPromptBased: true
+                            )
+                            if applyRateLimitMarker(promptMarker, for: .claude, changedThreadIds: &rateLimitChangedThreadIds) {
+                                changed = true
+                            }
+                            if threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                            if threads[i].hasUnsubmittedInputSessions.contains(session) {
+                                threads[i].hasUnsubmittedInputSessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                        } else {
+                            // Stale rate-limit prompt (limit expired but menu still
+                            // visible). Clear busy/unsubmitted-input state but do NOT
+                            // call syncUnsubmittedInputState — the stale menu text
+                            // could cause it to latch onto an older ❯ line in scrollback.
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                            if threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                            if threads[i].hasUnsubmittedInputSessions.contains(session) {
+                                threads[i].hasUnsubmittedInputSessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
                         }
                     } else if let content, isAgentIdleAtPrompt(content) {
                         guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
