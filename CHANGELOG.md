@@ -16,6 +16,9 @@ All notable changes to this project will be documented in this file.
 - New "Switch to new tab" checkbox in the New Tab prompt sheet — works like the existing "Switch to new thread" option, remembers the last selection, and defaults to on.
 - Option+middle-click on a tab now closes it immediately without a confirmation alert.
 
+### Local Sync
+- Agentic Merge now falls back to the first enabled non-rate-limited agent when the project's default agent is currently rate-limited.
+
 ## 1.4.0 - 2026-03-31
 
 
