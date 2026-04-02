@@ -222,6 +222,8 @@ final class DiffPanelView: NSView {
     private var dragStartHeight: CGFloat = 0
 
     var onLoadMoreCommits: (() -> Void)?
+    /// Called when the ALL CHANGES tab needs branch-wide entries loaded.
+    var onAllChangesRequested: (() -> Void)?
     /// Called when the user selects a commit (nil = "Uncommitted").
     var onCommitSelected: ((String?) -> Void)?
     /// Called when the user double-taps a commit row (nil = "Uncommitted"). Second arg is display title.
@@ -231,11 +233,12 @@ final class DiffPanelView: NSView {
     /// Called when the user requests a manual git refresh for the selected thread.
     var onRefreshRequested: (() -> Void)?
 
-    private var allBranchEntries: [FileDiffEntry] = []
+    private var allBranchEntries: [FileDiffEntry]?
+    private var isLoadingAllChanges = false
 
     /// The entries currently shown in the ALL CHANGES tab.
     private var activeEntries: [FileDiffEntry] {
-        allBranchEntries
+        allBranchEntries ?? []
     }
 
     override init(frame frameRect: NSRect) {
@@ -755,7 +758,7 @@ final class DiffPanelView: NSView {
 
     func update(
         with newEntries: [FileDiffEntry],
-        allBranchEntries newAllBranchEntries: [FileDiffEntry] = [],
+        allBranchEntries newAllBranchEntries: [FileDiffEntry]? = nil,
         commits newCommits: [BranchCommit] = [],
         hasMoreCommits: Bool = false,
         forceVisible: Bool = false,
@@ -767,6 +770,7 @@ final class DiffPanelView: NSView {
     ) {
         uncommittedEntries = newEntries
         allBranchEntries = newAllBranchEntries
+        isLoadingAllChanges = false
         commits = newCommits
         self.worktreePath = worktreePath
         self.hasMoreCommits = hasMoreCommits
@@ -796,7 +800,7 @@ final class DiffPanelView: NSView {
             activeTab = .commits
         }
 
-        let hasContent = !newEntries.isEmpty || !newAllBranchEntries.isEmpty || !newCommits.isEmpty
+        let hasContent = !newEntries.isEmpty || !(newAllBranchEntries?.isEmpty ?? true) || !newCommits.isEmpty
         // Show tab bar if there are any commits to browse
         commitsTabButton.isHidden = !hasContent && !forceVisible
 
@@ -818,6 +822,15 @@ final class DiffPanelView: NSView {
         }
 
         updateBranchInfo(branchName: branchName, baseBranch: baseBranch, upstreamStatus: upstreamStatus)
+    }
+
+    func updateAllBranchEntries(_ entries: [FileDiffEntry]) {
+        allBranchEntries = entries
+        isLoadingAllChanges = false
+        updateTabTitles()
+
+        guard activeTab == .changes, !isInCommitDetailMode else { return }
+        rebuildRows()
     }
 
     /// Called by the controller after loading files for the selected commit.
@@ -871,7 +884,8 @@ final class DiffPanelView: NSView {
     func clear() {
         resetCommitDetailMode()
         uncommittedEntries = []
-        allBranchEntries = []
+        allBranchEntries = nil
+        isLoadingAllChanges = false
         commitEntries = []
         commits = []
         activeTab = .commits
@@ -898,8 +912,12 @@ final class DiffPanelView: NSView {
             commitsTabButton.title = hasMoreCommits ? "COMMITS (\(commits.count)+)" : "COMMITS (\(commits.count))"
         }
 
-        let totalChanges = allBranchEntries.count
-        changesTabButton.title = totalChanges == 0 ? "ALL CHANGES" : "ALL CHANGES (\(totalChanges))"
+        let totalChanges = allBranchEntries?.count
+        if let totalChanges, totalChanges > 0 {
+            changesTabButton.title = "ALL CHANGES (\(totalChanges))"
+        } else {
+            changesTabButton.title = "ALL CHANGES"
+        }
 
         let activeColor = NSColor.labelColor
         let inactiveColor = NSColor(resource: .textSecondary)
@@ -955,8 +973,29 @@ final class DiffPanelView: NSView {
     }
 
     private func rebuildChangesRows() {
-        let entries = activeEntries
         commitContextLabel.isHidden = true
+
+        if allBranchEntries == nil {
+            if !isLoadingAllChanges {
+                isLoadingAllChanges = true
+                onAllChangesRequested?()
+            }
+
+            let row = makeEmptyStateRow(message: "Loading changes…")
+            stackView.addArrangedSubview(row)
+            row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+            row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+            return
+        }
+
+        let entries = activeEntries
+        if entries.count > ThreadDetailViewController.diffMaxFileCount {
+            let row = makeEmptyStateRow(message: "Diff is too large (\(entries.count) files).")
+            stackView.addArrangedSubview(row)
+            row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+            row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+            return
+        }
 
         if entries.isEmpty {
             let row = makeEmptyStateRow(message: "No changes in this branch")
@@ -1109,6 +1148,14 @@ final class DiffPanelView: NSView {
     }
 
     private func rebuildCommitDetailRows() {
+        if commitDetailEntries.count > ThreadDetailViewController.diffMaxFileCount {
+            let row = makeEmptyStateRow(message: "Diff is too large (\(commitDetailEntries.count) files).")
+            stackView.addArrangedSubview(row)
+            row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+            row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+            return
+        }
+
         if commitDetailEntries.isEmpty {
             let msg = commitDetailHash == nil ? "No uncommitted changes" : "No changes in this commit"
             let row = makeEmptyStateRow(message: msg)

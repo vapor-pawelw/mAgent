@@ -1408,6 +1408,64 @@ final class InlineDiffViewController: NSViewController {
         }
     }
 
+    private func clearSections() {
+        for sv in sectionsStackView.arrangedSubviews {
+            sectionsStackView.removeArrangedSubview(sv)
+            sv.removeFromSuperview()
+        }
+        sectionViews.removeAll()
+    }
+
+    private func makeStatusRow(message: String) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = NSTextField(wrappingLabelWithString: message)
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .secondaryLabelColor
+        label.maximumNumberOfLines = 0
+        label.alignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
+            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 20),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -20),
+            container.widthAnchor.constraint(equalTo: sectionsStackView.widthAnchor),
+        ])
+
+        return container
+    }
+
+    func setDiffUnavailableMessage(_ message: String) {
+        worktreePath = nil
+        mergeBase = nil
+        lastMeasuredContentWidth = 0
+        headerLabel.stringValue = "DIFF"
+        clearSections()
+
+        let row = makeStatusRow(message: message)
+        sectionsStackView.addArrangedSubview(row)
+        row.leadingAnchor.constraint(equalTo: sectionsStackView.leadingAnchor).isActive = true
+        row.trailingAnchor.constraint(equalTo: sectionsStackView.trailingAnchor).isActive = true
+
+        allExpanded = true
+        updateExpandCollapseButton()
+        expandCollapseButton.isEnabled = false
+        expandCollapseButton.alphaValue = 0.45
+
+        stickyHeader.isHidden = false
+        stickyTopConstraint.constant = stickyPinnedTopConstant
+        showStickyPlaceholder(message)
+
+        view.needsLayout = true
+        DispatchQueue.main.async { [weak self] in
+            self?.handleScrollChange()
+        }
+    }
+
     @objc private func handleResizeDrag(_ gesture: NSPanGestureRecognizer) {
         let translation = gesture.translation(in: view)
         // Positive y = drag up = diff gets taller (AppKit origin is bottom-left)
@@ -1425,13 +1483,10 @@ final class InlineDiffViewController: NSViewController {
         lastMeasuredContentWidth = 0
 
         headerLabel.stringValue = "DIFF (\(fileCount) files)"
+        expandCollapseButton.isEnabled = true
+        expandCollapseButton.alphaValue = 1
 
-        // Clear old sections
-        for sv in sectionsStackView.arrangedSubviews {
-            sectionsStackView.removeArrangedSubview(sv)
-            sv.removeFromSuperview()
-        }
-        sectionViews.removeAll()
+        clearSections()
 
         // Split diff into per-file chunks and create section views
         let chunks = splitDiffIntoFileChunks(rawDiff)

@@ -1222,7 +1222,7 @@ extension ThreadListViewController {
         Task {
             let current = self.threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
             let entries: [FileDiffEntry]
-            let allBranchEntries: [FileDiffEntry]
+            let allBranchEntries: [FileDiffEntry]?
             let commits: [BranchCommit]
             let hasMoreCommits: Bool
             let baseBranch: String?
@@ -1246,7 +1246,6 @@ extension ThreadListViewController {
                 let resolvedBaseBranch = self.threadManager.resolveBaseBranch(for: current)
                 baseBranch = resolvedBaseBranch
                 async let entriesTask = GitService.shared.workingTreeDiffStats(worktreePath: current.worktreePath)
-                async let allBranchTask = GitService.shared.diffStats(worktreePath: current.worktreePath, baseBranch: resolvedBaseBranch)
                 async let commitsTask = GitService.shared.commitLog(
                     worktreePath: current.worktreePath,
                     baseBranch: resolvedBaseBranch,
@@ -1254,7 +1253,7 @@ extension ThreadListViewController {
                 )
                 async let upstreamTask = GitService.shared.upstreamTrackingStatus(worktreePath: current.worktreePath)
                 entries = await entriesTask
-                allBranchEntries = await allBranchTask
+                allBranchEntries = nil
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
@@ -1280,6 +1279,27 @@ extension ThreadListViewController {
             }
         }
         refreshBranchMismatchView(for: thread)
+    }
+
+    func loadAllChangesForSelectedThread() {
+        guard let thread = selectedThreadFromState() else { return }
+        guard !thread.isMain else { return }
+
+        let generation = diffPanelRefreshGeneration[thread.id] ?? 0
+        Task {
+            let current = self.threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+            let baseBranch = self.threadManager.resolveBaseBranch(for: current)
+            let entries = await GitService.shared.diffStats(
+                worktreePath: current.worktreePath,
+                baseBranch: baseBranch
+            )
+
+            await MainActor.run {
+                guard self.selectedThreadID == current.id else { return }
+                guard (self.diffPanelRefreshGeneration[current.id] ?? 0) == generation else { return }
+                self.diffPanelView.updateAllBranchEntries(entries)
+            }
+        }
     }
 
     // MARK: - Commit Detail Mode

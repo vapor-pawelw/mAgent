@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file.
 - Settings panes now reload the latest `settings.json` before saving UI changes, preventing stale Settings windows from overwriting the registered projects list after a restore or startup recovery.
 
 ### Diff Viewer
+- The bottom-left `ALL CHANGES` view now loads branch-wide file lists lazily, and very large diffs show a simple `Diff is too large` placeholder instead of hanging the app.
 - The bottom-left git panel now appends compact remote-tracking status to the current branch name, showing short suffixes like `(+1 -3 from remote)` or `(local)` when the branch has no upstream.
 - Discarding a file in the CHANGES panel now refreshes the panel immediately, and queues a follow-up refresh if another git refresh is already in progress so the file state does not stay stale.
 

@@ -229,6 +229,8 @@ final class ThreadDetailViewController: NSViewController {
     static let diffMinHeight: CGFloat = 100
     static let diffDefaultRatio: CGFloat = 0.7
     static let diffHeightKey = "InlineDiffViewController.height"
+    static let diffMaxFileCount = 2_000
+    static let diffMaxLineCount = 60_000
 
     let prJiraSeparator = VerticalSeparatorView()
     let pinSeparator: NSView = {

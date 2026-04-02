@@ -371,6 +371,9 @@ final class ThreadListViewController: NSViewController {
         diffPanelView.onLoadMoreCommits = { [weak self] in
             self?.loadMoreCommitsForSelectedThread()
         }
+        diffPanelView.onAllChangesRequested = { [weak self] in
+            self?.loadAllChangesForSelectedThread()
+        }
         diffPanelView.onCommitSelected = { [weak self] commitHash in
             self?.handleCommitSelected(commitHash)
         }

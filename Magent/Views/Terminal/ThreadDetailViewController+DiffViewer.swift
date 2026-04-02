@@ -1,6 +1,25 @@
 import Cocoa
 import MagentCore
 
+private func diffLineCount(_ diffContent: String) -> Int {
+    guard !diffContent.isEmpty else { return 0 }
+    return diffContent.utf8.reduce(into: 1) { count, byte in
+        if byte == 10 {
+            count += 1
+        }
+    }
+}
+
+private func diffTooLargeMessage(fileCount: Int, lineCount: Int) -> String? {
+    if fileCount > ThreadDetailViewController.diffMaxFileCount {
+        return "Diff is too large (\(fileCount) files)."
+    }
+    if lineCount > ThreadDetailViewController.diffMaxLineCount {
+        return "Diff is too large (\(lineCount) lines)."
+    }
+    return nil
+}
+
 final class DiffImageOverlayView: NSView {
     private let dimView = NSView()
     private let imageCardView = NSView()
@@ -190,48 +209,78 @@ extension ThreadDetailViewController {
             let diffContent: String?
             let mergeBase: String?
             let entries: [FileDiffEntry]
+            let tooLargeMessage: String?
 
             if let commitHash {
                 // Show diff for a specific commit (git show)
-                async let diffContentTask = GitService.shared.commitDiffContent(
-                    worktreePath: worktreePath,
-                    commitHash: commitHash
-                )
                 async let entriesTask = GitService.shared.commitDiffStats(
                     worktreePath: worktreePath,
                     commitHash: commitHash
                 )
-                diffContent = await diffContentTask
-                mergeBase = "\(commitHash)^"
                 entries = await entriesTask
+                mergeBase = "\(commitHash)^"
+                if let message = diffTooLargeMessage(fileCount: entries.count, lineCount: 0) {
+                    diffContent = nil
+                    tooLargeMessage = message
+                } else {
+                    let content = await GitService.shared.commitDiffContent(
+                        worktreePath: worktreePath,
+                        commitHash: commitHash
+                    )
+                    diffContent = content
+                    if let content {
+                        tooLargeMessage = diffTooLargeMessage(fileCount: entries.count, lineCount: diffLineCount(content))
+                    } else {
+                        tooLargeMessage = nil
+                    }
+                }
             } else if let baseBranch, !forceWorkingTreeDiff {
-                async let diffContentTask = GitService.shared.diffContent(
-                    worktreePath: worktreePath,
-                    baseBranch: baseBranch
-                )
                 async let mergeBaseTask = GitService.shared.mergeBase(
                     worktreePath: worktreePath,
                     baseBranch: baseBranch
                 )
                 async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
-                diffContent = await diffContentTask
-                mergeBase = await mergeBaseTask
                 entries = await entriesTask
+                mergeBase = await mergeBaseTask
+                if let message = diffTooLargeMessage(fileCount: entries.count, lineCount: 0) {
+                    diffContent = nil
+                    tooLargeMessage = message
+                } else {
+                    let content = await GitService.shared.diffContent(
+                        worktreePath: worktreePath,
+                        baseBranch: baseBranch
+                    )
+                    diffContent = content
+                    if let content {
+                        tooLargeMessage = diffTooLargeMessage(fileCount: entries.count, lineCount: diffLineCount(content))
+                    } else {
+                        tooLargeMessage = nil
+                    }
+                }
             } else {
                 // Uncommitted changes only (working tree vs HEAD)
-                async let diffContentTask = GitService.shared.workingTreeDiffContent(worktreePath: worktreePath)
                 async let entriesTask = GitService.shared.workingTreeDiffStats(worktreePath: worktreePath)
-                diffContent = await diffContentTask
-                mergeBase = "HEAD"
                 entries = await entriesTask
+                mergeBase = "HEAD"
+                if let message = diffTooLargeMessage(fileCount: entries.count, lineCount: 0) {
+                    diffContent = nil
+                    tooLargeMessage = message
+                } else {
+                    let content = await GitService.shared.workingTreeDiffContent(worktreePath: worktreePath)
+                    diffContent = content
+                    if let content {
+                        tooLargeMessage = diffTooLargeMessage(fileCount: entries.count, lineCount: diffLineCount(content))
+                    } else {
+                        tooLargeMessage = nil
+                    }
+                }
             }
 
-            guard let diffContent else {
+            if diffContent == nil, tooLargeMessage == nil {
                 NSLog("[DiffViewer] diffContent is nil, aborting")
                 isLoadingDiffViewer = false
                 return
             }
-            NSLog("[DiffViewer] got diffContent (%d chars), mergeBase=%@", diffContent.count, mergeBase ?? "nil")
 
             let fileCount = entries.count
             NSLog("[DiffViewer] got %d entries, entering MainActor", fileCount)
@@ -291,20 +340,24 @@ extension ThreadDetailViewController {
                 ])
                 NSLog("[DiffViewer] constraints activated")
 
-                NSLog("[DiffViewer] calling setDiffContent")
-                vc.setDiffContent(diffContent, fileCount: fileCount, worktreePath: worktreePath, mergeBase: mergeBase)
+                if let message = tooLargeMessage {
+                    vc.setDiffUnavailableMessage(message)
+                } else if let diffContent {
+                    NSLog("[DiffViewer] calling setDiffContent")
+                    vc.setDiffContent(diffContent, fileCount: fileCount, worktreePath: worktreePath, mergeBase: mergeBase)
+                }
                 diffVC = vc
                 currentDiffCommitHash = commitHash
                 isLoadingDiffViewer = false
                 NSLog("[DiffViewer] setDiffContent done")
 
-                if let file = scrollToFile {
+                if let file = scrollToFile, tooLargeMessage == nil {
                     DispatchQueue.main.async {
                         NSLog("[DiffViewer] expandFile %@", file)
                         vc.expandFile(file, collapseOthers: false)
                         NSLog("[DiffViewer] expandFile done")
                     }
-                } else {
+                } else if tooLargeMessage == nil {
                     NSLog("[DiffViewer] expandAll")
                     vc.expandAll()
                     NSLog("[DiffViewer] expandAll done")
@@ -343,30 +396,53 @@ extension ThreadDetailViewController {
             let diffContent: String?
             let mergeBase: String?
             let entries: [FileDiffEntry]
+            let tooLargeMessage: String?
 
             if let baseBranch, !forceWorkingTree {
-                async let diffContentTask = GitService.shared.diffContent(
-                    worktreePath: worktreePath,
-                    baseBranch: baseBranch
-                )
                 async let mergeBaseTask = GitService.shared.mergeBase(
                     worktreePath: worktreePath,
                     baseBranch: baseBranch
                 )
                 async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
-                diffContent = await diffContentTask
+                entries = await entriesTask
                 mergeBase = await mergeBaseTask
-                entries = await entriesTask
+                if let message = diffTooLargeMessage(fileCount: entries.count, lineCount: 0) {
+                    diffContent = nil
+                    tooLargeMessage = message
+                } else {
+                    let content = await GitService.shared.diffContent(
+                        worktreePath: worktreePath,
+                        baseBranch: baseBranch
+                    )
+                    diffContent = content
+                    if let content {
+                        tooLargeMessage = diffTooLargeMessage(fileCount: entries.count, lineCount: diffLineCount(content))
+                    } else {
+                        tooLargeMessage = nil
+                    }
+                }
             } else {
-                async let diffContentTask = GitService.shared.workingTreeDiffContent(worktreePath: worktreePath)
                 async let entriesTask = GitService.shared.workingTreeDiffStats(worktreePath: worktreePath)
-                diffContent = await diffContentTask
-                mergeBase = "HEAD"
                 entries = await entriesTask
+                mergeBase = "HEAD"
+                if let message = diffTooLargeMessage(fileCount: entries.count, lineCount: 0) {
+                    diffContent = nil
+                    tooLargeMessage = message
+                } else {
+                    let content = await GitService.shared.workingTreeDiffContent(worktreePath: worktreePath)
+                    diffContent = content
+                    if let content {
+                        tooLargeMessage = diffTooLargeMessage(fileCount: entries.count, lineCount: diffLineCount(content))
+                    } else {
+                        tooLargeMessage = nil
+                    }
+                }
             }
 
             await MainActor.run {
-                if let content = diffContent {
+                if let message = tooLargeMessage {
+                    self.diffVC?.setDiffUnavailableMessage(message)
+                } else if let content = diffContent {
                     self.diffVC?.setDiffContent(content, fileCount: entries.count, worktreePath: worktreePath, mergeBase: mergeBase)
                 } else {
                     // No more changes — auto-dismiss
