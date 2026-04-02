@@ -170,6 +170,7 @@ extension ThreadDetailViewController {
         }
         bringPromptTOCOverlayToFront()
         bringScrollOverlaysToFront()
+        bringTerminalBannerOverlayToFront()
 
         // Hide all terminal views, show selected
         for termView in terminalViews {

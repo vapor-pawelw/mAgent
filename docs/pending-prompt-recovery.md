@@ -70,6 +70,7 @@ This banner is scoped to the affected terminal tab only. Switching to another ta
 When a thread with pending recoveries is selected, `ThreadDetailViewController.refreshRecoveryBanner()` shows the first recovery as an embedded warning banner in the terminal container:
 
 - The banner includes an inline prompt preview plus expandable "Show More" details for a longer snippet of the recovered prompt.
+- The embedded banner must live inside a dedicated `BannerOverlayView` above the terminal surface and floating terminal overlays. Mounting it directly into `terminalContainer` lets Ghostty/overlay reordering steal button and `X` clicks.
 - **Copy Prompt** — copies the full recovered prompt to the clipboard without removing the recovery entry
 - **Reopen as Thread** — removes that single recovery entry, posts `.magentRecoveryReopenRequested` (observed by `ThreadListViewController` to present the recovery sheet), then shows the next recovery if any remain.
 - **Discard** — deletes the temp file, removes the entry, and shows the next.

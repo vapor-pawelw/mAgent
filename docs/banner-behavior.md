@@ -11,9 +11,11 @@
 
 - `BannerView` owns the shared dismissal affordances. `BannerConfig.allowsUserDismissal` treats timed banners as user-dismissible even if a caller forgets to opt in explicitly.
 - Swipe dismissal is attached only when `allowsUserDismissal` is true. The gesture dismisses after a short drag threshold in any direction.
+- **Gesture gotcha**: any banner swipe recognizer must set `delaysPrimaryMouseButtonEvents = false`. Leaving the default delay in place can make action buttons and the top-right `X` feel dead because the pan recognizer holds the click while deciding whether a drag is starting.
 - Call sites that represent long-running progress or forced-action states must pass `isDismissible: false` explicitly so they do not inherit the timed-banner affordances by accident.
 - **Hit-testing gotcha**: `BannerOverlayView.hitTest(_:)` receives points in the overlay's own coordinate space already. Do not reconvert from `superview` before forwarding to banner children; only convert from `self` into each child while walking subviews front-to-back. The extra conversion silently drops clicks on banner buttons.
 - **Header layout gotcha**: `BannerView`'s `messageLabel` must stay constrained between fixed-size leading/trailing accessory columns with lower horizontal hugging/compression resistance than those accessory containers. The accessory columns also need explicit height/centerY constraints; otherwise the `X`/icon can render outside a zero-height wrapper and stop receiving clicks even though they are visible.
+- **Embedded-banner gotcha**: banners shown over a terminal tab should be mounted inside a dedicated `BannerOverlayView` that sits above the terminal content, not added directly to `terminalContainer`. Ghostty and other floating terminal overlays can otherwise retake frontmost position and steal banner clicks.
 
 ## Current Non-Dismissible Progress Examples
 

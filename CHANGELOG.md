@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Agents
 - Draft tabs now preserve the model and reasoning selections chosen in the initial prompt sheet, and `Start Agent` later launches with those same settings instead of resetting to Auto.
+### Banner
+- Fixed embedded terminal banners ignoring button and dismiss clicks, including recovered unsubmitted prompt banners shown inside a thread.
 ### Thread
 - Fixed draft threads sometimes restoring as terminal/Codex tabs from stale tmux sessions. Draft-only threads now stay non-terminal until you explicitly start the agent.
 ### Tab
