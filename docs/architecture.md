@@ -247,7 +247,9 @@ Agent-backed terminal tabs may expose a `Resume Agent Session in New Tab` contex
 - Route resumed-duplicate tabs through the normal `addTab(...)` flow with an explicit `resumeSessionID` so startup, trust handling, overlay behavior, and persisted session metadata stay consistent with every other agent tab.
 - Persist the copied resume ID onto the new tab's `sessionConversationIDs` entry immediately so later recreation/reopen flows preserve the resumed conversation even before a subsequent refresh discovers the same ID again.
 
-### 4.11 Persistence Backup + Restore Contract
+The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu. That sheet is agent-only, so it keeps the model picker, title field, and model/reasoning controls while hiding the initial prompt box and the draft checkbox.
+
+### 4.10 Persistence Backup + Restore Contract
 
 Magent keeps two layers of backup protection for critical app-state files in Application Support:
 

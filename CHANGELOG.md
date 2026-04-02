@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Thread
 - Fixed draft threads sometimes restoring as terminal/Codex tabs from stale tmux sessions. Draft-only threads now stay non-terminal until you explicitly start the agent.
 ### Tab
+- The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu, and the continuation sheet now focuses the receiving agent model, title, and model/reasoning fields without showing a prompt box.
 - Agent-backed tabs now expose `Resume Agent Session in New Tab` in the tab context menu, opening a fresh tab that resumes the same Claude/Codex conversation when a saved resume ID is available.
 
 ### Diff Viewer

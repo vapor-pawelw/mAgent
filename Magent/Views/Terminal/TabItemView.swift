@@ -104,7 +104,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onKeepAlive: (() -> Void)?
     var onResumeAgentInNewTab: (() -> Void)?
     var canResumeAgentInNewTab: Bool = false
-    var onContinueIn: ((AgentType) -> Void)?
+    var onContinueIn: (() -> Void)?
     var onExportContext: (() -> Void)?
     var onKillSession: (() -> Void)?
     var onCloseTabsToTheRight: (() -> Void)?
@@ -293,9 +293,8 @@ final class TabItemView: NSView, NSMenuDelegate {
         onKeepAlive?()
     }
 
-    @objc private func continueInAgentTapped(_ sender: NSMenuItem) {
-        guard let agent = sender.representedObject as? AgentType else { return }
-        onContinueIn?(agent)
+    @objc private func continueInTapped() {
+        onContinueIn?()
     }
 
     @objc private func resumeAgentInNewTabTapped() {
@@ -389,19 +388,8 @@ final class TabItemView: NSView, NSMenuDelegate {
         }
 
         if !availableAgentsForContinue.isEmpty {
-            let continueItem = NSMenuItem(title: "Continue in...", action: nil, keyEquivalent: "")
-            let submenu = NSMenu()
-            for agent in availableAgentsForContinue {
-                let agentItem = NSMenuItem(
-                    title: agent.displayName,
-                    action: #selector(continueInAgentTapped(_:)),
-                    keyEquivalent: ""
-                )
-                agentItem.target = self
-                agentItem.representedObject = agent
-                submenu.addItem(agentItem)
-            }
-            continueItem.submenu = submenu
+            let continueItem = NSMenuItem(title: "Continue in...", action: #selector(continueInTapped), keyEquivalent: "")
+            continueItem.target = self
             menu.addItem(continueItem)
         }
 
