@@ -276,9 +276,10 @@ final class SettingsJiraViewController: NSViewController, NSTextFieldDelegate {
                         authDetailLabel.isHidden = false
                         // Auto-populate site URL if empty
                         if settings.jiraSiteURL.isEmpty {
-                            settings.jiraSiteURL = site
+                            persistSettings { settings in
+                                settings.jiraSiteURL = site
+                            }
                             siteURLField.stringValue = site
-                            try? persistence.saveSettings(settings)
                         }
                     }
                 } else {
@@ -324,6 +325,15 @@ final class SettingsJiraViewController: NSViewController, NSTextFieldDelegate {
 
     // MARK: - Actions
 
+    private func persistSettings(notify: Bool = false, _ mutate: (inout AppSettings) -> Void) {
+        settings = persistence.loadSettings()
+        mutate(&settings)
+        try? persistence.saveSettings(settings)
+        if notify {
+            NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+        }
+    }
+
     @objc private func loginTapped() {
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -342,9 +352,9 @@ final class SettingsJiraViewController: NSViewController, NSTextFieldDelegate {
 
     @objc private func integrationToggled() {
         let enabled = integrationCheckbox.state == .on
-        settings.jiraIntegrationEnabled = enabled
-        try? persistence.saveSettings(settings)
-        NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+        persistSettings(notify: true) { settings in
+            settings.jiraIntegrationEnabled = enabled
+        }
         updateIntegrationState()
 
         if enabled {
@@ -356,9 +366,9 @@ final class SettingsJiraViewController: NSViewController, NSTextFieldDelegate {
 
     @objc private func ticketDetectionToggled() {
         let enabled = ticketDetectionCheckbox.state == .on
-        settings.jiraTicketDetectionEnabled = enabled
-        try? persistence.saveSettings(settings)
-        NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+        persistSettings(notify: true) { settings in
+            settings.jiraTicketDetectionEnabled = enabled
+        }
         updateIntegrationState()
 
         if enabled {
@@ -374,18 +384,19 @@ final class SettingsJiraViewController: NSViewController, NSTextFieldDelegate {
             .replacingOccurrences(of: "https://", with: "")
             .replacingOccurrences(of: "http://", with: "")
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        settings.jiraSiteURL = value
+        persistSettings { settings in
+            settings.jiraSiteURL = value
+        }
         siteURLField.stringValue = value
-        try? persistence.saveSettings(settings)
     }
 
     func controlTextDidChange(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else { return }
 
         if field == ticketPrefixFilterField {
-            settings.jiraTicketDetectionPrefixes = field.stringValue
-            try? persistence.saveSettings(settings)
-            NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+            persistSettings(notify: true) { settings in
+                settings.jiraTicketDetectionPrefixes = field.stringValue
+            }
             scheduleTicketPrefixRefresh()
         }
     }

@@ -160,7 +160,9 @@ final class SettingsTerminalViewController: NSViewController {
         contentScrollView.reflectScrolledClipView(clipView)
     }
 
-    private func saveSettingsAndNotify() {
+    private func saveSettingsAndNotify(_ mutate: (inout AppSettings) -> Void) {
+        settings = persistence.loadSettings()
+        mutate(&settings)
         try? persistence.saveSettings(settings)
         NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
     }
@@ -227,23 +229,29 @@ final class SettingsTerminalViewController: NSViewController {
     @objc private func mouseWheelPopupChanged() {
         let index = mouseWheelPopup.indexOfSelectedItem
         guard TerminalMouseWheelBehavior.allCases.indices.contains(index) else { return }
-        settings.terminalMouseWheelBehavior = TerminalMouseWheelBehavior.allCases[index]
+        let selectedMode = TerminalMouseWheelBehavior.allCases[index]
+        settings.terminalMouseWheelBehavior = selectedMode
         refreshMouseWheelDescription()
-        saveSettingsAndNotify()
+        saveSettingsAndNotify { settings in
+            settings.terminalMouseWheelBehavior = selectedMode
+        }
     }
 
     @objc private func showScrollToBottomIndicatorToggled() {
-        settings.showScrollToBottomIndicator = showScrollToBottomIndicatorCheckbox.state == .on
-        saveSettingsAndNotify()
+        saveSettingsAndNotify { settings in
+            settings.showScrollToBottomIndicator = showScrollToBottomIndicatorCheckbox.state == .on
+        }
     }
 
     @objc private func showScrollOverlayToggled() {
-        settings.showTerminalScrollOverlay = showScrollOverlayCheckbox.state == .on
-        saveSettingsAndNotify()
+        saveSettingsAndNotify { settings in
+            settings.showTerminalScrollOverlay = showScrollOverlayCheckbox.state == .on
+        }
     }
 
     @objc private func showPromptTOCToggled() {
-        settings.showPromptTOCOverlay = showPromptTOCCheckbox.state == .on
-        saveSettingsAndNotify()
+        saveSettingsAndNotify { settings in
+            settings.showPromptTOCOverlay = showPromptTOCCheckbox.state == .on
+        }
     }
 }

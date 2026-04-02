@@ -393,24 +393,30 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
 
     // MARK: - Actions
 
+    private func persistSettings(_ mutate: (inout AppSettings) -> Void) {
+        settings = persistence.loadSettings()
+        mutate(&settings)
+        try? persistence.saveSettings(settings)
+    }
+
     @objc private func activeAgentsChanged() {
         var active: [AgentType] = []
         if claudeCheckbox.state == .on { active.append(.claude) }
         if codexCheckbox.state == .on { active.append(.codex) }
         if customCheckbox.state == .on { active.append(.custom) }
-        settings.activeAgents = active
-
-        if active.count <= 1 {
-            settings.defaultAgentType = nil
-        } else if let defaultAgent = settings.defaultAgentType, !active.contains(defaultAgent) {
-            settings.defaultAgentType = active.first
-        } else if settings.defaultAgentType == nil {
-            settings.defaultAgentType = active.first
+        persistSettings { settings in
+            settings.activeAgents = active
+            if active.count <= 1 {
+                settings.defaultAgentType = nil
+            } else if let defaultAgent = settings.defaultAgentType, !active.contains(defaultAgent) {
+                settings.defaultAgentType = active.first
+            } else if settings.defaultAgentType == nil {
+                settings.defaultAgentType = active.first
+            }
         }
 
         refreshDefaultAgentSection()
         customAgentCard.isHidden = !active.contains(.custom)
-        try? persistence.saveSettings(settings)
     }
 
     @objc private func openFullDiskAccessSettings() {
@@ -439,24 +445,28 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     }
 
     @objc private func permissionsSettingChanged() {
-        settings.agentSkipPermissions = skipPermissionsCheckbox.state == .on
-        settings.agentSandboxEnabled = sandboxCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings { settings in
+            settings.agentSkipPermissions = skipPermissionsCheckbox.state == .on
+            settings.agentSandboxEnabled = sandboxCheckbox.state == .on
+        }
     }
 
     @objc private func agentBehaviorSettingChanged() {
-        settings.ipcPromptInjectionEnabled = ipcInjectionCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings { settings in
+            settings.ipcPromptInjectionEnabled = ipcInjectionCheckbox.state == .on
+        }
     }
 
     @objc private func rememberLastTypeToggled() {
-        settings.rememberLastTypeSelection = rememberLastTypeCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings { settings in
+            settings.rememberLastTypeSelection = rememberLastTypeCheckbox.state == .on
+        }
     }
 
     @objc private func rateLimitDetectionToggled() {
-        settings.enableRateLimitDetection = rateLimitDetectionCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings { settings in
+            settings.enableRateLimitDetection = rateLimitDetectionCheckbox.state == .on
+        }
         ThreadManager.shared.applyRateLimitDetectionSettingChange()
     }
 
@@ -464,8 +474,9 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         let active = settings.availableActiveAgents
         let index = defaultAgentPopup.indexOfSelectedItem
         guard index >= 0, index < active.count else { return }
-        settings.defaultAgentType = active[index]
-        try? persistence.saveSettings(settings)
+        persistSettings { settings in
+            settings.defaultAgentType = active[index]
+        }
     }
 
     private func refreshDefaultAgentSection() {
@@ -491,9 +502,9 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         guard let textView = notification.object as? NSTextView else { return }
 
         if textView === customAgentCommandTextView {
-            settings.customAgentCommand = textView.string
+            persistSettings { settings in
+                settings.customAgentCommand = textView.string
+            }
         }
-
-        try? persistence.saveSettings(settings)
     }
 }

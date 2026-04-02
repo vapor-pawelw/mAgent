@@ -438,9 +438,30 @@ public final class PersistenceService {
         public let recoveredCoverageCount: Int
     }
 
+    public struct SettingsWriteProtectionError: Error, LocalizedError {
+        public let activeThreadProjectCount: Int
+        public let coveredProjectCount: Int
+
+        public var errorDescription: String? {
+            "Refusing to overwrite settings.json with incomplete settings while \(activeThreadProjectCount) active thread project(s) exist and only \(coveredProjectCount) would remain covered"
+        }
+    }
+
+    private func activeThreadProjectIDs() -> Set<UUID> {
+        guard case .loaded(let threads) = tryLoadThreads() else { return [] }
+        return Set(threads.filter { !$0.isArchived }.map(\.projectId))
+    }
+
+    private func projectCoverageCount(
+        settings: AppSettings,
+        activeThreadProjectIDs: Set<UUID>
+    ) -> Int {
+        Set(settings.projects.map(\.id)).intersection(activeThreadProjectIDs).count
+    }
+
     /// When active threads exist but the current settings file is missing, empty, or no
-    /// longer references those projects, try to restore the last rolling backup before
-    /// the app falls back to onboarding/default settings.
+    /// longer references those projects, try to restore the best available backup or
+    /// snapshot before the app falls back to onboarding/default settings.
     public func recoverSettingsFromRollingBackupIfNeeded(
         activeThreadProjectIDs: Set<UUID>
     ) -> SettingsRollingRecoveryResult? {
@@ -450,54 +471,79 @@ public final class PersistenceService {
         let currentCoverageCount: Int
         switch currentSettings {
         case .loaded(let settings):
-            currentCoverageCount = Set(settings.projects.map(\.id)).intersection(activeThreadProjectIDs).count
+            currentCoverageCount = projectCoverageCount(settings: settings, activeThreadProjectIDs: activeThreadProjectIDs)
         case .fileNotFound, .decodeFailed:
             currentCoverageCount = 0
         }
 
         guard currentCoverageCount < activeThreadProjectIDs.count else { return nil }
 
-        let backupSettings: AppSettings
-        switch decodeVersioned(
-            AppSettings.self,
-            from: settingsBackupURL,
-            currentVersion: SchemaVersion.settings,
-            migrations: settingsMigrations
-        ) {
-        case .loaded(let settings):
-            backupSettings = settings
-        case .fileNotFound, .decodeFailed:
-            return nil
+        var bestCandidate: (url: URL, settings: AppSettings, coverageCount: Int)?
+        for candidateURL in recoveryCandidateURLs(for: settingsURL) {
+            let candidateSettings: AppSettings
+            switch decodeVersionedPrimary(
+                AppSettings.self,
+                from: candidateURL,
+                currentVersion: SchemaVersion.settings,
+                migrations: settingsMigrations
+            ) {
+            case .loaded(let settings):
+                candidateSettings = settings
+            case .fileNotFound, .decodeFailed:
+                continue
+            }
+
+            let recoveredCoverageCount = projectCoverageCount(
+                settings: candidateSettings,
+                activeThreadProjectIDs: activeThreadProjectIDs
+            )
+            guard candidateSettings.isConfigured,
+                  !candidateSettings.projects.isEmpty,
+                  recoveredCoverageCount > currentCoverageCount else {
+                continue
+            }
+
+            if let bestCandidate, bestCandidate.coverageCount >= recoveredCoverageCount {
+                continue
+            }
+            bestCandidate = (candidateURL, candidateSettings, recoveredCoverageCount)
         }
 
-        let recoveredCoverageCount = Set(backupSettings.projects.map(\.id)).intersection(activeThreadProjectIDs).count
-        guard backupSettings.isConfigured,
-              !backupSettings.projects.isEmpty,
-              recoveredCoverageCount > currentCoverageCount else {
+        guard let bestCandidate else {
             return nil
         }
 
         do {
-            let envelope = VersionedEnvelope(schemaVersion: SchemaVersion.settings, data: backupSettings)
+            let envelope = VersionedEnvelope(schemaVersion: SchemaVersion.settings, data: bestCandidate.settings)
             let data = try encoder.encode(envelope)
             try data.write(to: settingsURL, options: .atomic)
-            _cachedSettings = backupSettings
+            _cachedSettings = bestCandidate.settings
             logger.info(
-                "Recovered settings.json from \(self.settingsBackupURL.lastPathComponent) (\(currentCoverageCount) -> \(recoveredCoverageCount) matching project ids)"
+                "Recovered settings.json from \(bestCandidate.url.lastPathComponent) (\(currentCoverageCount) -> \(bestCandidate.coverageCount) matching project ids)"
             )
             return SettingsRollingRecoveryResult(
-                sourceFileName: settingsBackupURL.lastPathComponent,
+                sourceFileName: bestCandidate.url.lastPathComponent,
                 previousCoverageCount: currentCoverageCount,
-                recoveredCoverageCount: recoveredCoverageCount
+                recoveredCoverageCount: bestCandidate.coverageCount
             )
         } catch {
-            logger.error("Failed to recover settings from \(self.settingsBackupURL.lastPathComponent): \(error.localizedDescription)")
+            logger.error("Failed to recover settings from backup candidate \(bestCandidate.url.lastPathComponent): \(error.localizedDescription)")
             return nil
         }
     }
 
     public func saveSettings(_ settings: AppSettings) throws {
         try ensureWritesAllowed(for: settingsURL.lastPathComponent)
+        let activeProjectIDs = activeThreadProjectIDs()
+        if !activeProjectIDs.isEmpty {
+            let coveredProjectCount = projectCoverageCount(settings: settings, activeThreadProjectIDs: activeProjectIDs)
+            if coveredProjectCount == 0 {
+                throw SettingsWriteProtectionError(
+                    activeThreadProjectCount: activeProjectIDs.count,
+                    coveredProjectCount: coveredProjectCount
+                )
+            }
+        }
         BackupService.shared.createRollingBackup(of: settingsURL)
         let envelope = VersionedEnvelope(schemaVersion: SchemaVersion.settings, data: settings)
         let data = try encoder.encode(envelope)

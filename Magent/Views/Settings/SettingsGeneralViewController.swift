@@ -334,12 +334,14 @@ final class SettingsGeneralViewController: NSViewController {
     }
 
     @objc private func autoCheckForUpdatesToggled() {
+        settings = persistence.loadSettings()
         settings.autoCheckForUpdates = autoCheckForUpdatesCheckbox.state == .on
         try? persistence.saveSettings(settings)
         UpdateService.shared.handleAutoCheckSettingChanged()
     }
 
     @objc private func syncLocalPathsOnArchiveToggled() {
+        settings = persistence.loadSettings()
         settings.syncLocalPathsOnArchive = syncLocalPathsOnArchiveCheckbox.state == .on
         try? persistence.saveSettings(settings)
     }

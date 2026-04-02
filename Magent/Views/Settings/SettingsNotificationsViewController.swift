@@ -312,8 +312,9 @@ final class SettingsNotificationsViewController: NSViewController {
 
     @objc private func soundPickerChanged() {
         guard let selectedName = soundPickerPopup.selectedItem?.title else { return }
-        settings.agentCompletionSoundName = selectedName
-        persistSettings()
+        persistSettings { settings in
+            settings.agentCompletionSoundName = selectedName
+        }
 
         soundPreviewPlayer?.stop()
         if let sound = NSSound(named: NSSound.Name(selectedName)) {
@@ -346,8 +347,9 @@ final class SettingsNotificationsViewController: NSViewController {
 
     @objc private func rateLimitSoundPickerChanged() {
         guard let selectedName = rateLimitSoundPickerPopup.selectedItem?.title else { return }
-        settings.rateLimitLiftedSoundName = selectedName
-        persistSettings()
+        persistSettings { settings in
+            settings.rateLimitLiftedSoundName = selectedName
+        }
 
         soundPreviewPlayer?.stop()
         if let sound = NSSound(named: NSSound.Name(selectedName)) {
@@ -358,8 +360,9 @@ final class SettingsNotificationsViewController: NSViewController {
 
     @objc private func rateLimitDetectedSoundPickerChanged() {
         guard let selectedName = rateLimitDetectedSoundPickerPopup.selectedItem?.title else { return }
-        settings.rateLimitDetectedSoundName = selectedName
-        persistSettings()
+        persistSettings { settings in
+            settings.rateLimitDetectedSoundName = selectedName
+        }
 
         soundPreviewPlayer?.stop()
         if let sound = NSSound(named: NSSound.Name(selectedName)) {
@@ -369,53 +372,63 @@ final class SettingsNotificationsViewController: NSViewController {
     }
 
     @objc private func rateLimitNotifyToggled() {
-        settings.notifyOnRateLimitLifted = rateLimitNotifyCheckbox.state == .on
-        rateLimitSoundPickerRow.isHidden = !settings.notifyOnRateLimitLifted
-        if !settings.notifyOnRateLimitLifted {
+        let enabled = rateLimitNotifyCheckbox.state == .on
+        rateLimitSoundPickerRow.isHidden = !enabled
+        if !enabled {
             soundPreviewPlayer?.stop()
             soundPreviewPlayer = nil
         }
-        persistSettings()
+        persistSettings { settings in
+            settings.notifyOnRateLimitLifted = enabled
+        }
     }
 
     @objc private func rateLimitSystemNotificationToggled() {
-        settings.showSystemNotificationOnRateLimitLifted = rateLimitSystemNotificationCheckbox.state == .on
-        persistSettings()
+        persistSettings { settings in
+            settings.showSystemNotificationOnRateLimitLifted = rateLimitSystemNotificationCheckbox.state == .on
+        }
     }
 
     @objc private func rateLimitDetectedSoundToggled() {
-        settings.playSoundOnRateLimitDetected = rateLimitDetectedSoundCheckbox.state == .on
-        rateLimitDetectedSoundPickerRow.isHidden = !settings.playSoundOnRateLimitDetected
-        if !settings.playSoundOnRateLimitDetected {
+        let enabled = rateLimitDetectedSoundCheckbox.state == .on
+        rateLimitDetectedSoundPickerRow.isHidden = !enabled
+        if !enabled {
             soundPreviewPlayer?.stop()
             soundPreviewPlayer = nil
         }
-        persistSettings()
+        persistSettings { settings in
+            settings.playSoundOnRateLimitDetected = enabled
+        }
     }
 
     @objc private func completionSoundToggled() {
-        settings.playSoundForAgentCompletion = completionSoundCheckbox.state == .on
-        soundPickerRow.isHidden = !settings.playSoundForAgentCompletion
-        if !settings.playSoundForAgentCompletion {
+        let enabled = completionSoundCheckbox.state == .on
+        soundPickerRow.isHidden = !enabled
+        if !enabled {
             soundPreviewPlayer?.stop()
             soundPreviewPlayer = nil
         }
-        persistSettings()
+        persistSettings { settings in
+            settings.playSoundForAgentCompletion = enabled
+        }
     }
 
     @objc private func showBannersToggled() {
-        settings.showSystemBanners = showBannersCheckbox.state == .on
-        persistSettings()
+        persistSettings { settings in
+            settings.showSystemBanners = showBannersCheckbox.state == .on
+        }
     }
 
     @objc private func autoReorderOnCompletionToggled() {
-        settings.autoReorderThreadsOnAgentCompletion = autoReorderOnCompletionCheckbox.state == .on
-        persistSettings()
+        persistSettings { settings in
+            settings.autoReorderThreadsOnAgentCompletion = autoReorderOnCompletionCheckbox.state == .on
+        }
     }
 
     @objc private func dockCompletionAttentionToggled() {
-        settings.showDockBadgeAndBounceForUnreadCompletions = dockCompletionAttentionCheckbox.state == .on
-        persistSettings(refreshDockBadge: true)
+        persistSettings(refreshDockBadge: true) { settings in
+            settings.showDockBadgeAndBounceForUnreadCompletions = dockCompletionAttentionCheckbox.state == .on
+        }
     }
 
     @objc private func openSystemNotificationSettings() {
@@ -458,7 +471,9 @@ final class SettingsNotificationsViewController: NSViewController {
         }
     }
 
-    private func persistSettings(refreshDockBadge: Bool = false) {
+    private func persistSettings(refreshDockBadge: Bool = false, _ mutate: (inout AppSettings) -> Void) {
+        settings = persistence.loadSettings()
+        mutate(&settings)
         try? persistence.saveSettings(settings)
         NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
 

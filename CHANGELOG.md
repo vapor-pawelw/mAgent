@@ -7,10 +7,17 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - Codex threads now mark work as finished more reliably when Codex returns to an idle prompt without emitting a bell, so completion dots and notifications are less likely to be missed.
 - Draft tabs now preserve the model and reasoning selections chosen in the initial prompt sheet, and `Start Agent` later launches with those same settings instead of resetting to Auto.
+
 ### Banner
 - Fixed embedded terminal banners ignoring button and dismiss clicks, including recovered unsubmitted prompt banners shown inside a thread.
+
+### Settings
+- Startup now treats `settings.json` as incomplete when it no longer covers every project referenced by active threads, recovers from the best available backup or snapshot candidate, and blocks writes that would replace thread-linked settings with an empty/default project list.
+- Settings panes now reload the latest `settings.json` before saving UI changes, preventing stale Settings windows from overwriting the registered projects list after a restore or startup recovery.
+
 ### Thread
 - Fixed draft threads sometimes restoring as terminal/Codex tabs from stale tmux sessions. Draft-only threads now stay non-terminal until you explicitly start the agent.
+
 ### Tab
 - The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu, and the continuation sheet now focuses the receiving agent model, title, and model/reasoning fields without showing a prompt box.
 - Agent-backed tabs now expose `Resume Agent Session in New Tab` in the tab context menu, opening a fresh tab that resumes the same Claude/Codex conversation when a saved resume ID is available.
