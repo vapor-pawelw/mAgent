@@ -200,16 +200,19 @@ final class AppCoordinator {
         _ settingsOutcome: LoadOutcome<AppSettings>,
         threadsOutcome: LoadOutcome<[MagentThread]>
     ) -> Bool {
-        guard case .loaded(let threads) = threadsOutcome,
-              threads.contains(where: { !$0.isArchived }) else {
+        guard case .loaded(let threads) = threadsOutcome else {
             return false
         }
+
+        let activeThreadProjectIDs = Set(threads.filter { !$0.isArchived }.map(\.projectId))
+        guard !activeThreadProjectIDs.isEmpty else { return false }
 
         switch settingsOutcome {
         case .fileNotFound:
             return true
         case .loaded(let settings):
-            return !settings.isConfigured || settings.projects.isEmpty
+            let coveredProjectIDs = Set(settings.projects.map(\.id)).intersection(activeThreadProjectIDs)
+            return !settings.isConfigured || settings.projects.isEmpty || coveredProjectIDs.count < activeThreadProjectIDs.count
         case .decodeFailed:
             return false
         }
@@ -220,11 +223,12 @@ final class AppCoordinator {
         alert.alertStyle = .critical
         alert.messageText = "Found threads, but settings are incomplete"
         alert.informativeText = """
-        Magent found existing thread data, but settings.json is missing or does not contain \
-        any configured projects. Showing onboarding in this state would strand those threads.
+        Magent found existing thread data, but settings.json is missing, empty, or no longer \
+        covers every project referenced by active threads. Showing onboarding in this state \
+        would strand those threads.
 
         Magent has blocked writes to settings.json for this launch so the existing recovery \
-        files are not overwritten. Quit now and restore from the rolling backup or a known-good \
+        files are not overwritten. Quit now and restore from a rolling backup or known-good \
         snapshot, or continue without saving settings changes.
 
         File location: ~/Library/Application Support/Magent

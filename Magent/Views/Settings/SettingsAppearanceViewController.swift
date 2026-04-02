@@ -121,7 +121,9 @@ final class SettingsAppearanceViewController: NSViewController {
         contentScrollView.reflectScrolledClipView(clipView)
     }
 
-    private func saveSettingsAndNotify() {
+    private func saveSettingsAndNotify(_ mutate: (inout AppSettings) -> Void) {
+        settings = persistence.loadSettings()
+        mutate(&settings)
         try? persistence.saveSettings(settings)
         NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
     }
@@ -177,12 +179,14 @@ final class SettingsAppearanceViewController: NSViewController {
     @objc private func appearancePopupChanged() {
         let index = appearancePopup.indexOfSelectedItem
         guard AppAppearanceMode.allCases.indices.contains(index) else { return }
-        settings.appAppearanceMode = AppAppearanceMode.allCases[index]
-        saveSettingsAndNotify()
+        saveSettingsAndNotify { settings in
+            settings.appAppearanceMode = AppAppearanceMode.allCases[index]
+        }
     }
 
     @objc private func preserveAgentColorThemeChanged() {
-        settings.preserveAgentColorTheme = preserveAgentColorThemeCheckbox.state == .on
-        saveSettingsAndNotify()
+        saveSettingsAndNotify { settings in
+            settings.preserveAgentColorTheme = preserveAgentColorThemeCheckbox.state == .on
+        }
     }
 }

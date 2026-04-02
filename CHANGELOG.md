@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Settings
+- Startup now treats `settings.json` as incomplete when it no longer covers every project referenced by active threads, recovers from the best available backup or snapshot candidate, and blocks writes that would replace thread-linked settings with an empty/default project list.
+- Settings panes now reload the latest `settings.json` before saving UI changes, preventing stale Settings windows from overwriting the registered projects list after a restore or startup recovery.
+
 ### Tab
 - Agent-backed tabs now expose `Resume Agent Session in New Tab` in the tab context menu, opening a fresh tab that resumes the same Claude/Codex conversation when a saved resume ID is available.
 

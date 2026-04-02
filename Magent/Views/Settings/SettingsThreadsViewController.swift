@@ -729,107 +729,125 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         return textView
     }
 
-    private func persistSettings(notify: Bool = false) {
+    private func persistSettings(notify: Bool = false, _ mutate: (inout AppSettings) -> Void) {
+        settings = persistence.loadSettings()
+        mutate(&settings)
         try? persistence.saveSettings(settings)
         guard notify else { return }
         NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
     }
 
     @objc private func autoRenameBranchToggled() {
-        settings.autoRenameBranches = autoRenameBranchCheckbox.state == .on
-        persistSettings()
+        persistSettings { settings in
+            settings.autoRenameBranches = autoRenameBranchCheckbox.state == .on
+        }
     }
 
     @objc private func autoSetDescriptionToggled() {
-        settings.autoSetThreadDescription = autoSetDescriptionCheckbox.state == .on
-        persistSettings()
+        persistSettings { settings in
+            settings.autoSetThreadDescription = autoSetDescriptionCheckbox.state == .on
+        }
     }
 
     @objc private func autoSetIconFromWorkTypeToggled() {
-        settings.autoSetThreadIconFromWorkType = autoSetIconFromWorkTypeCheckbox.state == .on
-        persistSettings()
+        persistSettings { settings in
+            settings.autoSetThreadIconFromWorkType = autoSetIconFromWorkTypeCheckbox.state == .on
+        }
     }
 
     @objc private func narrowThreadsToggled() {
-        settings.narrowThreads = narrowThreadsCheckbox.state == .on
-        persistSettings(notify: true)
+        persistSettings(notify: true) { settings in
+            settings.narrowThreads = narrowThreadsCheckbox.state == .on
+        }
     }
 
     @objc private func autoReorderOnCompletionToggled() {
-        settings.autoReorderThreadsOnAgentCompletion = autoReorderOnCompletionCheckbox.state == .on
-        persistSettings()
+        persistSettings { settings in
+            settings.autoReorderThreadsOnAgentCompletion = autoReorderOnCompletionCheckbox.state == .on
+        }
     }
 
     @objc private func showPRStatusBadgesToggled() {
-        settings.showPRStatusBadges = showPRStatusBadgesCheckbox.state == .on
-        persistSettings(notify: true)
+        persistSettings(notify: true) { settings in
+            settings.showPRStatusBadges = showPRStatusBadgesCheckbox.state == .on
+        }
     }
 
     @objc private func showJiraStatusBadgesToggled() {
-        settings.showJiraStatusBadges = showJiraStatusBadgesCheckbox.state == .on
-        persistSettings(notify: true)
+        persistSettings(notify: true) { settings in
+            settings.showJiraStatusBadges = showJiraStatusBadgesCheckbox.state == .on
+        }
     }
 
     @objc private func showBusyStateDurationToggled() {
-        settings.showBusyStateDuration = showBusyStateDurationCheckbox.state == .on
-        persistSettings(notify: true)
+        persistSettings(notify: true) { settings in
+            settings.showBusyStateDuration = showBusyStateDurationCheckbox.state == .on
+        }
     }
 
     @objc private func maxIdleSessionsToggled() {
         let isLimited = maxIdleSessionsCheckbox.state == .on
-        if isLimited {
-            settings.maxIdleSessions = maxIdleSessionsStepper.integerValue
-        } else {
-            settings.maxIdleSessions = nil
-        }
         maxIdleSessionsStepper.isEnabled = isLimited
         maxIdleSessionsValueLabel.textColor = isLimited ? .labelColor : .tertiaryLabelColor
-        persistSettings(notify: true)
+        persistSettings(notify: true) { settings in
+            settings.maxIdleSessions = isLimited ? maxIdleSessionsStepper.integerValue : nil
+        }
     }
 
     @objc private func protectPinnedToggled() {
-        settings.protectPinnedFromEviction = protectPinnedCheckbox.state == .on
-        persistSettings(notify: true)
+        persistSettings(notify: true) { settings in
+            settings.protectPinnedFromEviction = protectPinnedCheckbox.state == .on
+        }
     }
 
     @objc private func maxIdleSessionsStepperChanged() {
-        settings.maxIdleSessions = maxIdleSessionsStepper.integerValue
         maxIdleSessionsValueLabel.stringValue = "\(maxIdleSessionsStepper.integerValue)"
-        persistSettings(notify: true)
+        persistSettings(notify: true) { settings in
+            settings.maxIdleSessions = maxIdleSessionsStepper.integerValue
+        }
     }
 
     func textDidChange(_ notification: Notification) {
         guard let textView = notification.object as? NSTextView else { return }
 
         if textView === terminalInjectionTextView {
-            settings.terminalInjectionCommand = textView.string
+            persistSettings { settings in
+                settings.terminalInjectionCommand = textView.string
+            }
         } else if textView === agentContextTextView {
-            settings.agentContextInjection = textView.string
+            persistSettings { settings in
+                settings.agentContextInjection = textView.string
+            }
         } else if textView === slugPromptTextView {
-            settings.autoRenameSlugPrompt = textView.string
+            persistSettings { settings in
+                settings.autoRenameSlugPrompt = textView.string
+            }
         } else if textView === reviewPromptTextView {
-            settings.reviewPrompt = textView.string
+            persistSettings { settings in
+                settings.reviewPrompt = textView.string
+            }
         }
-
-        persistSettings()
     }
 
     @objc private func useSectionsToggled() {
-        settings.useThreadSections = useSectionsCheckbox.state == .on
-        persistSettings()
+        persistSettings { settings in
+            settings.useThreadSections = useSectionsCheckbox.state == .on
+        }
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
     @objc private func resetSlugPromptToDefault() {
         slugPromptTextView.string = AppSettings.defaultSlugPrompt
-        settings.autoRenameSlugPrompt = AppSettings.defaultSlugPrompt
-        persistSettings()
+        persistSettings { settings in
+            settings.autoRenameSlugPrompt = AppSettings.defaultSlugPrompt
+        }
     }
 
     @objc private func resetReviewPromptToDefault() {
         reviewPromptTextView.string = AppSettings.defaultReviewPrompt
-        settings.reviewPrompt = AppSettings.defaultReviewPrompt
-        persistSettings()
+        persistSettings { settings in
+            settings.reviewPrompt = AppSettings.defaultReviewPrompt
+        }
     }
 
     func refreshDefaultSectionPopup() {
@@ -850,8 +868,9 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         let visible = settings.visibleSections
         let selected = defaultSectionPopup.indexOfSelectedItem
         guard selected >= 0, selected < visible.count else { return }
-        settings.defaultSectionId = visible[selected].id
-        persistSettings()
+        persistSettings { settings in
+            settings.defaultSectionId = visible[selected].id
+        }
         sectionsTableView.reloadData()
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
@@ -889,8 +908,9 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             colorHex: "#8E8E93",
             sortOrder: maxOrder + 1
         )
-        settings.threadSections.append(section)
-        persistSettings()
+        persistSettings { settings in
+            settings.threadSections.append(section)
+        }
         sectionsTableView.reloadData()
         refreshDefaultSectionPopup()
 

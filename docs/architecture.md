@@ -290,7 +290,11 @@ If the primary file and all recovery candidates still fail to decode (or the fil
 2. A modal alert explains which files failed and why.
 3. The user can **Quit** (file stays untouched for manual recovery) or **Continue with Reset** (file is backed up as `<name>.corrupted.<timestamp>.json`, writes unblocked, app proceeds with defaults).
 
-If threads load successfully but settings are missing or no longer cover the live project IDs, Magent first tries to recover `settings.json` from the rolling backup before falling back to onboarding/default settings. This keeps existing threads attached to their projects after a missing-settings failure.
+If threads load successfully but settings are missing or no longer cover the live project IDs, Magent scans every `settings.json` recovery candidate (rolling backup first, then periodic snapshots newest-first) and restores the candidate with the best project-ID coverage before falling back to onboarding/default settings. This keeps existing threads attached to their projects after a missing-settings failure, even if `settings.bak.json` is stale but a newer snapshot is still good.
+
+If no candidate fully repairs coverage, startup still treats the file as incomplete when active threads reference projects that the loaded settings do not cover. In that state, writes to `settings.json` stay blocked for the launch so onboarding or other defaults cannot silently strand those threads.
+
+Settings UI controllers must not cache an `AppSettings` value for later whole-object saves. A pane can keep a local copy for rendering, but each save path must reload the latest settings from persistence immediately before mutating the relevant fields. Otherwise a stale Settings window opened during recovery/default-state startup can overwrite newer project registrations or restored settings with an old snapshot.
 
 Non-critical caches (Jira, PR, rate-limit, etc.) keep silent fallback to empty — they are regenerated from APIs.
 
