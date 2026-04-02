@@ -75,11 +75,21 @@ public nonisolated struct PersistedDraftTab: Codable, Sendable, Equatable {
     public let identifier: String
     public var agentType: AgentType
     public var prompt: String
+    public var modelId: String?
+    public var reasoningLevel: String?
 
-    public init(identifier: String, agentType: AgentType, prompt: String) {
+    public init(
+        identifier: String,
+        agentType: AgentType,
+        prompt: String,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
+    ) {
         self.identifier = identifier
         self.agentType = agentType
         self.prompt = prompt
+        self.modelId = modelId
+        self.reasoningLevel = reasoningLevel
     }
 }
 

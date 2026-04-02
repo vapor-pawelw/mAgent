@@ -65,7 +65,9 @@ struct AgentSessionConfig: Codable, Equatable {
 }
 ```
 
-Stored in `AgentLastSelectionStore` (or equivalent persistence). **Not stored per-thread** — model/reasoning is only used at fresh-start time. Resume inherits from the agent session itself.
+Stored in `AgentLastSelectionStore` (or equivalent persistence). **Not stored per-thread** for normal live sessions — model/reasoning is only used at fresh-start time, and resume inherits from the agent session itself.
+
+Draft tabs are the exception: if the user checks `Draft` in the launch sheet, the selected model and reasoning are persisted alongside the saved prompt so `Start Agent` later launches with the same explicit configuration. Missing values remain `nil` and mean `Auto`, which keeps older persisted drafts backward-compatible.
 
 ### Switching Agent in Picker
 
@@ -99,6 +101,14 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 ### Fast Path (Option+click / Context Menu)
 
 Uses last-selected model + reasoning for the relevant agent. No sheet shown. Equivalent to accepting the sheet with last-used values.
+
+### Draft Tabs
+
+Draft tabs reuse the same picker semantics as the launch sheet:
+
+- The draft editor shows `Model` and `Reasoning` pickers with the same `Auto` behavior.
+- Changing the agent swaps the visible model/reasoning choices to that agent's own remembered values.
+- Starting the draft later passes the persisted explicit selections into normal agent-tab creation, so the launched session matches the draft sheet state instead of re-reading the current global last-used values.
 
 ## Command Building
 

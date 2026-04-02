@@ -57,10 +57,10 @@ Tabs can also display in-app web content (WKWebView) alongside terminal tabs:
 Draft tabs let users save a prompt idea for later without executing it immediately:
 
 - **"Draft" checkbox** on the New Thread and New Tab sheets (agent mode only, unchecked by default) creates a draft tab instead of launching the agent
-- Draft tabs display a centered form with an agent type picker (agents only) and an editable prompt text area (max 1200pt wide x 400pt tall, responsive to window size)
+- Draft tabs display a centered form with an agent type picker, model picker, reasoning picker, and an editable prompt text area (max 1200pt wide x 400pt tall, responsive to window size)
 - Two actions: "Discard Draft" (with confirmation alert) removes the tab permanently; "Start Agent" converts the draft into a real agent tab and injects the prompt
 - Closing a draft tab via the tab bar close button also shows a discard confirmation
-- Draft content (agent type + prompt) persists across app restarts via `persistedDraftTabs` on `MagentThread`
+- Draft content (agent type + prompt + optional model/reasoning overrides) persists across app restarts via `persistedDraftTabs` on `MagentThread`
 - Draft tabs can only be created through the launch sheet checkbox — there is no other way to create them
 - Terminal overlays (scroll controls, scroll-to-bottom FAB, prompt TOC) are hidden while a draft tab is active
 - **Auto-rename with DRAFT prefix**: When a thread has active draft tabs and auto-rename/description generation triggers, the generated task description is prefixed with "DRAFT: ". The prefix is derived from live draft-tab state (`hasDraftTabs`), so it disappears naturally once the draft is consumed via "Start Agent"

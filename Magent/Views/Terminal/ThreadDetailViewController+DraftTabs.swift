@@ -12,6 +12,8 @@ extension ThreadDetailViewController {
                 identifier: persisted.identifier,
                 agentType: persisted.agentType,
                 prompt: persisted.prompt,
+                modelId: persisted.modelId,
+                reasoningLevel: persisted.reasoningLevel,
                 viewController: nil
             )
             draftTabs.append(entry)
@@ -34,7 +36,13 @@ extension ThreadDetailViewController {
 
     // MARK: - Open Draft Tab
 
-    func openDraftTab(identifier: String, agentType: AgentType, prompt: String) {
+    func openDraftTab(
+        identifier: String,
+        agentType: AgentType,
+        prompt: String,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
+    ) {
         // Dedup
         if let existingIndex = tabSlots.firstIndex(of: .draft(identifier: identifier)) {
             selectTab(at: existingIndex)
@@ -43,7 +51,14 @@ extension ThreadDetailViewController {
 
         hideEmptyState()
 
-        let entry = DraftTabEntry(identifier: identifier, agentType: agentType, prompt: prompt, viewController: nil)
+        let entry = DraftTabEntry(
+            identifier: identifier,
+            agentType: agentType,
+            prompt: prompt,
+            modelId: modelId,
+            reasoningLevel: reasoningLevel,
+            viewController: nil
+        )
         draftTabs.append(entry)
 
         let item = TabItemView(title: "Draft")
@@ -82,16 +97,34 @@ extension ThreadDetailViewController {
         // Lazily create the view controller
         if draftTabs[entryIndex].viewController == nil {
             let entry = draftTabs[entryIndex]
-            let vc = DraftTabViewController(draftIdentifier: identifier, agentType: entry.agentType, prompt: entry.prompt)
+            let vc = DraftTabViewController(
+                draftIdentifier: identifier,
+                agentType: entry.agentType,
+                prompt: entry.prompt,
+                modelId: entry.modelId,
+                reasoningLevel: entry.reasoningLevel
+            )
 
-            vc.onProceed = { [weak self] agentType, prompt in
-                self?.proceedWithDraft(identifier: identifier, agentType: agentType, prompt: prompt)
+            vc.onProceed = { [weak self] agentType, prompt, modelId, reasoningLevel in
+                self?.proceedWithDraft(
+                    identifier: identifier,
+                    agentType: agentType,
+                    prompt: prompt,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel
+                )
             }
             vc.onDiscard = { [weak self] in
                 self?.removeDraftTab(identifier: identifier)
             }
-            vc.onChanged = { [weak self] agentType, prompt in
-                self?.draftContentChanged(identifier: identifier, agentType: agentType, prompt: prompt)
+            vc.onChanged = { [weak self] agentType, prompt, modelId, reasoningLevel in
+                self?.draftContentChanged(
+                    identifier: identifier,
+                    agentType: agentType,
+                    prompt: prompt,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel
+                )
             }
 
             draftTabs[entryIndex].viewController = vc
@@ -185,7 +218,13 @@ extension ThreadDetailViewController {
 
     // MARK: - Proceed (Convert Draft to Agent Tab)
 
-    private func proceedWithDraft(identifier: String, agentType: AgentType, prompt: String) {
+    private func proceedWithDraft(
+        identifier: String,
+        agentType: AgentType,
+        prompt: String,
+        modelId: String?,
+        reasoningLevel: String?
+    ) {
         // Remove the draft tab UI
         guard let slotIndex = tabSlots.firstIndex(of: .draft(identifier: identifier)) else { return }
 
@@ -210,11 +249,11 @@ extension ThreadDetailViewController {
         threadManager.stripDraftDescriptionPrefixIfNeeded(threadId: thread.id)
 
         // Create actual agent tab with the prompt
-        addTabFromDraft(agentType: agentType, prompt: prompt)
+        addTabFromDraft(agentType: agentType, prompt: prompt, modelId: modelId, reasoningLevel: reasoningLevel)
     }
 
     /// Creates an actual agent tab from a draft, injecting the prompt.
-    private func addTabFromDraft(agentType: AgentType, prompt: String) {
+    private func addTabFromDraft(agentType: AgentType, prompt: String, modelId: String?, reasoningLevel: String?) {
         // Phase 1: Immediately add a tab item and show "Creating tab..." overlay.
         hideEmptyState()
         let pendingIndex = tabItems.count
@@ -248,7 +287,9 @@ extension ThreadDetailViewController {
                     shouldSubmitInitialPrompt: true,
                     customTitle: nil,
                     tabNameSuffix: nil,
-                    pendingPromptFileURL: nil
+                    pendingPromptFileURL: nil,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel
                 )
                 await MainActor.run {
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
@@ -300,10 +341,18 @@ extension ThreadDetailViewController {
 
     // MARK: - Content Changed
 
-    private func draftContentChanged(identifier: String, agentType: AgentType, prompt: String) {
+    private func draftContentChanged(
+        identifier: String,
+        agentType: AgentType,
+        prompt: String,
+        modelId: String?,
+        reasoningLevel: String?
+    ) {
         guard let entryIndex = draftTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
         draftTabs[entryIndex].agentType = agentType
         draftTabs[entryIndex].prompt = prompt
+        draftTabs[entryIndex].modelId = modelId
+        draftTabs[entryIndex].reasoningLevel = reasoningLevel
         persistDraftTabs()
     }
 
@@ -314,7 +363,9 @@ extension ThreadDetailViewController {
             PersistedDraftTab(
                 identifier: entry.identifier,
                 agentType: entry.agentType,
-                prompt: entry.prompt
+                prompt: entry.prompt,
+                modelId: entry.modelId,
+                reasoningLevel: entry.reasoningLevel
             )
         }
         threadManager.updatePersistedDraftTabs(for: thread.id, draftTabs: thread.persistedDraftTabs)

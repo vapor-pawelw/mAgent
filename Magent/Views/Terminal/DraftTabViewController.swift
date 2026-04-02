@@ -6,6 +6,8 @@ struct DraftTabEntry {
     let identifier: String
     var agentType: AgentType
     var prompt: String
+    var modelId: String?
+    var reasoningLevel: String?
     var viewController: DraftTabViewController?
 }
 
@@ -16,24 +18,36 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
     let draftIdentifier: String
     private(set) var agentType: AgentType
     private(set) var prompt: String
+    private(set) var modelId: String?
+    private(set) var reasoningLevel: String?
 
-    var onProceed: ((AgentType, String) -> Void)?
+    var onProceed: ((AgentType, String, String?, String?) -> Void)?
     var onDiscard: (() -> Void)?
-    var onChanged: ((AgentType, String) -> Void)?
+    var onChanged: ((AgentType, String, String?, String?) -> Void)?
 
     private var scrollWidthConstraint: NSLayoutConstraint!
     private var scrollHeightConstraint: NSLayoutConstraint!
 
     private let agentPicker = NSPopUpButton()
+    private let modelPicker = NSPopUpButton()
+    private let reasoningPicker = NSPopUpButton()
     private let promptTextView = NSTextView()
     private let discardButton = NSButton()
     private let proceedButton = NSButton()
     private var pickerAgentTypes: [AgentType] = []
 
-    init(draftIdentifier: String, agentType: AgentType, prompt: String) {
+    init(
+        draftIdentifier: String,
+        agentType: AgentType,
+        prompt: String,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
+    ) {
         self.draftIdentifier = draftIdentifier
         self.agentType = agentType
         self.prompt = prompt
+        self.modelId = modelId
+        self.reasoningLevel = reasoningLevel
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -53,13 +67,17 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
         setupUI()
     }
 
-    func updateContent(agentType: AgentType, prompt: String) {
+    func updateContent(agentType: AgentType, prompt: String, modelId: String?, reasoningLevel: String?) {
         self.agentType = agentType
         self.prompt = prompt
+        self.modelId = modelId
+        self.reasoningLevel = reasoningLevel
         promptTextView.string = prompt
         if let idx = pickerAgentTypes.firstIndex(of: agentType) {
             agentPicker.selectItem(at: idx)
         }
+        populateModelReasoningPickers()
+        applyStoredOrLastModelReasoningSelection()
     }
 
     override func viewDidLayout() {
@@ -124,7 +142,7 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(subtitleLabel)
 
-        // Agent picker row
+        // Agent/model/reasoning picker row
         let agentRow = NSStackView()
         agentRow.orientation = .horizontal
         agentRow.alignment = .centerY
@@ -140,6 +158,26 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
         agentPicker.action = #selector(agentPickerChanged)
         agentPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
         agentRow.addArrangedSubview(agentPicker)
+
+        let modelLabel = NSTextField(labelWithString: "Model")
+        modelLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        modelLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        agentRow.addArrangedSubview(modelLabel)
+
+        modelPicker.target = self
+        modelPicker.action = #selector(modelPickerChanged)
+        modelPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        agentRow.addArrangedSubview(modelPicker)
+
+        let reasoningLabel = NSTextField(labelWithString: "Reasoning")
+        reasoningLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        reasoningLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        agentRow.addArrangedSubview(reasoningLabel)
+
+        reasoningPicker.target = self
+        reasoningPicker.action = #selector(reasoningPickerChanged)
+        reasoningPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        agentRow.addArrangedSubview(reasoningPicker)
 
         stack.addArrangedSubview(agentRow)
 
@@ -218,6 +256,9 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
             scrollHeightConstraint,
             buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
+
+        populateModelReasoningPickers()
+        applyStoredOrLastModelReasoningSelection()
     }
 
     private func buildAgentPicker() {
@@ -236,13 +277,114 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
         }
     }
 
+    private var selectedModelId: String? {
+        guard modelPicker.indexOfSelectedItem > 0 else { return nil }
+        return modelPicker.selectedItem?.representedObject as? String
+    }
+
+    private var selectedReasoningLevel: String? {
+        guard reasoningPicker.indexOfSelectedItem > 0 else { return nil }
+        return reasoningPicker.selectedItem?.representedObject as? String
+    }
+
+    private func populateModelReasoningPickers() {
+        modelPicker.removeAllItems()
+        reasoningPicker.removeAllItems()
+
+        guard let agentConfig = AgentModelsService.shared.config(for: agentType) else { return }
+
+        modelPicker.addItem(withTitle: "Auto")
+        modelPicker.lastItem?.representedObject = nil
+        for model in agentConfig.models {
+            modelPicker.addItem(withTitle: model.label)
+            modelPicker.lastItem?.representedObject = model.id as NSString
+        }
+
+        populateReasoningPicker(agentConfig: agentConfig, modelId: nil)
+    }
+
+    private func populateReasoningPicker(agentConfig: AgentModelConfig, modelId: String?) {
+        let previousSelection = reasoningPicker.selectedItem?.representedObject as? String
+        reasoningPicker.removeAllItems()
+        reasoningPicker.addItem(withTitle: "Auto")
+        reasoningPicker.lastItem?.representedObject = nil
+
+        for level in agentConfig.effectiveReasoningLevels(for: modelId) {
+            reasoningPicker.addItem(withTitle: level.capitalized)
+            reasoningPicker.lastItem?.representedObject = level as NSString
+        }
+
+        if let previousSelection,
+           let matchIndex = reasoningPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == previousSelection }) {
+            reasoningPicker.selectItem(at: matchIndex)
+        }
+    }
+
+    private func applyStoredOrLastModelReasoningSelection() {
+        guard let agentConfig = AgentModelsService.shared.config(for: agentType) else { return }
+
+        let storedModelId = AgentModelsService.shared.validatedModelId(modelId, for: agentType)
+            ?? AgentModelsService.shared.validatedModelId(AgentLastSelectionStore.lastModel(for: agentType), for: agentType)
+        if let storedModelId,
+           let matchIndex = modelPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == storedModelId }) {
+            modelPicker.selectItem(at: matchIndex)
+            populateReasoningPicker(agentConfig: agentConfig, modelId: storedModelId)
+        } else {
+            modelPicker.selectItem(at: 0)
+            populateReasoningPicker(agentConfig: agentConfig, modelId: nil)
+        }
+
+        let storedReasoningLevel = AgentModelsService.shared.validatedReasoningLevel(reasoningLevel, for: agentType, modelId: selectedModelId)
+            ?? AgentModelsService.shared.validatedReasoningLevel(
+                AgentLastSelectionStore.lastReasoning(for: agentType),
+                for: agentType,
+                modelId: selectedModelId
+            )
+        if let storedReasoningLevel,
+           let matchIndex = reasoningPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == storedReasoningLevel }) {
+            reasoningPicker.selectItem(at: matchIndex)
+        } else {
+            reasoningPicker.selectItem(at: 0)
+        }
+
+        modelId = selectedModelId
+        reasoningLevel = selectedReasoningLevel
+    }
+
+    private func notifyChanged() {
+        onChanged?(agentType, promptTextView.string, selectedModelId, selectedReasoningLevel)
+    }
+
     // MARK: - Actions
 
     @objc private func agentPickerChanged() {
         let idx = agentPicker.indexOfSelectedItem
         guard idx >= 0, idx < pickerAgentTypes.count else { return }
         agentType = pickerAgentTypes[idx]
-        onChanged?(agentType, promptTextView.string)
+        modelId = nil
+        reasoningLevel = nil
+        populateModelReasoningPickers()
+        applyStoredOrLastModelReasoningSelection()
+        notifyChanged()
+    }
+
+    @objc private func modelPickerChanged() {
+        guard let agentConfig = AgentModelsService.shared.config(for: agentType) else { return }
+        let modelId = selectedModelId
+        populateReasoningPicker(agentConfig: agentConfig, modelId: modelId)
+        self.modelId = modelId
+        self.reasoningLevel = selectedReasoningLevel
+        AgentLastSelectionStore.saveModel(modelId, for: agentType)
+        AgentLastSelectionStore.saveReasoning(selectedReasoningLevel, for: agentType)
+        notifyChanged()
+    }
+
+    @objc private func reasoningPickerChanged() {
+        modelId = selectedModelId
+        reasoningLevel = selectedReasoningLevel
+        AgentLastSelectionStore.saveModel(modelId, for: agentType)
+        AgentLastSelectionStore.saveReasoning(reasoningLevel, for: agentType)
+        notifyChanged()
     }
 
     @objc private func discardTapped() {
@@ -259,13 +401,13 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
 
     @objc private func proceedTapped() {
         let trimmed = promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        onProceed?(agentType, trimmed)
+        onProceed?(agentType, trimmed, selectedModelId, selectedReasoningLevel)
     }
 
     // MARK: - NSTextViewDelegate
 
     func textDidChange(_ notification: Notification) {
         prompt = promptTextView.string
-        onChanged?(agentType, prompt)
+        notifyChanged()
     }
 }

@@ -340,7 +340,7 @@ extension ThreadListViewController {
                 insertAfterThreadId: effectiveInsertAfter,
                 insertAtTopOfVisibleGroup: insertAtTop,
                 initialWebURL: result.initialWebURL,
-                draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "") } : nil,
+                draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "", result.modelId, result.reasoningLevel) } : nil,
                 modelId: result.modelId,
                 reasoningLevel: result.reasoningLevel,
                 localFileSyncEntriesOverride: isFork ? capturedSourceThread?.localFileSyncEntriesSnapshot : nil
@@ -472,7 +472,7 @@ extension ThreadListViewController {
         insertAfterThreadId: UUID? = nil,
         insertAtTopOfVisibleGroup: Bool = false,
         initialWebURL: URL? = nil,
-        draftPrompt: (AgentType, String)? = nil,
+        draftPrompt: (agentType: AgentType, prompt: String, modelId: String?, reasoningLevel: String?)? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
         localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil
@@ -504,12 +504,18 @@ extension ThreadListViewController {
                 }
                 // If this is a draft, add a persisted draft tab to the newly created thread
                 // and trigger auto-rename from the draft prompt text.
-                if let (agentType, prompt) = draftPrompt {
+                if let draftPrompt {
                     let identifier = "draft:\(UUID().uuidString)"
-                    let draftTab = PersistedDraftTab(identifier: identifier, agentType: agentType, prompt: prompt)
+                    let draftTab = PersistedDraftTab(
+                        identifier: identifier,
+                        agentType: draftPrompt.agentType,
+                        prompt: draftPrompt.prompt,
+                        modelId: draftPrompt.modelId,
+                        reasoningLevel: draftPrompt.reasoningLevel
+                    )
                     self.threadManager.updatePersistedDraftTabs(for: created.id, draftTabs: [draftTab])
 
-                    let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let trimmedPrompt = draftPrompt.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmedPrompt.isEmpty {
                         _ = await self.threadManager.autoRenameThreadFromDraftPromptIfNeeded(
                             threadId: created.id,
@@ -574,7 +580,7 @@ extension ThreadListViewController {
         taskDescription: String?,
         requestedBranchName: String?,
         initialWebURL: URL?,
-        draftPrompt: (AgentType, String)?,
+        draftPrompt: (agentType: AgentType, prompt: String, modelId: String?, reasoningLevel: String?)?,
         modelId: String?,
         reasoningLevel: String?
     ) -> AgentLaunchSheetPrefill? {
@@ -589,9 +595,9 @@ extension ThreadListViewController {
             selectionRaw = "web"
             isDraft = false
         } else if let draftPrompt {
-            prompt = draftPrompt.1
-            agentType = draftPrompt.0
-            selectionRaw = draftPrompt.0.rawValue
+            prompt = draftPrompt.prompt
+            agentType = draftPrompt.agentType
+            selectionRaw = draftPrompt.agentType.rawValue
             isDraft = true
         } else if useAgentCommand {
             prompt = initialPrompt ?? ""
@@ -622,8 +628,8 @@ extension ThreadListViewController {
             description: description,
             branchName: branchName,
             agentType: agentType,
-            modelId: modelId,
-            reasoningLevel: reasoningLevel,
+            modelId: draftPrompt?.modelId ?? modelId,
+            reasoningLevel: draftPrompt?.reasoningLevel ?? reasoningLevel,
             selectionRaw: selectionRaw,
             isDraft: isDraft
         )

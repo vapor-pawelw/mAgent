@@ -661,7 +661,9 @@ extension ThreadDetailViewController {
                 self.openDraftTab(
                     identifier: identifier,
                     agentType: agentType,
-                    prompt: result.prompt ?? ""
+                    prompt: result.prompt ?? "",
+                    modelId: result.modelId,
+                    reasoningLevel: result.reasoningLevel
                 )
             } else if let webURL = result.initialWebURL {
                 let title = result.tabTitle ?? webURL.host ?? "Web"
