@@ -69,6 +69,8 @@ Stored in `AgentLastSelectionStore` (or equivalent persistence). **Not stored pe
 
 Draft tabs are the exception: if the user checks `Draft` in the launch sheet, the selected model and reasoning are persisted alongside the saved prompt so `Start Agent` later launches with the same explicit configuration. Missing values remain `nil` and mean `Auto`, which keeps older persisted drafts backward-compatible.
 
+The `Draft` checkbox state itself is also persisted with the saved launch-sheet draft, so reopening the sheet restores whether that prompt was meant to stay parked or launch immediately. The checkbox updates live while editing the sheet, which keeps the saved draft state aligned with what the user sees.
+
 ### Switching Agent in Picker
 
 Switching between Claude and Codex in the agent picker swaps the displayed model/reasoning to that agent's own last-selected values. **No cross-agent mapping** — each agent's selections are fully independent.

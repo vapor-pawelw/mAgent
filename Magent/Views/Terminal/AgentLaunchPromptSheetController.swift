@@ -759,6 +759,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 draftCheckbox.font = .systemFont(ofSize: 11)
                 draftCheckbox.contentTintColor = .controlAccentColor
                 draftCheckbox.toolTip = "Save this prompt as a draft tab instead of running it immediately"
+                draftCheckbox.target = self
+                draftCheckbox.action = #selector(draftCheckboxChanged)
 
                 let draftRow = NSStackView()
                 draftRow.orientation = .horizontal
@@ -1304,6 +1306,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             descriptionField.stringValue = draft.description
             branchField.stringValue = draft.branchName
         }
+        if config.showDraftCheckbox {
+            draftCheckbox.state = (mode == "agent" && draft.isDraft) ? .on : .off
+        }
     }
 
     private func persistDraft(mode: String? = nil) {
@@ -1313,7 +1318,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             AgentLaunchPromptDraft(
                 prompt: config.showPromptInputArea ? promptTextView.string : "",
                 description: mode == "agent" && config.showDescriptionAndBranchFields ? descriptionField.stringValue : "",
-                branchName: mode == "agent" && config.showDescriptionAndBranchFields ? branchField.stringValue : ""
+                branchName: mode == "agent" && config.showDescriptionAndBranchFields ? branchField.stringValue : "",
+                isDraft: mode == "agent" && config.showDraftCheckbox && draftCheckbox.state == .on
             ),
             for: currentDraftScope,
             mode: mode
@@ -1331,6 +1337,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     func textDidChange(_ notification: Notification) {
+        persistDraft()
+    }
+
+    @objc private func draftCheckboxChanged() {
         persistDraft()
     }
 

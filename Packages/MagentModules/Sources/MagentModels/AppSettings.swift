@@ -44,11 +44,41 @@ public nonisolated struct AgentLaunchPromptDraft: Codable, Sendable, Equatable {
     public var prompt: String
     public var description: String
     public var branchName: String
+    public var isDraft: Bool
 
-    public init(prompt: String = "", description: String = "", branchName: String = "") {
+    enum CodingKeys: String, CodingKey {
+        case prompt
+        case description
+        case branchName
+        case isDraft
+    }
+
+    public init(
+        prompt: String = "",
+        description: String = "",
+        branchName: String = "",
+        isDraft: Bool = false
+    ) {
         self.prompt = prompt
         self.description = description
         self.branchName = branchName
+        self.isDraft = isDraft
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        prompt = try container.decodeIfPresent(String.self, forKey: .prompt) ?? ""
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        branchName = try container.decodeIfPresent(String.self, forKey: .branchName) ?? ""
+        isDraft = try container.decodeIfPresent(Bool.self, forKey: .isDraft) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(prompt, forKey: .prompt)
+        try container.encode(description, forKey: .description)
+        try container.encode(branchName, forKey: .branchName)
+        try container.encode(isDraft, forKey: .isDraft)
     }
 }
 public nonisolated struct AppSettings: Codable, Sendable {
