@@ -996,7 +996,7 @@ extension ThreadListViewController {
 
     func refreshDiffPanelContextForSelectedThread() {
         guard let thread = selectedThreadFromState() else {
-            diffPanelView.updateBranchInfo(branchName: nil, baseBranch: nil)
+            diffPanelView.updateBranchInfo(branchName: nil, baseBranch: nil, upstreamStatus: nil)
             return
         }
         refreshDiffPanelContext(for: thread)
@@ -1068,9 +1068,24 @@ extension ThreadListViewController {
 
     func refreshDiffPanelContext(for thread: MagentThread) {
         let current = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
-        let branchName = current.isMain ? nil : (current.actualBranch ?? current.branchName)
+        let branchName = current.actualBranch ?? current.branchName
         let baseBranch = current.isMain ? nil : threadManager.resolveBaseBranch(for: current)
-        diffPanelView.updateBranchInfo(branchName: branchName, baseBranch: baseBranch)
+        Task {
+            let upstreamStatus = await GitService.shared.upstreamTrackingStatus(worktreePath: current.worktreePath)
+            await MainActor.run {
+                guard self.selectedThreadID == current.id else { return }
+                guard let latest = self.threadManager.threads.first(where: { $0.id == current.id }) else { return }
+                let latestBranchName = latest.actualBranch ?? latest.branchName
+                let latestBaseBranch = latest.isMain ? nil : self.threadManager.resolveBaseBranch(for: latest)
+                guard latestBranchName == branchName,
+                      latestBaseBranch == baseBranch else { return }
+                self.diffPanelView.updateBranchInfo(
+                    branchName: branchName,
+                    baseBranch: baseBranch,
+                    upstreamStatus: upstreamStatus
+                )
+            }
+        }
     }
 
     func showBaseBranchMenu(anchorView: NSView) {
@@ -1205,6 +1220,7 @@ extension ThreadListViewController {
             let commits: [BranchCommit]
             let hasMoreCommits: Bool
             let baseBranch: String?
+            let upstreamStatus: BranchUpstreamStatus
 
             if current.isMain {
                 baseBranch = nil
@@ -1213,11 +1229,13 @@ extension ThreadListViewController {
                     worktreePath: current.worktreePath,
                     limit: commitLimit + 1
                 )
+                async let upstreamTask = GitService.shared.upstreamTrackingStatus(worktreePath: current.worktreePath)
                 entries = await entriesTask
                 allBranchEntries = entries // main thread: all changes = uncommitted
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
+                upstreamStatus = await upstreamTask
             } else {
                 let resolvedBaseBranch = self.threadManager.resolveBaseBranch(for: current)
                 baseBranch = resolvedBaseBranch
@@ -1228,11 +1246,13 @@ extension ThreadListViewController {
                     baseBranch: resolvedBaseBranch,
                     limit: commitLimit + 1
                 )
+                async let upstreamTask = GitService.shared.upstreamTrackingStatus(worktreePath: current.worktreePath)
                 entries = await entriesTask
                 allBranchEntries = await allBranchTask
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
+                upstreamStatus = await upstreamTask
             }
 
             await MainActor.run {
@@ -1246,8 +1266,9 @@ extension ThreadListViewController {
                     hasMoreCommits: hasMoreCommits,
                     forceVisible: true,
                     worktreePath: current.worktreePath,
-                    branchName: current.isMain ? nil : (current.actualBranch ?? current.branchName),
+                    branchName: current.actualBranch ?? current.branchName,
                     baseBranch: baseBranch,
+                    upstreamStatus: upstreamStatus,
                     preserveSelection: preserveSelection
                 )
             }

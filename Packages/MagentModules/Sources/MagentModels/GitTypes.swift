@@ -36,6 +36,82 @@ public nonisolated enum PullRequestLookupResult: Sendable, Equatable {
     case unavailable
 }
 
+public nonisolated struct BranchUpstreamStatus: Sendable {
+    public let upstreamRef: String?
+    public let aheadCount: Int?
+    public let behindCount: Int?
+
+    public init(upstreamRef: String? = nil, aheadCount: Int? = nil, behindCount: Int? = nil) {
+        self.upstreamRef = upstreamRef
+        self.aheadCount = aheadCount
+        self.behindCount = behindCount
+    }
+
+    public var hasRemoteCounterpart: Bool {
+        upstreamRef != nil
+    }
+
+    public var displayText: String {
+        guard upstreamRef != nil else { return "Local" }
+        guard let suffix = inlineSuffix else { return "Up to date with remote" }
+        return suffix
+    }
+
+    public var inlineSuffix: String? {
+        guard upstreamRef != nil else { return "(local)" }
+
+        let ahead = max(0, aheadCount ?? 0)
+        let behind = max(0, behindCount ?? 0)
+
+        switch (ahead, behind) {
+        case (0, 0):
+            return nil
+        case let (ahead, behind):
+            var parts: [String] = []
+            if ahead > 0 {
+                parts.append("+\(ahead)")
+            }
+            if behind > 0 {
+                parts.append("-\(behind)")
+            }
+            return "(\(parts.joined(separator: " ")) from remote)"
+        default:
+            return nil
+        }
+    }
+
+    public var displayUpstreamRef: String? {
+        guard let upstreamRef else { return nil }
+        let displayUpstream = upstreamRef.hasPrefix("origin/")
+            ? String(upstreamRef.dropFirst("origin/".count))
+            : upstreamRef
+        return displayUpstream
+    }
+
+    public var tooltipText: String {
+        guard let upstreamRef else {
+            return "This branch has no configured remote counterpart."
+        }
+
+        let displayUpstream = displayUpstreamRef ?? upstreamRef
+        let ahead = max(0, aheadCount ?? 0)
+        let behind = max(0, behindCount ?? 0)
+
+        switch (ahead, behind) {
+        case (0, 0):
+            return "Upstream: \(displayUpstream)"
+        case let (ahead, behind) where ahead > 0 && behind > 0:
+            return "Upstream: \(displayUpstream) (\(ahead) ahead, \(behind) behind)"
+        case let (ahead, 0) where ahead > 0:
+            return "Upstream: \(displayUpstream) (\(ahead) ahead)"
+        case let (0, behind) where behind > 0:
+            return "Upstream: \(displayUpstream) (\(behind) behind)"
+        default:
+            return "Upstream: \(displayUpstream)"
+        }
+    }
+}
+
 public nonisolated struct GitRemote: Sendable {
     public let name: String
     public let host: String

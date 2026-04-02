@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Diff Viewer
+- The bottom-left git panel now appends compact remote-tracking status to the current branch name, showing short suffixes like `(+1 -3 from remote)` or `(local)` when the branch has no upstream.
 - Discarding a file in the CHANGES panel now refreshes the panel immediately, and queues a follow-up refresh if another git refresh is already in progress so the file state does not stay stale.
 
 ## 1.5.0 - 2026-04-02

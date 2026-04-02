@@ -186,6 +186,7 @@ final class DiffPanelView: NSView {
     private let baseLineLabel = NSTextField(labelWithString: "⤷ ")
     private let baseBranchButton = NSButton()
     private let baseLineStack = NSStackView()
+    private let remoteStatusLabel = NSTextField(labelWithString: "")
     private let branchInfoStack = NSStackView()
 
     // Working-tree entries (always loaded from git status)
@@ -387,11 +388,19 @@ final class DiffPanelView: NSView {
         baseLineStack.addArrangedSubview(baseLineLabel)
         baseLineStack.addArrangedSubview(baseBranchButton)
 
+        remoteStatusLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        remoteStatusLabel.textColor = NSColor(resource: .textSecondary).withAlphaComponent(0.7)
+        remoteStatusLabel.lineBreakMode = .byTruncatingTail
+        remoteStatusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        remoteStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+        remoteStatusLabel.isHidden = true
+
         branchInfoStack.orientation = .vertical
         branchInfoStack.spacing = 1
         branchInfoStack.alignment = .leading
         branchInfoStack.addArrangedSubview(branchInfoLabel)
         branchInfoStack.addArrangedSubview(baseLineStack)
+        branchInfoStack.addArrangedSubview(remoteStatusLabel)
         branchInfoStack.translatesAutoresizingMaskIntoConstraints = false
         branchInfoStack.isHidden = true
         addSubview(branchInfoStack)
@@ -753,6 +762,7 @@ final class DiffPanelView: NSView {
         worktreePath: String? = nil,
         branchName: String? = nil,
         baseBranch: String? = nil,
+        upstreamStatus: BranchUpstreamStatus? = nil,
         preserveSelection: Bool = false
     ) {
         uncommittedEntries = newEntries
@@ -807,7 +817,7 @@ final class DiffPanelView: NSView {
             onCommitSelected?(hash)
         }
 
-        updateBranchInfo(branchName: branchName, baseBranch: baseBranch)
+        updateBranchInfo(branchName: branchName, baseBranch: baseBranch, upstreamStatus: upstreamStatus)
     }
 
     /// Called by the controller after loading files for the selected commit.
@@ -820,17 +830,38 @@ final class DiffPanelView: NSView {
         }
     }
 
-    func updateBranchInfo(branchName: String?, baseBranch: String?) {
+    func updateBranchInfo(branchName: String?, baseBranch: String?, upstreamStatus: BranchUpstreamStatus?) {
+        if let branch = branchName, !branch.isEmpty {
+            let branchSuffix = upstreamStatus?.inlineSuffix ?? ""
+            branchInfoLabel.stringValue = branch + (branchSuffix.isEmpty ? "" : " \(branchSuffix)")
+
+            var toolTip = "Branch: \(branch)"
+            if let upstreamStatus, let upstream = upstreamStatus.displayUpstreamRef {
+                toolTip += "\nUpstream: \(upstream)"
+                if let suffix = upstreamStatus.inlineSuffix {
+                    toolTip += " \(suffix)"
+                }
+            } else if let upstreamStatus {
+                toolTip += "\n\(upstreamStatus.tooltipText)"
+            }
+            branchInfoLabel.toolTip = toolTip
+            branchInfoLabel.isHidden = false
+        } else {
+            branchInfoLabel.isHidden = true
+        }
+
         if let branch = branchName, !branch.isEmpty, let base = baseBranch, !base.isEmpty {
             let displayBase = base.hasPrefix("origin/") ? String(base.dropFirst(7)) : base
-            branchInfoLabel.stringValue = branch
-            branchInfoLabel.toolTip = "Branch: \(branch)"
             baseBranchButton.title = displayBase
             baseBranchButton.toolTip = "Click to change base branch"
-            branchInfoStack.isHidden = false
+            baseLineStack.isHidden = false
         } else {
-            branchInfoStack.isHidden = true
+            baseLineStack.isHidden = true
         }
+
+        remoteStatusLabel.isHidden = true
+
+        branchInfoStack.isHidden = branchInfoLabel.isHidden && baseLineStack.isHidden && remoteStatusLabel.isHidden
     }
 
     @objc private func baseBranchTapped() {
@@ -852,6 +883,9 @@ final class DiffPanelView: NSView {
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         commitsTabButton.isHidden = true
         commitContextLabel.isHidden = true
+        branchInfoLabel.isHidden = true
+        baseLineStack.isHidden = true
+        remoteStatusLabel.isHidden = true
         updateTabTitles()
         branchInfoStack.isHidden = true
         setPanelVisible(false)
