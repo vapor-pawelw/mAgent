@@ -238,7 +238,16 @@ Shell startup uses a managed `ZDOTDIR` wrapper so Magent can source the user's s
 - Use a unique filename per transfer (for example a UUID-based suffix) so multiple transfers can be created concurrently without clobbering each other.
 - Treat these files as ephemeral cache entries: remove them after a bounded TTL and prune leftovers on app launch/shutdown.
 
-### 4.10 Persistence Backup + Restore Contract
+### 4.10 Tab Resume Duplication Contract
+
+Agent-backed terminal tabs may expose a `Resume Agent Session in New Tab` context-menu item that opens a fresh tmux session but resumes the same agent conversation.
+
+- Only show this action for agent types that support deterministic resume (`Claude` and `Codex`).
+- Gate enablement on a non-empty persisted `sessionConversationIDs[sessionName]`; if no resume ID has been captured yet, the menu item should stay disabled and the action must not launch a best-effort fresh session under the guise of resume.
+- Route resumed-duplicate tabs through the normal `addTab(...)` flow with an explicit `resumeSessionID` so startup, trust handling, overlay behavior, and persisted session metadata stay consistent with every other agent tab.
+- Persist the copied resume ID onto the new tab's `sessionConversationIDs` entry immediately so later recreation/reopen flows preserve the resumed conversation even before a subsequent refresh discovers the same ID again.
+
+### 4.11 Persistence Backup + Restore Contract
 
 Magent keeps two layers of backup protection for critical app-state files in Application Support:
 

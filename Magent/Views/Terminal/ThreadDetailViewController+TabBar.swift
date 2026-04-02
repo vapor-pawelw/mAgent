@@ -288,7 +288,13 @@ extension ThreadDetailViewController {
 
             switch slot {
             case .terminal(let sessionName):
+                let agentType = threadManager.agentType(for: thread, sessionName: sessionName)
+                let resumeID = threadManager.conversationID(for: thread.id, sessionName: sessionName)
                 item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
+                item.onResumeAgentInNewTab = agentType?.supportsResume == true
+                    ? { [weak self] in self?.resumeAgentSessionInNewTab(at: i) }
+                    : nil
+                item.canResumeAgentInNewTab = !(resumeID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
                 item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: i, targetAgent: agent) }
                 item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
                 // Hide per-tab Keep Alive controls when the thread itself is keep-alive.
@@ -299,6 +305,8 @@ extension ThreadDetailViewController {
                     && thread.protectedTmuxSessions.contains(sessionName)
             case .web:
                 item.onRename = { [weak self] in self?.showWebTabRenameDialog(at: i) }
+                item.onResumeAgentInNewTab = nil
+                item.canResumeAgentInNewTab = false
                 item.onContinueIn = nil
                 item.onExportContext = nil
                 item.onKeepAlive = nil
@@ -307,6 +315,8 @@ extension ThreadDetailViewController {
                 item.showKeepAliveIcon = false
             case .draft:
                 item.onRename = nil
+                item.onResumeAgentInNewTab = nil
+                item.canResumeAgentInNewTab = false
                 item.onContinueIn = nil
                 item.onExportContext = nil
                 item.onKeepAlive = nil

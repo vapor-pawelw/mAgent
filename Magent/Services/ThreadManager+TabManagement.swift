@@ -11,6 +11,7 @@ extension ThreadManager {
         requestedAgentType: AgentType? = nil,
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
+        resumeSessionID: String? = nil,
         customTitle: String? = nil,
         tabNameSuffix: String? = nil,
         pendingPromptFileURL: URL? = nil,
@@ -66,6 +67,7 @@ extension ThreadManager {
                     agentType: selectedAgentType,
                     envExports: shellExportCommand(for: sessionEnvironment),
                     workingDirectory: projectPath,
+                    resumeSessionID: resumeSessionID,
                     modelId: modelId,
                     reasoningLevel: reasoningLevel
                 )
@@ -124,6 +126,7 @@ extension ThreadManager {
                     agentType: selectedAgentType,
                     envExports: shellExportCommand(for: sessionEnvironment),
                     workingDirectory: currentThread.worktreePath,
+                    resumeSessionID: resumeSessionID,
                     modelId: modelId,
                     reasoningLevel: reasoningLevel
                 )
@@ -198,6 +201,12 @@ extension ThreadManager {
             threads[index].agentTmuxSessions.append(tmuxSessionName)
             if let selectedAgentType {
                 threads[index].sessionAgentTypes[tmuxSessionName] = selectedAgentType
+            }
+            if let resumeSessionID {
+                let trimmedResumeSessionID = resumeSessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedResumeSessionID.isEmpty {
+                    threads[index].sessionConversationIDs[tmuxSessionName] = trimmedResumeSessionID
+                }
             }
             threads[index].agentHasRun = true
         }

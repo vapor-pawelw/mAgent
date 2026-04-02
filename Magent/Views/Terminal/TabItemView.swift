@@ -102,6 +102,8 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onRename: (() -> Void)?
     var onPin: (() -> Void)?
     var onKeepAlive: (() -> Void)?
+    var onResumeAgentInNewTab: (() -> Void)?
+    var canResumeAgentInNewTab: Bool = false
     var onContinueIn: ((AgentType) -> Void)?
     var onExportContext: (() -> Void)?
     var onKillSession: (() -> Void)?
@@ -296,6 +298,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         onContinueIn?(agent)
     }
 
+    @objc private func resumeAgentInNewTabTapped() {
+        onResumeAgentInNewTab?()
+    }
+
     @objc private func exportContextTapped() {
         onExportContext?()
     }
@@ -364,6 +370,17 @@ final class TabItemView: NSView, NSMenuDelegate {
             let renameItem = NSMenuItem(title: "Rename Tab...", action: #selector(renameTapped), keyEquivalent: "")
             renameItem.target = self
             menu.addItem(renameItem)
+        }
+
+        if onResumeAgentInNewTab != nil {
+            let resumeItem = NSMenuItem(
+                title: "Resume Agent Session in New Tab",
+                action: #selector(resumeAgentInNewTabTapped),
+                keyEquivalent: ""
+            )
+            resumeItem.target = self
+            resumeItem.isEnabled = canResumeAgentInNewTab
+            menu.addItem(resumeItem)
         }
 
         // Context transfer items
@@ -449,7 +466,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         }
 
         // Kill tmux session (terminal tabs only, when session is alive)
-        if let onKillSession, !isSessionDead {
+        if onKillSession != nil, !isSessionDead {
             if onKeepAlive == nil {
                 menu.addItem(.separator())
             }

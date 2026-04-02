@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Tab
+- Agent-backed tabs now expose `Resume Agent Session in New Tab` in the tab context menu, opening a fresh tab that resumes the same Claude/Codex conversation when a saved resume ID is available.
+
 ### Diff Viewer
 - Discarding a file in the CHANGES panel now refreshes the panel immediately, and queues a follow-up refresh if another git refresh is already in progress so the file state does not stay stale.
 

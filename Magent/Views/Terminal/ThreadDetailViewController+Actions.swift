@@ -688,6 +688,7 @@ extension ThreadDetailViewController {
         useAgentCommand: Bool,
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
+        resumeSessionID: String? = nil,
         customTitle: String? = nil,
         pendingPromptFileURL: URL? = nil,
         tabNameSuffix: String? = nil,
@@ -732,6 +733,7 @@ extension ThreadDetailViewController {
                     requestedAgentType: agentType,
                     initialPrompt: initialPrompt,
                     shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                    resumeSessionID: resumeSessionID,
                     customTitle: customTitle,
                     tabNameSuffix: tabNameSuffix,
                     pendingPromptFileURL: pendingPromptFileURL,
@@ -1186,6 +1188,27 @@ extension ThreadDetailViewController {
                 self.addTab(using: targetAgent, useAgentCommand: true, initialPrompt: prompt)
             }
         }
+    }
+
+    func resumeAgentSessionInNewTab(at index: Int) {
+        guard index < tabSlots.count, case .terminal(let sessionName) = tabSlots[index] else { return }
+        guard let agentType = threadManager.agentType(for: thread, sessionName: sessionName), agentType.supportsResume else { return }
+        guard let resumeSessionID = threadManager.conversationID(for: thread.id, sessionName: sessionName)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !resumeSessionID.isEmpty else {
+            BannerManager.shared.show(
+                message: "This tab does not have a resumable agent session yet.",
+                style: .warning
+            )
+            return
+        }
+
+        addTab(
+            using: agentType,
+            useAgentCommand: true,
+            resumeSessionID: resumeSessionID,
+            customTitle: thread.displayName(for: sessionName, at: index)
+        )
     }
 
     func exportTabContext(at index: Int) {
