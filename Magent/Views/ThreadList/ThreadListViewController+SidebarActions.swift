@@ -487,6 +487,16 @@ extension ThreadListViewController {
                     requestedAgentType: requestedAgentType,
                     useAgentCommand: useAgentCommand,
                     initialPrompt: initialPrompt,
+                    shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                    initialDraftTab: draftPrompt.map { draftPrompt in
+                        PersistedDraftTab(
+                            identifier: "draft:\(UUID().uuidString)",
+                            agentType: draftPrompt.agentType,
+                            prompt: draftPrompt.prompt,
+                            modelId: draftPrompt.modelId,
+                            reasoningLevel: draftPrompt.reasoningLevel
+                        )
+                    },
                     requestedName: requestedBranchName,
                     requestedBaseBranch: baseBranch,
                     pendingPromptFileURL: pendingPromptFileURL,
@@ -502,19 +512,9 @@ extension ThreadListViewController {
                    !desc.isEmpty {
                     try? self.threadManager.setTaskDescription(threadId: created.id, description: desc)
                 }
-                // If this is a draft, add a persisted draft tab to the newly created thread
-                // and trigger auto-rename from the draft prompt text.
+                // Trigger auto-rename from the draft prompt text after the draft-only
+                // thread has been created and persisted.
                 if let draftPrompt {
-                    let identifier = "draft:\(UUID().uuidString)"
-                    let draftTab = PersistedDraftTab(
-                        identifier: identifier,
-                        agentType: draftPrompt.agentType,
-                        prompt: draftPrompt.prompt,
-                        modelId: draftPrompt.modelId,
-                        reasoningLevel: draftPrompt.reasoningLevel
-                    )
-                    self.threadManager.updatePersistedDraftTabs(for: created.id, draftTabs: [draftTab])
-
                     let trimmedPrompt = draftPrompt.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmedPrompt.isEmpty {
                         _ = await self.threadManager.autoRenameThreadFromDraftPromptIfNeeded(

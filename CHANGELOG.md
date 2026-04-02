@@ -6,7 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Agents
 - Draft tabs now preserve the model and reasoning selections chosen in the initial prompt sheet, and `Start Agent` later launches with those same settings instead of resetting to Auto.
-
+### Thread
+- Fixed draft threads sometimes restoring as terminal/Codex tabs from stale tmux sessions. Draft-only threads now stay non-terminal until you explicitly start the agent.
 ### Tab
 - Agent-backed tabs now expose `Resume Agent Session in New Tab` in the tab context menu, opening a fresh tab that resumes the same Claude/Codex conversation when a saved resume ID is available.
 
