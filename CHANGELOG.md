@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - Codex threads now mark work as finished more reliably when Codex returns to an idle prompt without emitting a bell, so completion dots and notifications are less likely to be missed.
 - Draft tabs now preserve the model and reasoning selections chosen in the initial prompt sheet, and `Start Agent` later launches with those same settings instead of resetting to Auto.
+### Banner
+- Fixed embedded terminal banners ignoring button and dismiss clicks, including recovered unsubmitted prompt banners shown inside a thread.
 ### Thread
 - Fixed draft threads sometimes restoring as terminal/Codex tabs from stale tmux sessions. Draft-only threads now stay non-terminal until you explicitly start the agent.
 ### Tab

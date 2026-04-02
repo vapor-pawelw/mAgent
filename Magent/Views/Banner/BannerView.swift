@@ -264,6 +264,7 @@ final class BannerView: NSView {
 
         if config.allowsUserDismissal {
             let pan = NSPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+            pan.delaysPrimaryMouseButtonEvents = false
             addGestureRecognizer(pan)
         }
 

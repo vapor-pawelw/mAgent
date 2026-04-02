@@ -137,6 +137,7 @@ final class ThreadDetailViewController: NSViewController {
     let reviewButton = NSButton()
     let continueInButton = NSButton()
     let exportContextButton = NSButton()
+    let terminalBannerOverlay = BannerOverlayView()
     let scrollOverlay = TerminalScrollOverlayView()
     let togglePromptTOCButton = NSButton()
     let addTabButton = NSButton()
@@ -598,10 +599,28 @@ final class ThreadDetailViewController: NSViewController {
             terminalBottomToView!,
         ])
 
+        setupTerminalBannerOverlay()
         setupScrollFAB()
         setupScrollOverlay()
         refreshOverlayVisibilitySettings()
         refreshTerminalChromeAppearance()
+    }
+
+    func setupTerminalBannerOverlay() {
+        terminalBannerOverlay.translatesAutoresizingMaskIntoConstraints = false
+        terminalContainer.addSubview(terminalBannerOverlay)
+        NSLayoutConstraint.activate([
+            terminalBannerOverlay.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+            terminalBannerOverlay.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
+            terminalBannerOverlay.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
+            terminalBannerOverlay.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
+        ])
+        bringTerminalBannerOverlayToFront()
+    }
+
+    func bringTerminalBannerOverlayToFront() {
+        guard terminalBannerOverlay.superview === terminalContainer else { return }
+        terminalContainer.addSubview(terminalBannerOverlay, positioned: .above, relativeTo: nil)
     }
 
     // MARK: - Tab Setup
@@ -1484,14 +1503,15 @@ final class ThreadDetailViewController: NSViewController {
                 },
             ]
         ))
+        bringTerminalBannerOverlayToFront()
         banner.translatesAutoresizingMaskIntoConstraints = false
-        terminalContainer.addSubview(banner, positioned: .above, relativeTo: nil)
-        let topConstraint = banner.topAnchor.constraint(equalTo: terminalContainer.topAnchor, constant: 12)
+        terminalBannerOverlay.addSubview(banner)
+        let topConstraint = banner.topAnchor.constraint(equalTo: terminalBannerOverlay.topAnchor, constant: 12)
         NSLayoutConstraint.activate([
             topConstraint,
-            banner.centerXAnchor.constraint(equalTo: terminalContainer.centerXAnchor),
-            banner.leadingAnchor.constraint(greaterThanOrEqualTo: terminalContainer.leadingAnchor, constant: 20),
-            banner.trailingAnchor.constraint(lessThanOrEqualTo: terminalContainer.trailingAnchor, constant: -20),
+            banner.centerXAnchor.constraint(equalTo: terminalBannerOverlay.centerXAnchor),
+            banner.leadingAnchor.constraint(greaterThanOrEqualTo: terminalBannerOverlay.leadingAnchor, constant: 20),
+            banner.trailingAnchor.constraint(lessThanOrEqualTo: terminalBannerOverlay.trailingAnchor, constant: -20),
             banner.widthAnchor.constraint(lessThanOrEqualToConstant: 640),
         ])
 
@@ -1543,14 +1563,15 @@ final class ThreadDetailViewController: NSViewController {
                 },
             ]
         ))
+        bringTerminalBannerOverlayToFront()
         banner.translatesAutoresizingMaskIntoConstraints = false
-        terminalContainer.addSubview(banner, positioned: .above, relativeTo: nil)
-        let topConstraint = banner.topAnchor.constraint(equalTo: terminalContainer.topAnchor, constant: 12)
+        terminalBannerOverlay.addSubview(banner)
+        let topConstraint = banner.topAnchor.constraint(equalTo: terminalBannerOverlay.topAnchor, constant: 12)
         NSLayoutConstraint.activate([
             topConstraint,
-            banner.centerXAnchor.constraint(equalTo: terminalContainer.centerXAnchor),
-            banner.leadingAnchor.constraint(greaterThanOrEqualTo: terminalContainer.leadingAnchor, constant: 20),
-            banner.trailingAnchor.constraint(lessThanOrEqualTo: terminalContainer.trailingAnchor, constant: -20),
+            banner.centerXAnchor.constraint(equalTo: terminalBannerOverlay.centerXAnchor),
+            banner.leadingAnchor.constraint(greaterThanOrEqualTo: terminalBannerOverlay.leadingAnchor, constant: 20),
+            banner.trailingAnchor.constraint(lessThanOrEqualTo: terminalBannerOverlay.trailingAnchor, constant: -20),
             banner.widthAnchor.constraint(lessThanOrEqualToConstant: 640),
         ])
 
@@ -1656,14 +1677,15 @@ final class ThreadDetailViewController: NSViewController {
         banner.onDismiss = { [weak self] in
             self?.dismissRecoveryBanner()
         }
+        bringTerminalBannerOverlayToFront()
         banner.translatesAutoresizingMaskIntoConstraints = false
-        terminalContainer.addSubview(banner, positioned: .above, relativeTo: nil)
-        let topConstraint = banner.topAnchor.constraint(equalTo: terminalContainer.topAnchor, constant: 12)
+        terminalBannerOverlay.addSubview(banner)
+        let topConstraint = banner.topAnchor.constraint(equalTo: terminalBannerOverlay.topAnchor, constant: 12)
         NSLayoutConstraint.activate([
             topConstraint,
-            banner.centerXAnchor.constraint(equalTo: terminalContainer.centerXAnchor),
-            banner.leadingAnchor.constraint(greaterThanOrEqualTo: terminalContainer.leadingAnchor, constant: 20),
-            banner.trailingAnchor.constraint(lessThanOrEqualTo: terminalContainer.trailingAnchor, constant: -20),
+            banner.centerXAnchor.constraint(equalTo: terminalBannerOverlay.centerXAnchor),
+            banner.leadingAnchor.constraint(greaterThanOrEqualTo: terminalBannerOverlay.leadingAnchor, constant: 20),
+            banner.trailingAnchor.constraint(lessThanOrEqualTo: terminalBannerOverlay.trailingAnchor, constant: -20),
             banner.widthAnchor.constraint(lessThanOrEqualToConstant: 640),
         ])
 
