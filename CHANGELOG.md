@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 - Agent-backed tabs now expose `Resume Agent Session in New Tab` in the tab context menu, opening a fresh tab that resumes the same Claude/Codex conversation when a saved resume ID is available.
 
 ### Diff Viewer
+- The bottom-left git panel now appends compact remote-tracking status to the current branch name, showing short suffixes like `(+1 -3 from remote)` or `(local)` when the branch has no upstream.
 - Discarding a file in the CHANGES panel now refreshes the panel immediately, and queues a follow-up refresh if another git refresh is already in progress so the file state does not stay stale.
 
 ## 1.5.0 - 2026-04-02

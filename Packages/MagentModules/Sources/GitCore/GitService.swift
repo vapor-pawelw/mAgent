@@ -421,6 +421,34 @@ public final class GitService: Sendable {
         return branch
     }
 
+    /// Returns the current branch's configured upstream and how many commits it is ahead/behind.
+    /// `upstreamRef == nil` means the branch has no remote counterpart configured.
+    public func upstreamTrackingStatus(worktreePath: String) async -> BranchUpstreamStatus {
+        let upstreamResult = await ShellExecutor.execute(
+            "git rev-parse --abbrev-ref --symbolic-full-name @{u}",
+            workingDirectory: worktreePath
+        )
+        let upstreamRef = upstreamResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard upstreamResult.exitCode == 0, !upstreamRef.isEmpty else {
+            return BranchUpstreamStatus()
+        }
+
+        let divergenceResult = await ShellExecutor.execute(
+            "git rev-list --left-right --count HEAD...\(shellQuote(upstreamRef))",
+            workingDirectory: worktreePath
+        )
+        let parts = divergenceResult.stdout
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: \.isWhitespace)
+        let aheadCount = parts.indices.contains(0) ? Int(parts[0]) : nil
+        let behindCount = parts.indices.contains(1) ? Int(parts[1]) : nil
+        return BranchUpstreamStatus(
+            upstreamRef: upstreamRef,
+            aheadCount: aheadCount,
+            behindCount: behindCount
+        )
+    }
+
     /// Returns `true` when the worktree has no uncommitted changes (untracked files are ignored).
     public func isClean(worktreePath: String) async -> Bool {
         let result = await ShellExecutor.execute(
