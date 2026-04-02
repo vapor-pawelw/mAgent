@@ -8,7 +8,7 @@
 - Selecting inline diff text now supports the standard `Cmd+C` shortcut and copies the selected text to the macOS clipboard.
 - Left-clicking an image preview inside the inline diff opens a larger overlay above the full thread view with a darkened background; clicking anywhere or pressing Escape dismisses it.
 - Double-clicking a file opens the file with the system default macOS app.
-- Right-clicking a file opens a context menu with `Copy Filename`, `Show in Finder`, and (for non-committed files) `Stage` or `Unstage`. Directory rows also show the stage/unstage option when applicable. The `DiffFileRowView.workingStatus` property is set from `FileDiffEntry.workingStatus` in `makeEntryRow`; stage/unstage calls `GitService.shared.stageFile`/`unstageFile` then fires `onRefreshRequested` to reload the panel.
+- Right-clicking a file opens a context menu with `Copy Filename`, `Show in Finder`, and (for non-committed files) `Stage`, `Unstage`, or `Discard Changes`. Directory rows also show the stage/unstage/discard options when applicable. The `DiffFileRowView.workingStatus` property is set from `FileDiffEntry.workingStatus` in `makeEntryRow`; stage/unstage calls `GitService.shared.stageFile`/`unstageFile` then fires `onRefreshRequested` to reload the panel. Discard prompts a warning alert first, then uses `GitService.shared.discardFile(...)` to reset tracked paths or remove untracked paths before refreshing.
 
 ## Implementation Notes
 
@@ -20,6 +20,7 @@
 - Opening files uses `NSWorkspace.shared.open(url)`.
 - Revealing files in Finder uses `NSWorkspace.shared.activateFileViewerSelecting([url])`.
 - Missing files (for example deleted paths still listed in diff stats) show a warning banner instead of failing silently.
+- Discard is only available for rows whose `workingStatus` is not `.committed`. Tracked staged/unstaged rows are reset to `HEAD` with `git restore --staged --worktree`; untracked rows are removed with `git clean -fd`. Committed rows intentionally have no discard action.
 - Directory detection is UI-side in `DiffPanelView`: treat a path as a directory when it ends in `/` or resolves to a directory under the selected worktree path. Untracked directory rows can otherwise look identical to files because Git status reports them as plain paths.
 - Image zoom is implemented as a separate overlay in `ThreadDetailViewController+DiffViewer.swift`, not by resizing the inline diff section. `InlineDiffViewController` only forwards click events from image views upward.
 - The legend popover in `DiffPanelView.makeLegendViewController()` should use explicit container-to-stack inset constraints for padding. Relying on `NSStackView.edgeInsets` alone can render inconsistently in AppKit popovers.

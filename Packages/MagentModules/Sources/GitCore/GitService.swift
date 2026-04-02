@@ -877,6 +877,24 @@ public final class GitService: Sendable {
         )
     }
 
+    /// Discards a file (or directory) change from the working tree.
+    ///
+    /// Staged and unstaged tracked paths are reset to HEAD. Untracked paths are removed.
+    public func discardFile(worktreePath: String, relativePath: String, workingStatus: FileWorkingStatus) async -> Bool {
+        let command: String
+        switch workingStatus {
+        case .untracked:
+            command = "git clean -fd -- \(shellQuote(relativePath))"
+        case .staged, .unstaged:
+            command = "git restore --staged --worktree -- \(shellQuote(relativePath))"
+        case .committed:
+            return false
+        }
+
+        let result = await ShellExecutor.execute(command, workingDirectory: worktreePath)
+        return result.exitCode == 0
+    }
+
     /// Returns the full unified diff output for a single commit.
     public func commitDiffContent(worktreePath: String, commitHash: String) async -> String? {
         let diffResult = await ShellExecutor.execute(

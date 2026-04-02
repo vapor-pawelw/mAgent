@@ -26,6 +26,7 @@ private final class DiffFileRowView: NSView {
     var onShowInFinder: ((String) -> Void)?
     var onCopyFilename: ((String) -> Void)?
     var onStageToggle: ((String) -> Void)?
+    var onDiscard: ((String, FileWorkingStatus) -> Void)?
 
     var isFileSelected: Bool = false {
         didSet {
@@ -75,6 +76,11 @@ private final class DiffFileRowView: NSView {
             let stageItem = NSMenuItem(title: stageTitle, action: #selector(stageToggleFromMenu), keyEquivalent: "")
             stageItem.target = self
             menu.addItem(stageItem)
+
+            let discardItem = NSMenuItem(title: "Discard Changes", action: #selector(discardFromMenu), keyEquivalent: "")
+            discardItem.target = self
+            discardItem.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: "Discard changes")
+            menu.addItem(discardItem)
         }
 
         return menu
@@ -91,6 +97,10 @@ private final class DiffFileRowView: NSView {
 
     @objc private func stageToggleFromMenu() {
         onStageToggle?(filePath)
+    }
+
+    @objc private func discardFromMenu() {
+        onDiscard?(filePath, workingStatus)
     }
 }
 
@@ -675,6 +685,37 @@ final class DiffPanelView: NSView {
         }
     }
 
+    private func discardChanges(path: String, currentStatus: FileWorkingStatus) {
+        guard let worktreePath else { return }
+        let targetDescription = currentStatus == .untracked ? "remove this untracked file" : "discard the tracked file changes"
+        let alert = NSAlert()
+        alert.messageText = "Discard Changes?"
+        alert.informativeText = currentStatus == .untracked
+            ? "This will permanently remove \(path). This cannot be undone."
+            : "This will permanently discard the changes to \(path). This cannot be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        Task {
+            let didDiscard = await GitService.shared.discardFile(
+                worktreePath: worktreePath,
+                relativePath: path,
+                workingStatus: currentStatus
+            )
+            if didDiscard {
+                onRefreshRequested?()
+            } else {
+                BannerManager.shared.show(
+                    message: "Could not \(targetDescription) for \(path).",
+                    style: .warning
+                )
+            }
+        }
+    }
+
     // MARK: - Commit Selection
 
     private func selectCommit(_ hash: String?) {
@@ -1127,6 +1168,9 @@ final class DiffPanelView: NSView {
         }
         container.onStageToggle = { [weak self] path in
             self?.toggleStage(path: path, currentStatus: entry.workingStatus)
+        }
+        container.onDiscard = { [weak self] path, status in
+            self?.discardChanges(path: path, currentStatus: status)
         }
 
         let displayPath = entry.relativePath.hasSuffix("/") ? String(entry.relativePath.dropLast()) : entry.relativePath

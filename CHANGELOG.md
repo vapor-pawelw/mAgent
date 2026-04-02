@@ -7,6 +7,9 @@ All notable changes to this project will be documented in this file.
 ### General
 - Updated app icon.
 
+### Thread
+- Added a discard action to the CHANGES panel file context menu for non-committed rows, with a warning confirmation before tracked changes are reset or untracked files are removed.
+
 ### CLI
 - `current-thread` now returns the resolved base branch in the response.
 - New `set-base-branch` command to override a thread's base branch.
