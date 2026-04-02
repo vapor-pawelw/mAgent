@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### General
+- External web actions can now open in either the default browser or a Magent web tab by default, configurable in `Settings > General > Links`. PR/Jira buttons and matching thread menu actions follow that preference, while middle-click still opens the opposite destination as a quick override.
+- Terminal links now respect the same in-app web flow for HTTP(S) targets: `Cmd`-click follows your default link destination, and `Cmd`+middle-click explicitly opens the link in a Magent web tab.
+
 ### Diff Viewer
 - Discarding a file in the CHANGES panel now refreshes the panel immediately, and queues a follow-up refresh if another git refresh is already in progress so the file state does not stay stale.
 
