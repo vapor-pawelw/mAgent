@@ -263,7 +263,11 @@ extension ThreadManager {
             }
 
             let firstTabDisplayName = useAgentCommand
-                ? TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
+                ? TmuxSessionNaming.defaultTabDisplayName(
+                    for: selectedAgentType,
+                    modelLabel: resolvedModelLabel(for: selectedAgentType, modelId: modelId),
+                    reasoningLevel: reasoningLevel
+                )
                 : "Terminal"
             let firstTabSlug = Self.sanitizeForTmux(firstTabDisplayName)
             let tmuxSessionName = Self.buildSessionName(repoSlug: repoSlug, threadName: name, tabSlug: firstTabSlug)
@@ -445,7 +449,11 @@ extension ThreadManager {
         let selectedAgentType = resolveAgentType(for: project.id, requestedAgentType: nil, settings: settings)
 
         let repoSlug = Self.repoSlug(from: project.name)
-        let firstTabDisplayName = TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
+        let firstTabDisplayName = TmuxSessionNaming.defaultTabDisplayName(
+            for: selectedAgentType,
+            modelLabel: resolvedModelLabel(for: selectedAgentType, modelId: nil),
+            reasoningLevel: nil
+        )
         let firstTabSlug = Self.sanitizeForTmux(firstTabDisplayName)
         let tmuxSessionName = Self.buildSessionName(repoSlug: repoSlug, threadName: nil, tabSlug: firstTabSlug)
 

@@ -42,6 +42,36 @@ public enum TmuxSessionNaming {
         }
     }
 
+    public static func defaultTabDisplayName(
+        for agentType: AgentType?,
+        modelLabel: String? = nil,
+        reasoningLevel: String? = nil
+    ) -> String {
+        var parts = [defaultTabDisplayName(for: agentType)]
+        if let modelLabel = normalizedModelLabel(modelLabel, for: agentType) {
+            parts.append("(\(modelLabel))")
+        }
+        if let reasoningLevel, !reasoningLevel.isEmpty {
+            parts.append("(\(reasoningLevel.capitalized))")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    public static func normalizedModelLabel(_ modelLabel: String?, for agentType: AgentType?) -> String? {
+        guard let modelLabel else { return nil }
+        let trimmed = modelLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard agentType == .codex else { return trimmed }
+
+        let stripped = trimmed
+            .replacingOccurrences(of: #"(?i)\bgpt\b"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"(?i)\b\d+(\.\d+)*\b"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return stripped.isEmpty ? nil : stripped
+    }
+
     public static func isMagentSession(_ name: String) -> Bool {
         name.hasPrefix("ma-") || name.hasPrefix("magent-")
     }

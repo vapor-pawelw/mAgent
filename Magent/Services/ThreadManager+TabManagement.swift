@@ -69,7 +69,11 @@ extension ThreadManager {
                     modelId: modelId,
                     reasoningLevel: reasoningLevel
                 )
-                requestedTabBaseName = TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
+                requestedTabBaseName = TmuxSessionNaming.defaultTabDisplayName(
+                    for: selectedAgentType,
+                    modelLabel: resolvedModelLabel(for: selectedAgentType, modelId: modelId),
+                    reasoningLevel: reasoningLevel
+                )
             } else {
                 selectedAgentType = nil
                 startCmd = terminalStartCommand(
@@ -123,7 +127,11 @@ extension ThreadManager {
                     modelId: modelId,
                     reasoningLevel: reasoningLevel
                 )
-                requestedTabBaseName = TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
+                requestedTabBaseName = TmuxSessionNaming.defaultTabDisplayName(
+                    for: selectedAgentType,
+                    modelLabel: resolvedModelLabel(for: selectedAgentType, modelId: modelId),
+                    reasoningLevel: reasoningLevel
+                )
             } else {
                 startCmd = terminalStartCommand(
                     envExports: shellExportCommand(for: baseSessionEnvironment),

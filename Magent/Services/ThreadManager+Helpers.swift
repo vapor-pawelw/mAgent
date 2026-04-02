@@ -42,6 +42,13 @@ extension ThreadManager {
             .joined(separator: " && ")
     }
 
+    func resolvedModelLabel(for agentType: AgentType?, modelId: String?) -> String? {
+        guard let agentType, let modelId else { return nil }
+        return AgentModelsService.shared.config(for: agentType)?
+            .models.first(where: { $0.id == modelId })?
+            .label
+    }
+
     func applySessionEnvironmentVariables(
         sessionName: String,
         environmentVariables: [(String, String)]
