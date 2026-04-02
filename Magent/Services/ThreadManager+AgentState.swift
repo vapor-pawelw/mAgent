@@ -5,6 +5,12 @@ import MagentCore
 
 extension ThreadManager {
 
+    private struct CompletionProcessingResult {
+        var changed = false
+        var changedThreadIds = Set<UUID>()
+        var newlyUnreadThreadIds = Set<UUID>()
+    }
+
     // MARK: - Dead Session Detection
 
     func checkForDeadSessions() async {
@@ -74,58 +80,21 @@ extension ThreadManager {
         let now = Date()
         let settings = persistence.loadSettings()
         let playSound = settings.playSoundForAgentCompletion
-        let orderedUniqueSessions = sessions.reduce(into: [String]()) { result, session in
-            if !result.contains(session) {
-                result.append(session)
-            }
-        }
+        let orderedUniqueSessions = deduplicatedSessions(sessions)
+        let result = processCompletedAgentSessions(
+            orderedUniqueSessions,
+            completedAt: now,
+            settings: settings,
+            playSound: playSound,
+            shouldApplyRecentCompletionCooldown: true
+        )
 
-        var changed = false
-        var changedThreadIds = Set<UUID>()
-        var newlyUnreadThreadIds = Set<UUID>()
-
-        for session in orderedUniqueSessions {
-            if let previous = recentBellBySession[session], now.timeIntervalSince(previous) < 1.0 {
-                continue
-            }
-            recentBellBySession[session] = now
-
-            guard let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }) else {
-                continue
-            }
-
-            threads[index].lastAgentCompletionAt = now
-            if settings.autoReorderThreadsOnAgentCompletion {
-                bumpThreadToTopOfSection(threads[index].id)
-            }
-            threads[index].busySessions.remove(session)
-            threads[index].waitingForInputSessions.remove(session)
-            threads[index].hasUnsubmittedInputSessions.remove(session)
-            notifiedWaitingSessions.remove(session)
-
-            let isActiveThread = threads[index].id == activeThreadId
-            let isActiveTab = isActiveThread && threads[index].lastSelectedTabIdentifier == session
-            if !isActiveTab {
-                let hadUnreadCompletion = threads[index].hasUnreadAgentCompletion
-                threads[index].unreadCompletionSessions.insert(session)
-                if !hadUnreadCompletion {
-                    newlyUnreadThreadIds.insert(threads[index].id)
-                }
-            }
-            changed = true
-            changedThreadIds.insert(threads[index].id)
-            scheduleAgentConversationIDRefresh(threadId: threads[index].id, sessionName: session)
-
-            let projectName = settings.projects.first(where: { $0.id == threads[index].projectId })?.name ?? "Project"
-            sendAgentCompletionNotification(for: threads[index], projectName: projectName, playSound: playSound, sessionName: session)
-        }
-
-        guard changed else { return }
+        guard result.changed else { return }
         persistence.debouncedSaveActiveThreads(threads)
 
         // Refresh dirty and delivered states only for threads that just completed,
         // not the full scan — avoids running git-status on every thread on each bell.
-        for threadId in changedThreadIds {
+        for threadId in result.changedThreadIds {
             await refreshDirtyState(for: threadId)
             await refreshDeliveredState(for: threadId)
         }
@@ -148,11 +117,11 @@ extension ThreadManager {
 
         await MainActor.run {
             updateDockBadge()
-            if !newlyUnreadThreadIds.isEmpty {
+            if !result.newlyUnreadThreadIds.isEmpty {
                 requestDockBounceForUnreadCompletionIfNeeded()
             }
             delegate?.threadManager(self, didUpdateThreads: threads)
-            for threadId in changedThreadIds {
+            for threadId in result.changedThreadIds {
                 if let thread = threads.first(where: { $0.id == threadId }) {
                     postBusySessionsChangedNotification(for: thread)
                 }
@@ -170,6 +139,70 @@ extension ThreadManager {
                 }
             }
         }
+    }
+
+    private func deduplicatedSessions(_ sessions: [String]) -> [String] {
+        sessions.reduce(into: [String]()) { result, session in
+            if !result.contains(session) {
+                result.append(session)
+            }
+        }
+    }
+
+    @discardableResult
+    private func processCompletedAgentSessions(
+        _ sessions: [String],
+        completedAt: Date,
+        settings: AppSettings,
+        playSound: Bool,
+        shouldApplyRecentCompletionCooldown: Bool
+    ) -> CompletionProcessingResult {
+        var result = CompletionProcessingResult()
+
+        for session in sessions {
+            if shouldApplyRecentCompletionCooldown,
+               let previous = recentBellBySession[session],
+               completedAt.timeIntervalSince(previous) < 1.0 {
+                continue
+            }
+            recentBellBySession[session] = completedAt
+
+            guard let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }) else {
+                continue
+            }
+
+            threads[index].lastAgentCompletionAt = completedAt
+            if settings.autoReorderThreadsOnAgentCompletion {
+                bumpThreadToTopOfSection(threads[index].id)
+            }
+            threads[index].busySessions.remove(session)
+            threads[index].waitingForInputSessions.remove(session)
+            threads[index].hasUnsubmittedInputSessions.remove(session)
+            notifiedWaitingSessions.remove(session)
+
+            let isActiveThread = threads[index].id == activeThreadId
+            let isActiveTab = isActiveThread && threads[index].lastSelectedTabIdentifier == session
+            if !isActiveTab {
+                let hadUnreadCompletion = threads[index].hasUnreadAgentCompletion
+                threads[index].unreadCompletionSessions.insert(session)
+                if !hadUnreadCompletion {
+                    result.newlyUnreadThreadIds.insert(threads[index].id)
+                }
+            }
+            result.changed = true
+            result.changedThreadIds.insert(threads[index].id)
+            scheduleAgentConversationIDRefresh(threadId: threads[index].id, sessionName: session)
+
+            let projectName = settings.projects.first(where: { $0.id == threads[index].projectId })?.name ?? "Project"
+            sendAgentCompletionNotification(
+                for: threads[index],
+                projectName: projectName,
+                playSound: playSound,
+                sessionName: session
+            )
+        }
+
+        return result
     }
 
     private func sendAgentCompletionNotification(for thread: MagentThread, projectName: String, playSound: Bool, sessionName: String) {
@@ -216,6 +249,7 @@ extension ThreadManager {
         var busyChangedThreadIds = Set<UUID>()
         var rateLimitChangedThreadIds = Set<UUID>()
         var agentsWithVisibleRateLimitPrompt = Set<AgentType>()
+        var implicitCompletionSessions: [String] = []
 
         func publishBusySyncChangesIfNeeded() async {
             // Tick debounce timers for ALL threads every pass so pending
@@ -309,8 +343,9 @@ extension ThreadManager {
                     // Codex: busy only while "• esc to interrupt)" is visible in the latest scope
                     let isBusy = await paneShowsEscToInterrupt(sessionName: session)
                     guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                    let wasBusy = threads[i].busySessions.contains(session)
                     if isBusy {
-                        if !threads[i].busySessions.contains(session) {
+                        if !wasBusy {
                             threads[i].busySessions.insert(session)
                             changed = true
                             busyChangedThreadIds.insert(threads[i].id)
@@ -320,18 +355,25 @@ extension ThreadManager {
                             rateLimitChangedThreadIds.formUnion(recoveredIds)
                             changed = true
                         }
-                    } else if threads[i].busySessions.contains(session) {
-                        threads[i].busySessions.remove(session)
-                        changed = true
-                        busyChangedThreadIds.insert(threads[i].id)
-                    }
-                    // When Codex is idle, check for unsubmitted typed input.
-                    if !isBusy {
+                    } else {
+                        if wasBusy {
+                            threads[i].busySessions.remove(session)
+                            changed = true
+                            busyChangedThreadIds.insert(threads[i].id)
+                        }
+
+                        // When Codex is idle, check for unsubmitted typed input.
                         if await syncUnsubmittedInputState(threadId: threadId, sessionName: session, agentType: .codex) {
                             changed = true
                             busyChangedThreadIds.insert(threadId)
                         }
-                    } else {
+                        guard let ci = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                        let hasUnsubmittedInput = threads[ci].hasUnsubmittedInputSessions.contains(session)
+                        if wasBusy && !hasUnsubmittedInput {
+                            implicitCompletionSessions.append(session)
+                        }
+                    }
+                    if isBusy {
                         // Agent is busy — clear any stale unsubmitted-input flag.
                         if let ci = threads.firstIndex(where: { $0.id == threadId }),
                            threads[ci].hasUnsubmittedInputSessions.contains(session) {
@@ -474,6 +516,54 @@ extension ThreadManager {
         for thread in threads where !thread.isArchived {
             for session in thread.busySessions {
                 sessionLastBusyAt[session] = busyNow
+            }
+        }
+
+        let deduplicatedImplicitCompletionSessions = deduplicatedSessions(implicitCompletionSessions)
+        let settings = persistence.loadSettings()
+        let implicitCompletionResult = processCompletedAgentSessions(
+            deduplicatedImplicitCompletionSessions,
+            completedAt: Date(),
+            settings: settings,
+            playSound: settings.playSoundForAgentCompletion,
+            shouldApplyRecentCompletionCooldown: true
+        )
+        if implicitCompletionResult.changed {
+            changed = true
+            busyChangedThreadIds.formUnion(implicitCompletionResult.changedThreadIds)
+            for threadId in implicitCompletionResult.changedThreadIds {
+                await refreshDirtyState(for: threadId)
+                await refreshDeliveredState(for: threadId)
+            }
+
+            for session in deduplicatedImplicitCompletionSessions {
+                if let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }),
+                   !threads[index].didAutoRenameFromFirstPrompt,
+                   !threads[index].isMain {
+                    let threadId = threads[index].id
+                    Task {
+                        await triggerAutoRenameFromBellIfNeeded(threadId: threadId, sessionName: session)
+                    }
+                }
+            }
+
+            await MainActor.run {
+                updateDockBadge()
+                if !implicitCompletionResult.newlyUnreadThreadIds.isEmpty {
+                    requestDockBounceForUnreadCompletionIfNeeded()
+                }
+                for session in deduplicatedImplicitCompletionSessions {
+                    if let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }) {
+                        NotificationCenter.default.post(
+                            name: .magentAgentCompletionDetected,
+                            object: self,
+                            userInfo: [
+                                "threadId": threads[index].id,
+                                "unreadSessions": threads[index].unreadCompletionSessions
+                            ]
+                        )
+                    }
+                }
             }
         }
 
