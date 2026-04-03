@@ -70,8 +70,12 @@ extension ThreadManager {
     func checkForAgentCompletions() async {
         let sessions = await tmux.consumeAgentCompletionSessions()
         guard !sessions.isEmpty else { return }
+        await processAgentCompletionSessions(sessions)
+    }
 
-        let now = Date()
+    private func processAgentCompletionSessions(_ sessions: [String], now: Date = Date()) async {
+        guard !sessions.isEmpty else { return }
+
         let settings = persistence.loadSettings()
         let playSound = settings.playSoundForAgentCompletion
         let orderedUniqueSessions = sessions.reduce(into: [String]()) { result, session in
@@ -309,8 +313,9 @@ extension ThreadManager {
                     // Codex: busy only while "• esc to interrupt)" is visible in the latest scope
                     let isBusy = await paneShowsEscToInterrupt(sessionName: session)
                     guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                    let wasBusy = threads[i].busySessions.contains(session)
                     if isBusy {
-                        if !threads[i].busySessions.contains(session) {
+                        if !wasBusy {
                             threads[i].busySessions.insert(session)
                             changed = true
                             busyChangedThreadIds.insert(threads[i].id)
@@ -320,7 +325,7 @@ extension ThreadManager {
                             rateLimitChangedThreadIds.formUnion(recoveredIds)
                             changed = true
                         }
-                    } else if threads[i].busySessions.contains(session) {
+                    } else if wasBusy {
                         threads[i].busySessions.remove(session)
                         changed = true
                         busyChangedThreadIds.insert(threads[i].id)
@@ -339,6 +344,13 @@ extension ThreadManager {
                             changed = true
                             busyChangedThreadIds.insert(threadId)
                         }
+                    }
+
+                    if wasBusy
+                        && !isBusy
+                        && !threads[i].waitingForInputSessions.contains(session)
+                        && threads[i].rateLimitedSessions[session] == nil {
+                        _ = await processAgentCompletionSessions([session])
                     }
 
                 case .claude?:

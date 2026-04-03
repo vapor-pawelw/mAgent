@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Sessions
+- Agent completion tracking no longer relies on tmux `pipe-pane` watchers by default. Claude uses the injected Stop hook and Codex completion is inferred from busy→idle transitions, reducing tmux zombie buildup from long-lived watcher children.
+
+### Status Bar
+- The session count popover now shows detected tmux defunct-process counts and offers a manual `Restart tmux + Recover` action alongside idle-session cleanup.
+
 ### Diff Viewer
 - Discarding a file in the CHANGES panel now refreshes the panel immediately, and queues a follow-up refresh if another git refresh is already in progress so the file state does not stay stale.
 
