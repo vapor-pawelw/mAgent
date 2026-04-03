@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Agents
+- "Continue in" and the forward button now show an optional "Extra context" field, letting users provide priority instructions that the receiving agent sees alongside the transferred session context.
 - The reasoning/thinking level selection is now remembered per model instead of per agent type, so switching between e.g. Opus and Sonnet restores each model's last-used reasoning level independently.
 - Archived worktree names can now be safely reused without reviving old Claude/Codex conversations from the last thread that used that path.
 - The thread Review menu now puts the project default agent first and labels it `Default`, removing the separate `Use Project Default` entry.

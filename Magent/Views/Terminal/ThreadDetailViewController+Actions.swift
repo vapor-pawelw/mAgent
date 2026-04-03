@@ -716,16 +716,19 @@ extension ThreadDetailViewController {
             autoGenerateHint: nil,
             terminalInjectionPrefill: nil,
             agentContextPrefill: nil,
-            showPromptInputArea: false,
-            showDraftCheckbox: false
+            showPromptInputArea: true,
+            showDraftCheckbox: false,
+            promptLabelOverride: "Extra context"
         )
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
             guard let self, let result, let agentType = result.agentType else { return }
             let switchToTab = PersistenceService.shared.loadSettings().switchToNewlyCreatedTab
+            let extraContext = result.prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
             self.continueTabInAgent(
                 at: index,
                 targetAgent: agentType,
+                extraContext: extraContext?.isEmpty == false ? extraContext : nil,
                 customTitle: result.tabTitle,
                 modelId: result.modelId,
                 reasoningLevel: result.reasoningLevel,
@@ -1173,6 +1176,7 @@ extension ThreadDetailViewController {
     func continueTabInAgent(
         at index: Int,
         targetAgent: AgentType,
+        extraContext: String? = nil,
         customTitle: String? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
@@ -1217,7 +1221,7 @@ extension ThreadDetailViewController {
                 return
             }
 
-            let prompt = ContextExporter.transferPrompt(contextFilePath: contextPath)
+            let prompt = ContextExporter.transferPrompt(contextFilePath: contextPath, extraContext: extraContext)
 
             await MainActor.run {
                 self.addTab(

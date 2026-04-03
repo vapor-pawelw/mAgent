@@ -333,6 +333,8 @@ struct AgentLaunchSheetConfig {
     let showPromptInputArea: Bool
     /// When true, a "Draft" checkbox is shown (only enabled for agent mode).
     let showDraftCheckbox: Bool
+    /// When non-nil, overrides the default prompt label text (e.g. "Extra context" instead of "Initial prompt").
+    let promptLabelOverride: String?
 
     init(
         title: String,
@@ -355,7 +357,8 @@ struct AgentLaunchSheetConfig {
         baseBranchRepoPath: String? = nil,
         defaultBranchName: String? = nil,
         showPromptInputArea: Bool = true,
-        showDraftCheckbox: Bool = false
+        showDraftCheckbox: Bool = false,
+        promptLabelOverride: String? = nil
     ) {
         self.title = title
         self.acceptButtonTitle = acceptButtonTitle
@@ -378,6 +381,7 @@ struct AgentLaunchSheetConfig {
         self.defaultBranchName = defaultBranchName
         self.showPromptInputArea = showPromptInputArea
         self.showDraftCheckbox = showDraftCheckbox
+        self.promptLabelOverride = promptLabelOverride
     }
 }
 
@@ -1284,6 +1288,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     // MARK: - Draft
 
     private var promptLabelText: String {
+        if let override = config.promptLabelOverride { return override }
         switch currentMode {
         case "terminal": return "Initial command"
         case "web": return "Initial URL"

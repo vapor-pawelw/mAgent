@@ -185,7 +185,12 @@ public enum ContextExporter {
     // MARK: - Transfer Prompt
 
     /// Builds the initial prompt for the receiving agent.
-    public static func transferPrompt(contextFilePath: String) -> String {
-        return "Read \(contextFilePath) for context from the previous session. Continue where it left off. If work was interrupted or unfinished, resume and complete it first. Report progress and results directly. Ask what to do next only if no clear unfinished task remains."
+    /// - Parameters:
+    ///   - contextFilePath: Path to the context transfer markdown file.
+    ///   - extraContext: Optional priority instructions from the user, prepended to the prompt.
+    public static func transferPrompt(contextFilePath: String, extraContext: String? = nil) -> String {
+        let base = "Read \(contextFilePath) for context from the previous session. Continue where it left off. If work was interrupted or unfinished, resume and complete it first. Report progress and results directly. Ask what to do next only if no clear unfinished task remains."
+        guard let extra = extraContext, !extra.isEmpty else { return base }
+        return "\(base)\n\nUser's additional instructions (prioritize over the above): \(extra)"
     }
 }

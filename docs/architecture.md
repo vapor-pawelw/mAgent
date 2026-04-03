@@ -247,7 +247,7 @@ Agent-backed terminal tabs may expose a `Resume Agent Session in New Tab` contex
 - Route resumed-duplicate tabs through the normal `addTab(...)` flow with an explicit `resumeSessionID` so startup, trust handling, overlay behavior, and persisted session metadata stay consistent with every other agent tab.
 - Persist the copied resume ID onto the new tab's `sessionConversationIDs` entry immediately so later recreation/reopen flows preserve the resumed conversation even before a subsequent refresh discovers the same ID again.
 
-The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu. That sheet is agent-only, so it keeps the model picker, title field, and model/reasoning controls while hiding the initial prompt box and the draft checkbox.
+The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu. That sheet is agent-only, so it keeps the model picker, title field, model/reasoning controls, and an optional "Extra context" prompt field. The draft checkbox is hidden. When the user provides extra context, it is appended to the transfer prompt as priority instructions for the receiving agent; when left empty, the transfer prompt is unchanged.
 
 ### 4.10 Persistence Backup + Restore Contract
 
