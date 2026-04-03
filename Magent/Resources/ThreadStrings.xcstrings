@@ -837,6 +837,17 @@
         }
       }
     },
+    "threadRenameMenuTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename"
+          }
+        }
+      }
+    },
     "threadAppearanceMenuTitle": {
       "extractionState": "manual",
       "localizations": {

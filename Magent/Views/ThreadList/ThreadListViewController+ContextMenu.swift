@@ -45,23 +45,26 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
-        // Rename with prompt (submenu: recent prompts + custom)
-        let renamePromptItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameWithPrompt), action: nil, keyEquivalent: "")
-        renamePromptItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
-        renamePromptItem.submenu = buildRenameWithPromptSubmenu(for: thread)
-        menu.addItem(renamePromptItem)
-
-        // Rename branch
-        let renameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameBranch), action: #selector(renameThread(_:)), keyEquivalent: "")
-        renameItem.target = self
+        // Rename (submenu: prompt-based rename, description, branch name)
+        let renameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameMenuTitle), action: nil, keyEquivalent: "")
         renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
-        renameItem.representedObject = thread
+        renameItem.submenu = buildRenameSubmenu(for: thread)
         menu.addItem(renameItem)
 
-        let appearanceItem = NSMenuItem(title: String(localized: .ThreadStrings.threadAppearanceMenuTitle), action: nil, keyEquivalent: "")
-        appearanceItem.image = NSImage(systemSymbolName: "paintbrush", accessibilityDescription: nil)
-        appearanceItem.submenu = buildAppearanceSubmenu(for: thread)
-        menu.addItem(appearanceItem)
+        // Icon
+        let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadIconMenuTitle), action: nil, keyEquivalent: "")
+        iconItem.image = NSImage(
+            systemSymbolName: thread.threadIcon.symbolName,
+            accessibilityDescription: thread.threadIcon.accessibilityDescription
+        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
+        iconItem.submenu = buildThreadIconSubmenu(for: thread)
+        menu.addItem(iconItem)
+
+        // Sign
+        let signItem = NSMenuItem(title: "Sign", action: nil, keyEquivalent: "")
+        signItem.image = NSImage(systemSymbolName: "flag.fill", accessibilityDescription: "Sign emoji")
+        signItem.submenu = buildSignEmojiSubmenu(for: thread)
+        menu.addItem(signItem)
 
         // Move to... submenu
         let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
@@ -218,27 +221,24 @@ extension ThreadListViewController {
         return submenu
     }
 
-    private func buildAppearanceSubmenu(for thread: MagentThread) -> NSMenu {
-        let submenu = NSMenu()
+    private func buildRenameSubmenu(for thread: MagentThread) -> NSMenu {
+        let submenu = buildRenameWithPromptSubmenu(for: thread)
 
+        submenu.addItem(.separator())
+
+        // Set description
         let descriptionItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetDescription), action: #selector(setThreadDescription(_:)), keyEquivalent: "")
         descriptionItem.target = self
         descriptionItem.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
         descriptionItem.representedObject = thread
         submenu.addItem(descriptionItem)
 
-        let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadIconMenuTitle), action: nil, keyEquivalent: "")
-        iconItem.image = NSImage(
-            systemSymbolName: thread.threadIcon.symbolName,
-            accessibilityDescription: thread.threadIcon.accessibilityDescription
-        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
-        iconItem.submenu = buildThreadIconSubmenu(for: thread)
-        submenu.addItem(iconItem)
-
-        let signItem = NSMenuItem(title: "Sign", action: nil, keyEquivalent: "")
-        signItem.image = NSImage(systemSymbolName: "flag.fill", accessibilityDescription: "Sign emoji")
-        signItem.submenu = buildSignEmojiSubmenu(for: thread)
-        submenu.addItem(signItem)
+        // Rename branch
+        let branchItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameBranch), action: #selector(renameThread(_:)), keyEquivalent: "")
+        branchItem.target = self
+        branchItem.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)
+        branchItem.representedObject = thread
+        submenu.addItem(branchItem)
 
         return submenu
     }
