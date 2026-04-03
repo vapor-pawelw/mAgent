@@ -1104,19 +1104,18 @@ extension ThreadDetailViewController {
 
         menu.addItem(.separator())
 
-        if let defaultAgentType {
-            let defaultTitle = "Use Project Default (\(reviewMenuTitle(for: defaultAgentType, usesMaxReasoning: usesMaxReasoning)))"
-            let item = NSMenuItem(title: defaultTitle, action: #selector(reviewMenuItemTapped(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = [
-                "mode": "default",
-                "reviewReasoningMode": usesMaxReasoning ? "max" : "high",
-            ]
-            menu.addItem(item)
+        var orderedAgents = activeAgents
+        if let defaultAgentType, let idx = orderedAgents.firstIndex(of: defaultAgentType) {
+            orderedAgents.remove(at: idx)
+            orderedAgents.insert(defaultAgentType, at: 0)
         }
 
-        for agent in activeAgents {
-            let item = NSMenuItem(title: reviewMenuTitle(for: agent, usesMaxReasoning: usesMaxReasoning), action: #selector(reviewMenuItemTapped(_:)), keyEquivalent: "")
+        for agent in orderedAgents {
+            let isDefault = agent == defaultAgentType
+            let title = isDefault
+                ? "\(reviewMenuTitle(for: agent, usesMaxReasoning: usesMaxReasoning)) (Default)"
+                : reviewMenuTitle(for: agent, usesMaxReasoning: usesMaxReasoning)
+            let item = NSMenuItem(title: title, action: #selector(reviewMenuItemTapped(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = [
                 "mode": "agent",
