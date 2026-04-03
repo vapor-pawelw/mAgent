@@ -407,6 +407,8 @@ Each tmux session created by Magent is tagged with `MAGENT_THREAD_ID` (the ownin
 - `ThreadManager+SessionRecreation.swift` — session recreation/recovery
 
 **Why this matters**: Worktree names are reused when a thread is archived and a new thread is opened on the same branch/worktree name. Without ownership tracking, the old stale tmux session would be adopted by the new thread, restoring the previous agent session. The fix in `isValidExistingSession(...)` checks `MAGENT_THREAD_ID` first; if absent (old sessions), it falls back to comparing `session_created` timestamp against `thread.createdAt` — sessions older than the thread are rejected.
+
+Agent resume metadata needs the same freshness guard. Claude and Codex both key resumable conversations by worktree path/cwd, so a newly created thread that reuses an archived worktree name must not adopt a conversation whose last activity predates that thread's `createdAt`. Resume-ID refresh should therefore ignore historical conversations for the same path unless their timestamp is at or after the current thread creation window.
 ## ThreadManager Concurrency Contract
 
 `ThreadManager` is a plain `final class` (not an actor). Its mutable `threads: [MagentThread]` array must only be mutated on the **MainActor** to avoid data races.

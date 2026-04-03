@@ -999,12 +999,16 @@ final class ThreadDetailViewController: NSViewController {
         var envParts = [
             "export MAGENT_PROJECT_PATH=\(projectPath)",
             "export MAGENT_PROJECT_NAME=\(projectName)",
+            "export MAGENT_THREAD_ID=\(resolvedThread.id.uuidString)",
         ]
         if resolvedThread.isMain {
             envParts.append("export MAGENT_WORKTREE_NAME=main")
         } else {
             envParts.append("export MAGENT_WORKTREE_PATH=\(wd)")
             envParts.append("export MAGENT_WORKTREE_NAME=\(resolvedThread.name)")
+        }
+        if let selectedAgentType {
+            envParts.append("export MAGENT_AGENT_TYPE=\(selectedAgentType.rawValue)")
         }
         let envExports = envParts.joined(separator: " && ")
 

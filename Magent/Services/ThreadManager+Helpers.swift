@@ -1123,13 +1123,20 @@ extension ThreadManager {
 
         let agentType = agentType(for: threads[threadIndex], sessionName: sessionName)
         let worktreePath = threads[threadIndex].worktreePath
+        let minimumCreatedAt = threads[threadIndex].createdAt.addingTimeInterval(-2)
 
         let conversationID: String?
         switch agentType {
         case .claude:
-            conversationID = latestClaudeConversationID(worktreePath: worktreePath)
+            conversationID = latestClaudeConversationID(
+                worktreePath: worktreePath,
+                notOlderThan: minimumCreatedAt
+            )
         case .codex:
-            conversationID = await latestCodexConversationID(worktreePath: worktreePath)
+            conversationID = await latestCodexConversationID(
+                worktreePath: worktreePath,
+                notOlderThan: minimumCreatedAt
+            )
         case .custom, .none:
             conversationID = nil
         }
@@ -1141,7 +1148,10 @@ extension ThreadManager {
         try? persistence.saveActiveThreads(threads)
     }
 
-    private func latestClaudeConversationID(worktreePath: String) -> String? {
+    private func latestClaudeConversationID(
+        worktreePath: String,
+        notOlderThan minimumCreatedAt: Date? = nil
+    ) -> String? {
         struct ClaudeSessionIndex: Decodable {
             struct Entry: Decodable {
                 let sessionId: String
@@ -1164,6 +1174,18 @@ extension ThreadManager {
         let isoPlain = ISO8601DateFormatter()
         isoPlain.formatOptions = [.withInternetDateTime]
 
+        func entryTimestamp(_ entry: ClaudeSessionIndex.Entry) -> Date? {
+            if let modified = entry.modified {
+                if let date = isoWithFractional.date(from: modified) ?? isoPlain.date(from: modified) {
+                    return date
+                }
+            }
+            if let mtime = entry.fileMtime {
+                return Date(timeIntervalSince1970: mtime / 1000.0)
+            }
+            return nil
+        }
+
         func readIndex(path: String) -> String? {
             guard let data = FileManager.default.contents(atPath: path),
                   let index = try? JSONDecoder().decode(ClaudeSessionIndex.self, from: data) else {
@@ -1178,20 +1200,14 @@ extension ThreadManager {
             guard !entries.isEmpty else { return nil }
 
             let sorted = entries.sorted { lhs, rhs in
-                func score(_ e: ClaudeSessionIndex.Entry) -> Double {
-                    if let modified = e.modified {
-                        if let date = isoWithFractional.date(from: modified) ?? isoPlain.date(from: modified) {
-                            return date.timeIntervalSince1970
-                        }
-                    }
-                    if let mtime = e.fileMtime {
-                        return mtime / 1000.0
-                    }
-                    return 0
-                }
-                return score(lhs) > score(rhs)
+                (entryTimestamp(lhs) ?? .distantPast) > (entryTimestamp(rhs) ?? .distantPast)
             }
             guard let best = sorted.first, isUUID(best.sessionId) else { return nil }
+            if let minimumCreatedAt,
+               let timestamp = entryTimestamp(best),
+               timestamp < minimumCreatedAt {
+                return nil
+            }
             return best.sessionId
         }
 
@@ -1221,19 +1237,32 @@ extension ThreadManager {
                 }
                 .sorted { $0.mtime > $1.mtime }
             if let best = jsonlFiles.first {
+                if let minimumCreatedAt, best.mtime < minimumCreatedAt {
+                    continue
+                }
                 return best.sessionId
             }
         }
         return nil
     }
 
-    private func latestCodexConversationID(worktreePath: String) async -> String? {
+    private func latestCodexConversationID(
+        worktreePath: String,
+        notOlderThan minimumCreatedAt: Date? = nil
+    ) async -> String? {
         let codexDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
         let dbPath = newestCodexStateDatabase(in: codexDir)
         guard let dbPath else { return nil }
 
         let sqlWorktree = sqlQuoted(worktreePath)
-        let query = "SELECT id FROM threads WHERE cwd = \(sqlWorktree) ORDER BY updated_at DESC LIMIT 1;"
+        let freshnessClause: String
+        if let minimumCreatedAt {
+            let minimumTimestamp = Int(minimumCreatedAt.timeIntervalSince1970.rounded(.down))
+            freshnessClause = " AND updated_at >= \(minimumTimestamp)"
+        } else {
+            freshnessClause = ""
+        }
+        let query = "SELECT id FROM threads WHERE cwd = \(sqlWorktree)\(freshnessClause) ORDER BY updated_at DESC LIMIT 1;"
         let command = "sqlite3 \(ShellExecutor.shellQuote(dbPath)) \(ShellExecutor.shellQuote(query))"
         let result = await ShellExecutor.execute(command)
         guard result.exitCode == 0 else { return nil }

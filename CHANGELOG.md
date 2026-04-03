@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Agents
+- Archived worktree names can now be safely reused without reviving old Claude/Codex conversations from the last thread that used that path.
 - The thread Review menu now puts the project default agent first and labels it `Default`, removing the separate `Use Project Default` entry.
 - Codex threads now mark work as finished more reliably when Codex returns to an idle prompt without emitting a bell, so completion dots and notifications are less likely to be missed.
 - Draft tabs now preserve the model and reasoning selections chosen in the initial prompt sheet, and `Start Agent` later launches with those same settings instead of resetting to Auto.
