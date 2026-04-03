@@ -45,6 +45,7 @@ All notable changes to this project will be documented in this file.
 - New threads now appear at the top of their section instead of the bottom, making the latest work immediately visible without scrolling.
 - The main worktree context menu no longer shows the "Fork Thread" option.
 - Fixed draft threads sometimes restoring as terminal/Codex tabs from stale tmux sessions. Draft-only threads now stay non-terminal until you explicitly start the agent.
+- The thread context menu now groups "Rename with Prompt", "Set Description", and "Rename Branch" under a single "Rename" submenu for better organization.
 
 ### Tab
 - The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu, and the continuation sheet now focuses the receiving agent model, title, and model/reasoning fields without showing a prompt box.
