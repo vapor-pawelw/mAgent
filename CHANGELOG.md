@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
 - The launch sheet's `Draft` checkbox now stays in sync as you edit or reload the sheet, and the choice is remembered with the saved prompt instead of resetting on reopen.
 
 ### Banner
-- Fixed embedded terminal banners ignoring button and dismiss clicks, including recovered unsubmitted prompt banners shown inside a thread.
+- Fixed embedded terminal banners (including recovered unsubmitted prompt banners) ignoring clicks due to a coordinate-space bug in the banner overlay hit-test that shifted the point out of the banner's frame in non-flipped containers.
 - Banner swipe-to-dismiss now ignores taps that start on banner controls, so action buttons remain clickable even on dismissible banners.
 - Banner buttons now accept the first click and hit-test correctly inside the overlay, so banner actions respond immediately when the app is inactive.
 - Top-of-window banners now remain clickable under the transparent title bar instead of occasionally starting a window drag when you click a banner action or dismiss button.

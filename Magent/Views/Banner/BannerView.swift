@@ -110,10 +110,13 @@ final class BannerOverlayView: NSView {
         guard bounds.contains(point) else { return nil }
 
         // Walk front-to-back so overlapping views keep their expected z-order.
+        // hitTest(_:) receives the point in the superview's coordinate space.
+        // Since this overlay fills its parent from (0,0), point is already in
+        // our own coordinate system — pass it directly to children (their
+        // hitTest also expects the point in their superview's coords, i.e. ours).
         for subview in subviews.reversed() {
             guard !subview.isHidden, subview.alphaValue > 0 else { continue }
-            let subviewPoint = subview.convert(point, from: self)
-            if let hit = subview.hitTest(subviewPoint) {
+            if let hit = subview.hitTest(point) {
                 return hit
             }
         }
