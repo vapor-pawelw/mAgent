@@ -236,6 +236,9 @@ extension ThreadManager {
                 pendingThreadIds.remove(threadID)
                 if let idx = threads.firstIndex(where: { $0.id == threadID }) {
                     threads[idx].mergePhase2Setup(from: thread)
+                    // Draft/web threads never go through tmux setup or injectAfterStart,
+                    // so the threadSetupSentinel added at phase 1 must be cleared here.
+                    threads[idx].magentBusySessions.remove(MagentThread.threadSetupSentinel)
                 }
 
                 try persistence.saveActiveThreads(threads)
