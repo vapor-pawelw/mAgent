@@ -436,7 +436,6 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let descriptionField = NSTextField()
     private let branchField = NSTextField()
     private let baseBranchField = NSComboBox()
-    private let baseBranchHintLabel = NSTextField(labelWithString: "")
     private let baseBranchErrorLabel = NSTextField(labelWithString: "")
     private let titleField = NSTextField()
     private let draftCheckbox = NSButton(checkboxWithTitle: "Draft", target: nil, action: nil)
@@ -469,6 +468,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let sectionPicker = NSPopUpButton()
     private var sectionPickerItems: [ThreadSection] = []
     private var sectionPickerRow: NSView?
+    // When section is inlined into the project row, we track its label separately for show/hide.
+    private var sectionPickerLabel: NSTextField?
 
     private enum PickerItem {
         case agent(AgentType, isDefault: Bool)
@@ -687,11 +688,20 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
 
         // Section picker — shown for newThread when the project has sections enabled.
+        // When a project picker is also shown, section is inlined in the same row.
         if case .newThread(let projectId) = config.draftScope {
-            let row = makeSectionPickerRow()
-            stack.addArrangedSubview(row)
-            stack.setCustomSpacing(10, after: row)
-            sectionPickerRow = row
+            if projectPickerItems.count > 1, let projectRow = projectPickerRow as? NSStackView {
+                let label = makeFormLabel("Section")
+                sectionPickerLabel = label
+                projectRow.addArrangedSubview(label)
+                sectionPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
+                projectRow.addArrangedSubview(sectionPicker)
+            } else {
+                let row = makeSectionPickerRow()
+                stack.addArrangedSubview(row)
+                stack.setCustomSpacing(10, after: row)
+                sectionPickerRow = row
+            }
             populateSectionPicker(for: projectId)
         }
 
@@ -837,22 +847,6 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             stack.addArrangedSubview(bbr)
             baseBranchRow = bbr
             baseBranchField.delegate = self
-
-            // Hint label
-            baseBranchHintLabel.stringValue = "Uses default branch (\(defaultBranchPlaceholder)) if empty."
-            baseBranchHintLabel.font = .systemFont(ofSize: 11)
-            baseBranchHintLabel.textColor = NSColor(resource: .textSecondary)
-            baseBranchHintLabel.translatesAutoresizingMaskIntoConstraints = false
-            let hintRow = NSStackView()
-            hintRow.orientation = .horizontal
-            hintRow.spacing = 0
-            hintRow.translatesAutoresizingMaskIntoConstraints = false
-            let hintSpacer = NSView()
-            hintSpacer.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([hintSpacer.widthAnchor.constraint(equalToConstant: Self.formLabelColumnWidth)])
-            hintRow.addArrangedSubview(hintSpacer)
-            hintRow.addArrangedSubview(baseBranchHintLabel)
-            stack.addArrangedSubview(hintRow)
 
             // Error label (hidden by default)
             baseBranchErrorLabel.font = .systemFont(ofSize: 11, weight: .medium)
@@ -1061,7 +1055,6 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         baseBranchField.stringValue = ""
         let defaultBranch = resolvedDefaultBranchName()
         baseBranchField.placeholderString = defaultBranch
-        baseBranchHintLabel.stringValue = "Uses default branch (\(defaultBranch)) if empty."
         clearBaseBranchError()
         populateBaseBranchComboBox(repoPath: project.repoPath)
     }
@@ -1236,7 +1229,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private func populateSectionPicker(for projectId: UUID) {
         sectionPicker.removeAllItems()
         sectionPickerItems = config.sectionsByProjectId[projectId] ?? []
-        sectionPickerRow?.isHidden = sectionPickerItems.isEmpty
+        let hideSectionPicker = sectionPickerItems.isEmpty
+        sectionPickerRow?.isHidden = hideSectionPicker
+        sectionPickerLabel?.isHidden = hideSectionPicker
+        sectionPicker.isHidden = hideSectionPicker
 
         for (i, section) in sectionPickerItems.enumerated() {
             sectionPicker.addItem(withTitle: section.name)
