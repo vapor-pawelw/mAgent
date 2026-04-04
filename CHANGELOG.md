@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.5.1 - 2026-04-04
+
+
 ### Agents
 - "Continue in" and the forward button now show an optional "Extra context" field, letting users provide priority instructions that the receiving agent sees alongside the transferred session context.
 - The reasoning/thinking level selection is now remembered per model instead of per agent type, so switching between e.g. Opus and Sonnet restores each model's last-used reasoning level independently.
@@ -55,6 +60,7 @@ All notable changes to this project will be documented in this file.
 - The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu, and the continuation sheet now focuses the receiving agent model, title, and model/reasoning fields without showing a prompt box.
 - Tabs created via `Continue in...` now show the same forward icon as the header handoff button, making forwarded sessions easier to spot in the tab bar.
 - Agent-backed tabs now expose `Resume Agent Session in New Tab` in the tab context menu, opening a fresh tab that resumes the same Claude/Codex conversation when a saved resume ID is available.
+
 
 ## 1.5.0 - 2026-04-02
 
