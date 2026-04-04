@@ -48,6 +48,7 @@ All notable changes to this project will be documented in this file.
 - Fixed draft and web threads showing an indefinite busy spinner after creation since thread setup cleanup is now properly handled in non-terminal threads.
 - Fixed draft threads sometimes restoring as terminal/Codex tabs from stale tmux sessions. Draft-only threads now stay non-terminal until you explicitly start the agent.
 - The thread context menu now groups "Rename with Prompt", "Set Description", and "Rename Branch" under a single "Rename" submenu for better organization.
+- The new-thread sheet now inlines the section picker next to the project picker when both are present, saving vertical space and improving the dialog layout.
 - Added four new sign emojis: Book, Bolt, Magnifying Glass, and Lock. All sign labels now describe the emoji itself rather than intended usage.
 
 ### Tab
