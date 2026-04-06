@@ -118,22 +118,22 @@ final class ThreadListViewController: NSViewController {
         AlwaysEmphasizedRowView.capsuleTrailingInset
         + AlwaysEmphasizedRowView.capsuleBorderInset
         + AlwaysEmphasizedRowView.capsuleContentHPadding
-    static let projectDisclosureTrailingInset: CGFloat = sidebarTrailingInset
+    /// Leading inset for non-thread rows (project/section headers), aligned to capsule leading edge.
+    static let capsuleAlignedLeading: CGFloat = AlwaysEmphasizedRowView.capsuleLeadingInset
+    /// Trailing inset for non-thread rows, aligned to capsule trailing edge.
+    static let capsuleAlignedTrailing: CGFloat = AlwaysEmphasizedRowView.capsuleTrailingInset
     static let outlineIndentationPerLevel: CGFloat = 16
     static let disclosureButtonSize: CGFloat = 16
     static let projectHeaderActionButtonSize: CGFloat = 24
     static let projectAddButtonTrailingInset: CGFloat =
-        projectDisclosureTrailingInset - ((projectHeaderActionButtonSize - disclosureButtonSize) / 2)
+        capsuleAlignedTrailing - ((projectHeaderActionButtonSize - disclosureButtonSize) / 2)
     static let projectHeaderVerticalPadding: CGFloat = 4
     static let projectHeaderRowHeight: CGFloat = disclosureButtonSize + (projectHeaderVerticalPadding * 2) + 2
     static let projectHeaderToMainRowGap: CGFloat = 8
     static let projectSpacerDividerVerticalSpacing: CGFloat = 4
     static let projectSpacerDividerHeight: CGFloat = 1
-    static let projectSpacerDividerHorizontalInset: CGFloat = 8
-    static let projectSpacerDividerLeadingInset: CGFloat = projectSpacerDividerHorizontalInset
-    static let projectSpacerDividerTrailingInset: CGFloat = sidebarTrailingInset
-    static let sidebarRowLeadingInset: CGFloat = projectSpacerDividerLeadingInset
-    static let projectHeaderTitleLeadingInset: CGFloat = sidebarRowLeadingInset + 3
+    static let projectSpacerDividerLeadingInset: CGFloat = capsuleAlignedLeading
+    static let projectSpacerDividerTrailingInset: CGFloat = capsuleAlignedTrailing
     static let projectHeaderInterProjectGap: CGFloat =
         (projectSpacerDividerVerticalSpacing * 2) + projectSpacerDividerHeight
 

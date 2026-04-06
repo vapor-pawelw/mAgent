@@ -29,6 +29,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     private var busyOpacityMaskLayer: CAGradientLayer?
     private weak var maskedContentView: NSView?
     private var archivingOverlay: ArchivingRowOverlayView?
+    private var signEmojiLabel: NSTextField?
+    private var signEmojiTintColor: NSColor?
 
     var showsCompletionHighlight = false {
         didSet { needsDisplay = true }
@@ -87,6 +89,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             for case let cell as NSTableCellView in subviews {
                 cell.backgroundStyle = style
             }
+            updateSignEmojiSelectionColor()
         }
     }
 
@@ -259,6 +262,50 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             width: contentBounds.width + Self.busyMaskOverscanLeft + Self.busyMaskOverscanRight,
             height: contentBounds.height
         )
+    }
+
+    // MARK: - Sign Emoji
+
+    /// Configure the sign emoji displayed on the capsule's leading edge.
+    func configureSignEmoji(_ emoji: String?, tintColor: NSColor?, isSelected: Bool) {
+        signEmojiTintColor = tintColor
+        guard let emoji, !emoji.isEmpty else {
+            signEmojiLabel?.isHidden = true
+            return
+        }
+        let label = ensureSignEmojiLabel()
+        label.stringValue = emoji
+        label.font = (emoji == "↑" || emoji == "↓")
+            ? .systemFont(ofSize: 12, weight: .bold)
+            : .systemFont(ofSize: 9, weight: .bold)
+        label.textColor = isSelected ? .white : (tintColor ?? .labelColor)
+        label.isHidden = false
+    }
+
+    private func updateSignEmojiSelectionColor() {
+        guard let label = signEmojiLabel, !label.isHidden else { return }
+        label.textColor = isSelected ? .white : (signEmojiTintColor ?? .labelColor)
+    }
+
+    private func ensureSignEmojiLabel() -> NSTextField {
+        if let label = signEmojiLabel { return label }
+        let label = NSTextField(labelWithString: "")
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.alignment = .center
+        label.backgroundColor = .clear
+        label.isBordered = false
+        label.isEditable = false
+        label.isHidden = true
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(
+                equalTo: leadingAnchor,
+                constant: Self.capsuleLeadingInset
+            ),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        signEmojiLabel = label
+        return label
     }
 
     private func updateArchivingOverlay() {

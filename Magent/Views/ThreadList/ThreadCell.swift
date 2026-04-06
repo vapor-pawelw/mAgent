@@ -176,7 +176,6 @@ final class ThreadCell: NSTableCellView {
     private weak var prRowStack: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
     private var mainAccentBar: NSView?
-    private var signEmojiLabel: NSTextField?
     private var durationLabel: NSTextField?
     private var durationTimer: Timer?
     private var currentDurationSince: Date?
@@ -396,18 +395,6 @@ final class ThreadCell: NSTableCellView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
-        let emojiLabel = NSTextField(labelWithString: "")
-        emojiLabel.translatesAutoresizingMaskIntoConstraints = false
-        emojiLabel.font = .systemFont(ofSize: 9, weight: .bold)
-        emojiLabel.alignment = .center
-        emojiLabel.isHidden = true
-        addSubview(emojiLabel)
-        signEmojiLabel = emojiLabel
-        NSLayoutConstraint.activate([
-            emojiLabel.trailingAnchor.constraint(equalTo: iv.leadingAnchor, constant: -1),
-            emojiLabel.centerYAnchor.constraint(equalTo: iv.centerYAnchor),
-        ])
-
         let leadingConstraint = stack.leadingAnchor.constraint(
             equalTo: leadingAnchor,
             constant: ThreadListViewController.sidebarHorizontalInset
@@ -436,12 +423,12 @@ final class ThreadCell: NSTableCellView {
         accentBar.isHidden = true
         addSubview(accentBar)
 
+        // Position the accent bar where the icon sits in non-main threads:
+        // same horizontal inset, centered vertically with the text stack.
         NSLayoutConstraint.activate([
             accentBar.leadingAnchor.constraint(
                 equalTo: leadingAnchor,
-                constant: CGFloat(AlwaysEmphasizedRowView.capsuleLeadingInset)
-                    + AlwaysEmphasizedRowView.capsuleBorderInset
-                    + 4
+                constant: ThreadListViewController.sidebarHorizontalInset
             ),
             accentBar.centerYAnchor.constraint(equalTo: leadingTextStackView.centerYAnchor),
             accentBar.widthAnchor.constraint(equalToConstant: 3),
@@ -710,17 +697,6 @@ final class ThreadCell: NSTableCellView {
         configuredSectionColor = sectionColor
         updateLeadingIconTint()
 
-        if let emoji = thread.signEmoji {
-            signEmojiLabel?.stringValue = emoji
-            signEmojiLabel?.textColor = ThreadListViewController.signEmojiTintColor(for: emoji) ?? .labelColor
-            signEmojiLabel?.font = (emoji == "↑" || emoji == "↓")
-                ? .systemFont(ofSize: 12, weight: .bold)
-                : .systemFont(ofSize: 9, weight: .bold)
-            signEmojiLabel?.isHidden = false
-        } else {
-            signEmojiLabel?.stringValue = ""
-            signEmojiLabel?.isHidden = true
-        }
 
         if thread.isPinned {
             ensurePinnedBadge()
@@ -822,8 +798,6 @@ final class ThreadCell: NSTableCellView {
 
         imageView?.image = nil
         imageView?.isHidden = true
-
-        signEmojiLabel?.isHidden = true
 
         setDirtyDot(primaryDirtyDot, visible: false)
         setDirtyDot(secondaryDirtyDot, visible: isDirty)
@@ -1118,10 +1092,6 @@ final class ThreadCell: NSTableCellView {
         let isEmphasized = backgroundStyle == .emphasized
         if isConfiguredAsMain {
             textField?.textColor = isEmphasized ? .white : .labelColor
-        }
-        if let emoji = signEmojiLabel?.stringValue, !emoji.isEmpty {
-            let tint = ThreadListViewController.signEmojiTintColor(for: emoji)
-            signEmojiLabel?.textColor = isEmphasized ? .white : (tint ?? .labelColor)
         }
     }
 

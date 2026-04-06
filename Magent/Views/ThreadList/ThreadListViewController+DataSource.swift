@@ -379,11 +379,17 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
         let rowView = AlwaysEmphasizedRowView()
         if let thread = item as? MagentThread {
+            let isSelected = outlineView.isRowSelected(outlineView.row(forItem: item))
             rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion
             rowView.showsWaitingHighlight = thread.hasWaitingForInput && !thread.hasUnreadAgentCompletion
             rowView.showsSubtleBottomSeparator = false
             rowView.showsBusyShimmer = thread.isAnyBusy
             rowView.showsArchivingOverlay = thread.isArchiving
+            rowView.configureSignEmoji(
+                thread.signEmoji,
+                tintColor: thread.signEmoji.flatMap { Self.signEmojiTintColor(for: $0) },
+                isSelected: isSelected
+            )
         } else {
             rowView.showsCompletionHighlight = false
             rowView.showsWaitingHighlight = false
@@ -682,7 +688,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         tf.centerYAnchor.constraint(equalTo: c.centerYAnchor, constant: -1),
                         tf.leadingAnchor.constraint(
                             equalTo: c.leadingAnchor,
-                            constant: Self.projectHeaderTitleLeadingInset
+                            constant: Self.capsuleAlignedLeading
                         ),
                         disclosureButton.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 0),
                         disclosureButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor, constant: 1),
@@ -822,7 +828,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     NSLayoutConstraint.activate([
                         iv.leadingAnchor.constraint(
                             equalTo: c.leadingAnchor,
-                            constant: Self.sidebarRowLeadingInset
+                            constant: Self.capsuleAlignedLeading
                         ),
                         iv.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         iv.widthAnchor.constraint(equalToConstant: 8),
@@ -837,7 +843,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         badgeLabel.centerYAnchor.constraint(equalTo: badgeContainer.centerYAnchor),
                         disclosureButton.trailingAnchor.constraint(
                             equalTo: c.trailingAnchor,
-                            constant: -Self.projectDisclosureTrailingInset
+                            constant: -Self.capsuleAlignedTrailing
                         ),
                         disclosureButton.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
@@ -936,7 +942,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
                     currentBranch: currentBranch,
                     busyStateSince: thread.busyStateSince,
-                    leadingOffset: 0
+                    leadingOffset: 3 + 6 // accent bar width + spacing (matches icon flow)
                 )
                 return cell
             }
