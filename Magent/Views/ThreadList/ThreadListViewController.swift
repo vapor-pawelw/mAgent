@@ -27,6 +27,31 @@ final class SidebarOutlineView: NSOutlineView {
         super.scrollRowToVisible(row)
     }
 
+    /// Suppress AppKit's own selection/focus highlight so right-click context
+    /// menus don't draw an extra border around the row.
+    override func highlightSelection(inClipRect clipRect: NSRect) {
+        // No-op — custom capsule selection is drawn by AlwaysEmphasizedRowView.
+    }
+
+    /// Stores the row index for right-click so `clickedRow` stays valid
+    /// even though we bypass AppKit's default right-click selection handling.
+    private var _contextMenuRow: Int = -1
+    override var clickedRow: Int { _contextMenuRow >= 0 ? _contextMenuRow : super.clickedRow }
+
+    /// Prevent right-click from temporarily selecting a row, which causes AppKit
+    /// to draw its own selection/focus highlight outside our custom capsule.
+    override func rightMouseDown(with event: NSEvent) {
+        let loc = convert(event.locationInWindow, from: nil)
+        _contextMenuRow = row(at: loc)
+        defer { _contextMenuRow = -1 }
+        if _contextMenuRow >= 0, let menu = self.menu {
+            menu.delegate?.menuNeedsUpdate?(menu)
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+        } else {
+            super.rightMouseDown(with: event)
+        }
+    }
+
     /// Intercept clicks on the archive suggestion button inside thread cells so that
     /// tapping "archive" does not also select the row (which would trigger a heavyweight
     /// detail-view load that is immediately discarded).
@@ -340,6 +365,9 @@ final class ThreadListViewController: NSViewController {
         outlineView.backgroundColor = .clear
         outlineView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         outlineView.intercellSpacing = NSSize(width: 0, height: 0)
+        // Suppress AppKit's built-in selection drawing so right-click context menus
+        // don't add an unwanted border. Our custom capsule is drawn in drawBackground.
+        outlineView.selectionHighlightStyle = .none
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("ThreadColumn"))
         column.title = "Threads"

@@ -51,16 +51,34 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
+        focusRingType = .none
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         wantsLayer = true
+        focusRingType = .none
     }
 
     override var isEmphasized: Bool {
         get { true }
         set {}
+    }
+
+    // With selectionHighlightStyle = .none, AppKit no longer triggers redraws
+    // or backgroundStyle changes on child views automatically. Force both so
+    // drawBackground renders our capsule and cells update their tints.
+    override var isSelected: Bool {
+        didSet {
+            guard isSelected != oldValue else { return }
+            needsDisplay = true
+            // Push backgroundStyle to child cell views so they can react to
+            // selection changes (icon tint, badge colors, text color).
+            let style: NSView.BackgroundStyle = isSelected ? .emphasized : .normal
+            for case let cell as NSTableCellView in subviews {
+                cell.backgroundStyle = style
+            }
+        }
     }
 
     override func viewDidMoveToWindow() {
@@ -80,15 +98,34 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         busyOpacityMaskLayer.frame = busyMaskFrame(for: contentLayer.bounds)
     }
 
+    private func drawCapsuleBorderAndFill(color: NSColor, fillOpacity: CGFloat = 0.1, borderOpacity: CGFloat = 1.0) {
+        let fillPath = NSBezierPath(
+            roundedRect: capsuleRect,
+            xRadius: Self.capsuleCornerRadius,
+            yRadius: Self.capsuleCornerRadius
+        )
+        color.withAlphaComponent(fillOpacity).setFill()
+        fillPath.fill()
+
+        let insetRect = capsuleRect.insetBy(dx: Self.capsuleBorderWidth / 2, dy: Self.capsuleBorderWidth / 2)
+        let borderPath = NSBezierPath(
+            roundedRect: insetRect,
+            xRadius: Self.capsuleCornerRadius,
+            yRadius: Self.capsuleCornerRadius
+        )
+        borderPath.lineWidth = Self.capsuleBorderWidth
+        color.withAlphaComponent(borderOpacity).setStroke()
+        borderPath.stroke()
+    }
+
     override func drawBackground(in dirtyRect: NSRect) {
-        if showsCompletionHighlight, !isSelected {
-            let path = NSBezierPath(
-                roundedRect: capsuleRect,
-                xRadius: Self.capsuleCornerRadius,
-                yRadius: Self.capsuleCornerRadius
-            )
-            NSColor.controlAccentColor.withAlphaComponent(0.14).setFill()
-            path.fill()
+        // Selection drawing is done here (not in drawSelection) so we can use
+        // selectionHighlightStyle = .none on the outline view to fully suppress
+        // AppKit's own selection rect (which adds an unwanted border on right-click).
+        if isSelected {
+            drawCapsuleBorderAndFill(color: .controlAccentColor)
+        } else if showsCompletionHighlight {
+            drawCapsuleBorderAndFill(color: .systemGreen, fillOpacity: 0.06, borderOpacity: 0.5)
         }
 
         if showsSubtleBottomSeparator {
@@ -105,23 +142,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     }
 
     override func drawSelection(in dirtyRect: NSRect) {
-        let fillPath = NSBezierPath(
-            roundedRect: capsuleRect,
-            xRadius: Self.capsuleCornerRadius,
-            yRadius: Self.capsuleCornerRadius
-        )
-        NSColor.controlAccentColor.withAlphaComponent(0.1).setFill()
-        fillPath.fill()
-
-        let insetRect = capsuleRect.insetBy(dx: Self.capsuleBorderWidth / 2, dy: Self.capsuleBorderWidth / 2)
-        let path = NSBezierPath(
-            roundedRect: insetRect,
-            xRadius: Self.capsuleCornerRadius,
-            yRadius: Self.capsuleCornerRadius
-        )
-        path.lineWidth = Self.capsuleBorderWidth
-        NSColor.controlAccentColor.setStroke()
-        path.stroke()
+        // No-op: all capsule drawing is in drawBackground to allow
+        // selectionHighlightStyle = .none without losing our custom highlight.
     }
 
     private func updateBusyShimmerAnimation() {

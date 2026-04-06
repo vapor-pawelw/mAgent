@@ -5,8 +5,12 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Sidebar
-- Thread rows now use a rounded-border selection style with accent-colored border and subtle fill instead of the full-width highlight.
-- Busy-state duration badge is now a pill sitting on the capsule's top border with a matching border color.
+- Thread rows now use a rounded-border capsule selection style with accent-colored border and subtle fill instead of the full-width highlight.
+- Completed threads show a green capsule border and fill; thread icons tint to accent (selected) or green (completed).
+- Pinned and rate-limit status indicators are now bare-icon badges on the capsule's top border, with a circular background appearing on selected/completed rows.
+- Busy-state duration badge is now a pill sitting on the capsule's top border with a persistent border.
+- Right-clicking a thread no longer flashes an extra selection border.
+- Hidden/archived thread dimming no longer makes badge backgrounds semi-transparent.
 - Section header rows no longer receive thread-style capsule borders.
 
 ## 1.5.1 - 2026-04-04
