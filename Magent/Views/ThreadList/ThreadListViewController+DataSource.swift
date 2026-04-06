@@ -710,8 +710,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     return c
                 }()
 
-            cell.textField?.font = NSFont(name: "Noteworthy-Bold", size: 16)
-                ?? NSFont.systemFont(ofSize: 16, weight: .semibold)
+            cell.textField?.font = .systemFont(ofSize: 20, weight: .bold)
             cell.textField?.stringValue = project.name
             cell.textField?.invalidateIntrinsicContentSize()
             cell.textField?.textColor = .labelColor

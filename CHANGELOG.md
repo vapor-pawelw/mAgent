@@ -20,6 +20,9 @@ All notable changes to this project will be documented in this file.
 - Capsule content padding is now consistent: 12pt horizontal and vertical from capsule inner edge.
 - Outline view indentation set to zero so thread cells fill the full row width, eliminating coordinate mismatch between capsule and content.
 - Section header rows no longer receive thread-style capsule borders.
+- Project repo name now uses larger system bold font (20pt) instead of Noteworthy-Bold.
+- Removed separator divider between project groups; inter-project gap increased.
+- Reduced spacing between repo name header and main worktree row.
 
 ## 1.5.1 - 2026-04-04
 

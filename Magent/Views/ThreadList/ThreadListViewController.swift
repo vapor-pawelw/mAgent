@@ -127,15 +127,10 @@ final class ThreadListViewController: NSViewController {
     static let projectHeaderActionButtonSize: CGFloat = 24
     static let projectAddButtonTrailingInset: CGFloat =
         capsuleAlignedTrailing - ((projectHeaderActionButtonSize - disclosureButtonSize) / 2)
-    static let projectHeaderVerticalPadding: CGFloat = 4
-    static let projectHeaderRowHeight: CGFloat = disclosureButtonSize + (projectHeaderVerticalPadding * 2) + 2
-    static let projectHeaderToMainRowGap: CGFloat = 8
-    static let projectSpacerDividerVerticalSpacing: CGFloat = 4
-    static let projectSpacerDividerHeight: CGFloat = 1
-    static let projectSpacerDividerLeadingInset: CGFloat = capsuleAlignedLeading
-    static let projectSpacerDividerTrailingInset: CGFloat = capsuleAlignedTrailing
-    static let projectHeaderInterProjectGap: CGFloat =
-        (projectSpacerDividerVerticalSpacing * 2) + projectSpacerDividerHeight
+    static let projectHeaderVerticalPadding: CGFloat = 6
+    static let projectHeaderRowHeight: CGFloat = 36
+    static let projectHeaderToMainRowGap: CGFloat = 0
+    static let projectHeaderInterProjectGap: CGFloat = 24
 
     weak var delegate: ThreadListDelegate?
 
@@ -517,7 +512,9 @@ final class ThreadListViewController: NSViewController {
             // Main thread(s) for this project first
             let projectMainThreads = mainThreads.filter { $0.projectId == project.id }
             if !projectMainThreads.isEmpty {
-                children.append(SidebarProjectMainSpacer())
+                if Self.projectHeaderToMainRowGap > 0 {
+                    children.append(SidebarProjectMainSpacer())
+                }
                 children.append(contentsOf: projectMainThreads)
             }
 

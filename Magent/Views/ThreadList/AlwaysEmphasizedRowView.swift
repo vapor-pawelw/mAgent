@@ -379,42 +379,13 @@ final class SidebarSpacerRowView: NSTableRowView {
 }
 
 final class SidebarSpacerCellView: NSTableCellView {
-    private let dividerView = NSView()
-
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
-
-        dividerView.translatesAutoresizingMaskIntoConstraints = false
-        dividerView.wantsLayer = true
-        addSubview(dividerView)
-
-        NSLayoutConstraint.activate([
-            dividerView.leadingAnchor.constraint(
-                equalTo: leadingAnchor,
-                constant: ThreadListViewController.projectSpacerDividerLeadingInset
-            ),
-            dividerView.trailingAnchor.constraint(
-                equalTo: trailingAnchor,
-                constant: -ThreadListViewController.projectSpacerDividerTrailingInset
-            ),
-            dividerView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            dividerView.heightAnchor.constraint(equalToConstant: ThreadListViewController.projectSpacerDividerHeight),
-        ])
-        updateDividerColor()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        updateDividerColor()
-    }
-
-    private func updateDividerColor() {
-        dividerView.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.22).cgColor
     }
 }
