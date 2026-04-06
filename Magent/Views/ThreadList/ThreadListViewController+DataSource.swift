@@ -363,6 +363,9 @@ extension ThreadListViewController: NSOutlineViewDataSource {
 extension ThreadListViewController: NSOutlineViewDelegate {
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
+        if item is SidebarAddRepoRow {
+            return SidebarSpacerRowView()
+        }
         if item is SidebarSpacer {
             return SidebarSpacerRowView()
         }
@@ -479,6 +482,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
+        if item is SidebarAddRepoRow {
+            return Self.addRepoRowHeight
+        }
         if item is SidebarSpacer {
             return Self.projectHeaderInterProjectGap
         }
@@ -562,6 +568,10 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if (outlineView as? SidebarOutlineView)?.isDragInteractionActive == true {
             return false
         }
+        if item is SidebarAddRepoRow {
+            addRepoButtonTapped(NSButton())
+            return false
+        }
         if item is SidebarSpacer {
             return false
         }
@@ -619,6 +629,41 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
+        if item is SidebarAddRepoRow {
+            let identifier = NSUserInterfaceItemIdentifier("AddRepoCell")
+            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
+                ?? {
+                    let c = NSTableCellView()
+                    c.identifier = identifier
+
+                    let symbolConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+                    let button = NSButton()
+                    button.bezelStyle = .inline
+                    button.isBordered = false
+                    button.image = NSImage(
+                        systemSymbolName: "folder.badge.plus",
+                        accessibilityDescription: "Add Repository"
+                    )?.withSymbolConfiguration(symbolConfig)
+                    button.contentTintColor = .secondaryLabelColor
+                    button.target = self
+                    button.action = #selector(addRepoButtonTapped(_:))
+                    button.toolTip = "Add repository"
+                    button.translatesAutoresizingMaskIntoConstraints = false
+                    c.addSubview(button)
+
+                    NSLayoutConstraint.activate([
+                        button.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        button.trailingAnchor.constraint(
+                            equalTo: c.trailingAnchor,
+                            constant: -Self.capsuleAlignedTrailing
+                        ),
+                        button.widthAnchor.constraint(equalToConstant: 22),
+                        button.heightAnchor.constraint(equalToConstant: 22),
+                    ])
+                    return c
+                }()
+            return cell
+        }
         if item is SidebarSpacer {
             let identifier = NSUserInterfaceItemIdentifier("ProjectSpacerCell")
             let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? SidebarSpacerCellView

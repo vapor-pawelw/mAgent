@@ -24,7 +24,7 @@ This thread refined the left-rail and spacing rules for project headers, section
 ## Implementation Notes
 
 - Shared rails live in `ThreadListViewController`:
-  - `sidebarToolbarRowHeight` reserves the dedicated top row that holds the global `Add repo` button.
+  - `addRepoRowHeight` sets the height for the `SidebarAddRepoRow` at the top of the outline view (scrollable, not sticky).
   - `projectSpacerDividerLeadingInset` is the base left rail for separators.
   - `sidebarRowLeadingInset` reuses that rail for section dots, main-row accent bar, and top-level thread geometry.
   - `projectHeaderTitleLeadingInset` is the slightly inset text rail used by repo titles.

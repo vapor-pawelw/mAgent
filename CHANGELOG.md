@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file.
 - Project repo name now uses larger system bold font (20pt) instead of Noteworthy-Bold.
 - Removed separator divider between project groups; inter-project gap increased.
 - Reduced spacing between repo name header and main worktree row.
+- "Add repository" button is now a regular scrollable row at the top of the sidebar instead of a sticky toolbar overlay.
 
 ## 1.5.1 - 2026-04-04
 

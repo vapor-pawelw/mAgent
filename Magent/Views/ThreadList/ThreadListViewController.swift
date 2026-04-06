@@ -113,7 +113,7 @@ final class ThreadListViewController: NSViewController {
         AlwaysEmphasizedRowView.capsuleLeadingInset
         + AlwaysEmphasizedRowView.capsuleBorderInset
         + AlwaysEmphasizedRowView.capsuleContentHPadding
-    static let sidebarToolbarRowHeight: CGFloat = 32
+    static let addRepoRowHeight: CGFloat = 32
     static let sidebarTrailingInset: CGFloat =
         AlwaysEmphasizedRowView.capsuleTrailingInset
         + AlwaysEmphasizedRowView.capsuleBorderInset
@@ -136,11 +136,9 @@ final class ThreadListViewController: NSViewController {
 
     var outlineView: NSOutlineView!
     private var scrollView: NSScrollView!
-    private var toolbarRowView: NSView!
     let threadManager = ThreadManager.shared
     let persistence = PersistenceService.shared
 
-    private var addRepoButton: NSButton!
     private var scrollViewTopConstraint: NSLayoutConstraint?
     var diffPanelView: DiffPanelView!
     var branchMismatchView: BranchMismatchView!
@@ -213,7 +211,6 @@ final class ThreadListViewController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        setupToolbar()
         setupOutlineView()
 
         threadManager.delegate = self
@@ -320,42 +317,6 @@ final class ThreadListViewController: NSViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
     }
 
-    // MARK: - Toolbar Buttons
-
-    private func setupToolbar() {
-        toolbarRowView = NSView()
-        toolbarRowView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(toolbarRowView)
-
-        // Add repo button (top-right)
-        let addRepoSymbolConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
-        addRepoButton = NSButton()
-        addRepoButton.bezelStyle = .inline
-        addRepoButton.isBordered = false
-        addRepoButton.image = NSImage(
-            systemSymbolName: "folder.badge.plus",
-            accessibilityDescription: "Add Repository"
-        )?.withSymbolConfiguration(addRepoSymbolConfig)
-        addRepoButton.contentTintColor = .secondaryLabelColor
-        addRepoButton.target = self
-        addRepoButton.action = #selector(addRepoButtonTapped(_:))
-        addRepoButton.toolTip = "Add repository"
-        addRepoButton.translatesAutoresizingMaskIntoConstraints = false
-        toolbarRowView.addSubview(addRepoButton)
-
-        NSLayoutConstraint.activate([
-            toolbarRowView.topAnchor.constraint(equalTo: view.topAnchor),
-            toolbarRowView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            toolbarRowView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            toolbarRowView.heightAnchor.constraint(equalToConstant: Self.sidebarToolbarRowHeight),
-
-            addRepoButton.centerYAnchor.constraint(equalTo: toolbarRowView.centerYAnchor),
-            addRepoButton.trailingAnchor.constraint(equalTo: toolbarRowView.trailingAnchor, constant: -8),
-            addRepoButton.widthAnchor.constraint(equalToConstant: 22),
-            addRepoButton.heightAnchor.constraint(equalToConstant: 22),
-        ])
-    }
-
     // MARK: - Outline View
 
     private func setupOutlineView() {
@@ -436,7 +397,7 @@ final class ThreadListViewController: NSViewController {
         branchMismatchView = BranchMismatchView()
         view.addSubview(branchMismatchView)
 
-        scrollViewTopConstraint = scrollView.topAnchor.constraint(equalTo: toolbarRowView.bottomAnchor)
+        scrollViewTopConstraint = scrollView.topAnchor.constraint(equalTo: view.topAnchor)
 
         NSLayoutConstraint.activate([
             scrollViewTopConstraint!,
@@ -557,7 +518,7 @@ final class ThreadListViewController: NSViewController {
             )
         }
 
-        sidebarRootItems = []
+        sidebarRootItems = [SidebarAddRepoRow()]
         for (index, project) in sidebarProjects.enumerated() {
             if index > 0 {
                 sidebarRootItems.append(SidebarSpacer())
