@@ -78,44 +78,31 @@ private final class TopBorderBadge: NSView {
 
     override func layout() {
         super.layout()
-        // Keep circle cornerRadius in sync after layout resolves height.
-        if isBareIcon, layer?.borderWidth ?? 0 > 0 {
+        if isBareIcon {
             layer?.cornerRadius = bounds.height / 2
         }
     }
 
     func updateColors(isRowSelected: Bool, hasCompletionHighlight: Bool, appearance: NSAppearance) {
         appearance.performAsCurrentDrawingAppearance {
-            if self.isBareIcon {
-                // Bare icons: show circular background + border only when
-                // the row is selected or has a completion highlight.
-                let showChrome = isRowSelected || hasCompletionHighlight
-                if showChrome {
-                    // Make it circular — half the rendered height.
-                    self.layer?.cornerRadius = self.bounds.height / 2
-                    self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-                    self.layer?.borderWidth = 1
-                    if isRowSelected {
-                        self.layer?.borderColor = NSColor.controlAccentColor.cgColor
-                    } else {
-                        self.layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.5).cgColor
-                    }
-                } else {
-                    self.layer?.cornerRadius = 0
-                    self.layer?.backgroundColor = nil
-                    self.layer?.borderColor = nil
-                    self.layer?.borderWidth = 0
-                }
+            // Border color mirrors the capsule row border.
+            let borderColor: CGColor
+            if isRowSelected {
+                borderColor = NSColor.controlAccentColor.cgColor
+            } else if hasCompletionHighlight {
+                borderColor = NSColor.systemGreen.withAlphaComponent(0.5).cgColor
             } else {
-                // Text badges always show their pill background and border.
+                borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+            }
+
+            if self.isBareIcon {
+                self.layer?.cornerRadius = self.bounds.height / 2
                 self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-                if isRowSelected {
-                    self.layer?.borderColor = NSColor.controlAccentColor.cgColor
-                } else if hasCompletionHighlight {
-                    self.layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.5).cgColor
-                } else {
-                    self.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
-                }
+                self.layer?.borderColor = borderColor
+                self.layer?.borderWidth = 1
+            } else {
+                self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+                self.layer?.borderColor = borderColor
                 self.layer?.borderWidth = 1
             }
             self.label.textColor = NSColor.secondaryLabelColor

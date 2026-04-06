@@ -126,6 +126,25 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             drawCapsuleBorderAndFill(color: .controlAccentColor)
         } else if showsCompletionHighlight {
             drawCapsuleBorderAndFill(color: .systemGreen, fillOpacity: 0.06, borderOpacity: 0.5)
+        } else {
+            // Subtle border + fill for unselected threads.
+            let fillPath = NSBezierPath(
+                roundedRect: capsuleRect,
+                xRadius: Self.capsuleCornerRadius,
+                yRadius: Self.capsuleCornerRadius
+            )
+            NSColor.white.withAlphaComponent(0.05).setFill()
+            fillPath.fill()
+
+            let insetRect = capsuleRect.insetBy(dx: Self.capsuleBorderWidth / 2, dy: Self.capsuleBorderWidth / 2)
+            let borderPath = NSBezierPath(
+                roundedRect: insetRect,
+                xRadius: Self.capsuleCornerRadius,
+                yRadius: Self.capsuleCornerRadius
+            )
+            borderPath.lineWidth = 1
+            NSColor.white.withAlphaComponent(0.12).setStroke()
+            borderPath.stroke()
         }
 
         if showsSubtleBottomSeparator {
