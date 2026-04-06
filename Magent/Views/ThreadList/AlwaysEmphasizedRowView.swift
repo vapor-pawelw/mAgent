@@ -15,6 +15,10 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     private static let busyOpacitySweepAnimationKey = "busy-row-opacity-sweep"
     private static let busyMaskOverscanLeft: CGFloat = 96
     private static let busyMaskOverscanRight: CGFloat = 48
+    static let capsuleHorizontalInset: CGFloat = 4
+    static let capsuleVerticalInset: CGFloat = 8
+    private static let capsuleBorderWidth: CGFloat = 2
+    private static let capsuleCornerRadius: CGFloat = 8
     private var busyOpacityMaskLayer: CAGradientLayer?
     private weak var maskedContentView: NSView?
     private var archivingOverlay: ArchivingRowOverlayView?
@@ -31,6 +35,12 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     var showsArchivingOverlay = false {
         didSet { updateArchivingOverlay() }
     }
+
+    /// The inset rect used for the capsule border/background.
+    private var capsuleRect: NSRect {
+        bounds.insetBy(dx: Self.capsuleHorizontalInset, dy: Self.capsuleVerticalInset)
+    }
+
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -65,10 +75,14 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     }
 
     override func drawBackground(in dirtyRect: NSRect) {
-        super.drawBackground(in: dirtyRect)
         if showsCompletionHighlight, !isSelected {
+            let path = NSBezierPath(
+                roundedRect: capsuleRect,
+                xRadius: Self.capsuleCornerRadius,
+                yRadius: Self.capsuleCornerRadius
+            )
             NSColor.controlAccentColor.withAlphaComponent(0.14).setFill()
-            NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 1), xRadius: 6, yRadius: 6).fill()
+            path.fill()
         }
 
         if showsSubtleBottomSeparator {
@@ -82,6 +96,26 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             NSColor.separatorColor.withAlphaComponent(0.24).setFill()
             NSBezierPath(rect: separatorRect).fill()
         }
+    }
+
+    override func drawSelection(in dirtyRect: NSRect) {
+        let fillPath = NSBezierPath(
+            roundedRect: capsuleRect,
+            xRadius: Self.capsuleCornerRadius,
+            yRadius: Self.capsuleCornerRadius
+        )
+        NSColor.controlAccentColor.withAlphaComponent(0.1).setFill()
+        fillPath.fill()
+
+        let insetRect = capsuleRect.insetBy(dx: Self.capsuleBorderWidth / 2, dy: Self.capsuleBorderWidth / 2)
+        let path = NSBezierPath(
+            roundedRect: insetRect,
+            xRadius: Self.capsuleCornerRadius,
+            yRadius: Self.capsuleCornerRadius
+        )
+        path.lineWidth = Self.capsuleBorderWidth
+        NSColor.controlAccentColor.setStroke()
+        path.stroke()
     }
 
     private func updateBusyShimmerAnimation() {

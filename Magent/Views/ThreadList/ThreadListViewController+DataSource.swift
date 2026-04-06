@@ -373,6 +373,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             let rowView = ProjectHeaderRowView()
             return rowView
         }
+        if item is SidebarSection {
+            return ProjectHeaderRowView()
+        }
 
         let rowView = AlwaysEmphasizedRowView()
         if let thread = item as? MagentThread {
@@ -485,9 +488,10 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return 28
         }
         if item is MagentThread {
+            // Extra height for capsule vertical inset (top + bottom padding around border).
             return ThreadCell.uniformSidebarRowHeight(
                 maxDescriptionLines: currentSettings.sidebarDescriptionLineLimit
-            )
+            ) + AlwaysEmphasizedRowView.capsuleVerticalInset * 2
         }
         return 26
     }

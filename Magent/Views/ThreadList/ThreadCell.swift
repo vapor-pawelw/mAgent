@@ -119,6 +119,7 @@ final class ThreadCell: NSTableCellView {
     override var backgroundStyle: NSView.BackgroundStyle {
         didSet {
             updateMainTextColorForSelection()
+            updateDurationBadgeColors()
         }
     }
 
@@ -898,27 +899,64 @@ final class ThreadCell: NSTableCellView {
         .monospacedDigitSystemFont(ofSize: 9, weight: .regular)
     }
 
+    private var durationBadgeBackground: NSView?
+
     private func ensureDurationLabel() {
         guard durationLabel == nil else { return }
+
+        // Pill background that straddles the capsule's top border.
+        let pill = NSView()
+        pill.translatesAutoresizingMaskIntoConstraints = false
+        pill.wantsLayer = true
+        pill.layer?.cornerRadius = 7
+        pill.layer?.borderWidth = 1
+        addSubview(pill)
+        durationBadgeBackground = pill
+
         let label = NSTextField(labelWithString: "")
         label.translatesAutoresizingMaskIntoConstraints = false
         label.font = Self.durationFont()
-        label.textColor = NSColor.secondaryLabelColor.withAlphaComponent(0.4)
         label.lineBreakMode = .byClipping
         label.maximumNumberOfLines = 1
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        label.backgroundColor = .clear
+        label.isBordered = false
+        label.isEditable = false
         label.isHidden = true
-        addSubview(label)
+        pill.addSubview(label)
+
+        // Center the pill's vertical midpoint on the capsule's top border line.
+        let capsuleTopY = AlwaysEmphasizedRowView.capsuleVerticalInset
         NSLayoutConstraint.activate([
-            label.trailingAnchor.constraint(
+            pill.centerYAnchor.constraint(equalTo: topAnchor, constant: capsuleTopY),
+            pill.trailingAnchor.constraint(
                 equalTo: trailingAnchor,
-                constant: -ThreadListViewController.sidebarTrailingInset
+                constant: -(AlwaysEmphasizedRowView.capsuleHorizontalInset + 12)
             ),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3),
+            label.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 5),
+            label.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -5),
+            label.topAnchor.constraint(equalTo: pill.topAnchor, constant: 1),
+            label.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: -1),
         ])
         durationLabel = label
+        updateDurationBadgeColors()
     }
+
+    private func updateDurationBadgeColors() {
+        guard let pill = durationBadgeBackground else { return }
+        let rowSelected = (superview as? NSTableRowView)?.isSelected ?? false
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            pill.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            if rowSelected {
+                pill.layer?.borderColor = NSColor.controlAccentColor.cgColor
+            } else {
+                pill.layer?.borderColor = NSColor.white.withAlphaComponent(0.15).cgColor
+            }
+            self.durationLabel?.textColor = NSColor.secondaryLabelColor
+        }
+    }
+
 
     private func configureDuration(since: Date?) {
         ensureDurationLabel()
@@ -926,10 +964,12 @@ final class ThreadCell: NSTableCellView {
         if let since {
             refreshDurationText(since: since)
             durationLabel?.isHidden = false
+            durationBadgeBackground?.isHidden = false
             startDurationTimer()
         } else {
             durationLabel?.stringValue = ""
             durationLabel?.isHidden = true
+            durationBadgeBackground?.isHidden = true
             stopDurationTimer()
         }
     }
@@ -993,6 +1033,7 @@ final class ThreadCell: NSTableCellView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateMainTextColorForSelection()
+        updateDurationBadgeColors()
     }
 
     private func statusDescriptions(for thread: MagentThread) -> [String] {

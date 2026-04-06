@@ -4,7 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Sidebar
+- Thread rows now use a rounded-border selection style with accent-colored border and subtle fill instead of the full-width highlight.
+- Busy-state duration badge is now a pill sitting on the capsule's top border with a matching border color.
+- Section header rows no longer receive thread-style capsule borders.
 
 ## 1.5.1 - 2026-04-04
 

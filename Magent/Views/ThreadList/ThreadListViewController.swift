@@ -325,14 +325,14 @@ final class ThreadListViewController: NSViewController {
 
     private func setupOutlineView() {
         outlineView = SidebarOutlineView()
-        outlineView.style = .fullWidth
+        outlineView.style = .plain
         outlineView.headerView = nil
         outlineView.floatsGroupRows = true
         outlineView.indentationPerLevel = Self.outlineIndentationPerLevel
         outlineView.rowSizeStyle = .custom
         outlineView.backgroundColor = .clear
         outlineView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-        outlineView.intercellSpacing = NSSize(width: 0, height: 4)
+        outlineView.intercellSpacing = NSSize(width: 0, height: 0)
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("ThreadColumn"))
         column.title = "Threads"
