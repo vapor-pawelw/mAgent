@@ -5,8 +5,8 @@
 - Selecting a thread should not change the sidebar width.
 - Selecting a thread should not make a multiline thread row grow or shrink.
 - Task descriptions should keep the same wrapping/height while selection state changes.
-- All thread rows should occupy the same visual height for the active sidebar density, even when a thread only renders one line of text.
-- Pin, rate-limit, and completion markers should stay visually aligned, with pin always rightmost.
+- Thread row heights are dynamic based on content (description lines, subtitle, PR row) with a per-thread minimum enforced by `ThreadCell.sidebarRowHeight`. Height must not change when selection state toggles.
+- Pin, rate-limit, keep-alive, and duration badges sit on the capsule border and should not cause row-width or height changes on state transitions.
 - Periodic sidebar refreshes should not scroll the thread list back to the top while the user is reading older rows.
 - Periodic sidebar refreshes should not yank the current selection back into view if the user has intentionally scrolled elsewhere in the list.
 
@@ -15,10 +15,11 @@
 - Keep the main split view structure stable: swap detail content inside a persistent container instead of removing and re-adding split-view items.
 - Preserve the sidebar width during detail-content swaps with `SplitViewController.preserveSidebarWidthDuringContentChange(...)`.
 - Load the saved sidebar width into `preferredSidebarWidth` before startup selection/detail work begins, and apply the initial divider position no later than `viewWillAppear`. If launch-time content swaps run first, AppKit will build sidebar rows against the default width and then reflow them again when the saved width is restored.
-- Route thread-row height through `ThreadCell.uniformSidebarRowHeight(maxDescriptionLines:)` so every thread row derives the reserved layout height from the cell's actual fonts, line counts, marker sizes, and vertical insets.
-- Keep the reserved description line count in `AppSettings.sidebarDescriptionLineLimit` so the `Narrow threads` toggle switches both text wrapping and row height together.
+- Route thread-row height through `ThreadCell.sidebarRowHeight(descriptionLines:hasSubtitle:hasPRRow:narrowThreads:)` which computes per-thread height from actual content with a minimum enforced by `minimumContentHeight(narrowThreads:)`.
+- Dynamic heights are computed in `heightOfRowByItem` using `ThreadCell.estimatedDescriptionLineCount` for text-width-based line estimation.
+- Keep the description line limit in `AppSettings.sidebarDescriptionLineLimit` so the `Narrow threads` toggle switches both text wrapping and minimum row height together.
 - Keep description text style stable for description rows (semibold) so wrapping does not change with unread-selection state transitions.
-- Reserve a fixed status-marker slot in trailing row layout (14 pt) and keep pin as the rightmost marker. This prevents marker visibility toggles from changing available text width.
+- Status badges (pinned, rate-limit, keep-alive, duration) are now positioned on the capsule border rather than in a trailing stack. They do not affect available text width.
 - Refit sidebar outline width from the scroll view's visible clip width, not from `NSOutlineView`'s current frame width. On launch, the outline can hold a stale frame width even after the split view has restored the real sidebar size, which leaves trailing markers and project `+` buttons flush against the outer edge until a manual divider drag forces a resize.
 - Avoid per-layout `noteHeightOfRows(...)` invalidation, which caused visible resize lag/flicker during divider drags.
 - `ThreadListViewController.reloadData()` rebuilds the full outline tree during periodic thread/session refreshes, so it must capture and restore the `NSScrollView` clip-view origin around `outlineView.reloadData()` to preserve browsing position.
@@ -30,8 +31,8 @@
 ## Gotchas
 
 - Do not key sidebar row-height math off `hasUnreadAgentCompletion` or other selection-sensitive flags unless the visible layout is guaranteed to stay identical before and after selection.
-- Do not reintroduce separate "compact" and "description" thread row heights. Keeping a single measured height for all `MagentThread` rows prevents compact rows from jumping when text, selection, or marker state changes.
-- A split-view width fix alone is not sufficient. The sidebar can look like it is resizing when the real bug is row-height changes or trailing-marker width churn inside cells.
+- Dynamic row heights must be deterministic for a given thread state — the same thread data must always produce the same height. If height changes with selection, the outline view will visually jump.
+- A split-view width fix alone is not sufficient. The sidebar can look like it is resizing when the real bug is row-height changes inside cells.
 - Reloading the outline without restoring scroll position will look like a spontaneous scroll-position blink, especially because session-monitor updates fire every few seconds even when the user is not interacting with the sidebar. Use the structural-vs-metadata split (`sidebarNeedsStructuralReload`) to avoid full `reloadData()` for routine status updates.
 - **Structural keys that determine when a full reload is needed**: `id`, `sectionId`, `displayOrder`, `isPinned`, `isSidebarHidden`, `isArchived`, and `lastAgentCompletionAt` **only when `autoReorderThreadsOnAgentCompletion` is enabled**. When that setting is off, completion date does not affect display order and must not be included in the key — otherwise every agent completion triggers a structural reload and the animate-open jitter described below. Everything else (busy sessions, rate-limit, dirty flag, PR info, task description, icons, branch state) is metadata-only and can be updated in-place.
 - **Suppress animations in the restore loop**: `reloadData()` creates new `SidebarProject`/`SidebarSection` class instances on every call. NSOutlineView tracks expansion state by object identity, so after `outlineView.reloadData()` all new items start in the collapsed state. The restore loop then calls `expandItem()` on each one — and with the default animation duration this produces a visible slide-open animation for every section on every reload. Wrap the entire restore loop in `NSAnimationContext.beginGrouping()` / `NSAnimationContext.current.duration = 0` / `NSAnimationContext.endGrouping()` so expansions are instantaneous and the user never sees sections "pop" open.
