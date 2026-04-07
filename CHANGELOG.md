@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - GPT 5.3 is now available as a Codex model option.
 - Fixed agent resume/recovery from incorrectly triggering when a plain terminal fallback session is recreated.
+- Rate limits anchored to your submitting prompt are now pruned when you move on to new code, so old limit messages don't resurface in the sidebar after the pane scrolls.
+- Time-only rate limits (e.g., "resets 4pm") are now session-anchored, preventing cross-session bleed where one session's limit would ghost-appear on another.
 
 ## 1.5.2 - 2026-04-07
 
