@@ -13,6 +13,10 @@ All notable changes to this project will be documented in this file.
 - Project and section headers now stick to the top of the sidebar while scrolling, so you always know which repo/section the visible threads belong to. Clicking a sticky header smoothly scrolls back to the actual header row.
 - Busy threads now show a rotating gradient border animation instead of a spinner icon.
 - Metadata-only sidebar updates (busy state, rate limits, dirty flag, etc.) no longer recreate row views, preserving running animations.
+
+### CLI
+- `create-thread` no longer switches the GUI to the new thread by default. Use `--select` to opt in. Batch create never switches.
+
 ### Agents
 - GPT 5.3 is now available as a Codex model option.
 - Fixed agent resume/recovery from incorrectly triggering when a plain terminal fallback session is recreated.
