@@ -206,6 +206,9 @@ extension ThreadDetailViewController {
             tv.isHidden = true
         }
         hideActiveDraftTab()
+        for (_, placeholder) in detachedTabPlaceholders {
+            placeholder.isHidden = true
+        }
 
         // Hide all web tab views except the selected one
         for wt in webTabs {

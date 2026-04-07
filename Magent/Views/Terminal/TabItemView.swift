@@ -6,6 +6,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     let pinIcon: NSImageView
     let keepAliveIcon: NSImageView
     let typeIcon: NSImageView
+    let detachedIcon: NSImageView
     let busySpinner: NSProgressIndicator
     let completionDot: NSView
     let rateLimitIcon: NSImageView
@@ -131,6 +132,9 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onExportContext: (() -> Void)?
     var onKillSession: (() -> Void)?
     var onKillAllSessions: (() -> Void)?
+    var onDetach: (() -> Void)?
+    var onShowDetachedWindow: (() -> Void)?
+    var onReturnDetachedTab: (() -> Void)?
     var onCloseTabsToTheRight: (() -> Void)?
     var onCloseTabsToTheLeft: (() -> Void)?
     var availableAgentsForContinue: [AgentType] = []
@@ -141,6 +145,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         pinIcon = NSImageView()
         keepAliveIcon = NSImageView()
         typeIcon = NSImageView()
+        detachedIcon = NSImageView()
         busySpinner = NSProgressIndicator()
         completionDot = NSView()
         rateLimitIcon = NSImageView()
@@ -175,6 +180,15 @@ final class TabItemView: NSView, NSMenuDelegate {
         typeIcon.isHidden = true
         typeIcon.setContentHuggingPriority(.required, for: .horizontal)
         typeIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        // Detached icon (shown when tab is in a pop-out window)
+        detachedIcon.translatesAutoresizingMaskIntoConstraints = false
+        detachedIcon.image = NSImage(systemSymbolName: "macwindow", accessibilityDescription: "Detached")
+        detachedIcon.contentTintColor = .systemPurple
+        detachedIcon.imageScaling = .scaleProportionallyUpOrDown
+        detachedIcon.isHidden = true
+        detachedIcon.setContentHuggingPriority(.required, for: .horizontal)
+        detachedIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         // Completion dot (green circle)
         completionDot.wantsLayer = true
@@ -225,7 +239,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         contentStack.alignment = .centerY
         contentStack.spacing = 5
         contentStack.translatesAutoresizingMaskIntoConstraints = false
-        for view in [pinIcon, keepAliveIcon, typeIcon, completionDot, busySpinner, rateLimitIcon, titleLabel, closeButton] {
+        for view in [pinIcon, keepAliveIcon, typeIcon, detachedIcon, completionDot, busySpinner, rateLimitIcon, titleLabel, closeButton] {
             contentStack.addArrangedSubview(view)
         }
         contentStack.orientation = .horizontal
@@ -242,6 +256,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             keepAliveIcon.heightAnchor.constraint(equalToConstant: 10),
             typeIcon.widthAnchor.constraint(equalToConstant: 14),
             typeIcon.heightAnchor.constraint(equalToConstant: 14),
+            detachedIcon.widthAnchor.constraint(equalToConstant: 10),
+            detachedIcon.heightAnchor.constraint(equalToConstant: 10),
             completionDot.widthAnchor.constraint(equalToConstant: 8),
             completionDot.heightAnchor.constraint(equalToConstant: 8),
             busySpinner.widthAnchor.constraint(equalToConstant: 10),
@@ -347,10 +363,29 @@ final class TabItemView: NSView, NSMenuDelegate {
     @objc private func killAllSessionsTapped() {
         onKillAllSessions?()
     }
+    @objc private func detachTabTapped() {
+        onDetach?()
+    }
 
+    @objc private func showDetachedWindowTapped() {
+        onShowDetachedWindow?()
+    }
+
+    @objc private func returnDetachedTabTapped() {
+        onReturnDetachedTab?()
+    }
     private func updateAppearance() {
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let deadDimAlpha: CGFloat = isSessionDead ? 0.45 : 1.0
+        let dimAlpha: CGFloat
+        if isSessionDead {
+            dimAlpha = 0.45
+        } else if isDetached {
+            dimAlpha = 0.55
+        } else {
+            dimAlpha = 1.0
+        }
+
+        detachedIcon.isHidden = !isDetached
 
         let titleColor: NSColor
         if hasUnreadRateLimit && !isSelected {
@@ -382,11 +417,11 @@ final class TabItemView: NSView, NSMenuDelegate {
             }
         }
         titleLabel.textColor = titleColor
-        titleLabel.alphaValue = deadDimAlpha
+        titleLabel.alphaValue = dimAlpha
         pinIcon.contentTintColor = secondaryColor
-        pinIcon.alphaValue = deadDimAlpha
+        pinIcon.alphaValue = dimAlpha
         closeButton.contentTintColor = secondaryColor
-        closeButton.alphaValue = deadDimAlpha
+        closeButton.alphaValue = dimAlpha
     }
 
     // MARK: NSMenuDelegate
@@ -398,6 +433,24 @@ final class TabItemView: NSView, NSMenuDelegate {
         let pinItem = NSMenuItem(title: pinTitle, action: #selector(pinTapped), keyEquivalent: "")
         pinItem.target = self
         menu.addItem(pinItem)
+
+        // Detach/Return actions
+        if isDetached {
+            let showItem = NSMenuItem(title: "Show Window", action: #selector(showDetachedWindowTapped), keyEquivalent: "")
+            showItem.image = NSImage(systemSymbolName: "macwindow", accessibilityDescription: nil)
+            showItem.target = self
+            menu.addItem(showItem)
+
+            let returnItem = NSMenuItem(title: "Return to Tab", action: #selector(returnDetachedTabTapped), keyEquivalent: "")
+            returnItem.image = NSImage(systemSymbolName: "arrow.left.to.line", accessibilityDescription: nil)
+            returnItem.target = self
+            menu.addItem(returnItem)
+        } else if onDetach != nil {
+            let detachItem = NSMenuItem(title: "Detach Tab", action: #selector(detachTabTapped), keyEquivalent: "")
+            detachItem.image = NSImage(systemSymbolName: "rectangle.on.rectangle", accessibilityDescription: nil)
+            detachItem.target = self
+            menu.addItem(detachItem)
+        }
 
         if onRename != nil {
             let renameItem = NSMenuItem(title: "Rename Tab...", action: #selector(renameTapped), keyEquivalent: "")

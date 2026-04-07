@@ -64,7 +64,11 @@ extension ThreadDetailViewController {
 
         switch tabSlots[index] {
         case .terminal(let sessionName):
-            selectTerminalTab(at: index, sessionName: sessionName)
+            if PopoutWindowManager.shared.isTabDetached(sessionName: sessionName) {
+                selectDetachedTab(at: index, sessionName: sessionName)
+            } else {
+                selectTerminalTab(at: index, sessionName: sessionName)
+            }
         case .web(let identifier):
             selectWebTabByIdentifier(identifier, displayIndex: index)
         case .draft(let identifier):
@@ -146,6 +150,55 @@ extension ThreadDetailViewController {
         _ = selectPreparedTab(at: index)
     }
 
+    private func selectDetachedTab(at index: Int, sessionName: String) {
+        for (i, item) in tabItems.enumerated() {
+            item.isSelected = (i == index)
+        }
+
+        // Hide all terminal views
+        for tv in terminalViews where tv.superview != nil {
+            tv.isHidden = true
+        }
+
+        hideActiveWebTab()
+        hideActiveDraftTab()
+        hideEmptyState()
+
+        // Hide all existing placeholders first
+        for (_, placeholder) in detachedTabPlaceholders {
+            placeholder.isHidden = true
+        }
+
+        // Show or create detached tab placeholder
+        if let placeholder = detachedTabPlaceholders[sessionName] {
+            placeholder.isHidden = false
+        } else {
+            let placeholder = DetachedTabPlaceholderView(sessionName: sessionName)
+            placeholder.onShowWindow = {
+                PopoutWindowManager.shared.bringToFront(sessionName: sessionName)
+            }
+            placeholder.onReturnToTab = {
+                PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
+            }
+            placeholder.translatesAutoresizingMaskIntoConstraints = false
+            terminalContainer.addSubview(placeholder)
+            NSLayoutConstraint.activate([
+                placeholder.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
+                placeholder.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
+                placeholder.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+                placeholder.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
+            ])
+            detachedTabPlaceholders[sessionName] = placeholder
+        }
+
+        currentTabIndex = index
+        dismissLoadingOverlay()
+        scrollOverlay.isHidden = true
+        setScrollFABVisible(false)
+        promptTOCCanShowForCurrentTab = false
+        applyPromptTOCVisibility()
+    }
+
     @discardableResult
     func selectPreparedTab(at index: Int) -> Bool {
         guard index < tabSlots.count else { return false }
@@ -154,6 +207,11 @@ extension ThreadDetailViewController {
 
         hideActiveWebTab()
         hideActiveDraftTab()
+
+        // Hide detached tab placeholders when switching to a live terminal tab
+        for (_, placeholder) in detachedTabPlaceholders {
+            placeholder.isHidden = true
+        }
 
         for (i, item) in tabItems.enumerated() {
             item.isSelected = (i == index)
@@ -309,6 +367,14 @@ extension ThreadDetailViewController {
                 let agentType = threadManager.agentType(for: thread, sessionName: sessionName)
                 let resumeID = threadManager.conversationID(for: thread.id, sessionName: sessionName)
                 let isForwardedContinuation = thread.forwardedTmuxSessions.contains(sessionName)
+                item.isDetached = PopoutWindowManager.shared.isTabDetached(sessionName: sessionName)
+                item.onDetach = { [weak self] in self?.detachTab(at: i) }
+                item.onShowDetachedWindow = { [weak self] in
+                    PopoutWindowManager.shared.bringToFront(sessionName: sessionName)
+                }
+                item.onReturnDetachedTab = { [weak self] in
+                    PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
+                }
                 item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
                 item.allowsDoubleClickRename = true
                 item.onResumeAgentInNewTab = agentType?.supportsResume == true

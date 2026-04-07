@@ -85,6 +85,9 @@ extension ThreadDetailViewController {
         for termView in terminalViews { termView.isHidden = true }
         hideActiveWebTab()
         hideActiveDraftTab()
+        for (_, placeholder) in detachedTabPlaceholders {
+            placeholder.isHidden = true
+        }
 
         dismissLoadingOverlay()
 

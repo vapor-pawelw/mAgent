@@ -406,6 +406,13 @@ final class ThreadDetailViewController: NSViewController {
             object: nil
         )
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTabReturnedToThread(_:)),
+            name: .magentTabReturnedToThread,
+            object: nil
+        )
+
         refreshRecoveryBanner()
 
         Task {
@@ -444,6 +451,8 @@ final class ThreadDetailViewController: NSViewController {
     func cacheTerminalViewsForReuse() {
         for (index, sessionName) in thread.tmuxSessionNames.enumerated() {
             guard index < terminalViews.count else { continue }
+            // Skip sessions whose views are in a pop-out window, not here
+            guard !PopoutWindowManager.shared.isTabDetached(sessionName: sessionName) else { continue }
             ReusableTerminalViewCache.shared.store(
                 terminalViews[index],
                 sessionName: sessionName,
@@ -1662,6 +1671,13 @@ final class ThreadDetailViewController: NSViewController {
             return
         }
         refreshRecoveryBanner()
+    }
+
+    @objc private func handleTabReturnedToThread(_ notification: Notification) {
+        guard let sessionName = notification.userInfo?["sessionName"] as? String,
+              let threadId = notification.userInfo?["threadId"] as? UUID,
+              threadId == thread.id else { return }
+        returnDetachedTab(sessionName: sessionName)
     }
 
     func refreshRecoveryBanner() {
