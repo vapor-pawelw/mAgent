@@ -1325,12 +1325,43 @@ extension ThreadManager {
         let existing = threads[index].submittedPromptsBySession[sessionName] ?? []
         guard history != existing else { return }
 
+        // Capture before mutating so we can detect growth below.
+        let previousCount = existing.count
+
         if history.isEmpty {
             threads[index].submittedPromptsBySession.removeValue(forKey: sessionName)
         } else {
             threads[index].submittedPromptsBySession[sessionName] = history
         }
         try? persistence.saveActiveThreads(threads)
+
+        // When new prompts appear and the branch hasn't been renamed yet, kick off
+        // auto-rename immediately. This covers threads whose prompts arrive via CLI
+        // injection (sendPrompt IPC) or any other path that updates the history
+        // without going through ThreadDetailViewController's TOC refresh.
+        // All concurrency/duplication guards are enforced inside performAutoRename.
+        if history.count > previousCount,
+           !threads[index].didAutoRenameFromFirstPrompt {
+            let firstNewPrompt = history[previousCount]
+            let capturedId = threadId
+            let capturedSession = sessionName
+            Task {
+                _ = await self.autoRenameThreadAfterFirstPromptIfNeeded(
+                    threadId: capturedId,
+                    sessionName: capturedSession,
+                    prompt: firstNewPrompt
+                )
+            }
+        }
+    }
+
+    /// Appends a single prompt to a session's submitted history, reading the current
+    /// persisted state so concurrent callers cannot overwrite each other's additions.
+    /// Also triggers auto-rename when the history grows (same as `replaceSubmittedPromptHistory`).
+    func appendToSubmittedPromptHistory(threadId: UUID, sessionName: String, prompt: String) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        let current = threads[index].submittedPromptsBySession[sessionName] ?? []
+        replaceSubmittedPromptHistory(threadId: threadId, sessionName: sessionName, prompts: current + [prompt])
     }
 
     private func normalizedSubmittedPrompt(_ prompt: String) -> String {

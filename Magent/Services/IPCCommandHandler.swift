@@ -658,6 +658,13 @@ final class IPCCommandHandler {
 
         if thread.agentTmuxSessions.contains(sessionName) {
             threadManager.scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: sessionName)
+            // Record in submitted history so auto-rename fires immediately,
+            // without waiting for the user to open the thread or a bell event.
+            threadManager.appendToSubmittedPromptHistory(
+                threadId: thread.id,
+                sessionName: sessionName,
+                prompt: prompt
+            )
         }
 
         return .success(id: request.id)
