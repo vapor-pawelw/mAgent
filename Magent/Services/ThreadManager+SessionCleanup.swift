@@ -46,6 +46,10 @@ extension ThreadManager {
         if thread.id == activeThreadId && thread.lastSelectedTabIdentifier == sessionName {
             return true
         }
+        // Protect sessions visible in pop-out windows.
+        if PopoutWindowManager.shared.visibleSessionNames.contains(sessionName) {
+            return true
+        }
         // Thread-level or session-level "Keep Alive" — never close.
         if thread.isKeepAlive || thread.protectedTmuxSessions.contains(sessionName) {
             return true

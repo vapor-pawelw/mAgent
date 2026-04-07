@@ -60,6 +60,9 @@ extension ThreadManager {
                 // Never count the currently visible session as idle.
                 if session == currentSession { continue }
 
+                // Protect sessions visible in pop-out windows.
+                if PopoutWindowManager.shared.visibleSessionNames.contains(session) { continue }
+
                 // Already evicted — not live for our purposes.
                 if evictedIdleSessions.contains(session) { continue }
 
