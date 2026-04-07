@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Agents
+- GPT 5.3 is now available as a Codex model option.
 - Fixed agent resume/recovery from incorrectly triggering when a plain terminal fallback session is recreated.
 
 ## 1.5.2 - 2026-04-07
