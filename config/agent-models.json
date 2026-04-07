@@ -12,7 +12,8 @@
     "codex": {
       "models": [
         { "id": "gpt-5.4", "label": "GPT 5.4" },
-        { "id": "gpt-5.4-mini", "label": "GPT 5.4 Mini" }
+        { "id": "gpt-5.4-mini", "label": "GPT 5.4 Mini" },
+        { "id": "gpt-5.3", "label": "GPT 5.3" }
       ],
       "reasoningLevels": ["low", "medium", "high", "xhigh"]
     }

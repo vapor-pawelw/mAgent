@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Agents
+- GPT 5.3 is now available as a Codex model option.
 
 ## 1.5.2 - 2026-04-07
 
