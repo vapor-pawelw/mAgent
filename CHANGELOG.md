@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Sidebar
+- Project and section headers now stick to the top of the sidebar while scrolling, so you always know which repo/section the visible threads belong to. Clicking a sticky header smoothly scrolls back to the actual header row.
 
 ## 1.5.2 - 2026-04-07
 
