@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.5.3 - 2026-04-07
+
+
 ### Terminal
 - Fixed terminal becoming unresponsive to mouse clicks. The CAMetalLayer backing the terminal surface was missing `isOpaque`, causing the macOS window server to intermittently route mouse events past the terminal region.
 - Fixed tmux mouse URL capture script blocking all terminal input by running it in the background (`run-shell -b`).
@@ -30,6 +35,7 @@ All notable changes to this project will be documented in this file.
 
 ### Status Bar
 - Rate limit summary now shows inline Claude/Codex agent icons before each agent name.
+
 
 ## 1.5.2 - 2026-04-07
 
