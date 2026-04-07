@@ -4,8 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Sidebar
+- Rate limit badges now show Claude/Codex agent glyphs instead of generic hourglass icons, so users can see which agent is rate-limited at a glance.
+- Threads that directly trigger rate limits now show a red capsule highlight (like the green completion highlight) that clears when the user selects the thread.
+
 ### Agents
 - Fixed agent resume/recovery from incorrectly triggering when a plain terminal fallback session is recreated.
+
+### Status Bar
+- Rate limit summary now shows inline Claude/Codex agent icons before each agent name.
 
 ## 1.5.2 - 2026-04-07
 

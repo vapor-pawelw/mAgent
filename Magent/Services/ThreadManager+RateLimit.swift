@@ -19,6 +19,16 @@ extension ThreadManager {
         return "Rate limits: " + entries.joined(separator: "  ·  ")
     }
 
+    /// Returns per-agent rate limit entries for building attributed strings with inline icons.
+    func globalRateLimitEntries(now: Date = Date()) -> [(agent: AgentType, countdown: String)] {
+        let ordered: [AgentType] = [.claude, .codex]
+        return ordered.compactMap { agent in
+            guard let info = globalAgentRateLimits[agent] else { return nil }
+            guard info.resetAt > now else { return nil }
+            return (agent: agent, countdown: countdownText(until: info.resetAt, now: now))
+        }
+    }
+
     private func countdownText(until resetAt: Date, now: Date) -> String {
         let remaining = max(0, Int(resetAt.timeIntervalSince(now)))
         let days = remaining / 86_400
@@ -253,6 +263,12 @@ extension ThreadManager {
             // Re-lookup after await — the thread may have been archived/removed
             if let j = threads.firstIndex(where: { $0.id == threadId }),
                updatedRateLimits != threads[j].rateLimitedSessions {
+                // Mark newly rate-limited sessions as unread for "requires attention" UX.
+                let previousSessions = Set(threads[j].rateLimitedSessions.keys)
+                let newSessions = Set(updatedRateLimits.keys).subtracting(previousSessions)
+                if !newSessions.isEmpty {
+                    threads[j].unreadRateLimitSessions.formUnion(newSessions)
+                }
                 threads[j].rateLimitedSessions = updatedRateLimits
                 changedThreadIds.insert(threadId)
             }
@@ -352,6 +368,7 @@ extension ThreadManager {
         // already has a directly-detected (non-propagated) marker.
         var propagatedInfo = info
         propagatedInfo.isPropagated = true
+        propagatedInfo.agentType = agent
 
         for i in threads.indices where !threads[i].isArchived {
             var updatedRateLimits = threads[i].rateLimitedSessions
@@ -508,6 +525,7 @@ extension ThreadManager {
                 filtered.removeValue(forKey: key)
             }
             threads[i].rateLimitedSessions = filtered
+            threads[i].unreadRateLimitSessions.subtract(keysToRemove)
             changedThreadIds.insert(threads[i].id)
         }
     }
@@ -653,7 +671,7 @@ extension ThreadManager {
         let resetDescription = extractRateLimitResetDescription(from: focusText)
         let fingerprint = rateLimitFingerprint(from: focusText, fallback: resetDescription)
         return RateLimitDetection(
-            info: AgentRateLimitInfo(resetAt: parsed.resetAt, resetDescription: resetDescription, detectedAt: now),
+            info: AgentRateLimitInfo(resetAt: parsed.resetAt, resetDescription: resetDescription, detectedAt: now, agentType: agent),
             fingerprint: fingerprint,
             hasRelativeReset: parsed.hasRelativeReset,
             hasExplicitDateAnchor: parsed.hasExplicitDateAnchor
@@ -743,7 +761,7 @@ extension ThreadManager {
                 fallback: resetDescription
             )
             return RateLimitDetection(
-                info: AgentRateLimitInfo(resetAt: parsed.resetAt, resetDescription: resetDescription, detectedAt: now),
+                info: AgentRateLimitInfo(resetAt: parsed.resetAt, resetDescription: resetDescription, detectedAt: now, agentType: .claude),
                 fingerprint: fingerprint,
                 hasRelativeReset: parsed.hasRelativeReset,
                 hasExplicitDateAnchor: parsed.hasExplicitDateAnchor
