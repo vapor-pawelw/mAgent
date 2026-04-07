@@ -46,7 +46,7 @@ magent-cli create-thread --project <name> [options]
 | `--base-branch <name>` | Use an explicit branch as the base for the new thread. |
 | `--from-thread <name>` | Inherit base branch and section from the named thread. The new thread is positioned directly below it in the sidebar. Special values: `main` (project's main worktree), `none` (suppress auto-detection). |
 | `--select` | Switch the GUI to the newly created thread. By default, CLI-created threads appear in the sidebar without switching focus. |
-| `--no-submit` | Inject the prompt text into the agent input but don't press Enter. The user can review and submit manually. Recommended when spawning many threads to avoid concurrent agent CPU load. |
+| `--no-submit` | Inject the prompt text into the agent input but don't press Enter. The user can review and submit manually. |
 
 If neither `--name` nor `--description` is given, a random name is generated.
 `--base-thread` and `--base-branch` are mutually exclusive.
@@ -57,7 +57,7 @@ If neither `--name` nor `--description` is given, a random name is generated.
 
 ### batch-create
 
-Create multiple threads in parallel. Threads are created concurrently for maximum throughput with minimal UI blocking. Recommended with `--no-submit` when spawning many threads to avoid CPU spikes from concurrent agents.
+Create multiple threads in parallel. Threads are created concurrently for maximum throughput with minimal UI blocking.
 
 ```bash
 magent-cli batch-create --project <name> --file <specs.json> [--from-thread <name|main|none>] [--no-submit]
