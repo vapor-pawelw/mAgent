@@ -43,6 +43,9 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - Dynamic row heights computed in `heightOfRowByItem` using `ThreadCell.estimatedDescriptionLineCount` (text width estimation) and `ThreadCell.sidebarRowHeight(descriptionLines:hasSubtitle:hasPRRow:narrowThreads:)`.
 - The archiving overlay is owned by `AlwaysEmphasizedRowView`, covering the full row bounds.
 - Busy shimmer animation is a `CAGradientLayer` mask on the content view, managed by `AlwaysEmphasizedRowView`.
+- Busy border animation is a rotating conic gradient (`CAGradientLayer` with `.conic` type) masked to the capsule border stroke via a `CAShapeLayer`. The gradient has a short bright accent-colored arc (~16% of the circumference) that blends into the subtle default border color. When the row is selected, the bright arc switches to white. Managed by `AlwaysEmphasizedRowView.startBusyBorderAnimation()`.
+- Animation phase is stored in a class-level dictionary (`sharedBorderAnimationStartTimes`) keyed by thread ID (`busyBorderPhaseKey`), so animations survive row view recreation during structural reloads. The rotation uses `beginTime` pinned to the original start time so CA computes the correct phase from elapsed time.
+- Spinner indicators were removed from `ThreadCell`'s trailing stack — the animated border replaces them.
 
 ## Gotchas
 

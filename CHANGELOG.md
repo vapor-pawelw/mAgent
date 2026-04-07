@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Sidebar
+- Busy threads now show a rotating gradient border animation instead of a spinner icon.
+- Metadata-only sidebar updates (busy state, rate limits, dirty flag, etc.) no longer recreate row views, preserving running animations.
+
 ### Agents
 - GPT 5.3 is now available as a Codex model option.
 - Fixed agent resume/recovery from incorrectly triggering when a plain terminal fallback session is recreated.
