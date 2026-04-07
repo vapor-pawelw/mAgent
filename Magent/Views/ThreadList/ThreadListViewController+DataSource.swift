@@ -408,6 +408,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             rowView.showsSubtleBottomSeparator = false
             rowView.showsBusyShimmer = thread.isAnyBusy
             rowView.showsArchivingOverlay = thread.isArchiving
+            rowView.showsPopoutTint = PopoutWindowManager.shared.isThreadPoppedOut(thread.id)
             rowView.configureSignEmoji(
                 thread.signEmoji,
                 tintColor: thread.signEmoji.flatMap { Self.signEmojiTintColor(for: $0) },

@@ -74,6 +74,30 @@ extension ThreadListViewController {
         favoriteItem.isEnabled = canAddFavorite
         menu.addItem(favoriteItem)
 
+        // Pop-out window actions
+        if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
+            menu.addItem(NSMenuItem.separator())
+
+            let showItem = NSMenuItem(title: "Show Window", action: #selector(showPopoutWindow(_:)), keyEquivalent: "")
+            showItem.target = self
+            showItem.image = NSImage(systemSymbolName: "macwindow", accessibilityDescription: nil)
+            showItem.representedObject = thread
+            menu.addItem(showItem)
+
+            let returnItem = NSMenuItem(title: "Return to Main Window", action: #selector(returnPopoutToMain(_:)), keyEquivalent: "")
+            returnItem.target = self
+            returnItem.image = NSImage(systemSymbolName: "arrow.left.to.line", accessibilityDescription: nil)
+            returnItem.representedObject = thread
+            menu.addItem(returnItem)
+        } else {
+            menu.addItem(NSMenuItem.separator())
+
+            let popOutItem = NSMenuItem(title: "Open in Separate Window", action: #selector(popOutThread(_:)), keyEquivalent: "")
+            popOutItem.target = self
+            popOutItem.image = NSImage(systemSymbolName: "rectangle.on.rectangle", accessibilityDescription: nil)
+            popOutItem.representedObject = thread
+            menu.addItem(popOutItem)
+        }
         // Fork Thread
         if let createFromBranchItem = createThreadFromBaseMenuItem(for: thread, settings: settings) {
             menu.addItem(createFromBranchItem)
@@ -1038,6 +1062,7 @@ extension ThreadListViewController {
         threadManager.toggleThreadPin(threadId: threadId)
     }
 
+<<<<<<< HEAD
     @objc private func toggleThreadFavorite(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         let didToggle = threadManager.toggleThreadFavorite(threadId: threadId)
@@ -1048,6 +1073,28 @@ extension ThreadListViewController {
         )
     }
 
+||||||| parent of abde8cb (feat(popout-sidebar): Sidebar visual integration for pop-out windows)
+=======
+    @objc private func showPopoutWindow(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread else { return }
+        PopoutWindowManager.shared.bringToFront(threadId: thread.id)
+    }
+
+    @objc private func returnPopoutToMain(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread else { return }
+        PopoutWindowManager.shared.returnThreadToMain(thread.id)
+    }
+
+    @objc private func popOutThread(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread else { return }
+        NotificationCenter.default.post(
+            name: Notification.Name("magentPopOutThreadRequested"),
+            object: nil,
+            userInfo: ["threadId": thread.id]
+        )
+    }
+
+>>>>>>> abde8cb (feat(popout-sidebar): Sidebar visual integration for pop-out windows)
     @objc private func toggleThreadKeepAlive(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         threadManager.toggleThreadKeepAlive(threadId: threadId)

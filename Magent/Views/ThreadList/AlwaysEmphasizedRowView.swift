@@ -132,6 +132,9 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             updateBusyShimmerAnimation()
         }
     }
+    var showsPopoutTint = false {
+        didSet { needsDisplay = true }
+    }
     var showsArchivingOverlay = false {
         didSet { updateArchivingOverlay() }
     }
@@ -235,6 +238,11 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 fill: NSColor.systemGreen.withAlphaComponent(0.06),
                 border: NSColor.systemGreen.withAlphaComponent(0.5)
             )
+        } else if showsPopoutTint {
+            return CapsuleStyle(
+                fill: NSColor.systemPurple.withAlphaComponent(0.05),
+                border: NSColor.systemPurple.withAlphaComponent(0.2)
+            )
         } else {
             return CapsuleStyle(
                 fill: NSColor.white.withAlphaComponent(0.05),
@@ -269,7 +277,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         // selectionHighlightStyle = .none on the outline view to fully suppress
         // AppKit's own selection rect (which adds an unwanted border on right-click).
         let style = currentCapsuleStyle
-        if isSelected || showsRateLimitHighlight || showsWaitingHighlight || showsCompletionHighlight {
+        if isSelected || showsRateLimitHighlight || showsWaitingHighlight || showsCompletionHighlight || showsPopoutTint {
             drawCapsuleBorderAndFill(style)
         } else {
             // Normal: subtle fill + optional 1pt border.

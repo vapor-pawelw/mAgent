@@ -271,6 +271,7 @@ final class ThreadCell: NSTableCellView {
     private var codexRateLimitBadge: TopBorderBadge?
     private var keepAliveBadge: TopBorderBadge?
     private var favoriteBadge: TopBorderBadge?
+    private var popoutBadge: TopBorderBadge?
     private var pinnedBadge: TopBorderBadge?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
@@ -815,6 +816,14 @@ final class ThreadCell: NSTableCellView {
             keepAliveBadge?.toolTip = nil
         }
 
+        let isPopout = PopoutWindowManager.shared.isThreadPoppedOut(thread.id)
+        if isPopout {
+            ensurePopoutBadge()
+            // Re-ensure pin badge is last (same pattern as keepAlive does).
+            if thread.isPinned { ensurePinnedBadge() }
+        }
+        popoutBadge?.isHidden = !isPopout
+
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
         // Rate limit shown as top-border badge with agent glyph.
@@ -917,6 +926,8 @@ final class ThreadCell: NSTableCellView {
             rateLimitedAgentTypes: rateLimitedAgentTypes,
             directlyRateLimitedAgentTypes: directlyRateLimitedAgentTypes
         )
+
+        popoutBadge?.isHidden = true
 
         let showDuration = PersistenceService.shared.loadSettings().showBusyStateDuration
         configureDuration(since: showDuration ? busyStateSince : nil)
@@ -1178,6 +1189,19 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
+    private func ensurePopoutBadge() {
+        guard popoutBadge == nil else { return }
+        ensureTopBorderBadgeStack()
+        let badge = TopBorderBadge(bareIcon: true)
+        badge.label.isHidden = true
+        badge.iconView.image = Self.cachedSymbolImage("macwindow")
+        badge.iconView.contentTintColor = .systemPurple
+        badge.iconView.isHidden = false
+        badge.isHidden = true
+        badge.toolTip = "Open in separate window"
+        topBorderBadgeStack?.addArrangedSubview(badge)
+        popoutBadge = badge
+    }
     private func ensurePinnedBadge() {
         ensureTopBorderBadgeStack()
         if pinnedBadge == nil {
@@ -1236,6 +1260,7 @@ final class ThreadCell: NSTableCellView {
         codexRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         keepAliveBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         favoriteBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        popoutBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         pinnedBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         priorityCapsule?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         // Pin/favorite icons: primary brand by default, white when selected.
