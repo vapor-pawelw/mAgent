@@ -19,6 +19,9 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - GPT 5.3 is now available as a Codex model option.
 - Fixed agent resume/recovery from incorrectly triggering when a plain terminal fallback session is recreated.
+- Fixed auto-rename-on-first-prompt to trigger immediately when prompts are injected via CLI, instead of waiting for user interaction or bell events.
+
+### Thread Naming
 
 ### Status Bar
 - Rate limit summary now shows inline Claude/Codex agent icons before each agent name.
