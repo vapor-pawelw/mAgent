@@ -1552,6 +1552,7 @@ extension ThreadManager {
             let removed = oldWaiting.subtracting(prunedWaiting)
             for session in removed {
                 notifiedWaitingSessions.remove(session)
+                rateLimitLiftPendingResumeSessions.remove(session)
             }
             threads[index].waitingForInputSessions = prunedWaiting
             changed = true
