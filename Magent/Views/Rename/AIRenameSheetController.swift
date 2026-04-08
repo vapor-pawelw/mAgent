@@ -416,8 +416,13 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
 
     func textDidChange(_ notification: Notification) {
         guard !isClearingPlaceholder else { return }
-        if !isShowingPlaceholder, promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            showPlaceholder()
+        if !isShowingPlaceholder {
+            if promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                showPlaceholder()
+            } else {
+                // User typed something manually — reset picker to the placeholder item
+                promptPicker.selectItem(at: 0)
+            }
         }
     }
 

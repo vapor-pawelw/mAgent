@@ -45,42 +45,24 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
-        // Rename (submenu: prompt-based rename, description, branch name)
-        let renameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameMenuTitle), action: nil, keyEquivalent: "")
-        renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
-        renameItem.submenu = buildRenameSubmenu(for: thread)
-        menu.addItem(renameItem)
+        // AI Rename (top-level)
+        let aiRenameItem = NSMenuItem(title: "AI Rename…", action: #selector(showAIRenameSheet(_:)), keyEquivalent: "")
+        aiRenameItem.target = self
+        aiRenameItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
+        aiRenameItem.representedObject = thread
+        menu.addItem(aiRenameItem)
 
-        // Icon
-        let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadIconMenuTitle), action: nil, keyEquivalent: "")
-        iconItem.image = NSImage(
-            systemSymbolName: thread.threadIcon.symbolName,
-            accessibilityDescription: thread.threadIcon.accessibilityDescription
-        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
-        iconItem.submenu = buildThreadIconSubmenu(for: thread)
-        menu.addItem(iconItem)
-
-        // Sign
+        // Sign (top-level)
         let signItem = NSMenuItem(title: "Sign", action: nil, keyEquivalent: "")
         signItem.image = NSImage(systemSymbolName: "flag.fill", accessibilityDescription: "Sign emoji")
         signItem.submenu = buildSignEmojiSubmenu(for: thread)
         menu.addItem(signItem)
 
-        // Move to... submenu
-        let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
-        let moveSubmenu = NSMenu()
-        for section in visibleSections {
-            let item = NSMenuItem(title: section.name, action: #selector(moveThreadToSection(_:)), keyEquivalent: "")
-            item.target = self
-            item.image = colorDotImage(color: section.color, size: 8)
-            item.representedObject = ["thread": thread, "sectionId": section.id] as [String: Any]
-            moveSubmenu.addItem(item)
-        }
-
-        let moveItem = NSMenuItem(title: String(localized: .ThreadStrings.threadMoveTo), action: nil, keyEquivalent: "")
-        moveItem.submenu = moveSubmenu
-        moveItem.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
-        menu.addItem(moveItem)
+        // Configure submenu (icon, description, branch name, section)
+        let configureItem = NSMenuItem(title: "Configure", action: nil, keyEquivalent: "")
+        configureItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
+        configureItem.submenu = buildConfigureSubmenu(for: thread, settings: settings)
+        menu.addItem(configureItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -165,31 +147,52 @@ extension ThreadListViewController {
         return menu
     }
 
-    private func buildRenameSubmenu(for thread: MagentThread) -> NSMenu {
+    private func buildConfigureSubmenu(for thread: MagentThread, settings: AppSettings) -> NSMenu {
         let submenu = NSMenu()
 
-        // AI Rename... (opens the sheet)
-        let aiRenameItem = NSMenuItem(title: "AI Rename…", action: #selector(showAIRenameSheet(_:)), keyEquivalent: "")
-        aiRenameItem.target = self
-        aiRenameItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
-        aiRenameItem.representedObject = thread
-        submenu.addItem(aiRenameItem)
+        // Icon
+        let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadIconMenuTitle), action: nil, keyEquivalent: "")
+        iconItem.image = NSImage(
+            systemSymbolName: thread.threadIcon.symbolName,
+            accessibilityDescription: thread.threadIcon.accessibilityDescription
+        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
+        iconItem.submenu = buildThreadIconSubmenu(for: thread)
+        submenu.addItem(iconItem)
 
         submenu.addItem(.separator())
 
-        // Set description
-        let descriptionItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetDescription), action: #selector(setThreadDescription(_:)), keyEquivalent: "")
+        // Description
+        let descriptionItem = NSMenuItem(title: "Description…", action: #selector(setThreadDescription(_:)), keyEquivalent: "")
         descriptionItem.target = self
         descriptionItem.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
         descriptionItem.representedObject = thread
         submenu.addItem(descriptionItem)
 
-        // Rename branch
-        let branchItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameBranch), action: #selector(renameThread(_:)), keyEquivalent: "")
+        // Branch name
+        let branchItem = NSMenuItem(title: "Branch name…", action: #selector(renameThread(_:)), keyEquivalent: "")
         branchItem.target = self
         branchItem.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)
         branchItem.representedObject = thread
         submenu.addItem(branchItem)
+
+        // Section
+        let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
+        if !visibleSections.isEmpty {
+            submenu.addItem(.separator())
+
+            let sectionItem = NSMenuItem(title: "Section", action: nil, keyEquivalent: "")
+            sectionItem.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
+            let sectionSubmenu = NSMenu()
+            for section in visibleSections {
+                let item = NSMenuItem(title: section.name, action: #selector(moveThreadToSection(_:)), keyEquivalent: "")
+                item.target = self
+                item.image = colorDotImage(color: section.color, size: 8)
+                item.representedObject = ["thread": thread, "sectionId": section.id] as [String: Any]
+                sectionSubmenu.addItem(item)
+            }
+            sectionItem.submenu = sectionSubmenu
+            submenu.addItem(sectionItem)
+        }
 
         return submenu
     }
