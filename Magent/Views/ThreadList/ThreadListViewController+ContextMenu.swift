@@ -45,42 +45,24 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
-        // Rename (submenu: prompt-based rename, description, branch name)
-        let renameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameMenuTitle), action: nil, keyEquivalent: "")
-        renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
-        renameItem.submenu = buildRenameSubmenu(for: thread)
-        menu.addItem(renameItem)
+        // AI Rename (top-level)
+        let aiRenameItem = NSMenuItem(title: "AI Rename…", action: #selector(showAIRenameSheet(_:)), keyEquivalent: "")
+        aiRenameItem.target = self
+        aiRenameItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
+        aiRenameItem.representedObject = thread
+        menu.addItem(aiRenameItem)
 
-        // Icon
-        let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadIconMenuTitle), action: nil, keyEquivalent: "")
-        iconItem.image = NSImage(
-            systemSymbolName: thread.threadIcon.symbolName,
-            accessibilityDescription: thread.threadIcon.accessibilityDescription
-        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
-        iconItem.submenu = buildThreadIconSubmenu(for: thread)
-        menu.addItem(iconItem)
-
-        // Sign
+        // Sign (top-level)
         let signItem = NSMenuItem(title: "Sign", action: nil, keyEquivalent: "")
         signItem.image = NSImage(systemSymbolName: "flag.fill", accessibilityDescription: "Sign emoji")
         signItem.submenu = buildSignEmojiSubmenu(for: thread)
         menu.addItem(signItem)
 
-        // Move to... submenu
-        let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
-        let moveSubmenu = NSMenu()
-        for section in visibleSections {
-            let item = NSMenuItem(title: section.name, action: #selector(moveThreadToSection(_:)), keyEquivalent: "")
-            item.target = self
-            item.image = colorDotImage(color: section.color, size: 8)
-            item.representedObject = ["thread": thread, "sectionId": section.id] as [String: Any]
-            moveSubmenu.addItem(item)
-        }
-
-        let moveItem = NSMenuItem(title: String(localized: .ThreadStrings.threadMoveTo), action: nil, keyEquivalent: "")
-        moveItem.submenu = moveSubmenu
-        moveItem.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
-        menu.addItem(moveItem)
+        // Configure submenu (icon, description, branch name, section)
+        let configureItem = NSMenuItem(title: "Configure", action: nil, keyEquivalent: "")
+        configureItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
+        configureItem.submenu = buildConfigureSubmenu(for: thread, settings: settings)
+        menu.addItem(configureItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -165,80 +147,52 @@ extension ThreadListViewController {
         return menu
     }
 
-    private func buildRenameWithPromptSubmenu(for thread: MagentThread) -> NSMenu {
+    private func buildConfigureSubmenu(for thread: MagentThread, settings: AppSettings) -> NSMenu {
         let submenu = NSMenu()
 
-        // Draft tab prompts (shown first, prefixed with "DRAFT:")
-        let draftPrompts: [(String, String)] = thread.persistedDraftTabs.compactMap { draft in
-            let trimmed = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return nil }
-            return (draft.identifier, trimmed)
-        }
-        for (identifier, prompt) in draftPrompts {
-            let display = prompt.count > 54 ? String(prompt.prefix(51)) + "…" : prompt
-            let item = NSMenuItem(title: "\(ThreadManager.draftDescriptionPrefix)\(display)", action: #selector(renameWithDraftPrompt(_:)), keyEquivalent: "")
-            item.target = self
-            item.image = NSImage(systemSymbolName: "doc.text", accessibilityDescription: "Draft")
-            item.representedObject = ["thread": thread, "prompt": prompt, "draftId": identifier] as [String: Any]
-            submenu.addItem(item)
-        }
-
-        // Collect recent prompts across all sessions (newest last), deduplicate, take last 3
-        let recentPrompts: [String] = {
-            var seen = Set<String>()
-            var result: [String] = []
-            for prompt in thread.submittedPromptsBySession.values.flatMap({ $0 }).reversed() {
-                let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty, seen.insert(trimmed).inserted else { continue }
-                result.append(trimmed)
-                if result.count >= 3 { break }
-            }
-            return result.reversed() // oldest-first for menu order
-        }()
-
-        if !draftPrompts.isEmpty, !recentPrompts.isEmpty {
-            submenu.addItem(.separator())
-        }
-
-        for prompt in recentPrompts {
-            let truncated = prompt.count > 60 ? String(prompt.prefix(57)) + "…" : prompt
-            let item = NSMenuItem(title: truncated, action: #selector(renameWithRecentPrompt(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = ["thread": thread, "prompt": prompt] as [String: Any]
-            submenu.addItem(item)
-        }
-
-        if !recentPrompts.isEmpty || !draftPrompts.isEmpty {
-            submenu.addItem(.separator())
-        }
-
-        let customItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameCustom), action: #selector(renameThreadFromPrompt(_:)), keyEquivalent: "")
-        customItem.target = self
-        customItem.image = NSImage(systemSymbolName: "text.cursor", accessibilityDescription: nil)
-        customItem.representedObject = thread
-        submenu.addItem(customItem)
-
-        return submenu
-    }
-
-    private func buildRenameSubmenu(for thread: MagentThread) -> NSMenu {
-        let submenu = buildRenameWithPromptSubmenu(for: thread)
+        // Icon
+        let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadIconMenuTitle), action: nil, keyEquivalent: "")
+        iconItem.image = NSImage(
+            systemSymbolName: thread.threadIcon.symbolName,
+            accessibilityDescription: thread.threadIcon.accessibilityDescription
+        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
+        iconItem.submenu = buildThreadIconSubmenu(for: thread)
+        submenu.addItem(iconItem)
 
         submenu.addItem(.separator())
 
-        // Set description
-        let descriptionItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetDescription), action: #selector(setThreadDescription(_:)), keyEquivalent: "")
+        // Description
+        let descriptionItem = NSMenuItem(title: "Description…", action: #selector(setThreadDescription(_:)), keyEquivalent: "")
         descriptionItem.target = self
         descriptionItem.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
         descriptionItem.representedObject = thread
         submenu.addItem(descriptionItem)
 
-        // Rename branch
-        let branchItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameBranch), action: #selector(renameThread(_:)), keyEquivalent: "")
+        // Branch name
+        let branchItem = NSMenuItem(title: "Branch name…", action: #selector(renameThread(_:)), keyEquivalent: "")
         branchItem.target = self
         branchItem.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)
         branchItem.representedObject = thread
         submenu.addItem(branchItem)
+
+        // Section
+        let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
+        if !visibleSections.isEmpty {
+            submenu.addItem(.separator())
+
+            let sectionItem = NSMenuItem(title: "Section", action: nil, keyEquivalent: "")
+            sectionItem.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
+            let sectionSubmenu = NSMenu()
+            for section in visibleSections {
+                let item = NSMenuItem(title: section.name, action: #selector(moveThreadToSection(_:)), keyEquivalent: "")
+                item.target = self
+                item.image = colorDotImage(color: section.color, size: 8)
+                item.representedObject = ["thread": thread, "sectionId": section.id] as [String: Any]
+                sectionSubmenu.addItem(item)
+            }
+            sectionItem.submenu = sectionSubmenu
+            submenu.addItem(sectionItem)
+        }
 
         return submenu
     }
@@ -271,18 +225,13 @@ extension ThreadListViewController {
     static let signEmojiOptions: [SignOption] = [
         SignOption(emoji: "↑", label: "High Priority", tintColor: .systemRed),
         SignOption(emoji: "↓", label: "Low Priority", tintColor: .systemGreen),
-        SignOption(emoji: "❓", label: "Question", tintColor: .systemBlue),
-        SignOption(emoji: "❗", label: "Exclamation", tintColor: .systemOrange),
-        SignOption(emoji: "‼️", label: "Triple Exclamation", tintColor: .systemRed),
         SignOption(emoji: "🛑", label: "Stop Sign"),
         SignOption(emoji: "✅", label: "Checkmark"),
-        SignOption(emoji: "⏸️", label: "Pause"),
         SignOption(emoji: "⚠️", label: "Warning"),
         SignOption(emoji: "🔥", label: "Fire"),
-        SignOption(emoji: "📖", label: "Book"),
-        SignOption(emoji: "⚡", label: "Bolt"),
         SignOption(emoji: "🔍", label: "Magnifying Glass"),
-        SignOption(emoji: "🔒", label: "Lock"),
+        SignOption(emoji: "❓", label: "Question"),
+        SignOption(emoji: "❗", label: "Exclamation"),
     ]
 
     /// Returns the tint color for a sign emoji string, if any.
@@ -1119,99 +1068,62 @@ extension ThreadListViewController {
         }
     }
 
-    @objc private func renameWithRecentPrompt(_ sender: NSMenuItem) {
-        guard let info = sender.representedObject as? [String: Any],
-              let thread = info["thread"] as? MagentThread,
-              let prompt = info["prompt"] as? String else { return }
-
-        Task {
-            do {
-                let didRename = try await threadManager.renameThreadFromPrompt(thread, prompt: prompt)
-                guard didRename else { return }
-                await MainActor.run {
-                    if let updated = self.threadManager.threads.first(where: { $0.id == thread.id }) {
-                        self.delegate?.threadList(self, didRenameThread: updated)
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    let errorAlert = NSAlert()
-                    errorAlert.messageText = String(localized: .CommonStrings.commonRenameFailed)
-                    errorAlert.informativeText = error.localizedDescription
-                    errorAlert.alertStyle = .warning
-                    errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
-                    errorAlert.runModal()
-                }
-            }
-        }
-    }
-
-    @objc private func renameWithDraftPrompt(_ sender: NSMenuItem) {
-        guard let info = sender.representedObject as? [String: Any],
-              let thread = info["thread"] as? MagentThread,
-              let prompt = info["prompt"] as? String else { return }
-
-        Task {
-            do {
-                let didRename = try await threadManager.renameThreadFromPrompt(thread, prompt: prompt, prefixDraft: true)
-                guard didRename else { return }
-                await MainActor.run {
-                    if let updated = self.threadManager.threads.first(where: { $0.id == thread.id }) {
-                        self.delegate?.threadList(self, didRenameThread: updated)
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    let errorAlert = NSAlert()
-                    errorAlert.messageText = String(localized: .CommonStrings.commonRenameFailed)
-                    errorAlert.informativeText = error.localizedDescription
-                    errorAlert.alertStyle = .warning
-                    errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
-                    errorAlert.runModal()
-                }
-            }
-        }
-    }
-
-    @objc private func renameThreadFromPrompt(_ sender: NSMenuItem) {
+    @objc private func showAIRenameSheet(_ sender: NSMenuItem) {
         guard let thread = sender.representedObject as? MagentThread else { return }
+        presentAIRenameSheet(for: thread)
+    }
 
-        let alert = NSAlert()
-        alert.messageText = String(localized: .ThreadStrings.threadRenameTitle)
-        alert.informativeText = String(localized: .ThreadStrings.threadRenameMessage)
-        alert.addButton(withTitle: String(localized: .CommonStrings.commonRename))
-        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+    func presentAIRenameSheet(for thread: MagentThread, prefillPrompt: String = "") {
+        guard let parentWindow = view.window else { return }
 
-        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        textField.placeholderString = String(localized: .ThreadStrings.threadRenamePlaceholder)
-        alert.accessoryView = textField
+        let recentPrompts = Self.collectRecentPrompts(for: thread, limit: 10)
+        let config = AIRenameSheetConfig(
+            thread: thread,
+            recentPrompts: recentPrompts,
+            prefillPrompt: prefillPrompt
+        )
 
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        let prompt = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else { return }
-
-        Task {
-            do {
-                let didRename = try await threadManager.renameThreadFromPrompt(thread, prompt: prompt)
-                guard didRename else { return }
-                await MainActor.run {
-                    if let updated = self.threadManager.threads.first(where: { $0.id == thread.id }) {
-                        self.delegate?.threadList(self, didRenameThread: updated)
+        let sheet = AIRenameSheetController(config: config)
+        sheet.present(for: parentWindow) { [weak self] result in
+            guard let self, let result else { return }
+            Task {
+                do {
+                    let didRename = try await self.threadManager.renameThreadFromPrompt(
+                        thread,
+                        prompt: result.prompt,
+                        renameBranch: result.renameBranch,
+                        renameDescription: result.renameDescription,
+                        renameIcon: result.renameIcon
+                    )
+                    guard didRename else { return }
+                    await MainActor.run {
+                        if let updated = self.threadManager.threads.first(where: { $0.id == thread.id }) {
+                            self.delegate?.threadList(self, didRenameThread: updated)
+                        }
                     }
-                }
-            } catch {
-                await MainActor.run {
-                    let errorAlert = NSAlert()
-                    errorAlert.messageText = String(localized: .CommonStrings.commonRenameFailed)
-                    errorAlert.informativeText = error.localizedDescription
-                    errorAlert.alertStyle = .warning
-                    errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
-                    errorAlert.runModal()
+                } catch {
+                    await MainActor.run {
+                        BannerManager.shared.show(
+                            message: "AI Rename failed: \(error.localizedDescription)",
+                            style: .error
+                        )
+                    }
                 }
             }
         }
+    }
+
+    /// Collect recent prompts across all sessions, deduplicated, newest-first, up to `limit`.
+    static func collectRecentPrompts(for thread: MagentThread, limit: Int) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for prompt in thread.submittedPromptsBySession.values.flatMap({ $0 }).reversed() {
+            let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, seen.insert(trimmed).inserted else { continue }
+            result.append(trimmed)
+            if result.count >= limit { break }
+        }
+        return result
     }
 
     @objc private func renameThread(_ sender: NSMenuItem) {
