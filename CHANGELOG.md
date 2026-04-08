@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Agents
+- When a rate limit lifts (timer expiry or manual dismiss), threads and tabs where the agent was directly interrupted now show a "waiting for input" indicator so you know which ones to revisit and continue work. The indicator clears as soon as you select the tab or the agent resumes on its own.
+
 ### Sidebar
 - Fixed branch rename dialog pre-filling with the worktree name instead of the current git branch, and silently doing nothing when the user accepted it.
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.

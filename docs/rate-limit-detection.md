@@ -79,6 +79,17 @@ Newer pane output such as `/status` must not auto-clear an already-anchored limi
 - **Tooltips**: Show the exact reset time (e.g., "Rate limit reached. Resets Mar 2, 2026 at 8:00 PM") and whether the limit is direct or propagated
 - **Notifications**: Optional system notification when a rate limit lifts (configurable in Settings)
 
+## Resume Indicator After Lift
+
+When a rate limit lifts (timer expiry or manual dismiss), sessions that were **directly interrupted** (non-propagated marker) are automatically marked as "waiting for input" so the sidebar and tab bar show which threads need a follow-up prompt.
+
+- The indicator appears on the same tab dot used for interactive agent prompts (plan-mode, permission requests, etc.)
+- It persists until you select the affected tab or the agent resumes work on its own
+- Sessions that only had a **propagated** marker (global account limit applied to an idle session) are excluded — they were not interrupted mid-task
+- No additional sound or notification fires; the existing rate-limit-lifted signal is sufficient
+
+Implementation note: entries are tracked in `ThreadManager.rateLimitLiftPendingResumeSessions` (transient, not persisted) to protect the `waitingForInputSessions` entries from being auto-cleared by the idle-prompt detector, which normally clears waiting state when no interactive pattern is visible in the terminal.
+
 ## Settings
 
 Rate limit tracking can be toggled in **Settings > Agents > Agent Behavior**:
