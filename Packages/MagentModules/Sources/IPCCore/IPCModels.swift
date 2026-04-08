@@ -45,6 +45,10 @@ public nonisolated struct IPCBatchThreadSpec: Codable, Sendable {
     public var modelId: String?
     public var reasoningLevel: String?
     public var prompt: String?
+    /// Path to a file whose contents should be used as the initial prompt.
+    /// Useful for long prompts that are fragile to inline in JSON strings.
+    /// If both `prompt` and `promptFile` are provided, `promptFile` wins.
+    public var promptFile: String?
     public var newName: String?
     public var description: String?
     public var sectionName: String?
@@ -54,6 +58,14 @@ public nonisolated struct IPCBatchThreadSpec: Codable, Sendable {
     /// Per-spec override: thread name to inherit base branch and section from.
     /// `"main"` → project's main thread; `"none"` → suppress auto-detection.
     public var fromThreadName: String?
+
+    // The public JSON API uses "name" for the exact thread name; internally it's `newName`
+    // to avoid shadowing the commonly used `name` property on response types.
+    private enum CodingKeys: String, CodingKey {
+        case agentType, modelId, reasoningLevel, prompt, promptFile
+        case newName = "name"
+        case description, sectionName, baseThreadName, baseBranch, noSubmit, fromThreadName
+    }
 }
 
 // MARK: - Response

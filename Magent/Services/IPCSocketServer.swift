@@ -142,6 +142,24 @@ actor IPCSocketServer {
         do {
             let request = try JSONDecoder().decode(IPCRequest.self, from: data)
             response = await IPCCommandHandler.shared.handle(request)
+        } catch let decodeError as DecodingError {
+            // Provide actionable diagnostics instead of the opaque Foundation message.
+            switch decodeError {
+            case .keyNotFound(let key, _):
+                response = .failure("Invalid JSON: missing required key '\(key.stringValue)'")
+            case .typeMismatch(_, let ctx):
+                response = .failure("Invalid JSON: type mismatch — \(ctx.debugDescription)")
+            case .valueNotFound(_, let ctx):
+                response = .failure("Invalid JSON: value not found — \(ctx.debugDescription)")
+            case .dataCorrupted(let ctx):
+                // Common cause: pretty-printed specs.json embedded in the request caused
+                // truncation at the first newline. The CLI compacts the JSON now, but give
+                // a hint in case the caller bypasses the CLI.
+                let hint = "Ensure the full request is on a single line (no literal newlines inside the JSON)"
+                response = .failure("Invalid JSON: \(ctx.debugDescription). \(hint)")
+            @unknown default:
+                response = .failure("Invalid JSON: \(decodeError.localizedDescription)")
+            }
         } catch {
             response = .failure("Invalid JSON: \(error.localizedDescription)")
         }
@@ -762,9 +780,12 @@ actor IPCSocketServer {
             [ -n "$project" ] || die "Usage: magent-cli batch-create --project <name> --file <specs.json> [--from-thread <name|main|none>] [--no-submit]"
             [ -n "$bc_file" ] || die "Missing --file <specs.json>. File must contain a JSON array of thread specs."
             [ -f "$bc_file" ] || die "File not found: $bc_file"
-            specs=$(cat "$bc_file") || die "Failed to read: $bc_file"
-            # Validate it is a JSON array
-            printf '%s' "$specs" | jq -e 'type == "array"' >/dev/null 2>&1 || die "File must contain a JSON array of thread specs"
+            raw_specs=$(cat "$bc_file") || die "Failed to read: $bc_file"
+            # Validate it is a JSON array and compact it — the IPC protocol is
+            # newline-delimited, so pretty-printed JSON with embedded newlines
+            # would be truncated at the first \n and cause an "Invalid JSON" error.
+            specs=$(printf '%s' "$raw_specs" | jq -ec 'if type == "array" then . else error("not an array") end' 2>/dev/null) \
+                || die "File must contain a JSON array of thread specs"
             json="{$(json_kv command batch-create),$(json_kv project "$project"),\"threads\":$specs"
             [ "$no_submit" = "1" ] && json="$json,\"noSubmit\":true"
             # --from-thread: explicit name applies to all specs without per-spec fromThreadName

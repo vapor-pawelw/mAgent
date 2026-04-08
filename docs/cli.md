@@ -78,9 +78,10 @@ Each element in the specs array is an object with optional keys:
 
 | Key | Description |
 |-----|-------------|
-| `prompt` | Initial prompt for the agent. |
-| `description` | Natural-language description (AI generates slug). |
-| `name` | Exact thread name. |
+| `prompt` | Initial prompt for the agent (inline string). |
+| `promptFile` | Path to a file whose contents are used as the initial prompt. Overrides `prompt` when both are set. Prefer this over `prompt` for long prompts — inline JSON strings with embedded newlines are fragile. |
+| `description` | Natural-language description; AI generates a slug from it for the git branch name. |
+| `name` | Exact git branch/thread name (sets the branch name directly, no AI generation). Takes precedence over `description`. |
 | `agentType` | `claude`, `codex`, `custom`, or `terminal`. Errors if the agent is disabled in Settings. |
 | `modelId` | Model ID to launch with (e.g. `claude-opus-4-5`). Falls back to the agent's configured default. |
 | `reasoningLevel` | Reasoning level: `low`, `medium`, `high`, `max` (Claude) or `low`, `medium`, `high`, `xhigh` (Codex). |
@@ -90,11 +91,15 @@ Each element in the specs array is an object with optional keys:
 | `fromThreadName` | Per-spec override for `--from-thread`. |
 | `noSubmit` | Per-thread override for `--no-submit`. |
 
+> **`name` vs `description`**: Use `name` when you want an exact branch name (e.g. `"ip-1234-fix-login"`). Use `description` when you want AI to generate a short slug. If both are provided, `name` wins. The display name in the sidebar is the same as the branch name.
+
+> **Long prompts**: Use `promptFile` instead of `prompt` for multi-line or long prompts. Inline prompts embedded in the JSON string can cause parse errors if they contain special characters. `promptFile` accepts any absolute or `~`-relative path and is read server-side (same machine).
+
 Example `specs.json`:
 ```json
 [
   {"description": "fix login timeout", "prompt": "The login form times out after 30s..."},
-  {"description": "add dark mode support", "prompt": "Add dark mode toggle to settings..."},
+  {"description": "add dark mode support", "promptFile": "~/prompts/dark-mode.txt"},
   {"name": "refactor-api", "prompt": "Refactor the REST API client to use async/await"}
 ]
 ```

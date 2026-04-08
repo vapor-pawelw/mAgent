@@ -508,12 +508,26 @@ final class IPCCommandHandler {
                 sectionId = nil
             }
 
+            // Resolve prompt — promptFile wins over inline prompt when both are provided.
+            let resolvedPrompt: String?
+            if let filePath = spec.promptFile?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !filePath.isEmpty {
+                let url = URL(fileURLWithPath: (filePath as NSString).expandingTildeInPath)
+                do {
+                    resolvedPrompt = try String(contentsOf: url, encoding: .utf8)
+                } catch {
+                    return .failure("Thread \(i): could not read promptFile '\(filePath)': \(error.localizedDescription)", id: request.id)
+                }
+            } else {
+                resolvedPrompt = spec.prompt
+            }
+
             resolved.append(ResolvedSpec(
                 agentType: agentType,
                 useAgentCommand: useAgentCommand,
                 modelId: spec.modelId,
                 reasoningLevel: spec.reasoningLevel,
-                prompt: spec.prompt,
+                prompt: resolvedPrompt,
                 noSubmit: spec.noSubmit == true || request.noSubmit == true,
                 requestedName: requestedName,
                 description: spec.description,
