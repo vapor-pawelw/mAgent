@@ -681,6 +681,8 @@ extension ThreadManager {
         // Prompt-injection bookkeeping is global to ThreadManager rather than persisted on
         // the thread, so archive/delete must clear it explicitly when a thread disappears.
         clearTrackedInitialPromptInjection(forSessions: thread.tmuxSessionNames)
+        notifiedWaitingSessions.subtract(thread.tmuxSessionNames)
+        rateLimitLiftPendingResumeSessions.subtract(thread.tmuxSessionNames)
 
         // Evict any cached ghostty terminal views for this thread's sessions BEFORE the
         // cleanup task kills the tmux sessions. Ghostty calls _exit() when the PTY fd closes
@@ -869,6 +871,8 @@ extension ThreadManager {
         // Prompt-injection bookkeeping is global to ThreadManager rather than persisted on
         // the thread, so archive/delete must clear it explicitly when a thread disappears.
         clearTrackedInitialPromptInjection(forSessions: thread.tmuxSessionNames)
+        notifiedWaitingSessions.subtract(thread.tmuxSessionNames)
+        rateLimitLiftPendingResumeSessions.subtract(thread.tmuxSessionNames)
 
         // Remove from active list
         threads.remove(at: index)

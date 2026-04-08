@@ -121,7 +121,8 @@ extension ThreadManager {
         }
         let now = Date()
         var changedThreadIds = Set<UUID>()
-        var didChangeGlobalCache = pruneExpiredGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds)
+        var resumeMarkedThreadIds = Set<UUID>()
+        var didChangeGlobalCache = pruneExpiredGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds, resumeMarkedThreadIds: &resumeMarkedThreadIds)
         var newlyDetectedAgents = Set<AgentType>()
 
         // Lazy-load persisted rate-limit caches on first use.
@@ -354,6 +355,9 @@ extension ThreadManager {
                         userInfo: ["threadId": threadId]
                     )
                 }
+                // For threads where rate-limit-lift injected a "resume needed" waiting indicator,
+                // post the waiting notification so the tab bar picks up the updated state.
+                postWaitingForResumeNotifications(for: resumeMarkedThreadIds)
             }
         }
 
@@ -500,7 +504,11 @@ extension ThreadManager {
     }
 
     @discardableResult
-    private func pruneExpiredGlobalRateLimits(now: Date, changedThreadIds: inout Set<UUID>) -> Bool {
+    private func pruneExpiredGlobalRateLimits(
+        now: Date,
+        changedThreadIds: inout Set<UUID>,
+        resumeMarkedThreadIds: inout Set<UUID>
+    ) -> Bool {
         let expiredAgents = globalAgentRateLimits.compactMap { entry -> AgentType? in
             guard entry.value.resetAt <= now else { return nil }
             return entry.key
@@ -509,7 +517,8 @@ extension ThreadManager {
 
         for agent in expiredAgents {
             globalAgentRateLimits.removeValue(forKey: agent)
-            clearRateLimitMarkers(for: agent, changedThreadIds: &changedThreadIds)
+            let marked = clearRateLimitMarkers(for: agent, changedThreadIds: &changedThreadIds, markResumeNeeded: true)
+            resumeMarkedThreadIds.formUnion(marked)
         }
         sendRateLimitLiftedNotification(for: expiredAgents)
         return true
@@ -582,20 +591,55 @@ extension ThreadManager {
         }
     }
 
-    private func clearRateLimitMarkers(for agent: AgentType, changedThreadIds: inout Set<UUID>) {
+    /// Clears rate-limit markers for `agent` across all threads.
+    /// When `markResumeNeeded` is true, sessions being cleared are also injected into
+    /// `waitingForInputSessions` so the tab/sidebar shows a "continue work here" indicator.
+    /// Returns the IDs of threads that received new waiting-for-resume entries.
+    @discardableResult
+    private func clearRateLimitMarkers(
+        for agent: AgentType,
+        changedThreadIds: inout Set<UUID>,
+        markResumeNeeded: Bool = false
+    ) -> Set<UUID> {
+        var resumeMarkedThreadIds = Set<UUID>()
         for i in threads.indices {
             var filtered = threads[i].rateLimitedSessions
             let keysToRemove = filtered.keys.filter { sessionName in
                 agentType(for: threads[i], sessionName: sessionName) == agent
             }
             guard !keysToRemove.isEmpty else { continue }
+
+            // Capture isPropagated BEFORE removal — we need it for the resume check below.
+            let removedInfoBySession: [String: AgentRateLimitInfo] = markResumeNeeded
+                ? keysToRemove.reduce(into: [:]) { $0[$1] = filtered[$1] }
+                : [:]
+
             for key in keysToRemove {
                 filtered.removeValue(forKey: key)
             }
             threads[i].rateLimitedSessions = filtered
             threads[i].unreadRateLimitSessions.subtract(keysToRemove)
             changedThreadIds.insert(threads[i].id)
+
+            if markResumeNeeded {
+                // Only sessions with a directly-detected (non-propagated) marker were actually
+                // interrupted by the rate limit. Propagated markers are fan-out from the global
+                // limit and may have been applied to idle sessions that have nothing to resume.
+                let toMark = keysToRemove.filter {
+                    removedInfoBySession[$0]?.isPropagated == false &&
+                    !threads[i].busySessions.contains($0) &&
+                    !threads[i].waitingForInputSessions.contains($0)
+                }
+                if !toMark.isEmpty {
+                    threads[i].waitingForInputSessions.formUnion(toMark)
+                    rateLimitLiftPendingResumeSessions.formUnion(toMark)
+                    // Add to dedup set so normal waiting-detection doesn't re-notify.
+                    notifiedWaitingSessions.formUnion(toMark)
+                    resumeMarkedThreadIds.insert(threads[i].id)
+                }
+            }
         }
+        return resumeMarkedThreadIds
     }
 
     @discardableResult
@@ -604,7 +648,7 @@ extension ThreadManager {
         let hadGlobal = globalAgentRateLimits.removeValue(forKey: agent) != nil
 
         var changedThreadIds = Set<UUID>()
-        clearRateLimitMarkers(for: agent, changedThreadIds: &changedThreadIds)
+        let resumeMarkedThreadIds = clearRateLimitMarkers(for: agent, changedThreadIds: &changedThreadIds, markResumeNeeded: true)
         guard hadGlobal || !changedThreadIds.isEmpty else { return [] }
 
         lastPublishedRateLimitSummary = nil
@@ -618,6 +662,7 @@ extension ThreadManager {
                         userInfo: ["threadId": threadId]
                     )
                 }
+                postWaitingForResumeNotifications(for: resumeMarkedThreadIds)
             }
         }
         await publishRateLimitSummaryIfNeeded()
@@ -659,6 +704,24 @@ extension ThreadManager {
 
         _ = await liftRateLimitManually(for: agent)
         return added
+    }
+
+    /// Must be called on MainActor. Posts `.magentAgentWaitingForInput` for each thread
+    /// so tab bars refresh their "waiting for resume" indicator.
+    @MainActor
+    private func postWaitingForResumeNotifications(for threadIds: Set<UUID>) {
+        guard !threadIds.isEmpty else { return }
+        for threadId in threadIds {
+            guard let thread = threads.first(where: { $0.id == threadId }) else { continue }
+            NotificationCenter.default.post(
+                name: .magentAgentWaitingForInput,
+                object: self,
+                userInfo: [
+                    "threadId": threadId,
+                    "waitingSessions": thread.waitingForInputSessions
+                ]
+            )
+        }
     }
 
     func paneHasActiveNonIgnoredRateLimit(
