@@ -20,6 +20,8 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 - Fixed branch rename dialog pre-filling with the worktree name instead of the current git branch, and silently doing nothing when the user accepted it.
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
+- Increased thread row vertical spacing so the pin badge is no longer clipped at the top.
+- Fixed "Mark as read" appearing in the context menu for threads that aren't visually highlighted as done (when a rate-limit is also active, suppressing the green highlight).
 
 ### Thread
 - New "AI Rename" sheet (⌘⇧R) replaces the old single-line rename dialog: multi-line prompt input, recent prompt picker (last 10), and checkboxes to choose which parts to change (icon, description, branch name). Accessible as a top-level context menu item, TOC right-click, and main Thread menu.
