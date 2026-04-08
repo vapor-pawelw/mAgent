@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
 
 ### Thread
+- Auto-rename now uses all accumulated prompts for context, so if the first prompt gets rate-limited and the user follows up with "continue", the rename model still sees the original task description.
+- Manual "Rename from prompt" now updates the thread description and icon to match the new branch, instead of keeping the stale description from the original auto-rename.
 - Fixed archive merge failing when the branch name matches the worktree directory name by using unambiguous `refs/heads/` git references.
 
 ## 1.5.3 - 2026-04-07
