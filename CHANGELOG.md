@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Thread
+- Improved busy detection for Claude sessions with background tasks. Sessions running `run_in_background` tools or active task spinners are now correctly detected as busy even when the `❯` prompt is visible.
+- Fixed busy detection missing the agent status bar in tall terminal panes. Trailing blank lines in tmux captures are now stripped before analysis, preventing all-blank capture windows.
+
 ### Sidebar
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
 

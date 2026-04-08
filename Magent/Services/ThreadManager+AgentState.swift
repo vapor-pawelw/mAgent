@@ -457,16 +457,31 @@ extension ThreadManager {
                             }
                         }
                     } else if let content, isAgentIdleAtPrompt(content) {
-                        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                        if threads[i].busySessions.contains(session) {
-                            threads[i].busySessions.remove(session)
-                            changed = true
-                            busyChangedThreadIds.insert(threads[i].id)
-                        }
-                        // Check for unsubmitted typed input at the idle prompt.
-                        if await syncUnsubmittedInputState(threadId: threadId, sessionName: session, agentType: .claude) {
-                            changed = true
-                            busyChangedThreadIds.insert(threadId)
+                        // Prompt is visible and no "esc to interrupt" in the narrow
+                        // window. Check a wider capture for background activity
+                        // (run_in_background tools, active task spinners) that can
+                        // sit above the 15-line window in tall panes.
+                        let widerContent = await tmux.cachedCapturePane(sessionName: session, lastLines: 30)
+                        let hasBackgroundWork = widerContent.map { paneContentShowsBackgroundActivity($0) } ?? false
+                        if hasBackgroundWork {
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                            if !threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.insert(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                        } else {
+                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                            if threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.remove(session)
+                                changed = true
+                                busyChangedThreadIds.insert(threads[i].id)
+                            }
+                            // Check for unsubmitted typed input at the idle prompt.
+                            if await syncUnsubmittedInputState(threadId: threadId, sessionName: session, agentType: .claude) {
+                                changed = true
+                                busyChangedThreadIds.insert(threadId)
+                            }
                         }
                     } else {
                         // Claude is running but not idle at prompt — treat as busy
@@ -632,6 +647,25 @@ extension ThreadManager {
         // ❯ prompt visible without the busy status bar → agent is idle
         let hasPrompt = nonEmpty.contains(where: { $0.hasPrefix("\u{276F}") })
         return hasPrompt
+    }
+
+    /// Detects secondary busy indicators in Claude Code output that signal
+    /// background work is in progress, even when the `❯` prompt is visible.
+    /// This catches `run_in_background` Bash tools, active Agent subagents,
+    /// and in-progress task lists. Uses a wider pane capture (30+ lines) to
+    /// see indicators that may sit above the narrow 15-line prompt window.
+    func paneContentShowsBackgroundActivity(_ paneContent: String) -> Bool {
+        let lines = paneContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        for line in lines {
+            // "⎿  Running…" — a tool (Bash, Agent, etc.) is actively executing
+            if line.hasPrefix("\u{23BF}") && line.contains("Running") { return true }
+            // "✳" spinner prefix — an active task/thinking block with live progress
+            if line.hasPrefix("\u{2733}") { return true }
+        }
+        return false
     }
 
     /// Detects the Claude Code interactive rate-limit prompt, which shows options

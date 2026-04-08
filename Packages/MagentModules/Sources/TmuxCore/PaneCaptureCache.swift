@@ -72,8 +72,16 @@ actor PaneCaptureCache {
 
     private func trimmed(_ content: String, to lastLines: Int) -> String {
         guard lastLines < PaneCaptureCache.captureLines else { return content }
-        let lines = content.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        guard lines.count > lastLines else { return content }
+        var lines = content.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        // In tall tmux panes the live content can sit above a large block of
+        // trailing blank lines. Strip those before taking the suffix so callers
+        // (busy detection, prompt readiness, etc.) always see meaningful content.
+        while let last = lines.last, last.allSatisfy(\.isWhitespace) {
+            lines.removeLast()
+        }
+        guard lines.count > lastLines else {
+            return lines.joined(separator: "\n")
+        }
         return lines.suffix(lastLines).joined(separator: "\n")
     }
 }
