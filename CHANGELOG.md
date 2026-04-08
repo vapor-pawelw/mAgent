@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Sidebar
+- Fixed branch rename dialog pre-filling with the worktree name instead of the current git branch, and silently doing nothing when the user accepted it.
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
+
+### Thread
+- Fixed archive merge failing when the branch name matches the worktree directory name by using unambiguous `refs/heads/` git references.
 
 ## 1.5.3 - 2026-04-07
 

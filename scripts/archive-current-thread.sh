@@ -212,16 +212,19 @@ if [[ "$SKIP_LOCAL_SYNC" -eq 1 ]]; then
   echo "- Archive sync:  skip local sync"
 fi
 
+# Use refs/heads/ to avoid ambiguity when branch name matches a worktree directory name
+source_ref="refs/heads/$source_branch"
+
 echo "Merging '$source_branch' into '$base_branch' (ff-only first)..."
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  run_cmd git -C "$base_worktree_path" merge --ff-only "$source_branch"
-  echo "[dry-run] If ff-only fails, script will run: git -C $base_worktree_path merge --no-ff $source_branch"
+  run_cmd git -C "$base_worktree_path" merge --ff-only "$source_ref"
+  echo "[dry-run] If ff-only fails, script will run: git -C $base_worktree_path merge --no-ff $source_ref"
 else
-  if git -C "$base_worktree_path" merge --ff-only "$source_branch"; then
+  if git -C "$base_worktree_path" merge --ff-only "$source_ref"; then
     :
   else
     echo "Fast-forward unavailable; creating non-ff merge commit."
-    git -C "$base_worktree_path" merge --no-ff "$source_branch"
+    git -C "$base_worktree_path" merge --no-ff "$source_ref"
   fi
 fi
 

@@ -1221,14 +1221,17 @@ extension ThreadListViewController {
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        textField.stringValue = thread.branchName
+        // Use the actual git branch (transient) rather than the persisted branchName,
+        // which may still be the auto-generated worktree name before any rename.
+        let currentBranch = thread.actualBranch ?? thread.branchName
+        textField.stringValue = currentBranch
         alert.accessoryView = textField
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
 
         let newName = textField.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !newName.isEmpty, newName != thread.branchName else { return }
+        guard !newName.isEmpty, newName != currentBranch else { return }
 
         Task {
             do {

@@ -25,6 +25,7 @@
 
 - Thread name and worktree directory basename are always identical (names are permanent). The git branch can differ after rename operations or manual `git checkout` / `git switch`.
 - When refreshing UI after rename or branch changes, resolve the current thread again from `ThreadManager.threads` by `id` before reading `branchName` or `actualBranch`. Using the pre-refresh `MagentThread` snapshot can leave footer/tooltips one update behind.
+- UI that shows or compares "the current branch" must use `actualBranch ?? branchName`, not `branchName` alone. `branchName` is only updated by explicit rename operations and starts equal to the worktree name — it may lag behind the real git branch indefinitely.
 - `WorktreeMetadata.detectedFor` is a legacy field — no longer written or consumed. Retained only for Codable backward compatibility with existing cache files on disk.
 
 ## Base Branch Resolution (Explicit)
