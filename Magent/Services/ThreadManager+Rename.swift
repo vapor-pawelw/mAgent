@@ -128,14 +128,41 @@ extension ThreadManager {
         return slug
     }
 
+    // MARK: - Background shell execution with timeout
+
+    private enum ShellTimedResult {
+        case success(String)
+        case exitFailure(code: Int32, stderr: String)
+        case timeout
+    }
+
+    private func executeWithTimeout(command: String, workingDirectory: String?, timeoutNanos: UInt64) async -> ShellTimedResult {
+        await withTaskGroup(of: ShellTimedResult?.self) { group in
+            group.addTask {
+                let result = await ShellExecutor.execute(command, workingDirectory: workingDirectory)
+                guard result.exitCode == 0 else {
+                    return .exitFailure(code: result.exitCode, stderr: result.stderr)
+                }
+                return .success(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: timeoutNanos)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? .timeout
+        }
+    }
+
     private enum SlugGenerationAttemptResult {
         case slug(String)
-        case failed
+        case failed(reason: String)
     }
 
     private enum FirstPromptRenameAttemptResult {
         case generated(slug: String, taskDescription: GeneratedTaskDescription?)
-        case failed
+        case failed(reason: String)
     }
 
     private func codexBackgroundExecCommand(escapedPrompt: String) -> String {
@@ -144,7 +171,7 @@ extension ThreadManager {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let localBin = ShellExecutor.shellQuote("\(homeDir)/.local/bin")
         let miseShims = ShellExecutor.shellQuote("\(homeDir)/.local/share/mise/shims")
-        return "PATH=\(localBin):\(miseShims):$PATH codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none"
+        return "PATH=\(localBin):\(miseShims):$PATH codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none < /dev/null"
     }
 
     private func backgroundGenerationWorkingDirectory(projectId: UUID?) -> String? {
@@ -183,30 +210,25 @@ extension ThreadManager {
             // prompt stays minimal — large workspace instruction files were the primary cause
             // of slug-generation calls timing out.
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\""
+            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\" < /dev/null"
         }
 
-        let result: String? = await withTaskGroup(of: String?.self) { group in
-            group.addTask {
-                let result = await ShellExecutor.execute(command, workingDirectory: workingDirectory)
-                guard result.exitCode == 0 else { return nil }
-                return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            group.addTask {
-                // 60 s budget: when the project has a large CLAUDE.md/AGENTS.md the haiku API
-                // call can easily exceed 30 s due to the increased system-prompt context size.
-                try? await Task.sleep(nanoseconds: 60_000_000_000)
-                return nil
-            }
-            // Return whichever finishes first
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
-        }
+        let agentLabel = agentType.map(String.init(describing:)) ?? "claude"
+        let shellResult = await executeWithTimeout(command: command, workingDirectory: workingDirectory, timeoutNanos: 60_000_000_000)
 
-        guard let raw = result, !raw.isEmpty else { return .failed }
-        guard let slug = sanitizeSlug(raw) else { return .failed }
-        return .slug(slug)
+        switch shellResult {
+        case .timeout:
+            return .failed(reason: "\(agentLabel) timed out (60 s)")
+        case .exitFailure(let code, let stderr):
+            let snippet = String(stderr.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return .failed(reason: "\(agentLabel) exited \(code): \(snippet)")
+        case .success(let raw):
+            guard !raw.isEmpty else { return .failed(reason: "\(agentLabel) returned empty output") }
+            guard let slug = sanitizeSlug(raw) else {
+                return .failed(reason: "\(agentLabel) output could not be parsed as a slug")
+            }
+            return .slug(slug)
+        }
     }
 
     /// First-prompt optimization: fetch branch slug + task description in one model call.
@@ -250,34 +272,32 @@ extension ThreadManager {
             command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
         default:
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\""
+            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\" < /dev/null"
         }
 
-        let result: String? = await withTaskGroup(of: String?.self) { group in
-            group.addTask {
-                let result = await ShellExecutor.execute(command, workingDirectory: workingDirectory)
-                guard result.exitCode == 0 else { return nil }
-                return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: 60_000_000_000)
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
-        }
+        let agentLabel = agentType.map(String.init(describing:)) ?? "claude"
+        let shellResult = await executeWithTimeout(command: command, workingDirectory: workingDirectory, timeoutNanos: 60_000_000_000)
 
-        guard let raw = result, !raw.isEmpty else { return .failed }
-        guard let slug = sanitizeSlug(raw) else { return .failed }
-        let generatedDescription = sanitizeGeneratedTaskDescription(raw)
-        return .generated(slug: slug, taskDescription: generatedDescription)
+        switch shellResult {
+        case .timeout:
+            return .failed(reason: "\(agentLabel) timed out (60 s)")
+        case .exitFailure(let code, let stderr):
+            let snippet = String(stderr.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return .failed(reason: "\(agentLabel) exited \(code): \(snippet)")
+        case .success(let raw):
+            guard !raw.isEmpty else { return .failed(reason: "\(agentLabel) returned empty output") }
+            guard let slug = sanitizeSlug(raw) else {
+                return .failed(reason: "\(agentLabel) output could not be parsed as a slug")
+            }
+            let generatedDescription = sanitizeGeneratedTaskDescription(raw)
+            return .generated(slug: slug, taskDescription: generatedDescription)
+        }
     }
 
     enum AutoRenameResult {
         case candidates([String])
         /// AI slug generation failed (timeout, error, etc.).
-        case failed
+        case failed(diagnostic: String?)
     }
 
     func autoRenameCandidates(
@@ -287,17 +307,19 @@ extension ThreadManager {
     ) async -> AutoRenameResult {
         let agentOrder = slugGenerationAgentOrder(preferred: agentType, projectId: projectId)
 
+        var lastReason: String?
         let normalCandidates = agentOrder.available
         for candidateAgent in normalCandidates {
             switch await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId) {
             case .slug(let slug):
                 return .candidates(renameCandidates(from: slug))
-            case .failed:
+            case .failed(let reason):
+                lastReason = reason
                 continue
             }
         }
 
-        return .failed
+        return .failed(diagnostic: lastReason)
     }
 
     private func renameCandidates(from slug: String) -> [String] {
@@ -370,7 +392,7 @@ extension ThreadManager {
         let resolvedPreferred = preferredAgent ?? effectiveAgentType(for: currentThread.projectId)
         let agentOrder = slugGenerationAgentOrder(preferred: resolvedPreferred, projectId: currentThread.projectId)
         let cKey = promptCacheKey(for: trimmedPrompt)
-        var payloadResult: FirstPromptRenameAttemptResult = .failed
+        var payloadResult: FirstPromptRenameAttemptResult = .failed(reason: "no agents available")
         if let cached = promptRenameResultCache[currentThread.id]?[cKey] {
             payloadResult = .generated(slug: cached.slug, taskDescription: cached.taskDescription)
         } else {
@@ -397,8 +419,8 @@ extension ThreadManager {
         case .generated(let generatedSlug, let description):
             slug = generatedSlug
             generatedTaskDescription = description
-        case .failed:
-            throw ThreadManagerError.nameGenerationFailed
+        case .failed(let reason):
+            throw ThreadManagerError.nameGenerationFailed(diagnostic: reason)
         }
 
         let candidates = renameCandidates(from: slug).filter { $0 != currentThread.branchName }
@@ -617,6 +639,8 @@ extension ThreadManager {
         guard let resolvedSlug = slug else {
             // All agents failed; mark handled and let separate description path run as fallback.
             markFirstPromptAutoRenameHandled(threadId: refreshedThread.id)
+            // No diagnostic surfaced here — auto-rename failures show via the
+            // autoRenameFailedBannerShownThreadIds banner path below.
             return false
         }
 
@@ -689,7 +713,7 @@ extension ThreadManager {
         case .generated(let slug, let description):
             cache[cacheKey] = CachedRenameResult(slug: slug, taskDescription: description)
         case .failed:
-            return
+            return  // Don't cache failures — retry should call the agent again
         }
         promptRenameResultCache[threadId] = cache
     }
@@ -806,25 +830,12 @@ extension ThreadManager {
             command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
         default:
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\""
+            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\" < /dev/null"
         }
 
-        let result: String? = await withTaskGroup(of: String?.self) { group in
-            group.addTask {
-                let result = await ShellExecutor.execute(command, workingDirectory: workingDirectory)
-                guard result.exitCode == 0 else { return nil }
-                return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: 60_000_000_000)
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
-        }
+        let shellResult = await executeWithTimeout(command: command, workingDirectory: workingDirectory, timeoutNanos: 60_000_000_000)
 
-        guard let raw = result, !raw.isEmpty else { return nil }
+        guard case .success(let raw) = shellResult, !raw.isEmpty else { return nil }
         return sanitizeGeneratedTaskDescription(raw)
     }
 

@@ -80,7 +80,7 @@ extension ThreadManager {
         }
 
         guard foundUnique else {
-            throw ThreadManagerError.nameGenerationFailed
+            throw ThreadManagerError.nameGenerationFailed(diagnostic: nil)
         }
 
         let branchName = name

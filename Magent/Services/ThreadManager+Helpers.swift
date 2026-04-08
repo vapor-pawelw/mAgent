@@ -2162,7 +2162,7 @@ enum ThreadManagerError: LocalizedError {
     case invalidTabIndex
     case cannotDeleteMainThread
     case cannotRenameMainThread
-    case nameGenerationFailed
+    case nameGenerationFailed(diagnostic: String?)
     case worktreePathConflict([String])
     case noExpectedBranch
     case archiveCancelled
@@ -2190,8 +2190,12 @@ enum ThreadManagerError: LocalizedError {
             return "Main threads cannot be deleted."
         case .cannotRenameMainThread:
             return "Main threads cannot be renamed."
-        case .nameGenerationFailed:
-            return "Could not generate a thread name. Ensure Claude or Codex is configured and reachable, then try again."
+        case .nameGenerationFailed(let diagnostic):
+            let base = "Could not generate a thread name."
+            if let diagnostic, !diagnostic.isEmpty {
+                return "\(base) \(diagnostic)"
+            }
+            return "\(base) Ensure Claude or Codex is configured and reachable, then try again."
         case .worktreePathConflict(let names):
             let list = names.joined(separator: ", ")
             return "Cannot move worktrees — the following directories already exist in the destination: \(list)"
