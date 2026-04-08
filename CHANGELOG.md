@@ -17,6 +17,8 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 - Fixed branch rename dialog pre-filling with the worktree name instead of the current git branch, and silently doing nothing when the user accepted it.
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
+- Increased thread row vertical spacing so the pin badge is no longer clipped at the top.
+- Fixed "Mark as read" appearing in the context menu for threads that aren't visually highlighted as done (when a rate-limit is also active, suppressing the green highlight).
 
 ### Thread
 - Added question, exclamation, and triple-exclamation sign emojis to thread rows.

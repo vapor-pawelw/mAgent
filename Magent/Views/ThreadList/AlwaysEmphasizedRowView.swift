@@ -18,7 +18,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     private static let busyMaskOverscanRight: CGFloat = 48
     static let capsuleLeadingInset: CGFloat = 12
     static let capsuleTrailingInset: CGFloat = 12
-    static let capsuleVerticalInset: CGFloat = 8
+    static let capsuleVerticalInset: CGFloat = 10
     static let capsuleBorderWidth: CGFloat = 2
     /// Half the border width — the inset from capsule rect to the border's inner edge.
     static let capsuleBorderInset: CGFloat = capsuleBorderWidth / 2

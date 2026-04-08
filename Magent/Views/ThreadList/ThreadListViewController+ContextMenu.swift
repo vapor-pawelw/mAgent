@@ -15,8 +15,8 @@ extension ThreadListViewController {
 
         let settings = persistence.loadSettings()
 
-        // Mark as read (when thread has unread agent completion)
-        if thread.hasUnreadAgentCompletion {
+        // Mark as read (only when the completion highlight is actually visible — suppressed when a rate limit is also active)
+        if thread.hasUnreadAgentCompletion && !thread.hasUnreadRateLimit {
             let markReadItem = NSMenuItem(title: String(localized: .ThreadStrings.threadMarkAsRead), action: #selector(markThreadAsRead(_:)), keyEquivalent: "")
             markReadItem.target = self
             markReadItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
