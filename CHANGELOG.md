@@ -29,6 +29,7 @@ All notable changes to this project will be documented in this file.
 #### Features
 - New "AI Rename" sheet (⌘⇧R) replaces the old single-line rename dialog: multi-line prompt input, recent prompt picker (last 10), and checkboxes to choose which parts to change (icon, description, branch name). Accessible as a top-level context menu item, TOC right-click, and main Thread menu.
 - Restructured thread context menu: "AI Rename" and "Sign" are now top-level items; Icon, Description, Branch name, and Section are grouped under a new "Configure" submenu.
+- Grouped session actions in the thread context menu under a new `Session` submenu (`Keep Alive`, `Kill All Sessions`) to reduce top-level menu clutter.
 - Added a 1–5 Priority submenu next to Sign. Priority is shown as five cumulative dots on the thread row (immediately left of the busy-state duration), tinted blue → green → yellow → orange → red as the level rises. The ↑ High Priority and ↓ Low Priority sign emojis were removed in favor of this scale; the remaining sign emojis are unchanged.
 - Added "Set priority from Jira ticket" to the Jira submenu in the thread context menu, mirroring the existing "Set description from Jira ticket" action. The action is shown when the detected/linked Jira ticket has a priority that maps to the 1–5 scale (Highest → 5 … Lowest → 1).
 - Added question and exclamation sign emojis to thread rows; trimmed rarely-used signs (Pause, Book, Bolt, Lock).
@@ -85,7 +86,8 @@ All notable changes to this project will be documented in this file.
 - Right-clicking the `done` status item now opens a one-action context menu with `Mark All as Read`.
 
 #### Bug Fixes
-- Holding `Option` while opening a thread context menu now changes `Mark as Read` to `Mark All as Read`, so bulk-clearing read state is available from the existing thread menu without extra navigation.
+- Holding `Option` while the thread context menu is open now live-switches `Mark as Read` to `Mark All as Read`, so bulk-clearing read state no longer requires reopening the menu.
+- Marking a thread as read from the `done` popover row checkmark now keeps the popover open and refreshes the list in place, so users can clear multiple rows quickly without interruption.
 
 ### Distribution
 #### Features

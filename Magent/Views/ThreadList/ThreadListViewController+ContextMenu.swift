@@ -17,18 +17,28 @@ extension ThreadListViewController {
 
         // Mark as read (only when the completion highlight is actually visible — suppressed when a rate limit is also active)
         if thread.hasUnreadAgentCompletion && !thread.hasUnreadRateLimit {
-            let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
             let markReadItem = NSMenuItem(
-                title: isOptionPressed
-                    ? String(localized: .ThreadStrings.threadMarkAllAsRead)
-                    : String(localized: .ThreadStrings.threadMarkAsRead),
-                action: isOptionPressed ? #selector(markAllThreadsAsRead(_:)) : #selector(markThreadAsRead(_:)),
+                title: String(localized: .ThreadStrings.threadMarkAsRead),
+                action: #selector(markThreadAsRead(_:)),
                 keyEquivalent: ""
             )
             markReadItem.target = self
             markReadItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
             markReadItem.representedObject = thread.id
             menu.addItem(markReadItem)
+
+            // Alternate item is shown when Option is held while the menu is open.
+            let markAllReadItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.threadMarkAllAsRead),
+                action: #selector(markAllThreadsAsRead(_:)),
+                keyEquivalent: ""
+            )
+            markAllReadItem.target = self
+            markAllReadItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
+            markAllReadItem.representedObject = thread.id
+            markAllReadItem.isAlternate = true
+            markAllReadItem.keyEquivalentModifierMask = [.option]
+            menu.addItem(markAllReadItem)
             menu.addItem(NSMenuItem.separator())
         }
 
@@ -92,15 +102,18 @@ extension ThreadListViewController {
         hideItem.representedObject = thread.id
         menu.addItem(hideItem)
 
-        // Keep Alive
+        // Session submenu
+        let sessionItem = NSMenuItem(title: "Session", action: nil, keyEquivalent: "")
+        sessionItem.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
+        let sessionSubmenu = NSMenu()
+
         let keepAliveTitle = thread.isKeepAlive ? "Remove Keep Alive" : "Keep Alive"
         let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(toggleThreadKeepAlive(_:)), keyEquivalent: "")
         keepAliveItem.target = self
         keepAliveItem.image = NSImage(systemSymbolName: thread.isKeepAlive ? "shield.slash" : "shield.righthalf.filled", accessibilityDescription: nil)
         keepAliveItem.representedObject = thread.id
-        menu.addItem(keepAliveItem)
+        sessionSubmenu.addItem(keepAliveItem)
 
-        // Kill All Sessions
         let hasLiveSessions = thread.tmuxSessionNames.contains {
             !thread.deadSessions.contains($0)
         }
@@ -109,8 +122,11 @@ extension ThreadListViewController {
             killItem.target = self
             killItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
             killItem.representedObject = thread.id
-            menu.addItem(killItem)
+            sessionSubmenu.addItem(killItem)
         }
+
+        sessionItem.submenu = sessionSubmenu
+        menu.addItem(sessionItem)
 
         menu.addItem(NSMenuItem.separator())
 

@@ -870,22 +870,14 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         }
 
         let shouldRebuild = summaries != lastRenderedThreadSummaries || threads.count != lastRenderedThreadCount
-        let previouslyOpenStatus = activePopover?.isShown == true ? activePopoverStatus : nil
 
         if shouldRebuild {
-            if previouslyOpenStatus != nil {
-                activePopover?.close()
-            }
             rebuildThreadStatusSegments(summaries: summaries, totalCount: threads.count)
             lastRenderedThreadSummaries = summaries
             lastRenderedThreadCount = threads.count
         }
 
         refreshActivePopover()
-
-        if shouldRebuild, let status = previouslyOpenStatus {
-            showPopover(for: status)
-        }
     }
 
     private func rebuildThreadStatusSegments(summaries: [ThreadStatusSummaryDescriptor], totalCount: Int) {
