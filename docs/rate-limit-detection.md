@@ -26,13 +26,14 @@ Detection only triggers when a **concrete reset time** can be parsed from the te
 
 When Magent first sees a rate-limit message, it computes a **fingerprint** (normalized text of the rate-limit lines) and stores the fingerprint along with the **concrete reset time** to disk (`rate-limit-cache.json`).
 
-Magent also stores a per-agent ignore list for fingerprints you manually dismiss (`ignored-rate-limit-fingerprints.json`).
+Magent also stores a per-agent ignore list for exact reset timestamps you manually dismiss (`ignored-rate-limit-fingerprints.json`).
 
 #### Session & Prompt Anchoring
 
 Rate-limit fingerprints are anchored to:
 - **The session where first detected** — for time-only resets (e.g., "resets 4pm"), the cached limit only matches that same session. A different session's pane may contain identical wording but refers to a different event; only the first session's context is trusted.
 - **The last submitted prompt** — if the user submits new prompts or code, the old cached fingerprint is pruned so it doesn't resurface as a stale marker once the pane scrolls or clears.
+- **Ignored limits are reset-date scoped** — when you use `Lift + Ignore Current Messages`, Magent stores the exact resolved `resetAt` timestamp(s) for the currently visible limit window(s). That means only the specific detected occurrence is ignored; a later rate limit with the same visible text but a different resolved reset date still detects normally.
 
 On subsequent checks:
 - **Same fingerprint, same session, prompt unchanged** — uses the stored time (no re-parsing, no drift)
@@ -40,6 +41,8 @@ On subsequent checks:
 - **Same fingerprint, prompt changed** — cache is pruned; the old limit doesn't resurface
 - **Reset time in the past** — rate limit expired, skips detection
 - **New fingerprint** — parses fresh, stores the new mapping with session/prompt anchors
+- **Legacy pre-anchor cache file** — old `[fingerprint: resetAt]` entries from before session/prompt anchoring are dropped on migration rather than imported, because they lack enough context to safely suppress or reuse later detections
+- **Legacy ignore entries without `reset-at:`** — old ignored fingerprints keyed only by text are dropped on migration because they can suppress unrelated future limits that reuse the same wording
 
 This persistence means:
 - Restarting Magent doesn't re-detect stale messages as new rate limits
@@ -71,7 +74,7 @@ Newer pane output such as `/status` must not auto-clear an already-anchored limi
 
 - **Bottom status bar**: Shows a global rate-limit countdown (e.g. "⏳ Claude: 19m · Codex: 3h 5m") on the right side. Right-click offers:
   - Lift Claude/Codex limit now
-  - Lift + ignore currently visible fingerprints for Claude/Codex (so only future/new messages are tracked)
+  - Lift + ignore currently visible reset windows for Claude/Codex. If the pane currently shows multiple future reset dates for that agent (for example separate session and weekly limits), all of those reset timestamps are added to the ignore list together.
 - **Thread list**: Hourglass icon on threads with active rate limits:
   - **Red hourglass** (⏳): Direct rate limit detected in this thread's session(s)
   - **Orange hourglass** (⏳): Propagated from another session/agent (global account limit, but detected elsewhere)

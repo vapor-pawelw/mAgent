@@ -29,11 +29,21 @@ public struct RateLimitCacheEntry: Codable, Equatable {
 public final class PersistenceService {
 
     public static let shared = PersistenceService()
+    private static let ignoredRateLimitResetAtPrefix = "reset-at: "
+    private static let ignoredRateLimitDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
     public static let restorableCriticalFileNames = [
         "threads.json",
         "settings.json",
         "agent-launch-prompt-drafts.json",
     ]
+
+    public static func iso8601String(from date: Date) -> String {
+        ignoredRateLimitDateFormatter.string(from: date)
+    }
 
     private let fileManager = FileManager.default
     private let encoder: JSONEncoder = {
@@ -647,18 +657,24 @@ public final class PersistenceService {
     /// Automatically prunes expired entries on load, but keeps time-only entries
     /// as tombstones for 7 days past expiry to prevent re-anchoring stale messages
     /// (e.g. "resets 11am" being re-interpreted as today's 11am every day).
+    ///
+    /// Legacy `[String: Date]` cache files from before session/prompt anchoring are
+    /// dropped instead of migrated. Those entries have no anchor context, so importing
+    /// them can suppress or mis-anchor fresh detections in unrelated sessions.
     public func loadRateLimitCache() -> [String: RateLimitCacheEntry] {
         let url = rateLimitCacheURL
         guard let data = try? Data(contentsOf: url) else { return [:] }
 
-        // Try new format first, fall back to legacy [String: Date] migration.
+        // Try new format first. Legacy [String: Date] entries intentionally do not
+        // migrate forward because they lack the session/prompt anchors required to
+        // safely reuse bare-time reset messages across launches.
         let cache: [String: RateLimitCacheEntry]
         if let decoded = try? decoder.decode([String: RateLimitCacheEntry].self, from: data) {
             cache = decoded
         } else if let legacy = try? decoder.decode([String: Date].self, from: data) {
-            cache = legacy.reduce(into: [:]) { result, entry in
-                result[entry.key] = RateLimitCacheEntry(resetAt: entry.value)
-            }
+            logger.info("Dropping legacy rate-limit cache entries without anchors during migration (\(legacy.count) entries)")
+            saveRateLimitCache([:])
+            return [:]
         } else {
             return [:]
         }
@@ -744,12 +760,27 @@ public final class PersistenceService {
                 fingerprints
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
+                    .filter { !shouldPruneLegacyIgnoredRateLimitFingerprint($0, agent: agent) }
             )
             if !normalized.isEmpty {
                 parsed[agent] = normalized
             }
         }
         return parsed
+    }
+
+    private func shouldPruneLegacyIgnoredRateLimitFingerprint(_ fingerprint: String, agent: AgentType) -> Bool {
+        guard agent == .claude || agent == .codex else { return true }
+        let normalized = fingerprint
+            .lowercased()
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !normalized.isEmpty else { return false }
+        // Ignore entries must now include the concrete resolved reset timestamp so the
+        // ignore applies only to the exact detected event. Older entries keyed only by
+        // the fingerprint text are too broad and are dropped for all users on load.
+        return !normalized.contains(Self.ignoredRateLimitResetAtPrefix)
     }
 
     public func saveIgnoredRateLimitFingerprints(_ ignored: [AgentType: Set<String>]) {
