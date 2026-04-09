@@ -39,6 +39,7 @@ All notable changes to this project will be documented in this file.
 #### Features
 - `create-tab` now accepts `--title` to set the tab name from the CLI and `--fresh`/`--no-resume` to keep isolated review tabs from inheriting older agent history.
 - `batch-create` specs now accept `"promptFile": "/path/to/prompt.txt"` to load the initial prompt from a file, avoiding JSON escaping issues with long or multi-line prompts. `promptFile` takes precedence over `prompt` when both are set.
+- Added thread priority support to the CLI: `create-thread --priority 1-5` and a per-spec `"priority"` key for `batch-create` assign the 1–5 priority at creation time. A new `set-priority --thread <name> (--priority 1-5 | --clear)` command updates or clears priority on existing threads.
 
 #### Bug Fixes
 - Fixed multiline prompts sent via `send-prompt` (or agent-to-agent injection) being cut off after the first line. tmux paste-buffer now uses bracketed paste mode so Claude's TUI receives newlines as literal characters rather than Enter keypresses.
