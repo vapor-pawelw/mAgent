@@ -111,6 +111,7 @@ Before the app is usable, the user must complete a configuration step:
 - On app launch, threads are restored and terminals reconnected to existing tmux sessions
 - Agent tabs must preserve their own resolved agent type (for example Claude vs Codex) across relaunches and project-default changes, rather than being reinterpreted from the current project default each time they reopen.
 - While an agent tab is opening, the loading overlay may show a small, low-contrast technical status line only for non-routine recovery work (for example recreating a missing tmux session or replacing one tied to the wrong worktree). Routine agent startup should keep the simple `Starting agent...` message.
+- Revisiting a recently validated healthy agent session should avoid flashing `Starting agent...`; only show the loading overlay when preparation exceeds a short debounce window.
 - If a live agent tab has already returned to a normal shell prompt, reopening that tab should skip the `Starting agent...` overlay instead of waiting for agent-ready output that will never arrive.
 - Agent startup must source normal user zsh PATH setup before resolving the agent command, including setups that define `claude`/`codex` from `.zshrc`.
 

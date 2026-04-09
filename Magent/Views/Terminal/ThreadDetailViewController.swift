@@ -167,6 +167,10 @@ final class ThreadDetailViewController: NSViewController {
     var loadingLabel: NSTextField?
     var loadingDetailLabel: NSTextField?
     var loadingPollTimer: Timer?
+    /// Debounces the reveal of `loadingOverlay` so fast-path session prep
+    /// (e.g. revisiting a known-good thread) never shows the overlay at all.
+    /// Cancelled by `dismissLoadingOverlay()`.
+    var loadingOverlayRevealTimer: Timer?
     var loadingOverlaySessionName: String?
     /// Set to true while `injectAfterStart` has a prompt in-flight; prevents the
     /// poll timer from dismissing the overlay before keys are actually sent.
@@ -1299,8 +1303,9 @@ final class ThreadDetailViewController: NSViewController {
     func showCreationOverlay() {
         ensureLoadingOverlay()
         loadingLabel?.stringValue = "Creating thread..."
-        loadingOverlay?.alphaValue = 1
-        loadingOverlay?.isHidden = false
+        // Immediate reveal — thread creation (worktree + tmux) always exceeds the
+        // debounce window, so the user should see feedback right away.
+        revealLoadingOverlay(after: 0)
     }
 
     @objc private func handlePullRequestInfoChanged() {

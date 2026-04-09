@@ -272,9 +272,9 @@ extension ThreadDetailViewController {
 
         ensureLoadingOverlay()
         loadingLabel?.stringValue = String(localized: .ThreadStrings.tabCreatingSession)
-        loadingOverlay?.alphaValue = 1
-        loadingOverlay?.isHidden = false
         loadingDetailLabel?.isHidden = true
+        // Immediate reveal — tab creation always takes longer than the debounce window.
+        revealLoadingOverlay(after: 0)
 
         // Phase 2: Create tmux session in background.
         Task {

@@ -39,6 +39,37 @@ public final class TmuxService: Sendable {
         }
     }
 
+    public struct SessionContextSnapshot: Sendable {
+        public let createdAt: Date?
+        public let sessionPath: String?
+        public let panePath: String?
+        public let paneCommand: String?
+        public let ownerThreadId: String?
+        public let agentType: String?
+        public let projectPath: String?
+        public let worktreePath: String?
+
+        public init(
+            createdAt: Date?,
+            sessionPath: String?,
+            panePath: String?,
+            paneCommand: String?,
+            ownerThreadId: String?,
+            agentType: String?,
+            projectPath: String?,
+            worktreePath: String?
+        ) {
+            self.createdAt = createdAt
+            self.sessionPath = sessionPath
+            self.panePath = panePath
+            self.paneCommand = paneCommand
+            self.ownerThreadId = ownerThreadId
+            self.agentType = agentType
+            self.projectPath = projectPath
+            self.worktreePath = worktreePath
+        }
+    }
+
     // MARK: - Session Operations
 
     public func createSession(name: String, workingDirectory: String, command: String? = nil) async throws {
@@ -584,6 +615,54 @@ public final class TmuxService: Sendable {
         let rawValue = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let seconds = TimeInterval(rawValue), seconds > 0 else { return nil }
         return Date(timeIntervalSince1970: seconds)
+    }
+
+    /// Reads session context fields in a single `tmux display-message` call to avoid
+    /// multiple subprocess round-trips during session ownership validation.
+    public func sessionContextSnapshot(sessionName: String) async -> SessionContextSnapshot? {
+        let format = [
+            "#{session_created}",
+            "#{session_path}",
+            "#{pane_current_path}",
+            "#{pane_current_command}",
+            "#{E:MAGENT_THREAD_ID}",
+            "#{E:MAGENT_AGENT_TYPE}",
+            "#{E:MAGENT_PROJECT_PATH}",
+            "#{E:MAGENT_WORKTREE_PATH}",
+        ].joined(separator: "\t")
+
+        guard let output = try? await ShellExecutor.run(
+            "tmux display-message -p -t \(shellQuote(sessionName)) \(shellQuote(format))"
+        ) else {
+            return nil
+        }
+
+        let line = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty else { return nil }
+        let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 8 else { return nil }
+
+        let createdAt: Date? = {
+            let raw = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let seconds = TimeInterval(raw), seconds > 0 else { return nil }
+            return Date(timeIntervalSince1970: seconds)
+        }()
+
+        func nonEmpty(_ value: String) -> String? {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        return SessionContextSnapshot(
+            createdAt: createdAt,
+            sessionPath: nonEmpty(parts[1]),
+            panePath: nonEmpty(parts[2]),
+            paneCommand: nonEmpty(parts[3]),
+            ownerThreadId: nonEmpty(parts[4]),
+            agentType: nonEmpty(parts[5]),
+            projectPath: nonEmpty(parts[6]),
+            worktreePath: nonEmpty(parts[7])
+        )
     }
 
     public func activePaneInfo(sessionName: String) async -> (command: String, path: String)? {
