@@ -1,6 +1,69 @@
 import Cocoa
 import MagentCore
 
+private final class SignEmojiBadgeView: NSView {
+    var capsuleFill: NSColor = .clear { didSet { needsDisplay = true } }
+    var capsuleBorderColor: NSColor = .clear { didSet { needsDisplay = true } }
+    var capsuleBorderWidth: CGFloat = 0 { didSet { needsDisplay = true } }
+
+    private var emoji: String = ""
+    private var emojiFont: NSFont = .systemFont(ofSize: 11, weight: .bold)
+    private var emojiColor: NSColor = .labelColor
+
+    private static let padding: CGFloat = 4
+
+    func configure(emoji: String, font: NSFont, textColor: NSColor) {
+        self.emoji = emoji
+        self.emojiFont = font
+        self.emojiColor = textColor
+        invalidateIntrinsicContentSize()
+        needsDisplay = true
+    }
+
+    func updateTextColor(_ color: NSColor) {
+        emojiColor = color
+        needsDisplay = true
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let size = (emoji as NSString).size(withAttributes: [.font: emojiFont])
+        let p = Self.padding * 2
+        return NSSize(width: ceil(size.width) + p, height: ceil(size.height) + p)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let radius = bounds.height / 2
+        let roundedPath = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
+
+        NSColor.windowBackgroundColor.setFill()
+        roundedPath.fill()
+        capsuleFill.setFill()
+        roundedPath.fill()
+
+        if capsuleBorderWidth > 0 {
+            let inset = capsuleBorderWidth / 2
+            let borderPath = NSBezierPath(
+                roundedRect: bounds.insetBy(dx: inset, dy: inset),
+                xRadius: max(0, radius - inset),
+                yRadius: max(0, radius - inset)
+            )
+            borderPath.lineWidth = capsuleBorderWidth
+            capsuleBorderColor.setStroke()
+            borderPath.stroke()
+        }
+
+        let attrs: [NSAttributedString.Key: Any] = [.font: emojiFont, .foregroundColor: emojiColor]
+        let textSize = (emoji as NSString).size(withAttributes: attrs)
+        let textRect = CGRect(
+            x: (bounds.width - textSize.width) / 2,
+            y: (bounds.height - textSize.height) / 2,
+            width: textSize.width,
+            height: textSize.height
+        )
+        (emoji as NSString).draw(in: textRect, withAttributes: attrs)
+    }
+}
+
 private final class ArchivingRowOverlayView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
@@ -27,11 +90,14 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     static let capsuleContentHPadding: CGFloat = 12
     /// Vertical content padding from capsule inner edge (inside the border).
     static let capsuleContentVPadding: CGFloat = 12
+    /// X/Y offset from the row's top-leading corner for the sign emoji badge/label center.
+    /// Badge radius is 10pt; centering at 14pt gives a 4pt margin from the leading/top edge.
+    private static let signEmojiBadgeCenter: CGFloat = 14
     private var busyOpacityMaskLayer: CAGradientLayer?
     private weak var maskedContentView: NSView?
     private var archivingOverlay: ArchivingRowOverlayView?
-    private var signEmojiLabel: NSTextField?
     private var signEmojiTintColor: NSColor?
+    private var signEmojiBadge: SignEmojiBadgeView?
     /// Container layer for the rotating conic gradient border.
     private var busyBorderContainer: CALayer?
 
@@ -49,13 +115,13 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         didSet { needsDisplay = true }
     }
     var showsRateLimitHighlight = false {
-        didSet { needsDisplay = true }
+        didSet { needsDisplay = true; updateSignEmojiBadge() }
     }
     var showsCompletionHighlight = false {
-        didSet { needsDisplay = true }
+        didSet { needsDisplay = true; updateSignEmojiBadge() }
     }
     var showsWaitingHighlight = false {
-        didSet { needsDisplay = true }
+        didSet { needsDisplay = true; updateSignEmojiBadge() }
     }
     var showsSubtleBottomSeparator = false {
         didSet { needsDisplay = true }
@@ -135,13 +201,51 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         layoutBusyBorderLayers()
     }
 
-    private func drawCapsuleBorderAndFill(color: NSColor, fillOpacity: CGFloat = 0.1, borderOpacity: CGFloat = 1.0) {
+    // MARK: - Capsule Style
+
+    /// Resolved fill and border colors for the current row state.
+    /// Single source of truth consumed by both capsule drawing and the sign emoji badge.
+    private struct CapsuleStyle {
+        let fill: NSColor
+        let border: NSColor
+    }
+
+    private var currentCapsuleStyle: CapsuleStyle {
+        if isSelected {
+            return CapsuleStyle(
+                fill: NSColor.controlAccentColor.withAlphaComponent(0.1),
+                border: .controlAccentColor
+            )
+        } else if showsRateLimitHighlight {
+            return CapsuleStyle(
+                fill: NSColor.systemRed.withAlphaComponent(0.06),
+                border: NSColor.systemRed.withAlphaComponent(0.5)
+            )
+        } else if showsWaitingHighlight {
+            return CapsuleStyle(
+                fill: NSColor.systemOrange.withAlphaComponent(0.06),
+                border: NSColor.systemOrange.withAlphaComponent(0.5)
+            )
+        } else if showsCompletionHighlight {
+            return CapsuleStyle(
+                fill: NSColor.systemGreen.withAlphaComponent(0.06),
+                border: NSColor.systemGreen.withAlphaComponent(0.5)
+            )
+        } else {
+            return CapsuleStyle(
+                fill: NSColor.white.withAlphaComponent(0.05),
+                border: NSColor.white.withAlphaComponent(0.12)
+            )
+        }
+    }
+
+    private func drawCapsuleBorderAndFill(_ style: CapsuleStyle) {
         let fillPath = NSBezierPath(
             roundedRect: capsuleRect,
             xRadius: Self.capsuleCornerRadius,
             yRadius: Self.capsuleCornerRadius
         )
-        color.withAlphaComponent(fillOpacity).setFill()
+        style.fill.setFill()
         fillPath.fill()
 
         let insetRect = capsuleRect.insetBy(dx: Self.capsuleBorderWidth / 2, dy: Self.capsuleBorderWidth / 2)
@@ -151,7 +255,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             yRadius: Self.capsuleCornerRadius
         )
         borderPath.lineWidth = Self.capsuleBorderWidth
-        color.withAlphaComponent(borderOpacity).setStroke()
+        style.border.setStroke()
         borderPath.stroke()
     }
 
@@ -159,40 +263,43 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         // Selection drawing is done here (not in drawSelection) so we can use
         // selectionHighlightStyle = .none on the outline view to fully suppress
         // AppKit's own selection rect (which adds an unwanted border on right-click).
-        if isSelected {
-            drawCapsuleBorderAndFill(color: .controlAccentColor)
-        } else if showsRateLimitHighlight {
-            drawCapsuleBorderAndFill(color: .systemRed, fillOpacity: 0.06, borderOpacity: 0.5)
-        } else if showsWaitingHighlight {
-            drawCapsuleBorderAndFill(color: .systemOrange, fillOpacity: 0.06, borderOpacity: 0.5)
-        } else if showsCompletionHighlight {
-            drawCapsuleBorderAndFill(color: .systemGreen, fillOpacity: 0.06, borderOpacity: 0.5)
+        let style = currentCapsuleStyle
+        if isSelected || showsRateLimitHighlight || showsWaitingHighlight || showsCompletionHighlight {
+            drawCapsuleBorderAndFill(style)
         } else {
-            // Subtle border + fill for unselected threads.
+            // Normal: subtle fill + optional 1pt border (thinner than highlighted states).
             let fillPath = NSBezierPath(
                 roundedRect: capsuleRect,
                 xRadius: Self.capsuleCornerRadius,
                 yRadius: Self.capsuleCornerRadius
             )
             // Brighten fill slightly when the context menu is open for this row.
-            let fillAlpha: CGFloat = showsContextMenuHighlight ? 0.1 : 0.05
-            NSColor.white.withAlphaComponent(fillAlpha).setFill()
+            let fillColor = showsContextMenuHighlight
+                ? NSColor.white.withAlphaComponent(0.1)
+                : style.fill
+            fillColor.setFill()
             fillPath.fill()
 
             // Skip static border when the animated busy border is active.
             if busyBorderContainer == nil {
-                let insetRect = capsuleRect.insetBy(dx: Self.capsuleBorderWidth / 2, dy: Self.capsuleBorderWidth / 2)
+                let insetRect = capsuleRect.insetBy(dx: 0.5, dy: 0.5)
                 let borderPath = NSBezierPath(
                     roundedRect: insetRect,
                     xRadius: Self.capsuleCornerRadius,
                     yRadius: Self.capsuleCornerRadius
                 )
-                borderPath.lineWidth = showsContextMenuHighlight ? Self.capsuleBorderWidth : 1
-                let borderAlpha: CGFloat = showsContextMenuHighlight ? 0.3 : 0.12
-                NSColor.white.withAlphaComponent(borderAlpha).setStroke()
+                if showsContextMenuHighlight {
+                    borderPath.lineWidth = Self.capsuleBorderWidth
+                    NSColor.white.withAlphaComponent(0.3).setStroke()
+                } else {
+                    borderPath.lineWidth = 1
+                    style.border.setStroke()
+                }
                 borderPath.stroke()
             }
         }
+
+        updateSignEmojiBadgeAppearance(style: style)
 
         if showsSubtleBottomSeparator {
             let separatorY = isFlipped ? (bounds.maxY - 1) : bounds.minY
@@ -466,42 +573,64 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     func configureSignEmoji(_ emoji: String?, tintColor: NSColor?, isSelected: Bool) {
         signEmojiTintColor = tintColor
         guard let emoji, !emoji.isEmpty else {
-            signEmojiLabel?.isHidden = true
+            signEmojiBadge?.isHidden = true
             return
         }
-        let label = ensureSignEmojiLabel()
-        label.stringValue = emoji
-        label.font = (emoji == "↑" || emoji == "↓")
-            ? .systemFont(ofSize: 12, weight: .bold)
-            : .systemFont(ofSize: 9, weight: .bold)
-        label.textColor = isSelected ? .white : (tintColor ?? .labelColor)
-        label.isHidden = false
+        let fontSize: CGFloat = (emoji == "↑" || emoji == "↓") ? 14 : 11
+        let textColor: NSColor = isSelected ? .white : (tintColor ?? .labelColor)
+
+        let badge = ensureSignEmojiBadge()
+        badge.configure(
+            emoji: emoji,
+            font: .systemFont(ofSize: fontSize, weight: .bold),
+            textColor: textColor
+        )
+        badge.isHidden = false
+        updateSignEmojiBadge()
     }
 
     private func updateSignEmojiSelectionColor() {
-        guard let label = signEmojiLabel, !label.isHidden else { return }
-        label.textColor = isSelected ? .white : (signEmojiTintColor ?? .labelColor)
+        guard let badge = signEmojiBadge, !badge.isHidden else { return }
+        badge.updateTextColor(isSelected ? .white : (signEmojiTintColor ?? .labelColor))
+        updateSignEmojiBadge()
     }
 
-    private func ensureSignEmojiLabel() -> NSTextField {
-        if let label = signEmojiLabel { return label }
-        let label = NSTextField(labelWithString: "")
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.alignment = .center
-        label.backgroundColor = .clear
-        label.isBordered = false
-        label.isEditable = false
-        label.isHidden = true
-        addSubview(label)
+    /// Updates badge fill to mirror the capsule's current background color.
+    private func updateSignEmojiBadge() {
+        guard let badge = signEmojiBadge, !badge.isHidden else { return }
+        updateSignEmojiBadgeAppearance(style: currentCapsuleStyle)
+    }
+
+    /// Applies capsule fill and border to the badge. Called from both drawBackground
+    /// (which already has the resolved style) and updateSignEmojiBadge (which resolves it).
+    private func updateSignEmojiBadgeAppearance(style: CapsuleStyle) {
+        guard let badge = signEmojiBadge, !badge.isHidden else { return }
+        badge.capsuleFill = style.fill
+        badge.capsuleBorderColor = style.border
+        // Match the capsule border width: 2pt for highlighted/selected, 1pt for normal.
+        badge.capsuleBorderWidth = (isSelected || showsRateLimitHighlight || showsWaitingHighlight || showsCompletionHighlight)
+            ? Self.capsuleBorderWidth
+            : 1
+    }
+
+    private func ensureSignEmojiBadge() -> SignEmojiBadgeView {
+        if let badge = signEmojiBadge { return badge }
+        let badge = SignEmojiBadgeView()
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        badge.isHidden = true
+        // Padding is high-priority (750) so the required 1:1 ratio can override it
+        // to produce a circle when the emoji is narrower than it is tall.
+        badge.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        badge.setContentHuggingPriority(.defaultHigh, for: .vertical)
+        addSubview(badge)
         NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(
-                equalTo: leadingAnchor,
-                constant: Self.capsuleLeadingInset
-            ),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            badge.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            badge.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            // Required: always a circle.
+            badge.widthAnchor.constraint(equalTo: badge.heightAnchor),
         ])
-        signEmojiLabel = label
-        return label
+        signEmojiBadge = badge
+        return badge
     }
 
     private func updateArchivingOverlay() {

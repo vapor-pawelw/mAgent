@@ -53,6 +53,7 @@ All notable changes to this project will be documented in this file.
 - Fixed Codex busy indicators dropping during long-running tool commands (for example `xcodebuild`) and occasionally staying busy due to stale pane lines. Busy detection now uses Codex working/background status markers near the bottom of the latest pane scope and only applies stored agent-type fallback when live pane content matches that agent.
 ### Sidebar
 #### Features
+- Thread sign emojis (↑ ↓ and custom emoji) now appear inside a small circular badge in the top-left corner of the thread row, with a border that matches the row's current highlight color.
 - Right-clicking an unselected thread now briefly highlights its row while the context menu is open, making it clear which thread the action will apply to.
 
 #### Bug Fixes
