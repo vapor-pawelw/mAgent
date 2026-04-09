@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Settings
+- App updates now use a clear staged action in Settings: `Download` first, disabled `Downloading...` while transfer/prep runs, then `Install & Relaunch` once the update is ready. Prepared downloads are recovered from `/tmp` after app restarts, so you can still install without downloading again.
+
 ### Terminal
 - Eliminated the tmux zombie process buildup that caused the recurring "tmux health issue: N defunct processes" banner. The per-click URL capture binding now stores mouse state in an in-process tmux option (`set-option -gqF`) instead of spawning a shell script via `run-shell -b` on every mouse click, so fast clicking no longer accumulates defunct children under the tmux server.
 

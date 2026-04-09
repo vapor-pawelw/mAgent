@@ -404,6 +404,8 @@ final class SettingsGeneralViewController: NSViewController {
 
     @objc private func updateNowTapped() {
         Task { @MainActor in
+            guard !UpdateService.shared.isUpdateDownloadInProgress,
+                  !UpdateService.shared.isUpdateInstallInProgress else { return }
             if UpdateService.shared.isUpdateReadyToInstall {
                 await UpdateService.shared.installPreparedUpdate()
             } else {
@@ -447,6 +449,7 @@ final class SettingsGeneralViewController: NSViewController {
 
         guard let summary = UpdateService.shared.pendingUpdateSummary else {
             installUpdateButton.isHidden = true
+            installUpdateButton.isEnabled = true
             updateStatusLabel.isHidden = true
             updateStatusLabel.stringValue = ""
             updateChangelogToggleButton.isHidden = true
@@ -457,13 +460,29 @@ final class SettingsGeneralViewController: NSViewController {
         }
 
         if UpdateService.shared.isUpdateReadyToInstall {
-            installUpdateButton.title = "Install and Relaunch"
+            installUpdateButton.title = "Install & Relaunch"
+            installUpdateButton.isEnabled = true
+        } else if UpdateService.shared.isUpdateDownloadInProgress {
+            installUpdateButton.title = "Downloading..."
+            installUpdateButton.isEnabled = false
+        } else if UpdateService.shared.isUpdateInstallInProgress {
+            installUpdateButton.title = "Installing..."
+            installUpdateButton.isEnabled = false
         } else {
-            installUpdateButton.title = "Update to \(summary.availableVersion)"
+            installUpdateButton.title = "Download"
+            installUpdateButton.isEnabled = true
         }
         installUpdateButton.isHidden = false
 
-        if summary.isSkipped {
+        if UpdateService.shared.isUpdateDownloadInProgress {
+            if UpdateService.shared.isUpdatePreparing {
+                updateStatusLabel.stringValue = "Preparing Magent \(summary.availableVersion) for installation..."
+            } else if let percent = UpdateService.shared.updateDownloadProgressPercent {
+                updateStatusLabel.stringValue = "Downloading Magent \(summary.availableVersion)... \(percent)%"
+            } else {
+                updateStatusLabel.stringValue = "Downloading Magent \(summary.availableVersion)..."
+            }
+        } else if summary.isSkipped {
             updateStatusLabel.stringValue = "New version \(summary.availableVersion) is available. This version is currently skipped for launch banners, but you can still install it here."
         } else {
             updateStatusLabel.stringValue = "New version \(summary.availableVersion) is available. You are currently on \(summary.currentVersion)."
