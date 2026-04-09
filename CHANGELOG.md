@@ -51,6 +51,7 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Fresh Claude/Codex tabs now scope resume discovery to the tab that created them instead of the whole thread age, reducing accidental conversation carryover on older worktrees.
 - Fixed Codex busy indicators dropping during long-running tool commands (for example `xcodebuild`) and occasionally staying busy due to stale pane lines. Busy detection now uses Codex working/background status markers near the bottom of the latest pane scope and only applies stored agent-type fallback when live pane content matches that agent.
+- Fixed agent labels in the "+" right-click menu (both new thread and new tab) showing misleading suffixes like "Claude (M)" or "Codex (Codex, M)". The menu now shows the full model and reasoning level verbatim (e.g. `Claude (Opus, high)`, `Codex (GPT 5.3 Codex, xhigh)`), and omits any part set to Auto.
 ### Sidebar
 #### Features
 - Thread sign emojis (↑ ↓ and custom emoji) now appear inside a small circular badge in the top-left corner of the thread row, with a border that matches the row's current highlight color.
