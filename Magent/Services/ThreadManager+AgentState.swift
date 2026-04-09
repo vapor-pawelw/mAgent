@@ -478,7 +478,12 @@ extension ThreadManager {
                         let widerContent = await tmux.cachedCapturePane(sessionName: session, lastLines: 120)
                         let lastPromptForRL = threads.first(where: { $0.id == threadId })?.submittedPromptsBySession[session]?.last
                         let isActiveLimit = widerContent.map {
-                            paneHasActiveNonIgnoredRateLimit(for: .claude, paneContent: $0, lastSubmittedPrompt: lastPromptForRL)
+                            paneHasActiveNonIgnoredRateLimit(
+                                for: .claude,
+                                paneContent: $0,
+                                lastSubmittedPrompt: lastPromptForRL,
+                                sessionName: session
+                            )
                         } ?? false
 
                         if isActiveLimit {

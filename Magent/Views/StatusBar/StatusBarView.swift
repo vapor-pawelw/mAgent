@@ -1518,9 +1518,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
                 let shortName = agent == .claude ? "Claude" : "Codex"
                 let message: String
                 if ignoredCount > 0 {
-                    message = "\(shortName) limit lifted. Ignoring \(ignoredCount) current fingerprint\(ignoredCount == 1 ? "" : "s")."
+                    message = "\(shortName) limit lifted. Ignoring \(ignoredCount) current reset window\(ignoredCount == 1 ? "" : "s")."
                 } else {
-                    message = "\(shortName) limit lifted. No active fingerprints found to ignore."
+                    message = "\(shortName) limit lifted. No active reset windows found to ignore."
                 }
                 BannerManager.shared.show(message: message, style: .info)
                 refresh()

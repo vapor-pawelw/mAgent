@@ -59,10 +59,40 @@ extension ThreadManager {
         }
     }
 
-    private func isIgnoredRateLimitFingerprint(_ fingerprint: String, for agent: AgentType) -> Bool {
-        let normalized = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return false }
-        return ignoredRateLimitFingerprintsByAgent[agent]?.contains(normalized) ?? false
+    private func ignoredRateLimitResetAtKey(_ resetAt: Date) -> String {
+        "reset-at: \(PersistenceService.iso8601String(from: resetAt))"
+    }
+
+    private func isIgnoredRateLimitResetAt(_ resetAt: Date, for agent: AgentType) -> Bool {
+        let key = ignoredRateLimitResetAtKey(resetAt)
+        return ignoredRateLimitFingerprintsByAgent[agent]?.contains(key) ?? false
+    }
+
+    private func resolvedResetAtForIgnoredFingerprint(
+        _ detection: RateLimitDetection,
+        sessionName: String?,
+        lastSubmittedPrompt: String?,
+        now: Date
+    ) -> Date {
+        guard let cached = rateLimitFingerprintCache[detection.fingerprint],
+              cached.resetAt > now else {
+            return detection.info.resetAt
+        }
+
+        if let anchorSession = cached.anchorSession {
+            guard let sessionName, sessionName == anchorSession else {
+                return detection.info.resetAt
+            }
+            if let anchorPrompt = cached.anchorPrompt {
+                guard lastSubmittedPrompt == anchorPrompt else {
+                    return detection.info.resetAt
+                }
+            } else if lastSubmittedPrompt != nil {
+                return detection.info.resetAt
+            }
+        }
+
+        return cached.resetAt
     }
 
     private func hasUnexpiredConcreteRateLimit(
@@ -181,7 +211,13 @@ extension ThreadManager {
                     continue
                 }
 
-                if isIgnoredRateLimitFingerprint(detection.fingerprint, for: sessionAgent) {
+                let ignoredResetAt = resolvedResetAtForIgnoredFingerprint(
+                    detection,
+                    sessionName: sessionName,
+                    lastSubmittedPrompt: lastPrompt,
+                    now: now
+                )
+                if isIgnoredRateLimitResetAt(ignoredResetAt, for: sessionAgent) {
                     if detectionEnabled {
                         if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
                             // keep prompt-based marker
@@ -676,25 +712,42 @@ extension ThreadManager {
 
         let now = Date()
         let snapshot = threads.filter { !$0.isArchived }
-        var activeFingerprints = Set<String>()
+        var activeResetAtKeys = Set<String>()
 
         for thread in snapshot {
             for sessionName in thread.agentTmuxSessions {
                 guard agentType(for: thread, sessionName: sessionName) == agent else { continue }
                 let lastPrompt = thread.submittedPromptsBySession[sessionName]?.last
-                guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
-                      let detection = rateLimitDetection(from: paneContent, now: now, agent: agent, lastSubmittedPrompt: lastPrompt) else {
+                guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120) else {
                     continue
                 }
-                let effectiveResetAt = rateLimitFingerprintCache[detection.fingerprint]?.resetAt ?? detection.info.resetAt
-                guard effectiveResetAt > now else { continue }
-                activeFingerprints.insert(detection.fingerprint)
+                var resetDates = allFutureResetDatesForIgnore(
+                    from: paneContent,
+                    agent: agent,
+                    now: now,
+                    lastSubmittedPrompt: lastPrompt
+                )
+                if resetDates.isEmpty,
+                   let detection = rateLimitDetection(from: paneContent, now: now, agent: agent, lastSubmittedPrompt: lastPrompt) {
+                    let effectiveResetAt = resolvedResetAtForIgnoredFingerprint(
+                        detection,
+                        sessionName: sessionName,
+                        lastSubmittedPrompt: lastPrompt,
+                        now: now
+                    )
+                    if effectiveResetAt > now {
+                        resetDates = [effectiveResetAt]
+                    }
+                }
+                for resetAt in resetDates {
+                    activeResetAtKeys.insert(ignoredRateLimitResetAtKey(resetAt))
+                }
             }
         }
 
         var ignored = ignoredRateLimitFingerprintsByAgent[agent] ?? []
         let before = ignored.count
-        ignored.formUnion(activeFingerprints)
+        ignored.formUnion(activeResetAtKeys)
         let added = ignored.count - before
         if added > 0 {
             ignoredRateLimitFingerprintsByAgent[agent] = ignored
@@ -728,12 +781,21 @@ extension ThreadManager {
         for agent: AgentType,
         paneContent: String,
         now: Date = Date(),
-        lastSubmittedPrompt: String? = nil
+        lastSubmittedPrompt: String? = nil,
+        sessionName: String? = nil
     ) -> Bool {
         guard isRateLimitTrackable(agent: agent) else { return false }
         ensureRateLimitCachesLoaded()
         guard let detection = rateLimitDetection(from: paneContent, now: now, agent: agent, lastSubmittedPrompt: lastSubmittedPrompt) else { return false }
-        guard !isIgnoredRateLimitFingerprint(detection.fingerprint, for: agent) else { return false }
+        let effectiveResetAt = resolvedResetAtForIgnoredFingerprint(
+            detection,
+            sessionName: sessionName,
+            lastSubmittedPrompt: lastSubmittedPrompt,
+            now: now
+        )
+        guard !isIgnoredRateLimitResetAt(effectiveResetAt, for: agent) else {
+            return false
+        }
 
         if let cached = rateLimitFingerprintCache[detection.fingerprint] {
             return cached.resetAt > now
@@ -773,7 +835,13 @@ extension ThreadManager {
         }
         guard let latestPaneContent else { return [] }
         let lastPrompt = thread.submittedPromptsBySession[sessionName]?.last
-        if paneHasActiveNonIgnoredRateLimit(for: agent, paneContent: latestPaneContent, now: now, lastSubmittedPrompt: lastPrompt) {
+        if paneHasActiveNonIgnoredRateLimit(
+            for: agent,
+            paneContent: latestPaneContent,
+            now: now,
+            lastSubmittedPrompt: lastPrompt,
+            sessionName: sessionName
+        ) {
             return []
         }
 
@@ -874,6 +942,34 @@ extension ThreadManager {
         let scopedStart = tail.index(after: scopeSeparatorIndex)
         guard scopedStart < tail.endIndex else { return tail }
         return Array(tail[scopedStart...])
+    }
+
+    private func allFutureResetDatesForIgnore(
+        from paneContent: String,
+        agent: AgentType,
+        now: Date,
+        lastSubmittedPrompt: String?
+    ) -> [Date] {
+        var tail = rateLimitTail(from: paneContent, agent: agent)
+        if let lastPrompt = lastSubmittedPrompt {
+            tail = scopeTailAfterLastPrompt(tail, prompt: lastPrompt, agent: agent)
+        }
+
+        let relevantLines = tail.filter { line in
+            let normalized = line.lowercased()
+            return normalized.contains("reset")
+                || normalized.contains("available")
+                || normalized.contains("until")
+                || normalized.contains("retry")
+                || normalized.contains("try again")
+                || normalized.contains("limit")
+                || normalized.contains("rate")
+                || normalized.contains("quota")
+        }
+
+        let detectorText = (relevantLines.isEmpty ? tail : relevantLines).joined(separator: "\n")
+        let parsed = parseAllResetDates(from: detectorText, now: now)
+        return parsed.filter { $0 > now }
     }
 
     /// Detects Codex's interactive model-switch prompt that appears when *approaching*
@@ -1123,27 +1219,35 @@ extension ThreadManager {
     }
 
     private func parseRelativeResetDate(from text: String, now: Date) -> Date? {
+        parseRelativeResetDates(from: text, now: now).first
+    }
+
+    private func parseRelativeResetDates(from text: String, now: Date) -> [Date] {
         let normalized = text.lowercased()
         let triggerPattern = #"(?:try again|retry|resets?|reset|available)\s+(?:in|after)\s+([^\n\.;,]+)"#
-        guard let triggerRegex = try? NSRegularExpression(pattern: triggerPattern, options: []) else { return nil }
+        guard let triggerRegex = try? NSRegularExpression(pattern: triggerPattern, options: []) else { return [] }
         let searchRange = NSRange(normalized.startIndex..<normalized.endIndex, in: normalized)
 
+        var dates: [Date] = []
         for match in triggerRegex.matches(in: normalized, options: [], range: searchRange) {
             guard match.numberOfRanges >= 2,
                   let durationRange = Range(match.range(at: 1), in: normalized) else { continue }
             let durationText = String(normalized[durationRange])
             if let seconds = parseDurationSeconds(from: durationText), seconds > 0 {
-                return now.addingTimeInterval(seconds)
+                dates.append(now.addingTimeInterval(seconds))
             }
         }
 
         // Fallback for common API wording (e.g. "retry after 30s").
         if let seconds = parseDurationSeconds(from: normalized), seconds > 0,
            normalized.contains("retry after") || normalized.contains("try again in") {
-            return now.addingTimeInterval(seconds)
+            let fallback = now.addingTimeInterval(seconds)
+            if !dates.contains(fallback) {
+                dates.append(fallback)
+            }
         }
 
-        return nil
+        return dates.sorted()
     }
 
     private func parseDurationSeconds(from text: String) -> TimeInterval? {
@@ -1195,15 +1299,20 @@ extension ThreadManager {
     }
 
     private func parseExplicitResetDate(from text: String, now: Date) -> (date: Date, hasDayToken: Bool)? {
+        parseExplicitResetDates(from: text, now: now).first
+    }
+
+    private func parseExplicitResetDates(from text: String, now: Date) -> [(date: Date, hasDayToken: Bool)] {
         let pattern = #"(?:resets?|try again|retry)\s+(?:(?:at|on)\s+)?(?:(today|tomorrow|mon(?:day)?|tues?(?:day)?|wed(?:nesday)?|thurs?(?:day)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)[,;]?\s+)?(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?)(?:\s*\(([^)\n]+)\))?"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-            return nil
+            return []
         }
 
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         let matches = regex.matches(in: text, options: [], range: range)
-        guard !matches.isEmpty else { return nil }
+        guard !matches.isEmpty else { return [] }
 
+        var results: [(date: Date, hasDayToken: Bool)] = []
         for match in matches.reversed() {
             guard match.numberOfRanges >= 3,
                   let clockRange = Range(match.range(at: 2), in: text) else {
@@ -1241,16 +1350,18 @@ extension ThreadManager {
                    let yesterday = calendar.date(byAdding: .day, value: -1, to: baseDate),
                    now.timeIntervalSince(yesterday) >= 0,
                    now.timeIntervalSince(yesterday) <= 6 * 3600 {
-                    return (date: yesterday, hasDayToken: hasDayToken)
+                    results.append((date: yesterday, hasDayToken: hasDayToken))
+                    continue
                 }
-                return (date: baseDate, hasDayToken: hasDayToken)
+                results.append((date: baseDate, hasDayToken: hasDayToken))
+                continue
             }
             if let shifted = calendar.date(byAdding: .day, value: dayOffset, to: baseDate) {
-                return (date: shifted, hasDayToken: hasDayToken)
+                results.append((date: shifted, hasDayToken: hasDayToken))
             }
         }
 
-        return nil
+        return results
     }
 
     /// Parses full date+time phrases like:
@@ -1258,60 +1369,69 @@ extension ThreadManager {
     /// "retry at March 6, 2026 1:17AM"
     /// "available at Feb 28th, 2026 11:30 PM"
     private func parseFullDateResetDate(from text: String) -> Date? {
+        parseFullDateResetDates(from: text).first
+    }
+
+    private func parseFullDateResetDates(from text: String) -> [Date] {
         let pattern = #"(?:try again|retry|available|resets?)\s+at\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})\s+(\d{1,2}):(\d{2})\s*(a\.?m\.?|p\.?m\.?)"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-            return nil
+            return []
         }
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        guard let match = regex.firstMatch(in: text, options: [], range: range),
-              match.numberOfRanges >= 7,
-              let monthRange = Range(match.range(at: 1), in: text),
-              let dayRange = Range(match.range(at: 2), in: text),
-              let yearRange = Range(match.range(at: 3), in: text),
-              let hourRange = Range(match.range(at: 4), in: text),
-              let minuteRange = Range(match.range(at: 5), in: text),
-              let meridiemRange = Range(match.range(at: 6), in: text) else {
-            return nil
-        }
+        var dates: [Date] = []
+        for match in regex.matches(in: text, options: [], range: range) {
+            guard match.numberOfRanges >= 7,
+                  let monthRange = Range(match.range(at: 1), in: text),
+                  let dayRange = Range(match.range(at: 2), in: text),
+                  let yearRange = Range(match.range(at: 3), in: text),
+                  let hourRange = Range(match.range(at: 4), in: text),
+                  let minuteRange = Range(match.range(at: 5), in: text),
+                  let meridiemRange = Range(match.range(at: 6), in: text) else {
+                continue
+            }
 
-        let monthStr = String(text[monthRange]).lowercased().prefix(3)
-        let monthMap: [String: Int] = [
-            "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
-        ]
-        guard let month = monthMap[String(monthStr)],
-              let day = Int(text[dayRange]),
-              let year = Int(text[yearRange]),
-              let hour = Int(text[hourRange]),
-              let minute = Int(text[minuteRange]),
-              (1...12).contains(hour) else {
-            return nil
-        }
+            let monthStr = String(text[monthRange]).lowercased().prefix(3)
+            let monthMap: [String: Int] = [
+                "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+                "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
+            ]
+            guard let month = monthMap[String(monthStr)],
+                  let day = Int(text[dayRange]),
+                  let year = Int(text[yearRange]),
+                  let hour = Int(text[hourRange]),
+                  let minute = Int(text[minuteRange]),
+                  (1...12).contains(hour) else {
+                continue
+            }
 
-        let meridiem = String(text[meridiemRange])
-            .lowercased()
-            .replacingOccurrences(of: ".", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let hour24: Int
-        if meridiem.hasPrefix("p") {
-            hour24 = hour == 12 ? 12 : hour + 12
-        } else if meridiem.hasPrefix("a") {
-            hour24 = hour == 12 ? 0 : hour
-        } else {
-            return nil
-        }
+            let meridiem = String(text[meridiemRange])
+                .lowercased()
+                .replacingOccurrences(of: ".", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let hour24: Int
+            if meridiem.hasPrefix("p") {
+                hour24 = hour == 12 ? 12 : hour + 12
+            } else if meridiem.hasPrefix("a") {
+                hour24 = hour == 12 ? 0 : hour
+            } else {
+                continue
+            }
 
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        var components = DateComponents()
-        components.timeZone = .current
-        components.year = year
-        components.month = month
-        components.day = day
-        components.hour = hour24
-        components.minute = minute
-        components.second = 0
-        return calendar.date(from: components)
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = .current
+            var components = DateComponents()
+            components.timeZone = .current
+            components.year = year
+            components.month = month
+            components.day = day
+            components.hour = hour24
+            components.minute = minute
+            components.second = 0
+            if let date = calendar.date(from: components) {
+                dates.append(date)
+            }
+        }
+        return dates.sorted()
     }
 
     private func parseResetClockComponents(from text: String) -> (hour: Int, minute: Int)? {
@@ -1406,8 +1526,12 @@ extension ThreadManager {
     }
 
     private func parseAbsoluteResetDate(from text: String, now: Date) -> Date? {
+        parseAbsoluteResetDates(from: text, now: now).first
+    }
+
+    private func parseAbsoluteResetDates(from text: String, now: Date) -> [Date] {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else {
-            return nil
+            return []
         }
 
         let relevantLines = text
@@ -1429,7 +1553,24 @@ extension ThreadManager {
             .compactMap(\.date)
             .filter { $0 > now.addingTimeInterval(-60) }
             .sorted()
-            .first
+    }
+
+    private func parseAllResetDates(from text: String, now: Date) -> [Date] {
+        var dates: [Date] = []
+        dates.append(contentsOf: parseRelativeResetDates(from: text, now: now))
+        dates.append(contentsOf: parseExplicitResetDates(from: text, now: now).map(\.date))
+        dates.append(contentsOf: parseFullDateResetDates(from: text))
+        dates.append(contentsOf: parseAbsoluteResetDates(from: text, now: now))
+
+        let deduped = dates
+            .sorted()
+            .reduce(into: [Date]()) { result, date in
+                if let last = result.last, abs(last.timeIntervalSince(date)) < 1 {
+                    return
+                }
+                result.append(date)
+            }
+        return deduped
     }
 
     private func extractRateLimitResetDescription(from text: String) -> String? {
