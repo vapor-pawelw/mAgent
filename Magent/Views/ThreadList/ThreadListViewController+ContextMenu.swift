@@ -345,6 +345,33 @@ extension ThreadListViewController {
     private func buildMainThreadContextMenu(for thread: MagentThread) -> NSMenu {
         let menu = NSMenu()
 
+        // Mark as read (only when the completion highlight is actually visible — suppressed when a rate limit is also active)
+        if thread.hasUnreadAgentCompletion && !thread.hasUnreadRateLimit {
+            let markReadItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.threadMarkAsRead),
+                action: #selector(markThreadAsRead(_:)),
+                keyEquivalent: ""
+            )
+            markReadItem.target = self
+            markReadItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
+            markReadItem.representedObject = thread.id
+            menu.addItem(markReadItem)
+
+            // Alternate item is shown when Option is held while the menu is open.
+            let markAllReadItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.threadMarkAllAsRead),
+                action: #selector(markAllThreadsAsRead(_:)),
+                keyEquivalent: ""
+            )
+            markAllReadItem.target = self
+            markAllReadItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
+            markAllReadItem.representedObject = thread.id
+            markAllReadItem.isAlternate = true
+            markAllReadItem.keyEquivalentModifierMask = [.option]
+            menu.addItem(markAllReadItem)
+            menu.addItem(NSMenuItem.separator())
+        }
+
         // Open in Finder
         let finderItem = NSMenuItem(title: String(localized: .ThreadStrings.threadOpenInFinder), action: #selector(openThreadInFinder(_:)), keyEquivalent: "")
         finderItem.target = self
