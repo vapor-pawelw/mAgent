@@ -50,6 +50,6 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 
 ## Per-Session Tracking
 
-- Completion is tracked per-session: `unreadCompletionSessions` set on the thread. `hasUnreadAgentCompletion` checks `!unreadCompletionSessions.isEmpty`.
+- Completion is tracked per-session: `unreadCompletionSessions` set on the thread. `hasUnreadAgentCompletion` checks `!unreadCompletionSessions.isEmpty && !isAnyBusy` — busy state takes precedence over completion so a row never appears green and busy at the same time. The raw set is preserved while busy, so the indicator reappears as soon as the thread goes idle. Internal callers that need the raw state (transition detection in `processCompletedAgentSessions`, `markThreadCompletionSeen` clearing) inspect `unreadCompletionSessions` directly instead of going through the busy-suppressed property.
 - Tab-level green dots react via `magentAgentCompletionDetected` notification. Selecting a tab calls `markSessionCompletionSeen(threadId:sessionName:)` to clear individual sessions.
 - Do not reintroduce tmux `pipe-pane` completion watchers by default. The legacy path is retained only behind `TmuxService.legacyAgentBellPipeEnabled`. `ensureBellPipes()` now serves as upgrade cleanup when the legacy flag is off.

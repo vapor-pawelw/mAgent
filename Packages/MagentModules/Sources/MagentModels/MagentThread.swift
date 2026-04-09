@@ -410,7 +410,12 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     }
 
     public var hasUnreadAgentCompletion: Bool {
-        !unreadCompletionSessions.isEmpty
+        // Busy state takes precedence over completion: if the thread is currently
+        // busy (agent or Magent), we never surface a "completion to read" indicator.
+        // Otherwise the row could appear simultaneously green (completed) and busy,
+        // which is contradictory and confusing. The raw `unreadCompletionSessions`
+        // set is preserved so the indicator reappears as soon as busy clears.
+        !unreadCompletionSessions.isEmpty && !isAnyBusy
     }
 
     /// True when newly detected rate limits haven't been acknowledged by the user yet.
