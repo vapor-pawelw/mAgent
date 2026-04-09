@@ -192,7 +192,10 @@ extension ThreadManager {
             let isActiveThread = threads[index].id == activeThreadId
             let isActiveTab = isActiveThread && threads[index].lastSelectedTabIdentifier == session
             if !isActiveTab {
-                let hadUnreadCompletion = threads[index].hasUnreadAgentCompletion
+                // Use the raw set here, not `hasUnreadAgentCompletion`, which is now
+                // busy-suppressed for display. We need to detect the actual underlying
+                // empty→non-empty transition so dock-bounce/notification logic still fires.
+                let hadUnreadCompletion = !threads[index].unreadCompletionSessions.isEmpty
                 threads[index].unreadCompletionSessions.insert(session)
                 if !hadUnreadCompletion {
                     result.newlyUnreadThreadIds.insert(threads[index].id)
@@ -882,7 +885,10 @@ extension ThreadManager {
     @MainActor
     func markThreadCompletionSeen(threadId: UUID) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
-        guard threads[index].hasUnreadAgentCompletion else { return }
+        // Use the raw set, not `hasUnreadAgentCompletion`, so we still clear unread
+        // sessions when the thread happens to be busy (display is suppressed in that
+        // case, but the underlying state should still be cleared on explicit mark-as-read).
+        guard !threads[index].unreadCompletionSessions.isEmpty else { return }
         threads[index].unreadCompletionSessions.removeAll()
         persistence.debouncedSaveActiveThreads(threads)
         updateDockBadge()
