@@ -121,6 +121,8 @@ final class UpdateService {
     private let persistence = PersistenceService.shared
     private let releasesURL = URL(string: "https://api.github.com/repos/vapor-pawelw/mAgent/releases?per_page=10")!
     private let updaterLogPath = "/tmp/magent-self-update.log"
+    private let preparedUpdateRootURL = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("magent-prepared-update", isDirectory: true)
 
     private var isChecking = false
     private var isUpdating = false
@@ -131,6 +133,15 @@ final class UpdateService {
     private var preparedAppURL: URL?
     /// The version string of the prepared update (used to match against detectedUpdate).
     private var preparedVersion: String?
+    private var bundleUpdatePhase: BundleUpdatePhase = .idle
+
+    private enum BundleUpdatePhase: Equatable {
+        case idle
+        case downloading(progressPercent: Int?)
+        case preparing
+        case readyToInstall
+        case installing
+    }
 
     private static let pollingInterval: TimeInterval = 3600 // 1 hour
 
@@ -194,8 +205,43 @@ final class UpdateService {
     /// True when the update has been downloaded and extracted, ready for install,
     /// and the prepared version still matches the currently detected update.
     var isUpdateReadyToInstall: Bool {
-        guard let preparedVersion, preparedAppURL != nil else { return false }
+        guard let preparedVersion, let preparedAppURL else { return false }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: preparedAppURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return false
+        }
         return preparedVersion == detectedUpdate?.version.displayString
+    }
+
+    var isUpdateDownloadInProgress: Bool {
+        switch bundleUpdatePhase {
+        case .downloading, .preparing:
+            return true
+        case .idle, .readyToInstall, .installing:
+            return false
+        }
+    }
+
+    var isUpdatePreparing: Bool {
+        if case .preparing = bundleUpdatePhase {
+            return true
+        }
+        return false
+    }
+
+    var isUpdateInstallInProgress: Bool {
+        if case .installing = bundleUpdatePhase {
+            return true
+        }
+        return false
+    }
+
+    var updateDownloadProgressPercent: Int? {
+        if case .downloading(let percent) = bundleUpdatePhase {
+            return percent
+        }
+        return nil
     }
 
     func installDetectedUpdateIfAvailable() async {
@@ -205,9 +251,43 @@ final class UpdateService {
 
     /// Called when user clicks "Install and relaunch" after download is complete.
     func installPreparedUpdate() async {
-        guard let preparedAppURL, let preparedVersion,
-              let detectedUpdate,
-              preparedVersion == detectedUpdate.version.displayString else { return }
+        guard let detectedUpdate else {
+            BannerManager.shared.show(
+                message: "No update is currently available to install.",
+                style: .warning,
+                duration: 5
+            )
+            return
+        }
+        guard let preparedAppURL, let preparedVersion else {
+            setBundleUpdatePhase(.idle)
+            BannerManager.shared.show(
+                message: "The downloaded update is no longer available. Please download it again.",
+                style: .warning,
+                duration: 6
+            )
+            return
+        }
+        guard preparedVersion == detectedUpdate.version.displayString else {
+            invalidatePreparedUpdate()
+            BannerManager.shared.show(
+                message: "The downloaded update does not match the latest available version. Please download again.",
+                style: .warning,
+                duration: 6
+            )
+            return
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: preparedAppURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            invalidatePreparedUpdate()
+            BannerManager.shared.show(
+                message: "The prepared update bundle could not be found. Please download it again.",
+                style: .warning,
+                duration: 6
+            )
+            return
+        }
         await performSwapAndRelaunch(update: detectedUpdate, preparedAppURL: preparedAppURL)
     }
 
@@ -276,8 +356,9 @@ final class UpdateService {
 
     private func showAvailableUpdateBanner(_ available: AvailableUpdate) {
         #if DEBUG
-        return
+        _ = available
         #endif
+        #if !DEBUG
         let availableVersion = available.version.displayString
         shownUpdateBannerForVersion = availableVersion
         let currentVersion = currentVersionString()
@@ -302,6 +383,7 @@ final class UpdateService {
             detailsCollapsedTitle: String(localized: .UpdateStrings.updateShowChanges),
             detailsExpandedTitle: String(localized: .UpdateStrings.updateHideChanges)
         )
+        #endif
     }
 
     private func skipVersion(_ version: String) {
@@ -324,16 +406,57 @@ final class UpdateService {
             invalidatePreparedUpdate()
         }
 
+        if let nextVersion {
+            if restorePreparedUpdateIfAvailable(forVersion: nextVersion) {
+                setBundleUpdatePhase(.readyToInstall)
+            } else if !isUpdateDownloadInProgress && !isUpdateInstallInProgress {
+                setBundleUpdatePhase(.idle)
+            }
+        } else {
+            setBundleUpdatePhase(.idle)
+        }
+
         guard previousVersion != nextVersion || previousNotes != nextNotes else { return }
         notifyUpdateStateChanged()
     }
 
     private func invalidatePreparedUpdate() {
-        if let preparedAppURL {
-            try? FileManager.default.removeItem(at: preparedAppURL.deletingLastPathComponent())
-        }
+        try? FileManager.default.removeItem(at: preparedUpdateRootURL)
         preparedAppURL = nil
         preparedVersion = nil
+        if case .readyToInstall = bundleUpdatePhase {
+            setBundleUpdatePhase(.idle)
+        }
+    }
+
+    private func setBundleUpdatePhase(_ phase: BundleUpdatePhase) {
+        guard bundleUpdatePhase != phase else { return }
+        bundleUpdatePhase = phase
+        notifyUpdateStateChanged()
+    }
+
+    private func preparedUpdateDirectory(forVersion version: String) -> URL {
+        preparedUpdateRootURL.appendingPathComponent(version, isDirectory: true)
+    }
+
+    private func preparedUpdateAppURL(forVersion version: String) -> URL {
+        preparedUpdateDirectory(forVersion: version)
+            .appendingPathComponent("Magent.app", isDirectory: true)
+    }
+
+    @discardableResult
+    private func restorePreparedUpdateIfAvailable(forVersion version: String) -> Bool {
+        let candidate = preparedUpdateAppURL(forVersion: version)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            preparedAppURL = nil
+            preparedVersion = nil
+            return false
+        }
+        preparedAppURL = candidate
+        preparedVersion = version
+        return true
     }
 
     private func notifyUpdateStateChanged() {
@@ -428,6 +551,7 @@ final class UpdateService {
             switch strategy {
             case .homebrewCask:
                 // Homebrew manages its own download; start it detached and close.
+                setBundleUpdatePhase(.installing)
                 let updaterScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
                 try writeHomebrewUpdaterScript(at: updaterScriptPath)
                 let q = ShellExecutor.shellQuote
@@ -448,11 +572,13 @@ final class UpdateService {
                     throw UpdateError.unwritableInstallLocation(installDirectory)
                 }
 
-                let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
-                    .appendingPathComponent("magent-update-\(UUID().uuidString)")
+                let version = update.version.displayString
+                try? FileManager.default.removeItem(at: preparedUpdateRootURL)
+                let tempDir = preparedUpdateDirectory(forVersion: version)
                 try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
                 // Phase 1: Download in-app so user sees progress.
+                setBundleUpdatePhase(.downloading(progressPercent: 0))
                 showUpdateProgressBanner(
                     String(localized: .UpdateStrings.updateDownloading(update.version.displayString)),
                     showsSpinner: true
@@ -461,6 +587,7 @@ final class UpdateService {
                 try await downloadAsset(from: update.assetURL, to: archiveURL)
 
                 // Phase 2: Unpack/prepare in-app.
+                setBundleUpdatePhase(.preparing)
                 showUpdateProgressBanner(
                     String(localized: .UpdateStrings.updatePreparing),
                     showsSpinner: true
@@ -468,11 +595,19 @@ final class UpdateService {
                 let extracted = try await extractApp(from: archiveURL, kind: update.assetKind, in: tempDir)
 
                 // Phase 3: Store prepared app and show "Install and relaunch" banner.
-                self.preparedAppURL = extracted
-                self.preparedVersion = update.version.displayString
-                showReadyToInstallBanner(version: update.version.displayString)
+                let finalPreparedURL = tempDir.appendingPathComponent("Magent.app", isDirectory: true)
+                if extracted.path != finalPreparedURL.path {
+                    if FileManager.default.fileExists(atPath: finalPreparedURL.path) {
+                        try FileManager.default.removeItem(at: finalPreparedURL)
+                    }
+                    try FileManager.default.moveItem(at: extracted, to: finalPreparedURL)
+                }
+                self.preparedAppURL = finalPreparedURL
+                self.preparedVersion = version
+                showReadyToInstallBanner(version: version)
             }
         } catch {
+            setBundleUpdatePhase(.idle)
             BannerManager.shared.show(
                 message: error.localizedDescription,
                 style: .error,
@@ -485,12 +620,19 @@ final class UpdateService {
     private func performSwapAndRelaunch(update: AvailableUpdate, preparedAppURL: URL) async {
         guard !isUpdating else { return }
         isUpdating = true
-        // Clear prepared state immediately to prevent duplicate clicks.
-        self.preparedAppURL = nil
-        self.preparedVersion = nil
+        setBundleUpdatePhase(.installing)
 
         do {
             let appBundlePath = Bundle.main.bundlePath
+            var isPreparedDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: preparedAppURL.path, isDirectory: &isPreparedDirectory),
+                  isPreparedDirectory.boolValue else {
+                throw UpdateError.extractionFailed("Prepared update bundle is missing.")
+            }
+            let installDirectory = URL(fileURLWithPath: appBundlePath).deletingLastPathComponent().path
+            guard FileManager.default.isWritableFile(atPath: installDirectory) else {
+                throw UpdateError.unwritableInstallLocation(installDirectory)
+            }
             let swapScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
             try writeSwapScript(at: swapScriptPath)
             let q = ShellExecutor.shellQuote
@@ -502,6 +644,8 @@ final class UpdateService {
             }
 
             clearSkippedVersion(matching: update.version.displayString)
+            self.preparedAppURL = nil
+            self.preparedVersion = nil
             showUpdateProgressBanner(
                 String(localized: .UpdateStrings.updateInstalling)
             )
@@ -509,6 +653,12 @@ final class UpdateService {
             NSApp.terminate(nil)
         } catch {
             isUpdating = false
+            if FileManager.default.fileExists(atPath: preparedAppURL.path) {
+                setBundleUpdatePhase(.readyToInstall)
+            } else {
+                invalidatePreparedUpdate()
+                setBundleUpdatePhase(.idle)
+            }
             BannerManager.shared.show(
                 message: error.localizedDescription,
                 style: .error,
@@ -518,6 +668,7 @@ final class UpdateService {
     }
 
     private func showReadyToInstallBanner(version: String) {
+        setBundleUpdatePhase(.readyToInstall)
         BannerManager.shared.show(
             message: String(localized: .UpdateStrings.updateReadyToInstall(version)),
             style: .info,
@@ -531,7 +682,6 @@ final class UpdateService {
                 },
             ]
         )
-        notifyUpdateStateChanged()
     }
 
     private func showUpdateProgressBanner(_ message: String, showsSpinner: Bool = false) {
@@ -549,12 +699,49 @@ final class UpdateService {
     private func downloadAsset(from url: URL, to destinationURL: URL) async throws {
         var request = URLRequest(url: url)
         request.setValue("Magent-Updater", forHTTPHeaderField: "User-Agent")
-        let (tempURL, urlResponse) = try await URLSession.shared.download(for: request)
+        let (bytes, urlResponse) = try await URLSession.shared.bytes(for: request)
         guard let http = urlResponse as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            try? FileManager.default.removeItem(at: tempURL)
             throw UpdateError.invalidHTTPStatus((urlResponse as? HTTPURLResponse)?.statusCode ?? -1)
         }
-        try FileManager.default.moveItem(at: tempURL, to: destinationURL)
+
+        let expectedLength = http.expectedContentLength > 0 ? http.expectedContentLength : nil
+        FileManager.default.createFile(atPath: destinationURL.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: destinationURL)
+        defer { try? handle.close() }
+
+        var buffer = [UInt8]()
+        buffer.reserveCapacity(64 * 1024)
+        var bytesReceived: Int64 = 0
+        var lastPublishedPercent = -1
+
+        do {
+            for try await byte in bytes {
+                buffer.append(byte)
+                bytesReceived += 1
+
+                if buffer.count >= 64 * 1024 {
+                    try handle.write(contentsOf: Data(buffer))
+                    buffer.removeAll(keepingCapacity: true)
+                }
+
+                if let expectedLength {
+                    let ratio = min(max(Double(bytesReceived) / Double(expectedLength), 0), 1)
+                    let percent = Int((ratio * 100).rounded(.down))
+                    if percent != lastPublishedPercent {
+                        lastPublishedPercent = percent
+                        setBundleUpdatePhase(.downloading(progressPercent: percent))
+                    }
+                }
+            }
+
+            if !buffer.isEmpty {
+                try handle.write(contentsOf: Data(buffer))
+            }
+            setBundleUpdatePhase(.downloading(progressPercent: 100))
+        } catch {
+            try? FileManager.default.removeItem(at: destinationURL)
+            throw error
+        }
     }
 
     /// Clears launch-blocking extended attributes that can survive archive extraction
@@ -588,7 +775,7 @@ final class UpdateService {
             )
             let mountedApp = findResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !mountedApp.isEmpty else {
-                await ShellExecutor.execute("/usr/bin/hdiutil detach \(q(mountDir.path)) -quiet 2>/dev/null || true")
+                _ = await ShellExecutor.execute("/usr/bin/hdiutil detach \(q(mountDir.path)) -quiet 2>/dev/null || true")
                 throw UpdateError.extractionFailed("Magent.app not found in DMG")
             }
 
@@ -596,7 +783,7 @@ final class UpdateService {
             let copyResult = await ShellExecutor.execute(
                 "/usr/bin/ditto \(q(mountedApp)) \(q(destApp.path))"
             )
-            await ShellExecutor.execute("/usr/bin/hdiutil detach \(q(mountDir.path)) -quiet 2>/dev/null || true")
+            _ = await ShellExecutor.execute("/usr/bin/hdiutil detach \(q(mountDir.path)) -quiet 2>/dev/null || true")
             guard copyResult.exitCode == 0 else {
                 throw UpdateError.extractionFailed("Failed to copy app from DMG (exit \(copyResult.exitCode))")
             }

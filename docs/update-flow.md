@@ -1,7 +1,7 @@
 # Update Flow
 
 User-facing behavior:
-- `General` settings owns update preferences and actions: the launch-check checkbox, manual `Check for Updates Now`, and an `Update to <version>` button when a newer release has already been detected.
+- `General` settings owns update preferences and actions: the launch-check checkbox, manual `Check for Updates Now`, and a staged update button (`Download` → disabled `Downloading...` with progress text → `Install & Relaunch` once ready).
 - Launch-time update checks run only when `AppSettings.autoCheckForUpdates` is enabled.
 - When auto-check is enabled, Magent also polls for new versions every hour in the background. The poller starts/stops immediately when the setting is toggled mid-session. Periodic checks that find an available update only show the banner once per version per session to avoid clobbering unrelated banners.
 - In debug builds, the "Update available" banner is suppressed entirely. The update check still runs and populates `detectedUpdate` (so the Settings panel works), but `showAvailableUpdateBanner` returns early under `#if DEBUG`.
@@ -15,8 +15,9 @@ Implementation details:
 - Release notes come from the GitHub release `body` and are passed through banner/settings UI as optional details text.
 - Detected update state is kept in memory by `UpdateService` and broadcast with `magentUpdateStateChanged`, which `SettingsGeneralViewController` observes to refresh its update card.
 - Skipped-version persistence lives in `AppSettings.skippedUpdateVersion`.
-- For direct bundle installs, `UpdateService.downloadUpdate` does all the slow work in-app (download via `URLSession.download(for:)`, then DMG mount+ditto or ZIP unpack), showing progress banners with spinners at each phase. When download and extraction complete, the user sees a persistent "Magent X.Y.Z is ready to install" banner with an "Install and Relaunch" button. Only when the user clicks that button is the minimal swap-only shell script launched (`writeSwapScript`), which waits for the process to exit, `mv`s the prepared bundle into place, and calls `open`. The app terminates after 0.3 s.
+- For direct bundle installs, `UpdateService.downloadUpdate` does all the slow work in-app (download via `URLSession.bytes(for:)` streaming with progress updates, then DMG mount+ditto or ZIP unpack), showing progress banners with spinners at each phase. When download and extraction complete, the user sees a persistent "Magent X.Y.Z is ready to install" banner with an "Install & Relaunch" button. Only when the user clicks that button is the minimal swap-only shell script launched (`writeSwapScript`), which waits for the process to exit, `mv`s the prepared bundle into place, and calls `open`. The app terminates after 0.3 s.
 - Prepared update state (`preparedAppURL`, `preparedVersion`) is invalidated whenever `setDetectedUpdate` changes the detected version to prevent installing a stale payload. `isUpdateReadyToInstall` enforces `preparedVersion == detectedUpdate?.version.displayString`.
+- Prepared bundle payloads are staged under `/tmp/magent-prepared-update/<version>/Magent.app`, so if Magent is killed after download/prep, a later launch can recover the ready-to-install state for the same detected version.
 - The install phase (`performSwapAndRelaunch`) is guarded by `isUpdating` and clears prepared state on first click to prevent duplicate swap scripts from banner + Settings racing.
 - For both direct bundle installs and Homebrew installs, the updater clears `com.apple.quarantine` and `com.apple.provenance` from the prepared/final app bundle before relaunch. This is a defensive workaround for unsigned release artifacts that could otherwise install successfully but refuse Finder/LaunchServices launch until the user manually ran `xattr -cr /Applications/Magent.app`.
 - For Homebrew installs, the original detached-script flow is kept: `brew upgrade --cask magent` runs after the app exits because Homebrew manages its own download, then the updater clears launch-blocking xattrs from `/Applications/Magent.app` before reopening it.
@@ -48,6 +49,10 @@ What changed in this thread (sealeo):
 - Added version-matching invariant: prepared payload is invalidated when the detected update version changes, and install requires `preparedVersion == detectedUpdate.version`.
 - Added re-entrancy guard on install phase to prevent duplicate swap scripts.
 - Re-checks that find an already-prepared version show the "ready to install" banner instead of regressing to "update available".
+
+What changed in this thread (slowking):
+- Settings update action is now explicit and staged: `Download` first, disabled `Downloading...` during transfer/prep (including percent text when available), then `Install & Relaunch` when prepared.
+- Bundle update downloads now stream in-app with incremental progress updates, and reuse a deterministic `/tmp` staging path so ready-to-install payloads survive app restarts/kills.
 
 Gotchas for future agents:
 - Do not switch back to GitHub's `/releases/latest` endpoint unless you also handle its `404`-when-empty behavior. An empty public release repo is a valid state during setup.
