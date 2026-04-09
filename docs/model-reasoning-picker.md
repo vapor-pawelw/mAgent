@@ -102,7 +102,7 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 
 Uses last-selected model + reasoning for the relevant agent. No sheet shown. Equivalent to accepting the sheet with last-used values.
 
-The right-click context menu on the "+" (new tab) button and the sidebar "New Thread" submenu list agent types directly — the default agent appears first with a "(Default)" suffix. Each agent's menu item shows its last-used model and reasoning formatted like tab names (e.g., `Claude (Sonnet, H) (Default)`, `Codex`). This gives immediate visibility into what configuration each agent will launch with.
+The right-click context menu on the "+" (new tab) button and the sidebar "New Thread" submenu list agent types directly — the default agent appears first with a "(Default)" suffix. Each agent's menu item shows its last-used model and reasoning verbatim in a verbose form (e.g., `Claude (Sonnet, high) (Default)`, `Codex (GPT 5.3 Codex, xhigh)`, `Claude` when both are Auto). Any part set to Auto is omitted individually. This is intentionally different from the compact tab-name formatter in `TmuxSessionNaming.defaultTabDisplayName(for:modelLabel:reasoningLevel:)` — the compact form strips `"Opus"` for Claude and `GPT`/version tokens for Codex and abbreviates reasoning to single letters, which produced misleading suffixes like `Claude (M)` or `Codex (Codex, M)` when reused in the `+` menu. The verbose form is built inline in `AgentMenuBuilder.populate` and must not be replaced with the compact helper.
 
 ### Draft Tabs
 

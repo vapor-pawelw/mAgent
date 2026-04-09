@@ -54,11 +54,23 @@ enum AgentMenuBuilder {
             }
             let reasoning = AgentLastSelectionStore.lastReasoning(for: agent, modelId: modelId)
 
-            let baseName = TmuxSessionNaming.defaultTabDisplayName(
-                for: agent,
-                modelLabel: modelLabel,
-                reasoningLevel: reasoning
-            )
+            // Verbose suffix for the + menu: show the full model label and full
+            // reasoning level ("Claude (Opus, high reasoning)"). Any part set to
+            // Auto (nil) is skipped. This intentionally bypasses the compact
+            // tab-name formatting in TmuxSessionNaming, which strips "Opus" and
+            // GPT version tokens and abbreviates reasoning to single letters.
+            var details: [String] = []
+            if let modelLabel, !modelLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                details.append(modelLabel)
+            }
+            if let reasoning, !reasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                details.append(reasoning.lowercased())
+            }
+
+            let agentName = TmuxSessionNaming.defaultTabDisplayName(for: agent)
+            let baseName = details.isEmpty
+                ? agentName
+                : "\(agentName) (\(details.joined(separator: ", ")))"
             let title = isDefault ? "\(baseName) (Default)" : baseName
 
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
