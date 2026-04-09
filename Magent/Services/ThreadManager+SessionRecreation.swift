@@ -11,7 +11,36 @@ extension ThreadManager {
         let validatedAt: Date
     }
 
-    private static let knownGoodSessionTTL: TimeInterval = 120
+    static let knownGoodSessionTTL: TimeInterval = 120
+
+    /// Fast-path check for `ThreadDetailViewController.ensureSessionPrepared`: returns
+    /// true when a freshly-created VC can skip `recreateSessionIfNeeded` entirely and
+    /// its `hasSession` shell probe. The check trusts the existing known-good TTL plus
+    /// the kill/rename/dead-session/eviction invalidation paths that already scrub the
+    /// cache (`killSession`, `toggleSectionKeepAlive`, session cleanup, rename rekey,
+    /// etc.). Does NOT touch tmux.
+    ///
+    /// Without this, every thread switch into a recently-visited thread goes through
+    /// an async `tmux has-session` call before the overlay can be dismissed, which is
+    /// the bulk of the visible "Starting agent..." flash on revisits.
+    func isSessionPreparedFastPath(sessionName: String, thread: MagentThread) -> Bool {
+        guard let cached = knownGoodSessionContexts[sessionName] else { return false }
+        guard Date().timeIntervalSince(cached.validatedAt) <= Self.knownGoodSessionTTL else {
+            knownGoodSessionContexts.removeValue(forKey: sessionName)
+            return false
+        }
+        // The cached context must belong to this thread. (Rename rekeys the cache,
+        // but a session whose thread ID drifted for any other reason is unsafe to trust.)
+        guard cached.threadId == thread.id else { return false }
+        // Sessions that were marked dead or evicted must fall through to the slow path
+        // so the VC can trigger recreation.
+        if thread.deadSessions.contains(sessionName) { return false }
+        if evictedIdleSessions.contains(sessionName) { return false }
+        // If recreation is currently in-flight elsewhere (session monitor, etc.), don't
+        // fast-path — the in-flight work may be about to flip the session state.
+        if sessionsBeingRecreated.contains(sessionName) { return false }
+        return true
+    }
 
     enum SessionRecreationAction {
         case recreateMissingAgentSession
@@ -369,10 +398,12 @@ extension ThreadManager {
         projectPath: String,
         isAgentSession: Bool
     ) async -> Bool {
-        if let ownerThreadID = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_THREAD_ID"),
+        let snapshot = await tmux.sessionContextSnapshot(sessionName: sessionName)
+
+        if let ownerThreadID = snapshot?.ownerThreadId,
            !ownerThreadID.isEmpty {
             guard ownerThreadID == thread.id.uuidString else { return false }
-        } else if let sessionCreatedAt = await tmux.sessionCreatedAt(sessionName: sessionName),
+        } else if let sessionCreatedAt = snapshot?.createdAt,
                   sessionCreatedAt < thread.createdAt.addingTimeInterval(-1) {
             // A session older than the current thread is from a previous owner
             // when a branch/worktree name gets reused. Do not adopt it.
@@ -381,9 +412,9 @@ extension ThreadManager {
 
         let expectedPath = thread.isMain ? projectPath : thread.worktreePath
 
-        if let paneInfo = await tmux.activePaneInfo(sessionName: sessionName),
-           !path(paneInfo.path, isWithin: expectedPath) {
-            if !isAgentSession && isShellCommand(paneInfo.command) {
+        if let panePath = snapshot?.panePath,
+           !path(panePath, isWithin: expectedPath) {
+            if !isAgentSession, let paneCommand = snapshot?.paneCommand, isShellCommand(paneCommand) {
                 // Keep terminal sessions when users navigate away manually.
                 return true
             }
@@ -393,7 +424,7 @@ extension ThreadManager {
 
         if isAgentSession,
            let expectedAgentType = agentType(for: thread, sessionName: sessionName) {
-            if let envAgentType = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_AGENT_TYPE")?
+            if let envAgentType = snapshot?.agentType?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased(),
                !envAgentType.isEmpty {
@@ -405,27 +436,27 @@ extension ThreadManager {
         }
 
         if thread.isMain {
-            if let envProject = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_PROJECT_PATH"),
+            if let envProject = snapshot?.projectPath,
                !envProject.isEmpty {
                 return envProject == projectPath
             }
-            if let sessionPath = await tmux.sessionPath(sessionName: sessionName) {
+            if let sessionPath = snapshot?.sessionPath {
                 return path(sessionPath, isWithin: projectPath)
             }
             return true
         }
 
-        if let envWorktree = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH"),
+        if let envWorktree = snapshot?.worktreePath,
            !envWorktree.isEmpty {
             guard envWorktree == thread.worktreePath else { return false }
-            if let envProject = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_PROJECT_PATH"),
+            if let envProject = snapshot?.projectPath,
                !envProject.isEmpty {
                 return envProject == projectPath
             }
             return true
         }
 
-        if let sessionPath = await tmux.sessionPath(sessionName: sessionName) {
+        if let sessionPath = snapshot?.sessionPath {
             return path(sessionPath, isWithin: thread.worktreePath)
         }
         return true

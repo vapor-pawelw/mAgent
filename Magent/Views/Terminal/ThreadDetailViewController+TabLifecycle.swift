@@ -282,8 +282,44 @@ extension ThreadDetailViewController {
             stack.trailingAnchor.constraint(lessThanOrEqualTo: overlay.trailingAnchor, constant: -40),
         ])
 
+        // Create the overlay hidden. Callers reveal it explicitly via
+        // `revealLoadingOverlay(after:)`, which debounces the reveal so fast-path
+        // session prep (known-good revisits) never flashes the overlay at all.
+        overlay.alphaValue = 0
+        overlay.isHidden = true
+
         loadingOverlay = overlay
         loadingDetailLabel = detailLabel
+    }
+
+    /// Reveal the loading overlay after a debounce window. If `dismissLoadingOverlay()`
+    /// fires before the timer does, the overlay stays hidden — which is the whole
+    /// point for fast-path tab switches to already-prepared sessions.
+    ///
+    /// Pass `after: 0` for cases where the work is guaranteed to take visibly long
+    /// (e.g. "Creating thread..." / "Creating tab...") so the user sees feedback
+    /// immediately without any debounce.
+    @MainActor
+    func revealLoadingOverlay(after delay: TimeInterval = 0.25) {
+        ensureLoadingOverlay()
+        loadingOverlayRevealTimer?.invalidate()
+        loadingOverlayRevealTimer = nil
+
+        guard let overlay = loadingOverlay else { return }
+
+        if delay <= 0 {
+            overlay.alphaValue = 1
+            overlay.isHidden = false
+            return
+        }
+
+        loadingOverlayRevealTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.loadingOverlayRevealTimer = nil
+            guard let overlay = self.loadingOverlay else { return }
+            overlay.alphaValue = 1
+            overlay.isHidden = false
+        }
     }
 
     @MainActor
@@ -306,8 +342,9 @@ extension ThreadDetailViewController {
             return
         }
 
-        loadingOverlay?.alphaValue = 1
-        loadingOverlay?.isHidden = false
+        // Debounced reveal: if prep resolves within the window, the overlay
+        // never shows. Dismiss path cancels the timer.
+        revealLoadingOverlay(after: 0.25)
         loadingDetailLabel?.stringValue = ""
         loadingDetailLabel?.isHidden = true
         loadingOverlaySessionName = sessionName
@@ -335,36 +372,21 @@ extension ThreadDetailViewController {
 
         loadingOverlayInjectionObservers = [startedObs, injectedObs]
 
-        let startTime = Date()
-        let maxWait: TimeInterval = 15
-
-        loadingPollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
-            guard let self else { timer.invalidate(); return }
-
-            let elapsed = Date().timeIntervalSince(startTime)
-            if elapsed >= maxWait {
-                timer.invalidate()
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.loadingPollTimer = nil
-                    self.dismissLoadingOverlay()
-                }
-                return
-            }
-
-            Task {
-                let ready = await self.isAgentReady(sessionName: sessionName, agentType: agentType)
-                if ready {
-                    await MainActor.run {
-                        guard !self.loadingOverlayWaitingForInjection else { return }
-                        self.loadingPollTimer?.invalidate()
-                        self.loadingPollTimer = nil
-                        self.dismissLoadingOverlay()
-                    }
-                }
-            }
+        // Safety cap: force-dismiss after 15 s if nothing else has fired.
+        // The previous 500 ms recurring `tmux capture-pane` poll has been removed —
+        // on revisits `ensureSessionPrepared` dismisses the overlay directly via
+        // the `!keepStartupOverlay` branch, and on fresh startups the injection
+        // observers above cover the normal path. The poll was burning 1 shell
+        // subprocess every 500 ms for every thread switch with no user benefit.
+        loadingPollTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.loadingPollTimer = nil
+            self.dismissLoadingOverlay()
         }
 
+        // One-shot readiness probe — if the agent is already sitting at a clean
+        // prompt the moment we're asked to start tracking (a common revisit case),
+        // dismiss immediately so the debounce never even fires.
         Task { [weak self] in
             guard let self else { return }
             let ready = await self.isAgentReady(sessionName: sessionName, agentType: agentType)
@@ -390,6 +412,8 @@ extension ThreadDetailViewController {
     func dismissLoadingOverlay() {
         loadingPollTimer?.invalidate()
         loadingPollTimer = nil
+        loadingOverlayRevealTimer?.invalidate()
+        loadingOverlayRevealTimer = nil
 
         loadingOverlayWaitingForInjection = false
         for obs in loadingOverlayInjectionObservers {
@@ -425,6 +449,17 @@ extension ThreadDetailViewController {
         onAction: (@MainActor @Sendable (ThreadManager.SessionRecreationAction?) -> Void)? = nil
     ) async -> Bool {
         if preparedSessions.contains(sessionName), !forceRevalidate { return false }
+
+        // Cross-VC fast path: a freshly-constructed ThreadDetailViewController has an
+        // empty `preparedSessions`, but the underlying tmux session may have been
+        // validated by a previous VC instance within the known-good TTL. Trust that
+        // cache so revisiting a recently-opened thread doesn't incur a `tmux has-session`
+        // round trip before the overlay is dismissed.
+        if !forceRevalidate,
+           threadManager.isSessionPreparedFastPath(sessionName: sessionName, thread: thread) {
+            preparedSessions.insert(sessionName)
+            return false
+        }
 
         if forceRevalidate, let existingTask = sessionPreparationTasks[sessionName] {
             existingTask.cancel()

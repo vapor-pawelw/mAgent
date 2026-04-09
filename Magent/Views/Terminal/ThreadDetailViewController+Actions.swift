@@ -771,12 +771,12 @@ extension ThreadDetailViewController {
             for termView in terminalViews { termView.isHidden = true }
             hideActiveWebTab()
 
-            // Show "Creating tab..." overlay immediately.
+            // Show "Creating tab..." overlay immediately — tmux session creation
+            // always takes long enough to warrant the feedback, so skip the debounce.
             ensureLoadingOverlay()
             loadingLabel?.stringValue = String(localized: .ThreadStrings.tabCreatingSession)
-            loadingOverlay?.alphaValue = 1
-            loadingOverlay?.isHidden = false
             loadingDetailLabel?.isHidden = true
+            revealLoadingOverlay(after: 0)
         }
 
         // Phase 2: Run tmux setup in the background; overlay stays visible throughout.
