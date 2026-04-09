@@ -823,11 +823,7 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
-        let isDescending = NSApp.currentEvent?.modifierFlags.contains(.option) == true
-        let sortItem = NSMenuItem(title: isDescending ? "Sort All Sections Descending" : "Sort All Sections", action: nil, keyEquivalent: "")
-        sortItem.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
-        sortItem.submenu = buildSortSubmenu(projectId: project.projectId, sectionId: nil, batchAll: true, isDescending: isDescending)
-        menu.addItem(sortItem)
+        addSortMenuItems(to: menu, projectId: project.projectId, sectionId: nil, batchAll: true)
 
         return menu
     }
@@ -862,16 +858,7 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
-        let isDescending = NSApp.currentEvent?.modifierFlags.contains(.option) == true
-        let sortItem = NSMenuItem(title: isDescending ? "Sort Descending" : "Sort", action: nil, keyEquivalent: "")
-        sortItem.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
-        sortItem.submenu = buildSortSubmenu(
-            projectId: section.projectId,
-            sectionId: section.sectionId,
-            batchAll: false,
-            isDescending: isDescending
-        )
-        menu.addItem(sortItem)
+        addSortMenuItems(to: menu, projectId: section.projectId, sectionId: section.sectionId, batchAll: false)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -890,9 +877,30 @@ extension ThreadListViewController {
         return menu
     }
 
-    /// Builds the Sort submenu with four sort criteria. `batchAll` = true means sort all sections
-    /// in the project (used for the project-level context menu). `sectionId` is ignored when
-    /// `batchAll` is true.
+    /// Adds an ascending "Sort"/"Sort All Sections" item and its Option-alternate descending
+    /// counterpart to `menu`. Using `isAlternate` lets AppKit swap them interactively as the
+    /// user holds/releases Option while the menu is open — the same mechanism used elsewhere
+    /// (e.g. "Close Tabs to the Right/Left" in the tab context menu).
+    private func addSortMenuItems(to menu: NSMenu, projectId: UUID, sectionId: UUID?, batchAll: Bool) {
+        let baseTitle = batchAll ? "Sort All Sections" : "Sort"
+        let symbol = "arrow.up.arrow.down"
+
+        let ascItem = NSMenuItem(title: baseTitle, action: nil, keyEquivalent: "")
+        ascItem.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        ascItem.submenu = buildSortSubmenu(projectId: projectId, sectionId: sectionId, batchAll: batchAll, isDescending: false)
+        menu.addItem(ascItem)
+
+        // Alternate shown in place of the above when Option is held.
+        let descItem = NSMenuItem(title: "\(baseTitle) Descending", action: nil, keyEquivalent: "")
+        descItem.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        descItem.submenu = buildSortSubmenu(projectId: projectId, sectionId: sectionId, batchAll: batchAll, isDescending: true)
+        descItem.isAlternate = true
+        descItem.keyEquivalentModifierMask = .option
+        menu.addItem(descItem)
+    }
+
+    /// Builds a Sort submenu for the given direction. `batchAll` = true sorts all sections in the
+    /// project; `sectionId` is only used when `batchAll` is false.
     private func buildSortSubmenu(
         projectId: UUID,
         sectionId: UUID?,
@@ -920,14 +928,6 @@ extension ThreadListViewController {
                 "batchAll": batchAll,
             ] as [String: Any]
             submenu.addItem(item)
-        }
-
-        // Hint about the Option modifier so users discover the descending direction.
-        if !isDescending {
-            submenu.addItem(.separator())
-            let hintItem = NSMenuItem(title: "⌥ Option for descending", action: nil, keyEquivalent: "")
-            hintItem.isEnabled = false
-            submenu.addItem(hintItem)
         }
 
         return submenu
