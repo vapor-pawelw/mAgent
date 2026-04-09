@@ -294,6 +294,8 @@ The `void*` is the **app**'s userdata (i.e. `GhosttyAppManager`) — **there is 
 
 **Rule**: Never rely on `close_surface_cb` for surface cleanup. If a Ghostty surface is not freed before `ghostty_app_tick` runs, the tick will crash on the zombie surface (use-after-free).
 
+**Display-link callback safety**: `CVDisplayLink` output callbacks should treat their `userdata` pointer as optional and return early when it is missing. Startup/teardown races can leave the callback invoked with null userdata; force-unwrapping that pointer in the callback crashes before Magent can recover.
+
 ### The IPC close-tab path
 
 When a tab is closed via the IPC path (`magent-cli close-tab` → `IPCCommandHandler` → `threadManager.removeTab`), the tmux session is killed by the model layer — **`removeFromSuperview()` is never called on the `TerminalSurfaceView`**. Without `removeFromSuperview`, `viewDidMoveToWindow(nil)` never fires, `destroySurface()` is never called, and `ghostty_surface_free` is never called. `CVDisplayLink` continues firing `ghostty_app_tick` against the zombie surface, causing a crash.

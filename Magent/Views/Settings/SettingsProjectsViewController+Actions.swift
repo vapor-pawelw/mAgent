@@ -12,8 +12,8 @@ extension SettingsProjectsViewController {
         panel.allowsMultipleSelection = false
         panel.message = "Select a git repository folder"
 
-        panel.beginSheetModal(for: view.window!) { [weak self] response in
-            guard let self, response == .OK, let url = panel.url else { return }
+        let handleSelection: (URL) -> Void = { [weak self] url in
+            guard let self else { return }
             let path = url.path
 
             Task {
@@ -44,6 +44,17 @@ extension SettingsProjectsViewController {
                     }
                 }
             }
+        }
+
+        if let window = view.window {
+            panel.beginSheetModal(for: window) { response in
+                guard response == .OK, let url = panel.url else { return }
+                handleSelection(url)
+            }
+        } else {
+            let response = panel.runModal()
+            guard response == .OK, let url = panel.url else { return }
+            handleSelection(url)
         }
     }
 
@@ -265,8 +276,8 @@ extension SettingsProjectsViewController {
         panel.allowsMultipleSelection = false
         panel.directoryURL = URL(fileURLWithPath: project.repoPath)
 
-        panel.beginSheetModal(for: view.window!) { [weak self] response in
-            guard let self, response == .OK, let url = panel.url else { return }
+        let handleSelection: (URL) -> Void = { [weak self] url in
+            guard let self else { return }
             let path = url.path
             Task {
                 let isRepo = await GitService.shared.isGitRepository(at: path)
@@ -292,6 +303,17 @@ extension SettingsProjectsViewController {
                 }
             }
         }
+
+        if let window = view.window {
+            panel.beginSheetModal(for: window) { response in
+                guard response == .OK, let url = panel.url else { return }
+                handleSelection(url)
+            }
+        } else {
+            let response = panel.runModal()
+            guard response == .OK, let url = panel.url else { return }
+            handleSelection(url)
+        }
     }
 
     @objc func browseWorktreesPath() {
@@ -304,8 +326,8 @@ extension SettingsProjectsViewController {
         let oldResolved = project.resolvedWorktreesBasePath()
         panel.directoryURL = URL(fileURLWithPath: oldResolved)
 
-        panel.beginSheetModal(for: view.window!) { [weak self] response in
-            guard let self, response == .OK, let url = panel.url else { return }
+        let handleSelection: (URL) -> Void = { [weak self] url in
+            guard let self else { return }
             let newPath = url.path
 
             // No-op if paths are the same
@@ -378,6 +400,17 @@ extension SettingsProjectsViewController {
                 self.showDetailForProject(updatedProject)
                 Task { await ThreadManager.shared.syncThreadsWithWorktrees(for: updatedProject) }
             }
+        }
+
+        if let window = view.window {
+            panel.beginSheetModal(for: window) { response in
+                guard response == .OK, let url = panel.url else { return }
+                handleSelection(url)
+            }
+        } else {
+            let response = panel.runModal()
+            guard response == .OK, let url = panel.url else { return }
+            handleSelection(url)
         }
     }
 }

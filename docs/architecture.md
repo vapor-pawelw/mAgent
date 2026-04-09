@@ -241,6 +241,14 @@ Shell startup uses a managed `ZDOTDIR` wrapper so Magent can source the user's s
 - Use a unique filename per transfer (for example a UUID-based suffix) so multiple transfers can be created concurrently without clobbering each other.
 - Treat these files as ephemeral cache entries: remove them after a bounded TTL and prune leftovers on app launch/shutdown.
 
+### AppKit Picker Presentation Safety
+
+`NSOpenPanel.beginSheetModal(for:)` requires a live host window. Setup/settings actions can run while a controller's view exists but is not attached to a window yet.
+
+- Do not force-unwrap `view.window` when presenting file/folder pickers.
+- Present as a sheet only when a host window exists; otherwise fall back to `runModal()`.
+- This prevents intermittent launch/setup timing crashes in configuration and settings flows.
+
 ### 4.10 Tab Resume Duplication Contract
 
 Agent-backed terminal tabs may expose a `Resume Agent Session in New Tab` context-menu item that opens a fresh tmux session but resumes the same agent conversation.

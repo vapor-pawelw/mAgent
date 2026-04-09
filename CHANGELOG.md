@@ -5,9 +5,11 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Settings
+- Fixed rare crashes when opening repository/worktree folder pickers before the Settings/Configuration view had an attached window.
 - App updates now use a clear staged action in Settings: `Download` first, disabled `Downloading...` while transfer/prep runs, then `Install & Relaunch` once the update is ready. Prepared downloads are recovered from `/tmp` after app restarts, so you can still install without downloading again.
 
 ### Terminal
+- Hardened embedded terminal display-link callbacks to safely ignore missing runtime userdata instead of crashing on pointer unwrap.
 - Eliminated the tmux zombie process buildup that caused the recurring "tmux health issue: N defunct processes" banner. The per-click URL capture binding now stores mouse state in an in-process tmux option (`set-option -gqF`) instead of spawning a shell script via `run-shell -b` on every mouse click, so fast clicking no longer accumulates defunct children under the tmux server.
 
 ### New Thread Sheet

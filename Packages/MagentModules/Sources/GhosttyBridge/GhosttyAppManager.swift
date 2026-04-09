@@ -611,7 +611,8 @@ private func displayLinkCallback(
     _ flagsOut: UnsafeMutablePointer<CVOptionFlags>,
     _ userdata: UnsafeMutableRawPointer?
 ) -> CVReturn {
-    let mgr = Unmanaged<GhosttyAppManager>.fromOpaque(userdata!).takeUnretainedValue()
+    guard let userdata else { return kCVReturnSuccess }
+    let mgr = Unmanaged<GhosttyAppManager>.fromOpaque(userdata).takeUnretainedValue()
     // Use DispatchQueue.main.async to match standalone Ghostty's wakeup approach
     // and avoid Swift Task allocation overhead at 60fps.
     DispatchQueue.main.async {

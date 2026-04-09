@@ -71,7 +71,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // This avoids "already running" modal interruptions when a notification
         // tap triggers an app-open attempt while Magent is already running.
         let currentPID = ProcessInfo.processInfo.processIdentifier
-        let runningInstances = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier!)
+        let runningInstances: [NSRunningApplication]
+        if let bundleIdentifier = Bundle.main.bundleIdentifier, !bundleIdentifier.isEmpty {
+            runningInstances = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+        } else {
+            runningInstances = []
+        }
         if let existing = runningInstances.first(where: {
             $0.processIdentifier != currentPID
                 && !$0.isTerminated
@@ -305,7 +310,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let commitHash = Self.loadBundleFile("BUILD_COMMIT")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasCommit = commitHash != nil && commitHash != "unknown" && commitHash?.isEmpty == false
 
-        let versionSuffix = hasCommit ? " (\(commitHash!))" : ""
+        let versionSuffix = hasCommit ? " (\(commitHash ?? "unknown"))" : ""
         options[.version] = "Build \(buildNumber)\(versionSuffix)"
 
         NSApp.orderFrontStandardAboutPanel(options: options)

@@ -191,9 +191,15 @@ final class ConfigurationViewController: NSViewController {
         panel.allowsMultipleSelection = false
         panel.message = String(localized: .ConfigurationStrings.configurationSelectRepositoryFolder)
 
-        panel.beginSheetModal(for: view.window!) { [weak self] response in
-            guard let self, response == .OK, let url = panel.url else { return }
-            self.handleSelectedFolder(url)
+        if let window = view.window {
+            panel.beginSheetModal(for: window) { [weak self] response in
+                guard let self, response == .OK, let url = panel.url else { return }
+                self.handleSelectedFolder(url)
+            }
+        } else {
+            let response = panel.runModal()
+            guard response == .OK, let url = panel.url else { return }
+            handleSelectedFolder(url)
         }
     }
 
