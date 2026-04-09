@@ -1,6 +1,68 @@
 import Cocoa
 import MagentCore
 
+private final class SignEmojiBadgeView: NSView {
+    var capsuleFill: NSColor = .clear { didSet { needsDisplay = true } }
+
+    private var fillOverlayLayer: CALayer?
+    private let emojiLabel: NSTextField
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        emojiLabel = NSTextField(labelWithString: "")
+        emojiLabel.translatesAutoresizingMaskIntoConstraints = false
+        emojiLabel.alignment = .center
+        emojiLabel.backgroundColor = .clear
+        emojiLabel.isBordered = false
+        emojiLabel.isEditable = false
+        super.init(frame: frameRect)
+        addSubview(emojiLabel)
+        NSLayoutConstraint.activate([
+            emojiLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            emojiLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(emoji: String, font: NSFont, textColor: NSColor) {
+        emojiLabel.stringValue = emoji
+        emojiLabel.font = font
+        emojiLabel.textColor = textColor
+    }
+
+    func updateTextColor(_ color: NSColor) {
+        emojiLabel.textColor = color
+    }
+
+    override func updateLayer() {
+        guard let layer else { return }
+        let overlay: CALayer
+        if let existing = fillOverlayLayer {
+            overlay = existing
+        } else {
+            let new = CALayer()
+            layer.addSublayer(new)
+            fillOverlayLayer = new
+            overlay = new
+        }
+        overlay.frame = layer.bounds
+        overlay.cornerRadius = layer.cornerRadius
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            overlay.backgroundColor = self.capsuleFill.cgColor
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        fillOverlayLayer?.frame = layer?.bounds ?? .zero
+    }
+}
+
 private final class ArchivingRowOverlayView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
@@ -27,11 +89,15 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     static let capsuleContentHPadding: CGFloat = 12
     /// Vertical content padding from capsule inner edge (inside the border).
     static let capsuleContentVPadding: CGFloat = 12
+    /// X/Y offset from the row's top-leading corner for the sign emoji badge/label center.
+    /// Must be ≥ badge radius (10) + glow blur (6) + margin (2) = 18 so the glow
+    /// stays within the row's bounds and doesn't bleed into adjacent rows or outside the leading edge.
+    private static let signEmojiBadgeCenter: CGFloat = 18
     private var busyOpacityMaskLayer: CAGradientLayer?
     private weak var maskedContentView: NSView?
     private var archivingOverlay: ArchivingRowOverlayView?
-    private var signEmojiLabel: NSTextField?
     private var signEmojiTintColor: NSColor?
+    private var signEmojiBadge: SignEmojiBadgeView?
     /// Container layer for the rotating conic gradient border.
     private var busyBorderContainer: CALayer?
 
@@ -49,13 +115,13 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         didSet { needsDisplay = true }
     }
     var showsRateLimitHighlight = false {
-        didSet { needsDisplay = true }
+        didSet { needsDisplay = true; updateSignEmojiBadge() }
     }
     var showsCompletionHighlight = false {
-        didSet { needsDisplay = true }
+        didSet { needsDisplay = true; updateSignEmojiBadge() }
     }
     var showsWaitingHighlight = false {
-        didSet { needsDisplay = true }
+        didSet { needsDisplay = true; updateSignEmojiBadge() }
     }
     var showsSubtleBottomSeparator = false {
         didSet { needsDisplay = true }
@@ -135,13 +201,51 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         layoutBusyBorderLayers()
     }
 
-    private func drawCapsuleBorderAndFill(color: NSColor, fillOpacity: CGFloat = 0.1, borderOpacity: CGFloat = 1.0) {
+    // MARK: - Capsule Style
+
+    /// Resolved fill and border colors for the current row state.
+    /// Single source of truth consumed by both capsule drawing and the sign emoji badge.
+    private struct CapsuleStyle {
+        let fill: NSColor
+        let border: NSColor
+    }
+
+    private var currentCapsuleStyle: CapsuleStyle {
+        if isSelected {
+            return CapsuleStyle(
+                fill: NSColor.controlAccentColor.withAlphaComponent(0.1),
+                border: .controlAccentColor
+            )
+        } else if showsRateLimitHighlight {
+            return CapsuleStyle(
+                fill: NSColor.systemRed.withAlphaComponent(0.06),
+                border: NSColor.systemRed.withAlphaComponent(0.5)
+            )
+        } else if showsWaitingHighlight {
+            return CapsuleStyle(
+                fill: NSColor.systemOrange.withAlphaComponent(0.06),
+                border: NSColor.systemOrange.withAlphaComponent(0.5)
+            )
+        } else if showsCompletionHighlight {
+            return CapsuleStyle(
+                fill: NSColor.systemGreen.withAlphaComponent(0.06),
+                border: NSColor.systemGreen.withAlphaComponent(0.5)
+            )
+        } else {
+            return CapsuleStyle(
+                fill: NSColor.white.withAlphaComponent(0.05),
+                border: NSColor.white.withAlphaComponent(0.12)
+            )
+        }
+    }
+
+    private func drawCapsuleBorderAndFill(_ style: CapsuleStyle) {
         let fillPath = NSBezierPath(
             roundedRect: capsuleRect,
             xRadius: Self.capsuleCornerRadius,
             yRadius: Self.capsuleCornerRadius
         )
-        color.withAlphaComponent(fillOpacity).setFill()
+        style.fill.setFill()
         fillPath.fill()
 
         let insetRect = capsuleRect.insetBy(dx: Self.capsuleBorderWidth / 2, dy: Self.capsuleBorderWidth / 2)
@@ -151,7 +255,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             yRadius: Self.capsuleCornerRadius
         )
         borderPath.lineWidth = Self.capsuleBorderWidth
-        color.withAlphaComponent(borderOpacity).setStroke()
+        style.border.setStroke()
         borderPath.stroke()
     }
 
@@ -159,39 +263,65 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         // Selection drawing is done here (not in drawSelection) so we can use
         // selectionHighlightStyle = .none on the outline view to fully suppress
         // AppKit's own selection rect (which adds an unwanted border on right-click).
-        if isSelected {
-            drawCapsuleBorderAndFill(color: .controlAccentColor)
-        } else if showsRateLimitHighlight {
-            drawCapsuleBorderAndFill(color: .systemRed, fillOpacity: 0.06, borderOpacity: 0.5)
-        } else if showsWaitingHighlight {
-            drawCapsuleBorderAndFill(color: .systemOrange, fillOpacity: 0.06, borderOpacity: 0.5)
-        } else if showsCompletionHighlight {
-            drawCapsuleBorderAndFill(color: .systemGreen, fillOpacity: 0.06, borderOpacity: 0.5)
+        let style = currentCapsuleStyle
+        if isSelected || showsRateLimitHighlight || showsWaitingHighlight || showsCompletionHighlight {
+            drawCapsuleBorderAndFill(style)
         } else {
-            // Subtle border + fill for unselected threads.
+            // Normal: subtle fill + optional 1pt border (thinner than highlighted states).
             let fillPath = NSBezierPath(
                 roundedRect: capsuleRect,
                 xRadius: Self.capsuleCornerRadius,
                 yRadius: Self.capsuleCornerRadius
             )
             // Brighten fill slightly when the context menu is open for this row.
-            let fillAlpha: CGFloat = showsContextMenuHighlight ? 0.1 : 0.05
-            NSColor.white.withAlphaComponent(fillAlpha).setFill()
+            let fillColor = showsContextMenuHighlight
+                ? NSColor.white.withAlphaComponent(0.1)
+                : style.fill
+            fillColor.setFill()
             fillPath.fill()
 
             // Skip static border when the animated busy border is active.
             if busyBorderContainer == nil {
-                let insetRect = capsuleRect.insetBy(dx: Self.capsuleBorderWidth / 2, dy: Self.capsuleBorderWidth / 2)
+                let insetRect = capsuleRect.insetBy(dx: 0.5, dy: 0.5)
                 let borderPath = NSBezierPath(
                     roundedRect: insetRect,
                     xRadius: Self.capsuleCornerRadius,
                     yRadius: Self.capsuleCornerRadius
                 )
-                borderPath.lineWidth = showsContextMenuHighlight ? Self.capsuleBorderWidth : 1
-                let borderAlpha: CGFloat = showsContextMenuHighlight ? 0.3 : 0.12
-                NSColor.white.withAlphaComponent(borderAlpha).setStroke()
+                if showsContextMenuHighlight {
+                    borderPath.lineWidth = Self.capsuleBorderWidth
+                    NSColor.white.withAlphaComponent(0.3).setStroke()
+                } else {
+                    borderPath.lineWidth = 1
+                    style.border.setStroke()
+                }
                 borderPath.stroke()
             }
+        }
+
+        // Draw glow around sign emoji badge using NSShadow — reliable in AppKit
+        // draw-based rendering, unlike CALayer shadow which is clipped in layer-backed views.
+        if signEmojiBadge?.isHidden == false {
+            let badgeCenterX = Self.signEmojiBadgeCenter
+            let badgeCenterY: CGFloat = isFlipped
+                ? Self.signEmojiBadgeCenter
+                : bounds.height - Self.signEmojiBadgeCenter
+            let badgeRect = CGRect(
+                x: badgeCenterX - 10, y: badgeCenterY - 10, width: 20, height: 20
+            )
+            NSGraphicsContext.current?.saveGraphicsState()
+            let glow = NSShadow()
+            glow.shadowBlurRadius = 6
+            glow.shadowOffset = .zero
+            // Strip pre-baked alpha from border color so shadowColor alone controls intensity.
+            glow.shadowColor = style.border.withAlphaComponent(0.5)
+            glow.set()
+            // Fill must be opaque for NSShadow to cast at full strength — alpha scales the
+            // shadow intensity, so near-transparent fills produce near-invisible glows.
+            // The badge subview renders on top and covers this fill entirely.
+            NSColor.windowBackgroundColor.setFill()
+            NSBezierPath(ovalIn: badgeRect).fill()
+            NSGraphicsContext.current?.restoreGraphicsState()
         }
 
         if showsSubtleBottomSeparator {
@@ -466,42 +596,59 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     func configureSignEmoji(_ emoji: String?, tintColor: NSColor?, isSelected: Bool) {
         signEmojiTintColor = tintColor
         guard let emoji, !emoji.isEmpty else {
-            signEmojiLabel?.isHidden = true
+            signEmojiBadge?.isHidden = true
             return
         }
-        let label = ensureSignEmojiLabel()
-        label.stringValue = emoji
-        label.font = (emoji == "↑" || emoji == "↓")
-            ? .systemFont(ofSize: 12, weight: .bold)
-            : .systemFont(ofSize: 9, weight: .bold)
-        label.textColor = isSelected ? .white : (tintColor ?? .labelColor)
-        label.isHidden = false
+        let fontSize: CGFloat = (emoji == "↑" || emoji == "↓") ? 14 : 11
+        let textColor: NSColor = isSelected ? .white : (tintColor ?? .labelColor)
+
+        let badge = ensureSignEmojiBadge()
+        badge.configure(
+            emoji: emoji,
+            font: .systemFont(ofSize: fontSize, weight: .bold),
+            textColor: textColor
+        )
+        badge.isHidden = false
+        updateSignEmojiBadge()
     }
 
     private func updateSignEmojiSelectionColor() {
-        guard let label = signEmojiLabel, !label.isHidden else { return }
-        label.textColor = isSelected ? .white : (signEmojiTintColor ?? .labelColor)
+        guard let badge = signEmojiBadge, !badge.isHidden else { return }
+        badge.updateTextColor(isSelected ? .white : (signEmojiTintColor ?? .labelColor))
+        updateSignEmojiBadge()
     }
 
-    private func ensureSignEmojiLabel() -> NSTextField {
-        if let label = signEmojiLabel { return label }
-        let label = NSTextField(labelWithString: "")
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.alignment = .center
-        label.backgroundColor = .clear
-        label.isBordered = false
-        label.isEditable = false
-        label.isHidden = true
-        addSubview(label)
+    /// Updates badge fill to mirror the capsule's current background color.
+    private func updateSignEmojiBadge() {
+        guard let badge = signEmojiBadge, !badge.isHidden else { return }
+        badge.capsuleFill = currentCapsuleStyle.fill
+        // Glow is drawn in drawBackground via NSShadow — trigger a redraw.
+        needsDisplay = true
+    }
+
+    private func ensureSignEmojiBadge() -> SignEmojiBadgeView {
+        if let badge = signEmojiBadge { return badge }
+        let badge = SignEmojiBadgeView()
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        badge.wantsLayer = true
+        badge.layer?.cornerRadius = 10  // circle (half of 20pt size)
+        badge.isHidden = true
+        addSubview(badge)
+        let size: CGFloat = 20
         NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(
+            badge.widthAnchor.constraint(equalToConstant: size),
+            badge.heightAnchor.constraint(equalToConstant: size),
+            badge.centerXAnchor.constraint(
                 equalTo: leadingAnchor,
-                constant: Self.capsuleLeadingInset
+                constant: Self.signEmojiBadgeCenter
             ),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            badge.centerYAnchor.constraint(
+                equalTo: topAnchor,
+                constant: Self.signEmojiBadgeCenter
+            ),
         ])
-        signEmojiLabel = label
-        return label
+        signEmojiBadge = badge
+        return badge
     }
 
     private func updateArchivingOverlay() {
