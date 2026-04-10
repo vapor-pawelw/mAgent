@@ -111,6 +111,7 @@ All notable changes to this project will be documented in this file.
 - Fixed "Mark as read" appearing in the context menu for threads that aren't visually highlighted as done (when a rate-limit is also active, suppressing the green highlight).
 - Fixed thread rows appearing simultaneously green (agent completed) and busy. Busy state now takes precedence — completion highlights are suppressed while the thread is busy and reappear once it goes idle.
 - Fixed thread row border widths so only the selected row uses a 2pt border; all non-selected states (including completion, waiting, rate-limit, and busy animation) now use 1pt, and attached sign badges match that width.
+- Fixed `Create New Repository…` from the sidebar add-repo menu sometimes appearing to do nothing. Repo creation now shows a persistent progress banner with spinner, reports explicit success/failure banners, and seeds the initial empty commit with transient git identity/signing-hook overrides so local git config does not block creation.
 
 ### Status Bar
 #### Features

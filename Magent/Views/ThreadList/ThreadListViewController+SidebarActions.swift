@@ -857,22 +857,41 @@ extension ThreadListViewController {
                 return
             }
 
+            BannerManager.shared.show(
+                message: "Creating repository: \(url.lastPathComponent)",
+                style: .info,
+                duration: nil,
+                isDismissible: false,
+                showsSpinner: true
+            )
+
             Task {
-                do {
+                func runGit(arguments: [String]) async throws {
                     let process = Process()
                     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-                    process.arguments = ["init", path]
+                    process.arguments = arguments
                     process.standardOutput = FileHandle.nullDevice
-                    process.standardError = FileHandle.nullDevice
+                    let stderrPipe = Pipe()
+                    process.standardError = stderrPipe
+
                     try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                         process.terminationHandler = { proc in
                             if proc.terminationStatus == 0 {
                                 cont.resume()
-                            } else {
-                                cont.resume(throwing: NSError(domain: "Magent", code: 1, userInfo: [
-                                    NSLocalizedDescriptionKey: "git init exited with status \(proc.terminationStatus)"
-                                ]))
+                                return
                             }
+
+                            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                            let stderrText = String(data: stderrData, encoding: .utf8)?
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                            let message = stderrText?.isEmpty == false
+                                ? stderrText!
+                                : "git \(arguments.joined(separator: " ")) exited with status \(proc.terminationStatus)"
+                            cont.resume(throwing: NSError(
+                                domain: "Magent",
+                                code: Int(proc.terminationStatus),
+                                userInfo: [NSLocalizedDescriptionKey: message]
+                            ))
                         }
                         do {
                             try process.run()
@@ -880,43 +899,40 @@ extension ThreadListViewController {
                             cont.resume(throwing: error)
                         }
                     }
+                }
+
+                do {
+                    try await runGit(arguments: ["init", path])
 
                     // Create an initial empty commit so the default branch actually
                     // exists — without this, worktree creation and branch validation
                     // fail because `git init` alone leaves the repo with no commits
                     // and no materialized branch.
-                    let commitProcess = Process()
-                    commitProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-                    commitProcess.arguments = [
+                    try await runGit(arguments: [
                         "-C", path,
-                        "commit", "--allow-empty", "-m", "Initial commit"
-                    ]
-                    commitProcess.standardOutput = FileHandle.nullDevice
-                    commitProcess.standardError = FileHandle.nullDevice
-                    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                        commitProcess.terminationHandler = { proc in
-                            if proc.terminationStatus == 0 {
-                                cont.resume()
-                            } else {
-                                cont.resume(throwing: NSError(domain: "Magent", code: 1, userInfo: [
-                                    NSLocalizedDescriptionKey: "git commit exited with status \(proc.terminationStatus)"
-                                ]))
-                            }
-                        }
-                        do {
-                            try commitProcess.run()
-                        } catch {
-                            cont.resume(throwing: error)
-                        }
-                    }
+                        "-c", "user.name=Magent",
+                        "-c", "user.email=magent@local.invalid",
+                        "-c", "commit.gpgsign=false",
+                        "commit", "--allow-empty", "--no-verify", "-m", "Initial commit"
+                    ])
 
                     let defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: path)
 
                     await MainActor.run {
                         self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
+                        BannerManager.shared.show(
+                            message: "Repository created: \(url.lastPathComponent)",
+                            style: .info,
+                            duration: 3.0
+                        )
                     }
                 } catch {
                     await MainActor.run {
+                        BannerManager.shared.show(
+                            message: "Failed to create repository: \(url.lastPathComponent)",
+                            style: .error,
+                            duration: 6.0
+                        )
                         let alert = NSAlert()
                         alert.messageText = "Failed to Create Repository"
                         alert.informativeText = error.localizedDescription
