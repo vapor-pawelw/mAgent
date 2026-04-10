@@ -4,7 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Sidebar
+#### Features
+- Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
 
 ## 1.5.4 - 2026-04-10
 

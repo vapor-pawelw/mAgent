@@ -224,6 +224,11 @@ For the main thread, the sidebar uses these rules:
   - Show branch/worktree lines when values are present
   - Show PR line only when PR exists
   - Show status section only when at least one status is active
+- Thread-row badges should expose hover hints for the specific badge meaning:
+  - Priority badge: show numeric level and label (`Lowest` ... `Highest`)
+  - Busy duration badge: show elapsed busy duration
+  - Favorite, pinned, and keep-alive badges: identify the protection/pinning/favorite state
+  - Jira and PR badges: show ticket/PR status context
 
 ## Settings
 

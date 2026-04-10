@@ -687,6 +687,7 @@ final class ThreadCell: NSTableCellView {
         if let ticketKey {
             jiraTicketLabel?.stringValue = ticketKey
             jiraTicketLabel?.isHidden = false
+            jiraTicketLabel?.toolTip = "Jira ticket: \(ticketKey)"
             if showJiraBadges, let verified = thread.verifiedJiraTicket, !verified.status.isEmpty {
                 jiraStatusBadge?.configure(
                     text: verified.status,
@@ -694,13 +695,17 @@ final class ThreadCell: NSTableCellView {
                     fontSize: badgeFontSize
                 )
                 jiraStatusBadge?.isHidden = false
+                jiraStatusBadge?.toolTip = "Jira status: \(verified.status)"
             } else {
                 jiraStatusBadge?.isHidden = true
+                jiraStatusBadge?.toolTip = nil
             }
         } else {
             jiraTicketLabel?.stringValue = ""
             jiraTicketLabel?.isHidden = true
+            jiraTicketLabel?.toolTip = nil
             jiraStatusBadge?.isHidden = true
+            jiraStatusBadge?.toolTip = nil
         }
 
         prDotSeparator?.isHidden = !(hasTicket && hasPR)
@@ -708,6 +713,7 @@ final class ThreadCell: NSTableCellView {
         if let pr = thread.pullRequestInfo {
             prNumberLabel?.stringValue = pr.displayLabel
             prNumberLabel?.isHidden = false
+            prNumberLabel?.toolTip = "Pull request: \(pr.displayLabel)"
             if showPRBadges {
                 prStatusBadge?.configure(
                     text: pr.statusText,
@@ -715,13 +721,17 @@ final class ThreadCell: NSTableCellView {
                     fontSize: badgeFontSize
                 )
                 prStatusBadge?.isHidden = false
+                prStatusBadge?.toolTip = "PR status: \(pr.statusText)"
             } else {
                 prStatusBadge?.isHidden = true
+                prStatusBadge?.toolTip = nil
             }
         } else {
             prNumberLabel?.stringValue = ""
             prNumberLabel?.isHidden = true
+            prNumberLabel?.toolTip = nil
             prStatusBadge?.isHidden = true
+            prStatusBadge?.toolTip = nil
         }
 
         let detailedTooltip = buildDetailedTooltip(
@@ -750,16 +760,20 @@ final class ThreadCell: NSTableCellView {
         if thread.isFavorite {
             ensureFavoriteBadge()
             favoriteBadge?.isHidden = false
+            favoriteBadge?.toolTip = "Favorite thread"
         } else {
             favoriteBadge?.isHidden = true
+            favoriteBadge?.toolTip = nil
         }
 
         if thread.isPinned {
             ensurePinnedBadge()
             pinnedBadge?.isHidden = false
+            pinnedBadge?.toolTip = "Pinned thread"
             pinImageView?.isHidden = true
         } else {
             pinnedBadge?.isHidden = true
+            pinnedBadge?.toolTip = nil
             pinImageView?.isHidden = true
         }
         updateTopBorderBadgeOrder()
@@ -775,6 +789,7 @@ final class ThreadCell: NSTableCellView {
             if thread.isPinned { ensurePinnedBadge() }
         } else {
             keepAliveBadge?.isHidden = true
+            keepAliveBadge?.toolTip = nil
         }
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
@@ -1077,17 +1092,29 @@ final class ThreadCell: NSTableCellView {
         return String(repeating: "●", count: filled) + String(repeating: "○", count: 5 - filled)
     }
 
+    private static func priorityLabel(forLevel level: Int) -> String {
+        switch level {
+        case 1: return "Lowest"
+        case 2: return "Low"
+        case 3: return "Medium"
+        case 4: return "High"
+        default: return "Highest"
+        }
+    }
+
     private func configurePriority(_ priority: Int?) {
         ensureDurationLabel()
         guard let capsule = priorityCapsule else { return }
         guard let priority, (1...5).contains(priority) else {
             capsule.label.stringValue = ""
             capsule.isHidden = true
+            capsule.toolTip = nil
             return
         }
         capsule.label.stringValue = Self.priorityDotsString(forLevel: priority)
         capsule.label.textColor = Self.priorityTintColor(forLevel: priority)
         capsule.isHidden = false
+        capsule.toolTip = "Priority \(priority): \(Self.priorityLabel(forLevel: priority))"
         capsule.needsDisplay = true
     }
 
@@ -1197,11 +1224,13 @@ final class ThreadCell: NSTableCellView {
             refreshDurationText(since: since)
             durationLabel?.isHidden = false
             durationBadge?.isHidden = false
+            durationBadge?.toolTip = "Busy duration"
             startDurationTimer()
         } else {
             durationLabel?.stringValue = ""
             durationLabel?.isHidden = true
             durationBadge?.isHidden = true
+            durationBadge?.toolTip = nil
             stopDurationTimer()
         }
     }
@@ -1220,6 +1249,7 @@ final class ThreadCell: NSTableCellView {
         }
         durationLabel?.stringValue = text
         durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed)
+        durationBadge?.toolTip = "Busy for \(text)"
     }
 
     /// Returns a subtle tint for the duration label based on elapsed seconds.
