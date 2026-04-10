@@ -239,6 +239,7 @@ public nonisolated struct IPCProjectInfo: Encodable, Sendable {
 public nonisolated struct IPCTabInfo: Encodable, Sendable {
     public let index: Int
     public let sessionName: String
+    public var displayName: String?
     public let isAgent: Bool
     public var agentType: String?
     public var isBusy: Bool?
@@ -249,6 +250,7 @@ public nonisolated struct IPCTabInfo: Encodable, Sendable {
     public init(index: Int, sessionName: String, isAgent: Bool) {
         self.index = index
         self.sessionName = sessionName
+        self.displayName = nil
         self.isAgent = isAgent
     }
 }

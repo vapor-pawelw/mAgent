@@ -6,7 +6,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v26"
+    private static let cliVersion = "magent-cli-v27"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -213,6 +213,7 @@ actor IPCSocketServer {
 
         SOCKET="${MAGENT_SOCKET:-\#(socketPath)}"
         SEP="$(printf '\037')"
+        INTERACTIVE_STATE_FILE="${MAGENT_CLI_STATE_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/magent/interactive-last.json}"
 
         die() { echo "Error: $1" >&2; exit 1; }
 
@@ -399,6 +400,48 @@ actor IPCSocketServer {
             printf '"%s":"%s"' "$1" "$(json_escape "$2")"
         }
 
+        save_last_attach_state() {
+            save_project="$1"
+            save_thread_id="$2"
+            save_session="$3"
+            [ -n "$save_project" ] || return 0
+            [ -n "$save_thread_id" ] || return 0
+            save_dir=$(dirname "$INTERACTIVE_STATE_FILE")
+            mkdir -p "$save_dir" 2>/dev/null || return 0
+            save_tmp="${INTERACTIVE_STATE_FILE}.tmp.$$"
+            printf '{%s,%s,%s}\n' \
+                "$(json_kv project "$save_project")" \
+                "$(json_kv threadId "$save_thread_id")" \
+                "$(json_kv sessionName "$save_session")" >"$save_tmp" 2>/dev/null || {
+                rm -f "$save_tmp"
+                return 0
+            }
+            mv "$save_tmp" "$INTERACTIVE_STATE_FILE" 2>/dev/null || rm -f "$save_tmp"
+        }
+
+        remember_attach_context_from_session() {
+            remember_session="$1"
+            [ -n "$remember_session" ] || return 0
+            have_cmd jq || return 0
+            remember_req="{$(json_kv command current-thread),$(json_kv sessionName "$remember_session")}"
+            remember_resp=$(send_checked_request "$remember_req" 2>/dev/null) || return 0
+            remember_project=$(printf '%s' "$remember_resp" | jq -r '.thread.projectName // empty' 2>/dev/null)
+            remember_thread_id=$(printf '%s' "$remember_resp" | jq -r '.thread.id // empty' 2>/dev/null)
+            [ -n "$remember_project" ] && [ -n "$remember_thread_id" ] || return 0
+            save_last_attach_state "$remember_project" "$remember_thread_id" "$remember_session"
+        }
+
+        load_last_attach_state() {
+            LAST_ATTACHED_PROJECT=""
+            LAST_ATTACHED_THREAD_ID=""
+            LAST_ATTACHED_SESSION=""
+            [ -f "$INTERACTIVE_STATE_FILE" ] || return 0
+            have_cmd jq || return 0
+            LAST_ATTACHED_PROJECT=$(jq -r '.project // empty' "$INTERACTIVE_STATE_FILE" 2>/dev/null)
+            LAST_ATTACHED_THREAD_ID=$(jq -r '.threadId // empty' "$INTERACTIVE_STATE_FILE" 2>/dev/null)
+            LAST_ATTACHED_SESSION=$(jq -r '.sessionName // empty' "$INTERACTIVE_STATE_FILE" 2>/dev/null)
+        }
+
         send_request() {
             printf '%s\n' "$1" | nc -U "$SOCKET" -w "${2:-10}" 2>/dev/null
         }
@@ -467,6 +510,7 @@ actor IPCSocketServer {
             [ -n "$attach_session" ] || die "Missing tmux session name"
             have_cmd tmux || die "tmux is required."
             tmux has-session -t "$attach_session" 2>/dev/null || die "tmux session not found: $attach_session"
+            remember_attach_context_from_session "$attach_session"
 
             if [ -n "${TMUX:-}" ]; then
                 tmux switch-client -t "$attach_session"
@@ -480,6 +524,23 @@ actor IPCSocketServer {
             project_lines=$(printf '%s' "$project_resp" | jq -r '.projects | sort_by(.name)[] | "\(.name)\u001f\(.name)\u001f\(.repoPath)"')
             [ -n "$project_lines" ] || die "No projects configured."
             printf '%s\n' "$project_lines" | pick_value "Project"
+        }
+
+        project_exists() {
+            project_name="$1"
+            [ -n "$project_name" ] || return 1
+            project_exists_resp=$(send_checked_request "{$(json_kv command list-projects)}")
+            printf '%s' "$project_exists_resp" | jq -e --arg name "$project_name" '.projects[] | select(.name == $name)' >/dev/null 2>&1
+        }
+
+        thread_exists_in_project() {
+            thread_project="$1"
+            thread_id="$2"
+            [ -n "$thread_project" ] || return 1
+            [ -n "$thread_id" ] || return 1
+            thread_exists_req="{$(json_kv command list-sections),$(json_kv project "$thread_project")}"
+            thread_exists_resp=$(send_checked_request "$thread_exists_req")
+            printf '%s' "$thread_exists_resp" | jq -e --arg id "$thread_id" '.sections[] | (.threads // [])[] | select(.id == $id)' >/dev/null 2>&1
         }
 
         pick_thread_or_create() {
@@ -569,20 +630,21 @@ actor IPCSocketServer {
             tab_raw=$(printf '%s' "$tab_resp" | jq -r '.tabs | sort_by(.index)[] | [
                 .sessionName,
                 .index,
+                (.displayName // ("Tab " + (.index | tostring))),
                 (if .isAgent then (.agentType // "agent") else "terminal" end),
                 (if (.isBusy // false) then "true" else "false" end),
                 (if (.isWaitingForInput // false) then "true" else "false" end),
                 (if (.hasUnreadCompletion // false) then "true" else "false" end),
                 (if (.isBlockedByRateLimit // false) then "true" else "false" end)
             ] | @tsv')
-            tab_lines=$(printf '%s\n' "$tab_raw" | while IFS="$(printf '\t')" read -r tab_session tab_idx tab_agent_type tab_busy tab_input tab_done tab_limited; do
-                tab_label="Tab #${tab_idx}"
+            tab_lines=$(printf '%s\n' "$tab_raw" | while IFS="$(printf '\t')" read -r tab_session tab_idx tab_label tab_agent_type tab_busy tab_input tab_done tab_limited; do
                 tab_detail=$(join_with_dot "" "$(paint "$ANSI_BLUE" "$tab_agent_type")" "$(paint "$ANSI_MUTED" "$tab_session")")
                 tab_badges=$(format_tab_badges "$tab_busy" "$tab_input" "$tab_done" "$tab_limited")
                 printf '%s%s%s%s%s%s%s\n' "$tab_session" "$SEP" "$tab_label" "$SEP" "$tab_detail" "$SEP" "$tab_badges"
             done)
             {
-                printf '__back__%s← Back%sReturn to thread list\n' "$SEP" "$SEP"
+                printf '__back_thread__%s← Back to threads%sReturn to thread list\n' "$SEP" "$SEP"
+                printf '__back_project__%s← Back to projects%sReturn to project list\n' "$SEP" "$SEP"
                 printf '%s\n' "$tab_lines"
             } | pick_value "Tab"
         }
@@ -624,14 +686,27 @@ actor IPCSocketServer {
         run_interactive() {
             interactive_project="$1"
             interactive_fixed_project=0
+            interactive_resume_thread=""
             [ -n "$interactive_project" ] && interactive_fixed_project=1
+            if [ "$interactive_fixed_project" -eq 0 ]; then
+                load_last_attach_state
+                if [ -n "$LAST_ATTACHED_PROJECT" ] && project_exists "$LAST_ATTACHED_PROJECT"; then
+                    interactive_project="$LAST_ATTACHED_PROJECT"
+                    interactive_resume_thread="$LAST_ATTACHED_THREAD_ID"
+                fi
+            fi
 
             while :; do
                 if [ -z "$interactive_project" ]; then
                     interactive_project=$(pick_project) || exit 1
                 fi
 
-                interactive_pick=$(pick_thread_or_create "$interactive_project") || exit 1
+                if [ -n "$interactive_resume_thread" ] && thread_exists_in_project "$interactive_project" "$interactive_resume_thread"; then
+                    interactive_pick="$interactive_resume_thread"
+                else
+                    interactive_resume_thread=""
+                    interactive_pick=$(pick_thread_or_create "$interactive_project") || exit 1
+                fi
 
                 case "$interactive_pick" in __section__*) continue ;; esac
 
@@ -652,14 +727,25 @@ actor IPCSocketServer {
                     return "$create_status"
                 fi
 
+                interactive_back_to_project=0
                 while :; do
                     interactive_session=$(pick_tab_session "$interactive_pick") || exit 1
-                    if [ "$interactive_session" = "__back__" ]; then
+                    if [ "$interactive_session" = "__back_thread__" ]; then
+                        interactive_resume_thread=""
+                        break
+                    fi
+                    if [ "$interactive_session" = "__back_project__" ]; then
+                        interactive_project=""
+                        interactive_resume_thread=""
+                        interactive_back_to_project=1
                         break
                     fi
                     attach_tmux_session "$interactive_session"
                     return
                 done
+                if [ "$interactive_back_to_project" -eq 1 ]; then
+                    continue
+                fi
             done
         }
 
