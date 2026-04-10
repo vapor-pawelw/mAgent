@@ -22,6 +22,9 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - Project repo names use system bold 20pt font.
 - No separator divider between project groups; vertical gap (`projectHeaderInterProjectGap = 24pt`) handles spacing.
 - The global "Add repository" button is a `SidebarAddRepoRow` at the top of the outline view's root items. It scrolls with the rest of the content — there is no sticky toolbar.
+- The add-repo row opens a 2-item menu: `Create New Repository…` and `Import Existing Repository…`.
+- `Create New Repository…` selects/creates a target folder, initializes git, seeds an empty initial commit, then registers the project and creates the main thread.
+- During create-repo flow, Magent shows a persistent spinner banner (`Creating repository: <name>`), then replaces it with explicit success (`Repository created: <name>`) or failure status (`Failed to create repository: <name>`) and an error alert.
 - **Sticky headers**: When the user scrolls past a project or section header, a floating overlay (`StickyHeaderOverlayView`) pins the project name (and current section, if applicable) at the top of the sidebar. A 12pt fade gradient softens the transition into scrolling content. Clicking a sticky header smoothly scrolls the sidebar to reveal the actual header row.
 - **Selected-thread jump capsule**: When the selected thread is outside the visible thread-list viewport, a floating capsule appears near the bottom of the thread list (inside the sidebar's thread area, not over the changes panel). It shows thread icon + title (prefer task description, fallback to worktree name) and a directional arrow (`up`/`down`) indicating where the row is relative to the viewport. Clicking the capsule centers the selected thread row. The capsule fades/slides in/out, and after scrolling completes the target row gets a brief pulse.
 - The archive icon (`archivebox.fill`) appears in the trailing area. Clicking it must not select the row — `SidebarOutlineView.mouseDown` intercepts clicks on the archive button directly.
@@ -62,6 +65,8 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - The PR/ticket row (`prRow`) contains `[jiraTicketTF, jiraBadge, dotSep, prNumTF, prBadge]` with `detachesHiddenViews = true`. Never merge branch/worktree and PR/ticket into one secondary line.
 - CALayer colors from dynamic NSColor assets must be resolved inside `performAsCurrentDrawingAppearance`. `NSColor(resource:).withAlphaComponent(_:)` can snapshot the wrong drawing context at call time. Always create derived colors AND access `.cgColor` inside the `effectiveAppearance.performAsCurrentDrawingAppearance { }` block.
 - The sticky header's `CAGradientLayer` uses non-flipped CALayer coordinates: `colors[0]` at `startPoint(y=0)` is the visual **bottom** of the layer. So the array must be `[transparent, opaque]` to fade from opaque (top, adjacent to headers) to transparent (bottom).
+- Create-repo bootstrap must not depend on user-level git commit config. The seed commit path should pass transient `-c` overrides for identity and signing (`user.name`, `user.email`, `commit.gpgsign=false`) and skip local hooks (`--no-verify`) to avoid silent failures from machine-specific git config.
+- Do not discard git stderr in create/import flows. Failure paths should surface the underlying git message to the user (alert/banner) so "does nothing" states are diagnosable.
 
 ## Thread Row Naming/Description Contract
 
