@@ -60,7 +60,6 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
     var onURLChange: ((URL) -> Void)?
     /// Fires when the current page requests opening a URL in a separate tab.
     var onOpenInNewTab: ((URL) -> Void)?
-    private var settingsObserver: NSObjectProtocol?
 
     init(url: URL, identifier: String) {
         self.tabIdentifier = identifier
@@ -213,22 +212,19 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         webView.load(URLRequest(url: url))
         updateNavButtons()
 
-        settingsObserver = NotificationCenter.default.addObserver(
-            forName: .magentSettingsDidChange,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.applyAppearanceMode()
-        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSettingsDidChange(_:)),
+            name: .magentSettingsDidChange,
+            object: nil
+        )
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
     deinit {
-        if let settingsObserver {
-            NotificationCenter.default.removeObserver(settingsObserver)
-        }
+        NotificationCenter.default.removeObserver(self)
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -416,6 +412,10 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         applyAppearanceModeToCurrentPage()
     }
 
+    @objc private func handleSettingsDidChange(_ notification: Notification) {
+        applyAppearanceMode()
+    }
+
     private func applyAppearanceModeToCurrentPage() {
         let mode = PersistenceService.shared.loadSettings().appAppearanceMode.rawValue
         guard let modeLiteral = javaScriptStringLiteral(mode) else { return }
@@ -484,9 +484,9 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
     }
 }
 
-// MARK: - NSTextFieldDelegate
+// MARK: - Text Delegates
 
-extension WebTabView: NSTextFieldDelegate {
+extension WebTabView: NSTextFieldDelegate, NSSearchFieldDelegate {
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if control === findField {
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
