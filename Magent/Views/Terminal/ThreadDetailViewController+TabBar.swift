@@ -307,6 +307,7 @@ extension ThreadDetailViewController {
                 // Hide per-tab Keep Alive controls when the thread itself is keep-alive.
                 item.onKeepAlive = thread.isKeepAlive ? nil : { [weak self] in self?.toggleKeepAlive(at: i) }
                 item.onKillSession = { [weak self] in self?.killSession(at: i) }
+                item.onKillAllSessions = { [weak self] in self?.killAllSessions() }
                 item.availableAgentsForContinue = settings.availableActiveAgents
                 item.showKeepAliveIcon = !thread.isKeepAlive
                     && thread.protectedTmuxSessions.contains(sessionName)
@@ -323,6 +324,7 @@ extension ThreadDetailViewController {
                 item.onExportContext = nil
                 item.onKeepAlive = nil
                 item.onKillSession = nil
+                item.onKillAllSessions = nil
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
             case .draft:
@@ -333,6 +335,7 @@ extension ThreadDetailViewController {
                 item.onExportContext = nil
                 item.onKeepAlive = nil
                 item.onKillSession = nil
+                item.onKillAllSessions = nil
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
             }

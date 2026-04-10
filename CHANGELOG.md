@@ -17,6 +17,10 @@ All notable changes to this project will be documented in this file.
 - Hardened embedded terminal display-link callbacks to safely ignore missing runtime userdata instead of crashing on pointer unwrap.
 - Eliminated the tmux zombie process buildup that caused the recurring "tmux health issue: N defunct processes" banner. The per-click URL capture binding now stores mouse state in an in-process tmux option (`set-option -gqF`) instead of spawning a shell script via `run-shell -b` on every mouse click, so fast clicking no longer accumulates defunct children under the tmux server.
 
+### Tab
+#### Bug Fixes
+- Reorganized the tab context menu for faster session actions: `Resume Agent Session in New Tab` now sits directly below `Continue in...`, tab-level session controls are grouped under a `Session` submenu (`Keep Alive`, `Kill All Sessions`), and `Close Tabs to the Left/Right` now appear immediately above `Close This Tab` (which stays last).
+
 ### New Thread Sheet
 #### Features
 - Terminal and Web type prompts now display as compact single-line fields with placeholder text ("e.g. vim, htop, ssh user@host" / "https://..."), making the expected input obvious and reducing accidental prompt-in-URL mistakes.

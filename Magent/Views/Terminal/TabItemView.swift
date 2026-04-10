@@ -125,6 +125,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onContinueIn: (() -> Void)?
     var onExportContext: (() -> Void)?
     var onKillSession: (() -> Void)?
+    var onKillAllSessions: (() -> Void)?
     var onCloseTabsToTheRight: (() -> Void)?
     var onCloseTabsToTheLeft: (() -> Void)?
     var availableAgentsForContinue: [AgentType] = []
@@ -335,6 +336,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         onKillSession?()
     }
 
+    @objc private func killAllSessionsTapped() {
+        onKillAllSessions?()
+    }
+
     private func updateAppearance() {
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let deadDimAlpha: CGFloat = isSessionDead ? 0.45 : 1.0
@@ -392,6 +397,17 @@ final class TabItemView: NSView, NSMenuDelegate {
             menu.addItem(renameItem)
         }
 
+        // Context transfer items
+        if !availableAgentsForContinue.isEmpty || onResumeAgentInNewTab != nil || onExportContext != nil {
+            menu.addItem(.separator())
+        }
+
+        if !availableAgentsForContinue.isEmpty {
+            let continueItem = NSMenuItem(title: "Continue in...", action: #selector(continueInTapped), keyEquivalent: "")
+            continueItem.target = self
+            menu.addItem(continueItem)
+        }
+
         if onResumeAgentInNewTab != nil {
             let resumeItem = NSMenuItem(
                 title: "Resume Agent Session in New Tab",
@@ -401,17 +417,6 @@ final class TabItemView: NSView, NSMenuDelegate {
             resumeItem.target = self
             resumeItem.isEnabled = canResumeAgentInNewTab
             menu.addItem(resumeItem)
-        }
-
-        // Context transfer items
-        if !availableAgentsForContinue.isEmpty || onExportContext != nil {
-            menu.addItem(.separator())
-        }
-
-        if !availableAgentsForContinue.isEmpty {
-            let continueItem = NSMenuItem(title: "Continue in...", action: #selector(continueInTapped), keyEquivalent: "")
-            continueItem.target = self
-            menu.addItem(continueItem)
         }
 
         if onExportContext != nil {
@@ -428,6 +433,29 @@ final class TabItemView: NSView, NSMenuDelegate {
         let hasTabsToRight = tabIndex < totalTabCount - 1
         let hasTabsToLeft = tabIndex > 0
 
+        if onKeepAlive != nil || onKillAllSessions != nil {
+            menu.addItem(.separator())
+            let sessionItem = NSMenuItem(title: "Session", action: nil, keyEquivalent: "")
+            let sessionSubmenu = NSMenu()
+
+            if onKeepAlive != nil {
+                let keepAliveTitle = showKeepAliveIcon ? "Remove Keep Alive" : "Keep Alive"
+                let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(keepAliveTapped), keyEquivalent: "")
+                keepAliveItem.target = self
+                sessionSubmenu.addItem(keepAliveItem)
+            }
+
+            if onKillAllSessions != nil {
+                let killAllItem = NSMenuItem(title: "Kill All Sessions", action: #selector(killAllSessionsTapped), keyEquivalent: "")
+                killAllItem.target = self
+                sessionSubmenu.addItem(killAllItem)
+            }
+
+            sessionItem.submenu = sessionSubmenu
+            menu.addItem(sessionItem)
+        }
+
+        // Close tabs section at the bottom
         if hasTabsToRight || hasTabsToLeft {
             menu.addItem(.separator())
 
@@ -466,25 +494,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             }
         }
 
-        if onKeepAlive != nil {
-            menu.addItem(.separator())
-            let keepAliveTitle = showKeepAliveIcon ? "Remove Keep Alive" : "Keep Alive"
-            let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(keepAliveTapped), keyEquivalent: "")
-            keepAliveItem.target = self
-            menu.addItem(keepAliveItem)
-        }
-
-        // Kill tmux session (terminal tabs only, when session is alive)
-        if onKillSession != nil, !isSessionDead {
-            if onKeepAlive == nil {
-                menu.addItem(.separator())
-            }
-            let killItem = NSMenuItem(title: "Kill Session", action: #selector(killSessionTapped), keyEquivalent: "")
-            killItem.target = self
-            menu.addItem(killItem)
-        }
-
-        // "Close this tab" — always at the bottom
+        // "Close this tab" — always the last option
+        menu.addItem(.separator())
         let closeThisItem = NSMenuItem(title: "Close This Tab", action: #selector(closeTapped), keyEquivalent: "")
         closeThisItem.target = self
         menu.addItem(closeThisItem)
