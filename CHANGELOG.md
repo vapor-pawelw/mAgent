@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### General
 #### Bug Fixes
+- Fixed main window size/position resetting on app rerun/relaunch paths that bypass normal app termination. Magent now persists the main-window frame continuously on move/resize/screen changes, so the latest frame restores reliably on next launch.
 - Fixed Magent unexpectedly switching macOS Spaces/desktops during display-topology updates. Screen-parameter handling now refreshes off-screen recovery without activating or focusing the app window.
 - Improved multi-monitor launch restore reliability. Magent now persists the main window's last display ID on quit and prefers reopening on that display at next launch (with active-screen fallback when the saved display is unavailable).
 

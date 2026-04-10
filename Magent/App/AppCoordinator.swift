@@ -10,6 +10,7 @@ final class AppCoordinator {
     private var window: NSWindow?
     private let persistence = PersistenceService.shared
     private var pendingOffScreenRecovery: DispatchWorkItem?
+    private var mainWindowFrameObservers: [NSObjectProtocol] = []
     private(set) var statusBar: StatusBarView?
 
     func start() {
@@ -114,6 +115,7 @@ final class AppCoordinator {
         ensureWindowIsVisibleOnCurrentScreens(window)
         window.makeKeyAndOrderFront(nil)
         self.window = window
+        installMainWindowFramePersistenceObservers(for: window)
 
         installBannerOverlay(for: window)
 
@@ -180,6 +182,24 @@ final class AppCoordinator {
         guard let window else { return }
         window.saveFrame(usingName: Self.mainWindowAutosaveName)
         persistMainWindowScreenID(for: window)
+    }
+
+    private func installMainWindowFramePersistenceObservers(for window: NSWindow) {
+        let center = NotificationCenter.default
+        let notifications: [Notification.Name] = [
+            NSWindow.didMoveNotification,
+            NSWindow.didResizeNotification,
+            NSWindow.didEndLiveResizeNotification,
+            NSWindow.didChangeScreenNotification,
+        ]
+
+        mainWindowFrameObservers = notifications.map { name in
+            center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.persistMainWindowFrame()
+                }
+            }
+        }
     }
 
     func presentConfiguration(over viewController: NSViewController) {
@@ -697,6 +717,7 @@ final class AppCoordinator {
         )
 
         window.setFrame(adjustedFrame, display: true)
+        persistMainWindowFrame()
     }
 
     private func isCompletelyOffScreen(_ frame: NSRect, visibleFrames: [NSRect]) -> Bool {
