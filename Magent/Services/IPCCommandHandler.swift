@@ -757,6 +757,7 @@ final class IPCCommandHandler {
         let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
             let isAgent = thread.agentTmuxSessions.contains(sessionName)
             var tab = IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent)
+            tab.displayName = thread.displayName(for: sessionName, at: index)
             if isAgent {
                 tab.agentType = threadManager.agentType(for: thread, sessionName: sessionName)?.rawValue
                 tab.isBusy = thread.busySessions.contains(sessionName) || thread.magentBusySessions.contains(sessionName)
@@ -1175,7 +1176,9 @@ final class IPCCommandHandler {
         // Build tab list
         let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
             let isAgent = thread.agentTmuxSessions.contains(sessionName)
-            return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent)
+            var tab = IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent)
+            tab.displayName = thread.displayName(for: sessionName, at: index)
+            return tab
         }
 
         let status = makeThreadStatus(for: thread)

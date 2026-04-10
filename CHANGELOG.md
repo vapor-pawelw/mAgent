@@ -59,12 +59,14 @@ All notable changes to this project will be documented in this file.
 - `create-tab` now accepts `--title` to set the tab name from the CLI and `--fresh`/`--no-resume` to keep isolated review tabs from inheriting older agent history.
 - `batch-create` specs now accept `"promptFile": "/path/to/prompt.txt"` to load the initial prompt from a file, avoiding JSON escaping issues with long or multi-line prompts. `promptFile` takes precedence over `prompt` when both are set.
 - Added thread priority support to the CLI: `create-thread --priority 1-5` and a per-spec `"priority"` key for `batch-create` assign the 1–5 priority at creation time. A new `set-priority --thread <name> (--priority 1-5 | --clear)` command updates or clears priority on existing threads.
+- Interactive CLI now remembers the last attached session context and, on the next run, opens directly in that thread when available. If the thread is gone it falls back to the last project; if the project is gone it falls back to project picker.
 
 #### Bug Fixes
 - Fixed multiline prompts sent via `send-prompt` (or agent-to-agent injection) being cut off after the first line. tmux paste-buffer now uses bracketed paste mode so Claude's TUI receives newlines as literal characters rather than Enter keypresses.
 - Fixed `batch-create` silently ignoring the `name` field in specs JSON — the JSON key `"name"` was not mapped to the internal Swift property, so threads were always auto-named from `description`.
 - Fixed `batch-create` failing with "Invalid JSON" when `specs.json` is pretty-printed. The CLI now compacts the array before sending so embedded newlines don't truncate the IPC message.
 - Improved IPC JSON parse error messages: errors now report the specific field or mismatch instead of the generic "couldn't be read" Foundation message; `dataCorrupted` errors include a hint about the newline-truncation pitfall.
+- Interactive CLI tab picker now shows real tab names (including custom titles) instead of generic `Tab #` labels.
 
 ### Agents
 #### Features
