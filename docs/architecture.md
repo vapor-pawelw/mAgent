@@ -213,7 +213,7 @@ The main window's sidebar/detail `NSSplitView` structure should remain stable wh
 
 - Display-topology callbacks (for example `applicationDidChangeScreenParameters`) must not call app-activation paths (`NSApp.activate`, `makeKeyAndOrderFront`) because those can pull the user to another macOS Space unexpectedly.
 - Keep screen-change handling limited to non-focus side effects (for example off-screen frame recovery) so background monitor or display events never steal focus.
-- Persist both the main-window frame autosave entry and the last display identifier on quit. At launch, restore frame first, then prefer the persisted display when available; only fall back to the active/mouse display if the saved display no longer exists.
+- Persist both the main-window frame autosave entry and the last display identifier continuously (window move/resize/screen-change) and again on quit. Rerun/relaunch flows (for example replacing the process from Xcode) can skip `applicationWillTerminate`, so launch restore must rely on the latest continuously saved frame instead of quit-only persistence. At launch, restore frame first, then prefer the persisted display when available; only fall back to the active/mouse display if the saved display no longer exists.
 - If a restored frame lands on a different display than the persisted preferred display, re-center on the preferred display before showing the window.
 
 ### 4.7 Release-Gated Local Features
