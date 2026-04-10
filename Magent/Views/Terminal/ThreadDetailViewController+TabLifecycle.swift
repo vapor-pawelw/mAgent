@@ -561,6 +561,16 @@ extension ThreadDetailViewController {
         }
     }
 
+    func killAllSessions() {
+        Task {
+            await threadManager.killAllSessions(threadId: thread.id)
+            if let freshThread = threadManager.threads.first(where: { $0.id == thread.id }) {
+                thread = freshThread
+            }
+            rebuildTabBar()
+        }
+    }
+
     // MARK: - Keep Alive
 
     func toggleKeepAlive(at index: Int) {
