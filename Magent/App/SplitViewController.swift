@@ -55,6 +55,7 @@ final class SplitViewController: NSSplitViewController {
     private var isRestoringSidebarWidth = false
     private var keyEventMonitor: Any?
     private var cachedKeyBindings: KeyBindingSettings = KeyBindingSettings()
+    private weak var observedWindowForFocusNotifications: NSWindow?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -89,6 +90,7 @@ final class SplitViewController: NSSplitViewController {
 
         applyInitialSidebarWidthIfNeeded()
         setupWindowToolbar()
+        installWindowFocusObserversIfNeeded()
 
         NotificationCenter.default.addObserver(
             self,
@@ -130,6 +132,13 @@ final class SplitViewController: NSSplitViewController {
             self,
             selector: #selector(handlePopOutThreadRequested(_:)),
             name: .magentPopOutThreadRequested,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleVisibleThreadCompletionDetected(_:)),
+            name: .magentAgentCompletionDetected,
             object: nil
         )
     }
@@ -325,6 +334,40 @@ final class SplitViewController: NSSplitViewController {
         }
     }
 
+    private func installWindowFocusObserversIfNeeded() {
+        guard let window = view.window, observedWindowForFocusNotifications !== window else { return }
+        if let previousWindow = observedWindowForFocusNotifications {
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSWindow.didBecomeKeyNotification,
+                object: previousWindow
+            )
+        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMainWindowDidBecomeKey(_:)),
+            name: NSWindow.didBecomeKeyNotification,
+            object: window
+        )
+        observedWindowForFocusNotifications = window
+    }
+
+    private func focusedThreadIdForCompletionRead() -> UUID? {
+        if let detailVC = currentDetailVC {
+            return detailVC.thread.id
+        }
+        if contentContainerVC.currentChild is DetachedThreadPlaceholderView {
+            return ThreadManager.shared.activeThreadId
+        }
+        return nil
+    }
+
+    private func markFocusedThreadCompletionSeenIfNeeded() {
+        guard view.window?.isKeyWindow == true,
+              let threadId = focusedThreadIdForCompletionRead() else { return }
+        ThreadManager.shared.markThreadCompletionSeen(threadId: threadId)
+    }
+
     private func presentThread(_ thread: MagentThread) {
         currentDetailVC?.cacheTerminalViewsForReuse()
         let detailVC = ThreadDetailViewController(thread: thread)
@@ -442,6 +485,19 @@ final class SplitViewController: NSSplitViewController {
                 detailVC.selectTab(at: tabIndex)
             }
         }
+
+        markFocusedThreadCompletionSeenIfNeeded()
+    }
+
+    @objc private func handleMainWindowDidBecomeKey(_ notification: Notification) {
+        markFocusedThreadCompletionSeenIfNeeded()
+    }
+
+    @objc private func handleVisibleThreadCompletionDetected(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID,
+              threadId == focusedThreadIdForCompletionRead(),
+              view.window?.isKeyWindow == true else { return }
+        ThreadManager.shared.markThreadCompletionSeen(threadId: threadId)
     }
 
     @objc private func handleOpenExternalLinkInApp(_ notification: Notification) {
@@ -640,6 +696,7 @@ extension SplitViewController: ThreadListDelegate {
         } else {
             showThread(thread)
         }
+        markFocusedThreadCompletionSeenIfNeeded()
         threadListVC.refreshDiffPanelForSelectedThread()
     }
 

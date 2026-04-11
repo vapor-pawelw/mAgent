@@ -239,9 +239,11 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 border: NSColor.systemGreen.withAlphaComponent(0.5)
             )
         } else if showsPopoutTint {
+            let subtlePurple = NSColor.systemPurple.blended(withFraction: 0.35, of: .secondaryLabelColor)
+                ?? NSColor.systemPurple
             return CapsuleStyle(
-                fill: NSColor.systemPurple.withAlphaComponent(0.05),
-                border: NSColor.systemPurple.withAlphaComponent(0.2)
+                fill: subtlePurple.withAlphaComponent(0.05),
+                border: subtlePurple.withAlphaComponent(0.28)
             )
         } else {
             return CapsuleStyle(

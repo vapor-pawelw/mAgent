@@ -5,6 +5,7 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 ## User-facing behavior
 
 - The sidebar and tab bar still use the existing green completion dot for unread finished work.
+- If a thread is already focused in the main window, or its separate thread window is focused, new completion attention is treated as read immediately instead of waiting for an extra tab/thread switch.
 - When the app is not foregrounded and a thread gets its first unread completion, the Dock icon requests informational attention (bounce).
 - The Dock badge shows the number of non-archived threads that currently have unread completions.
 - Waiting-for-input state does not contribute to the Dock badge.
@@ -21,6 +22,7 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 - The Dock badge uses thread count, not unread session count, so it matches the sidebar's thread-level completion affordance.
 - The Dock completion setting is persisted as `AppSettings.showDockBadgeAndBounceForUnreadCompletions`.
 - Toggling the setting in Notifications refreshes the Dock badge immediately instead of waiting for the next completion event.
+- Focus-driven clearing is window-aware: `SplitViewController` clears unread completion for the currently visible thread when the main window becomes key or stays focused during a completion event, and `ThreadPopoutWindowController` mirrors that behavior for separate thread windows.
 
 ## Completion sources
 
@@ -52,4 +54,5 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 
 - Completion is tracked per-session: `unreadCompletionSessions` set on the thread. `hasUnreadAgentCompletion` checks `!unreadCompletionSessions.isEmpty && !isAnyBusy` — busy state takes precedence over completion so a row never appears green and busy at the same time. The raw set is preserved while busy, so the indicator reappears as soon as the thread goes idle. Internal callers that need the raw state (transition detection in `processCompletedAgentSessions`, `markThreadCompletionSeen` clearing) inspect `unreadCompletionSessions` directly instead of going through the busy-suppressed property.
 - Tab-level green dots react via `magentAgentCompletionDetected` notification. Selecting a tab calls `markSessionCompletionSeen(threadId:sessionName:)` to clear individual sessions.
+- Thread-level completion can also clear without a tab switch: focusing the visible thread (or keeping its thread window focused while the completion arrives) calls `markThreadCompletionSeen(threadId:)` so the thread-level unread dot does not stick around while the user is already looking at that work.
 - Do not reintroduce tmux `pipe-pane` completion watchers by default. The legacy path is retained only behind `TmuxService.legacyAgentBellPipeEnabled`. `ensureBellPipes()` now serves as upgrade cleanup when the legacy flag is off.

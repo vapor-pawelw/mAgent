@@ -21,6 +21,7 @@ final class PopoutWindowManager: PopoutStateProviding {
 
     private(set) var threadWindows: [UUID: ThreadPopoutWindowController] = [:]
     private(set) var tabWindows: [String: TabPopoutWindowController] = [:]
+    private var suppressAutomaticStateSaves = false
 
     // MARK: - PopoutStateProviding
 
@@ -87,6 +88,8 @@ final class PopoutWindowManager: PopoutStateProviding {
             userInfo: ["threadId": thread.id]
         )
 
+        saveStateIfAllowed()
+
         return controller
     }
 
@@ -103,6 +106,8 @@ final class PopoutWindowManager: PopoutStateProviding {
             object: nil,
             userInfo: ["threadId": threadId]
         )
+
+        saveStateIfAllowed()
     }
 
     // MARK: - Tab Detach
@@ -128,6 +133,8 @@ final class PopoutWindowManager: PopoutStateProviding {
             userInfo: ["sessionName": sessionName, "threadId": thread.id]
         )
 
+        saveStateIfAllowed()
+
         return controller
     }
 
@@ -142,6 +149,8 @@ final class PopoutWindowManager: PopoutStateProviding {
             object: nil,
             userInfo: ["sessionName": sessionName, "threadId": controller.threadId]
         )
+
+        saveStateIfAllowed()
     }
 
     // MARK: - Bring to Front
@@ -157,6 +166,9 @@ final class PopoutWindowManager: PopoutStateProviding {
     // MARK: - Close All
 
     func closeAll() {
+        suppressAutomaticStateSaves = true
+        defer { suppressAutomaticStateSaves = false }
+
         for (threadId, _) in threadWindows {
             returnThreadToMain(threadId)
         }
@@ -303,6 +315,11 @@ final class PopoutWindowManager: PopoutStateProviding {
     }
 
     // MARK: - Helpers
+
+    private func saveStateIfAllowed() {
+        guard !suppressAutomaticStateSaves else { return }
+        saveState()
+    }
 
     private func isFrameVisibleOnCurrentScreens(_ frame: NSRect) -> Bool {
         for screen in NSScreen.screens {

@@ -31,10 +31,11 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
     case busy
     case waiting
     case done
+    case separateWindows
     case rateLimited
     case favorites
 
-    var buttonTitle: String {
+    func buttonTitle(for count: Int) -> String {
         switch self {
         case .busy:
             return "busy"
@@ -42,6 +43,8 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return "waiting"
         case .done:
             return "done"
+        case .separateWindows:
+            return count == 1 ? "window" : "windows"
         case .rateLimited:
             return "rate-limited"
         case .favorites:
@@ -57,6 +60,8 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return "Waiting For Input"
         case .done:
             return "Completed Threads"
+        case .separateWindows:
+            return "Threads In Separate Windows"
         case .rateLimited:
             return "Rate-Limited Threads"
         case .favorites:
@@ -72,6 +77,8 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return "exclamationmark.bubble"
         case .done:
             return "checkmark.circle.fill"
+        case .separateWindows:
+            return "macwindow"
         case .rateLimited:
             return "hourglass"
         case .favorites:
@@ -87,6 +94,8 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return .systemYellow
         case .done:
             return .systemGreen
+        case .separateWindows:
+            return .systemPurple
         case .rateLimited:
             return .systemRed
         case .favorites:
@@ -102,6 +111,8 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return thread.hasWaitingForInput
         case .done:
             return thread.hasUnreadAgentCompletion
+        case .separateWindows:
+            return PopoutWindowManager.shared.isThreadPoppedOut(thread.id)
         case .rateLimited:
             return thread.isBlockedByRateLimit
         case .favorites:
@@ -933,6 +944,8 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         nc.addObserver(self, selector: sel, name: .magentDeadSessionsDetected, object: nil)
         nc.addObserver(self, selector: sel, name: .magentTmuxHealthChanged, object: nil)
         nc.addObserver(self, selector: sel, name: .magentFavoritesChanged, object: nil)
+        nc.addObserver(self, selector: sel, name: .magentThreadPoppedOut, object: nil)
+        nc.addObserver(self, selector: sel, name: .magentThreadReturnedToMain, object: nil)
 
         statusTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
@@ -1063,7 +1076,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         button.isBordered = false
         button.image = NSImage(
             systemSymbolName: summary.kind.symbolName,
-            accessibilityDescription: summary.kind.buttonTitle
+            accessibilityDescription: summary.kind.buttonTitle(for: summary.count)
         )?.withSymbolConfiguration(
             NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
         )
@@ -1087,14 +1100,15 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     }
 
     private func configureStatusButton(_ button: NSButton, summary: ThreadStatusSummaryDescriptor) {
+        let statusTitle = summary.kind.buttonTitle(for: summary.count)
         button.attributedTitle = NSAttributedString(
-            string: "\(summary.count) \(summary.kind.buttonTitle)",
+            string: "\(summary.count) \(statusTitle)",
             attributes: [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
                 .foregroundColor: summary.kind.color,
             ]
         )
-        button.setAccessibilityLabel("\(summary.count) \(summary.kind.buttonTitle)")
+        button.setAccessibilityLabel("\(summary.count) \(statusTitle)")
     }
 
     private func refreshStatusButtonCountsInPlace(summaries: [ThreadStatusSummaryDescriptor]) {
@@ -1179,7 +1193,13 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             }
         }
 
-        return Array(newestFirst.prefix(3).reversed())
+        let displayedEntries: [ThreadStatusPopoverEntry]
+        if status == .separateWindows {
+            displayedEntries = newestFirst
+        } else {
+            displayedEntries = Array(newestFirst.prefix(3))
+        }
+        return Array(displayedEntries.reversed())
     }
 
     private func refreshActivePopover() {
@@ -1615,17 +1635,10 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             onSelectThread: { [weak self] threadId in
                 self?.activePopover?.close()
                 let sessionName = self?.navigationSessionName(for: status, threadId: threadId)
-                var userInfo: [String: Any] = [
-                    "threadId": threadId,
-                    "sessionName": sessionName as Any
-                ]
-                if status == .favorites {
-                    userInfo["centerInSidebar"] = true
-                }
-                NotificationCenter.default.post(
-                    name: .magentNavigateToThread,
-                    object: self,
-                    userInfo: userInfo
+                self?.navigateToThread(
+                    threadId: threadId,
+                    sessionName: sessionName,
+                    centerInSidebar: self?.shouldCenterSidebarOnNavigation(for: status) ?? false
                 )
             }
         )
@@ -1633,6 +1646,25 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         activePopoverStatus = status
         activePopover = popover
         popover.show(relativeTo: anchorButton.bounds, of: anchorButton, preferredEdge: .maxY)
+    }
+
+    private func shouldCenterSidebarOnNavigation(for status: ThreadStatusSummaryKind) -> Bool {
+        status == .favorites || status == .separateWindows
+    }
+
+    private func navigateToThread(threadId: UUID, sessionName: String?, centerInSidebar: Bool) {
+        var userInfo: [String: Any] = [
+            "threadId": threadId,
+            "sessionName": sessionName as Any
+        ]
+        if centerInSidebar {
+            userInfo["centerInSidebar"] = true
+        }
+        NotificationCenter.default.post(
+            name: .magentNavigateToThread,
+            object: self,
+            userInfo: userInfo
+        )
     }
 
     private func removeFavoriteThread(_ threadId: UUID) {
@@ -1682,6 +1714,8 @@ final class StatusBarView: NSView, NSPopoverDelegate {
                 thread.waitingForInputSessions.contains($0)
             }
         case .done:
+            return nil
+        case .separateWindows:
             return nil
         case .rateLimited:
             return orderedTerminalSessions.first {

@@ -22,6 +22,8 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - Favorites popover rows include a trailing remove action (`heart.slash.circle`) that removes that thread from favorites without navigating.
 - The favorites popover does not show `Mark All`/`Read` controls.
 - When the favorites cap is reached, the favorites popover shows an inline limit hint (`10/10`).
+- When any threads are open in separate windows, the left status stack also shows a purple `X window(s)` control. Clicking it opens a popover listing those popped-out threads.
+- Selecting a row in the separate-windows popover uses the same centered sidebar navigation as Favorites, so the matching row scrolls into view and pulses briefly.
 - A session count indicator on the right side shows the number of active tmux sessions (formatted as `live/total` when some are suspended, or just `total` when all are live). Clicking it opens a popover with a breakdown of live, suspended, protected (busy/waiting/shielded/pinned), and total sessions, plus a "Close N idle sessions" button that kills all non-protected live sessions. Clicking the button shows a confirmation alert listing which threads/tabs will be affected (scrollable, grouped by thread). Tab metadata is preserved — sessions are lazily recreated when the user selects the tab.
 - The sync label on the right side shows "Synced X ago" with a tooltip explaining what is synced (PR status from GitHub, plus Jira ticket info when any project has Jira sync enabled). When the latest sync fails, that same tooltip also includes the last failure reason, and right-clicking the sync label shows the last failure lines above "Refresh Now".
 - The rate-limit label on the right side shows active rate-limit countdowns. Right-clicking it offers "Lift Limit Now" and "Lift + Ignore Current Messages" per agent (Claude/Codex).
@@ -35,8 +37,10 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - `done` and `favorites` intentionally navigate by thread only (no session hint) so they do not mutate the destination thread's last-selected tab.
 - `done` ordering is persistent because unread completion state already survives relaunch via `MagentThread.unreadCompletionSessions`, and its ordering timestamp comes from persisted `MagentThread.lastAgentCompletionAt`.
 - `busy`, `waiting`, and `rate-limited` ordering is in-memory only. Their "added at" timestamps are tracked inside `StatusBarView` for the current app run and reset on relaunch because those statuses themselves are transient.
+- `separate windows` ordering is also in-memory only. The underlying popped-out state persists across relaunch, but the popover order is rebuilt from the current run's status-tracking timestamps.
 - Favorites ordering uses persisted `MagentThread.favoritedAt` (fallback `createdAt`) and is not capped to 3 rows like status summaries.
 - Favorites row selection posts `.magentNavigateToThread` with `centerInSidebar = true`; `SplitViewController` consumes that hint to suppress immediate `scrollRowToVisible` and call `ThreadListViewController.centerAndPulseThreadRow(byId:)`.
+- Separate-window row selection uses that same `.magentNavigateToThread` + `centerInSidebar = true` path rather than a second sidebar-navigation implementation.
 - While a status popover is visible, `StatusBarView` avoids rebuilding the status-button stack (to preserve the popover anchor) and updates existing button counts in place.
 - If a read action clears the currently open status entirely (for example, `done` goes to zero after `Mark All as Read`), `StatusBarView` must close that popover and rebuild the status-button stack immediately so stale `done` UI does not linger.
 

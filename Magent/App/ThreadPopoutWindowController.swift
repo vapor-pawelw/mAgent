@@ -183,6 +183,13 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             name: .magentTabReturnedToThread,
             object: nil
         )
+
+        nc.addObserver(
+            self,
+            selector: #selector(handleCompletionDetected(_:)),
+            name: .magentAgentCompletionDetected,
+            object: nil
+        )
     }
 
     @objc private func refreshInfoStrip() {
@@ -211,7 +218,33 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    @objc private func handleCompletionDetected(_ notification: Notification) {
+        guard let completedThreadId = notification.userInfo?["threadId"] as? UUID,
+              completedThreadId == threadId else { return }
+        markThreadCompletionSeenIfFocused()
+    }
+
     // MARK: - NSWindowDelegate
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        markThreadCompletionSeenIfFocused()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        PopoutWindowManager.shared.saveState()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        PopoutWindowManager.shared.saveState()
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        PopoutWindowManager.shared.saveState()
+    }
+
+    func windowDidChangeScreen(_ notification: Notification) {
+        PopoutWindowManager.shared.saveState()
+    }
 
     func windowWillClose(_ notification: Notification) {
         guard !isReturningToMain else { return }
@@ -228,6 +261,11 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             return "\(name) — \(branch)"
         }
         return name
+    }
+
+    private func markThreadCompletionSeenIfFocused() {
+        guard window?.isKeyWindow == true else { return }
+        ThreadManager.shared.markThreadCompletionSeen(threadId: threadId)
     }
 }
 

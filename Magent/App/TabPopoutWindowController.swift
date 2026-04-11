@@ -208,6 +208,22 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
         PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
     }
 
+    func windowDidMove(_ notification: Notification) {
+        PopoutWindowManager.shared.saveState()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        PopoutWindowManager.shared.saveState()
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        PopoutWindowManager.shared.saveState()
+    }
+
+    func windowDidChangeScreen(_ notification: Notification) {
+        PopoutWindowManager.shared.saveState()
+    }
+
     // MARK: - Helpers
 
     private static func windowTitle(for thread: MagentThread, sessionName: String) -> String {

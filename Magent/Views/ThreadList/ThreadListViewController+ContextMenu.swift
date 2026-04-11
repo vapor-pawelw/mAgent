@@ -1062,7 +1062,6 @@ extension ThreadListViewController {
         threadManager.toggleThreadPin(threadId: threadId)
     }
 
-<<<<<<< HEAD
     @objc private func toggleThreadFavorite(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         let didToggle = threadManager.toggleThreadFavorite(threadId: threadId)
@@ -1073,8 +1072,6 @@ extension ThreadListViewController {
         )
     }
 
-||||||| parent of abde8cb (feat(popout-sidebar): Sidebar visual integration for pop-out windows)
-=======
     @objc private func showPopoutWindow(_ sender: NSMenuItem) {
         guard let thread = sender.representedObject as? MagentThread else { return }
         PopoutWindowManager.shared.bringToFront(threadId: thread.id)
@@ -1093,8 +1090,6 @@ extension ThreadListViewController {
             userInfo: ["threadId": thread.id]
         )
     }
-
->>>>>>> abde8cb (feat(popout-sidebar): Sidebar visual integration for pop-out windows)
     @objc private func toggleThreadKeepAlive(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         threadManager.toggleThreadKeepAlive(threadId: threadId)

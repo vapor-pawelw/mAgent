@@ -1190,17 +1190,20 @@ final class ThreadCell: NSTableCellView {
     }
 
     private func ensurePopoutBadge() {
-        guard popoutBadge == nil else { return }
         ensureTopBorderBadgeStack()
-        let badge = TopBorderBadge(bareIcon: true)
-        badge.label.isHidden = true
-        badge.iconView.image = Self.cachedSymbolImage("macwindow")
-        badge.iconView.contentTintColor = .systemPurple
-        badge.iconView.isHidden = false
-        badge.isHidden = true
-        badge.toolTip = "Open in separate window"
-        topBorderBadgeStack?.addArrangedSubview(badge)
-        popoutBadge = badge
+        if popoutBadge == nil {
+            let badge = TopBorderBadge(bareIcon: true)
+            badge.label.isHidden = true
+            badge.iconView.image = Self.cachedSymbolImage("macwindow")
+            badge.iconView.contentTintColor = .systemPurple
+            badge.iconView.isHidden = false
+            badge.isHidden = true
+            badge.toolTip = "Open in separate window"
+            popoutBadge = badge
+        }
+        if let badge = popoutBadge, badge.superview !== topBorderBadgeStack {
+            topBorderBadgeStack?.addArrangedSubview(badge)
+        }
     }
     private func ensurePinnedBadge() {
         ensureTopBorderBadgeStack()
@@ -1221,28 +1224,18 @@ final class ThreadCell: NSTableCellView {
     private func updateTopBorderBadgeOrder() {
         guard let stack = topBorderBadgeStack else { return }
 
-        if let favorite = favoriteBadge, favorite.superview === stack,
-           let pin = pinnedBadge, pin.superview === stack {
-            stack.removeArrangedSubview(favorite)
-            favorite.removeFromSuperview()
-            stack.removeArrangedSubview(pin)
-            pin.removeFromSuperview()
-            stack.addArrangedSubview(favorite)
-            stack.addArrangedSubview(pin)
-            return
+        let trailingBadges = [favoriteBadge, popoutBadge, pinnedBadge].compactMap { badge -> TopBorderBadge? in
+            guard let badge, badge.superview === stack else { return nil }
+            return badge
         }
+        guard !trailingBadges.isEmpty else { return }
 
-        if let pin = pinnedBadge, pin.superview === stack, stack.arrangedSubviews.last !== pin {
-            stack.removeArrangedSubview(pin)
-            pin.removeFromSuperview()
-            stack.addArrangedSubview(pin)
-            return
+        for badge in trailingBadges {
+            stack.removeArrangedSubview(badge)
+            badge.removeFromSuperview()
         }
-
-        if let favorite = favoriteBadge, favorite.superview === stack, stack.arrangedSubviews.last !== favorite {
-            stack.removeArrangedSubview(favorite)
-            favorite.removeFromSuperview()
-            stack.addArrangedSubview(favorite)
+        for badge in trailingBadges {
+            stack.addArrangedSubview(badge)
         }
     }
 
@@ -1269,6 +1262,9 @@ final class ThreadCell: NSTableCellView {
         }
         if let pin = pinnedBadge {
             pin.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
+        }
+        if let popout = popoutBadge {
+            popout.iconView.contentTintColor = .systemPurple
         }
     }
 

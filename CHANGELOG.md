@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 #### Features
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
+- Threads opened in separate windows now use a subtle purple row tint, and their top-right window badge matches the other circular sidebar badges while keeping its purple icon.
 
 #### Bug Fixes
 - Fixed launch-time thread navigation so the selected thread is centered only after the sidebar has fully loaded and laid out, avoiding premature scroll jumps during startup.
@@ -29,10 +30,18 @@ All notable changes to this project will be documented in this file.
 - Fixed tab-name deduplication when cloning/resuming/renaming tabs. Names now use a single monotonic suffix sequence per base name (`Codex`, `Codex-1`, `Codex-2`, ...), preventing chained names like `Codex-1-1` and avoiding suffix reuse after deletions.
 
 ### Status Bar
+#### Features
+- Added a `windows` status in the bottom bar for threads opened in separate windows. Clicking it lists those threads and uses the same centered sidebar navigation as Favorites.
+
 #### Bug Fixes
 - Fixed favorites popover navigation using abrupt sidebar row reveal. Selecting a favorite thread now uses the same centered, smooth animated scroll (with row pulse) as the sidebar's selected-thread jump control.
 - Fixed thread icons in `favorites` and `done` popovers ignoring section colors. Popover rows now tint each thread icon with its effective section color (matching sidebar rows when sections are enabled).
 - Fixed `favorites`/`done` popover navigation overriding the destination thread's selected tab. Opening a thread from those popovers now preserves that thread's last-selected tab.
+
+### Thread
+#### Bug Fixes
+- Focusing a thread now clears unread completion state immediately, even if the thread was already selected or its separate window was already focused when the agent finished.
+- Separate thread and detached-tab windows now persist their latest size and position continuously, so app restart restores the same extracted windows in the same place.
 ## 1.5.4 - 2026-04-10
 
 
