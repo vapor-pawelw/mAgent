@@ -142,6 +142,7 @@ private final class ThreadStatusPopoverRowView: NSView {
     private let projectName: String
     private let isPropagatedOnly: Bool
     private let onSelect: (UUID) -> Void
+    private let iconTintColor: NSColor?
     private let trailingAction: ThreadStatusPopoverRowTrailingAction?
     private let onTrailingAction: ((UUID) -> Void)?
     private weak var trailingActionButton: NSButton?
@@ -157,6 +158,7 @@ private final class ThreadStatusPopoverRowView: NSView {
         addedAt: Date,
         projectName: String,
         isPropagatedOnly: Bool = false,
+        iconTintColor: NSColor? = nil,
         trailingAction: ThreadStatusPopoverRowTrailingAction? = nil,
         onTrailingAction: ((UUID) -> Void)? = nil,
         onSelect: @escaping (UUID) -> Void
@@ -165,6 +167,7 @@ private final class ThreadStatusPopoverRowView: NSView {
         self.addedAt = addedAt
         self.projectName = projectName
         self.isPropagatedOnly = isPropagatedOnly
+        self.iconTintColor = iconTintColor
         self.trailingAction = trailingAction
         self.onTrailingAction = onTrailingAction
         self.onSelect = onSelect
@@ -236,7 +239,7 @@ private final class ThreadStatusPopoverRowView: NSView {
             systemSymbolName: thread.threadIcon.symbolName,
             accessibilityDescription: thread.threadIcon.accessibilityDescription
         )
-        iconView.contentTintColor = NSColor(resource: .textSecondary)
+        iconView.contentTintColor = iconTintColor ?? NSColor(resource: .textSecondary)
         iconView.translatesAutoresizingMaskIntoConstraints = false
 
         let textStack = NSStackView()
@@ -514,6 +517,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
                 addedAt: entry.addedAt,
                 projectName: projectsById[entry.thread.projectId] ?? "Unknown Project",
                 isPropagatedOnly: entry.isPropagatedOnly,
+                iconTintColor: sectionColor(for: entry.thread, settings: settings),
                 trailingAction: trailingAction,
                 onTrailingAction: onRowTrailingAction,
                 onSelect: onSelectThread
@@ -563,6 +567,13 @@ private final class ThreadStatusPopoverViewController: NSViewController {
 
     @objc private func markAllAsReadTapped() {
         onMarkAllDoneAsRead?()
+    }
+
+    private func sectionColor(for thread: MagentThread, settings: AppSettings) -> NSColor? {
+        guard settings.shouldUseThreadSections(for: thread.projectId) else { return nil }
+        let sections = settings.sections(for: thread.projectId)
+        let effectiveSectionId = ThreadManager.shared.effectiveSectionId(for: thread, settings: settings)
+        return sections.first(where: { $0.id == effectiveSectionId })?.color
     }
 }
 
@@ -1671,15 +1682,13 @@ final class StatusBarView: NSView, NSPopoverDelegate {
                 thread.waitingForInputSessions.contains($0)
             }
         case .done:
-            return orderedTerminalSessions.first {
-                thread.unreadCompletionSessions.contains($0)
-            }
+            return nil
         case .rateLimited:
             return orderedTerminalSessions.first {
                 thread.rateLimitedSessions[$0] != nil
             }
         case .favorites:
-            return orderedTerminalSessions.first
+            return nil
         }
     }
 

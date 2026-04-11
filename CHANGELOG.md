@@ -27,6 +27,8 @@ All notable changes to this project will be documented in this file.
 ### Status Bar
 #### Bug Fixes
 - Fixed favorites popover navigation using abrupt sidebar row reveal. Selecting a favorite thread now uses the same centered, smooth animated scroll (with row pulse) as the sidebar's selected-thread jump control.
+- Fixed thread icons in `favorites` and `done` popovers ignoring section colors. Popover rows now tint each thread icon with its effective section color (matching sidebar rows when sections are enabled).
+- Fixed `favorites`/`done` popover navigation overriding the destination thread's selected tab. Opening a thread from those popovers now preserves that thread's last-selected tab.
 ## 1.5.4 - 2026-04-10
 
 

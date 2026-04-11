@@ -7,7 +7,7 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - The left side of the bottom status bar shows aggregate thread counts for `busy`, `waiting`, `done`, and `rate-limited` when any threads currently match those states.
 - When at least one thread is favorited, a dedicated `X favorites` control appears immediately after the session-count control, using a primary-color heart icon.
 - Each aggregate status is clickable. Clicking one opens a compact popover that looks like a tooltip and shows up to the 3 most recently added matching threads.
-- Clicking a thread row in that popover dismisses it and navigates directly to that thread. When Magent can still identify a tab/session that is currently responsible for that status, navigation also opens that tab (for example the first unread completed tab for `done`, or the first waiting/busy/rate-limited tab for those statuses).
+- Clicking a thread row in that popover dismisses it and navigates directly to that thread.
 - The popover is ordered so the newest matching thread sits closest to the mouse cursor. Because the popover opens above the bottom status bar, that means the newest row is rendered at the bottom.
 - In the `done` popover, each row shows a trailing checkmark button that marks that thread as read without navigating away. The list refreshes immediately to keep showing the newest 3 unread completed threads.
 - Marking rows as read from the `done` popover keeps the popover open and refreshes its content in place, so users can clear multiple rows quickly.
@@ -17,6 +17,8 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - Right-clicking the status-bar `done` item opens a context menu with a single action: `Mark All as Read`.
 - Clicking `X favorites` opens a favorites popover (same visual style as `done`) listing all favorite threads in chronological favorite order.
 - Navigating to a thread from the favorites popover now mirrors the sidebar jump-capsule behavior: if the thread row is offscreen, the sidebar scrolls smoothly to center it and applies the same brief row pulse.
+- Thread icons in `favorites` and `done` popover rows use the thread's effective section color (same color source as sidebar rows when sections are enabled).
+- Row selection in `favorites` and `done` popovers does not force a tab/session override. Those navigation paths preserve the destination thread's last-selected tab.
 - Favorites popover rows include a trailing remove action (`heart.slash.circle`) that removes that thread from favorites without navigating.
 - The favorites popover does not show `Mark All`/`Read` controls.
 - When the favorites cap is reached, the favorites popover shows an inline limit hint (`10/10`).
@@ -29,7 +31,8 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 
 - `StatusBarView` owns the aggregate status buttons, the per-status popover, and the ordering state used by the popover rows.
 - The popover is capped at 3 rows. Selection routes through the existing `.magentNavigateToThread` notification instead of adding a second navigation path.
-- Session targeting is intentionally best-effort and non-persistent. `StatusBarView` resolves the first matching session from the thread's current in-memory state at click time and passes it through `.magentNavigateToThread`; if no matching session still exists, navigation falls back to thread-only selection.
+- Session targeting is intentionally best-effort and non-persistent for `busy`, `waiting`, and `rate-limited`. `StatusBarView` resolves the first matching session from the thread's current in-memory state at click time and passes it through `.magentNavigateToThread`; if no matching session still exists, navigation falls back to thread-only selection.
+- `done` and `favorites` intentionally navigate by thread only (no session hint) so they do not mutate the destination thread's last-selected tab.
 - `done` ordering is persistent because unread completion state already survives relaunch via `MagentThread.unreadCompletionSessions`, and its ordering timestamp comes from persisted `MagentThread.lastAgentCompletionAt`.
 - `busy`, `waiting`, and `rate-limited` ordering is in-memory only. Their "added at" timestamps are tracked inside `StatusBarView` for the current app run and reset on relaunch because those statuses themselves are transient.
 - Favorites ordering uses persisted `MagentThread.favoritedAt` (fallback `createdAt`) and is not capped to 3 rows like status summaries.
