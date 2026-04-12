@@ -96,6 +96,7 @@ All notable changes to this project will be documented in this file.
 - Added thread Favorites: right-click `Add to Favorites` / `Remove from Favorites` action (next to pin), max 10 favorites, and a heart badge on favorite thread rows (positioned immediately left of the pin badge when both are present).
 
 #### Bug Fixes
+- Fixed missing branch-name compatibility symlinks for some worktrees. Non-main worktrees now auto-create and maintain `<worktrees-base>/<current-branch>` symlinks during branch-state refresh, branch-accept, and branch-rename flows.
 - Fixed AI Rename sheet hanging (infinite spinner) when typing after clicking at the end of the placeholder text.
 - Reduced unnecessary `Starting agent...` flashes when revisiting recently used tabs. Healthy sessions now fast-path across view-controller rebuilds, the loading overlay reveal is debounced for quick switches, and repeated tmux readiness polling during startup tracking was removed.
 - Fixed occasional blank thread view on open when a "prepared" terminal tab failed to attach on the first pass. Startup/tab selection now keeps a visible loading state and retries full tmux/session validation instead of leaving an empty panel.

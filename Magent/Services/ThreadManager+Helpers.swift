@@ -1671,6 +1671,18 @@ extension ThreadManager {
         SymlinkManager.createCompatibilitySymlink(from: oldPath, to: newPath)
     }
 
+    func ensureBranchSymlink(
+        branchName: String,
+        worktreePath: String,
+        worktreesBasePath: String
+    ) {
+        SymlinkManager.ensureBranchSymlink(
+            branchName: branchName,
+            worktreePath: worktreePath,
+            worktreesBasePath: worktreesBasePath
+        )
+    }
+
     // MARK: - Claude Settings
 
     /// Path to the Magent-specific Claude Code settings file.

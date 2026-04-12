@@ -518,6 +518,11 @@ extension ThreadManager {
         // Update branch fields only — thread name, tmux sessions, and worktree path are unchanged.
         threads[index].branchName = newBranchName
         threads[index].actualBranch = newBranchName
+        ensureBranchSymlink(
+            branchName: newBranchName,
+            worktreePath: currentThread.worktreePath,
+            worktreesBasePath: project.resolvedWorktreesBasePath()
+        )
         if markFirstPromptRenameHandled {
             threads[index].didAutoRenameFromFirstPrompt = true
         }

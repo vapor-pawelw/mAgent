@@ -12,6 +12,7 @@
 
 - `ThreadManager.refreshBranchStates()` updates `actualBranch` for all threads. It does **not** auto-update `branchName` — the poller only detects mismatch, never silently resolves it.
 - `branchName` is updated only by: thread creation (phase 2), rename operations (`ThreadManager+Rename`), or the user clicking "Accept" on the mismatch banner (`acceptActualBranch`).
+- Non-main worktrees maintain a branch-name compatibility symlink in the project's worktrees base directory (`<base>/<current-branch> -> <worktreePath>`). Reconciliation runs during branch-state refresh, explicit branch-accept, and branch-rename flows. Safety rules: never overwrite real files/directories, skip path-unsafe branch names, and only replace broken symlinks automatically.
 - Branch rename also retargets sibling threads whose stored `thread.baseBranch` or cached `WorktreeMetadata.detectedBaseBranch` still reference the old branch name. This keeps stacked-thread diffs and archive readiness pointed at the renamed parent instead of falling back to the project default.
 - Worktree discovery in `ThreadManager.syncThreadsWithWorktrees(for:)` must seed `branchName` from `git branch --show-current` rather than assuming the directory name or rename symlink matches the checked-out branch.
 - The sidebar diff footer is fed from the latest thread-manager snapshot, not from a stale `MagentThread` captured before rename/switch operations completed.

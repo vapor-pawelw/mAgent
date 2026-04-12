@@ -496,6 +496,22 @@ extension ThreadManager {
                     branchChangedThreadIds.insert(result.id)
                 }
             }
+
+            // Keep a branch-name compatibility symlink in the worktrees base dir.
+            // This self-heals worktrees whose checked-out branch differs from the
+            // permanent worktree directory name.
+            if !threads[i].isMain,
+               let project = settings.projects.first(where: { $0.id == threads[i].projectId }) {
+                let actualTrimmed = result.actual?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let branchForSymlink = (actualTrimmed?.isEmpty == false)
+                    ? (actualTrimmed ?? threads[i].branchName)
+                    : threads[i].branchName
+                ensureBranchSymlink(
+                    branchName: branchForSymlink,
+                    worktreePath: threads[i].worktreePath,
+                    worktreesBasePath: project.resolvedWorktreesBasePath()
+                )
+            }
         }
         if persistedChanged {
             persistence.debouncedSaveActiveThreads(threads)
@@ -543,6 +559,14 @@ extension ThreadManager {
             }
         } else {
             threads[index].branchName = actual
+            let settings = persistence.loadSettings()
+            if let project = settings.projects.first(where: { $0.id == threads[index].projectId }) {
+                ensureBranchSymlink(
+                    branchName: actual,
+                    worktreePath: threads[index].worktreePath,
+                    worktreesBasePath: project.resolvedWorktreesBasePath()
+                )
+            }
             try? persistence.saveActiveThreads(threads)
         }
 
