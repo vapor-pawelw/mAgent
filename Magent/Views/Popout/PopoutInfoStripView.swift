@@ -160,7 +160,7 @@ final class PopoutInfoStripView: NSView {
             self.prLabel.textColor = .controlAccentColor
             self.keepAliveIndicator.contentTintColor = .systemCyan
             self.favoriteIndicator.contentTintColor = NSColor(resource: .primaryBrand)
-            self.pinnedIndicator.contentTintColor = NSColor(resource: .primaryBrand)
+            self.pinnedIndicator.contentTintColor = NSColor(resource: .textSecondary)
         }
     }
 
@@ -258,15 +258,7 @@ final class PopoutInfoStripView: NSView {
     }
 
     private func updateThreadIconTint(thread: MagentThread) {
-        if thread.hasAllSessionsDead {
-            threadIconView.contentTintColor = .tertiaryLabelColor
-        } else if thread.hasWaitingForInput {
-            threadIconView.contentTintColor = .systemOrange
-        } else if thread.hasUnreadAgentCompletion {
-            threadIconView.contentTintColor = .systemGreen
-        } else {
-            threadIconView.contentTintColor = NSColor(resource: .primaryBrand)
-        }
+        threadIconView.contentTintColor = sectionColor(for: thread) ?? .secondaryLabelColor
     }
 
     private func updateStatusIndicator(thread: MagentThread) {
@@ -316,9 +308,7 @@ final class PopoutInfoStripView: NSView {
         } else if thread.hasUnreadAgentCompletion {
             borderColor = .systemGreen.withAlphaComponent(0.5)
         } else {
-            let subtlePurple = NSColor.systemPurple.blended(withFraction: 0.35, of: .secondaryLabelColor)
-                ?? NSColor.systemPurple
-            borderColor = subtlePurple.withAlphaComponent(0.28)
+            borderColor = NSColor.separatorColor.withAlphaComponent(0.45)
         }
 
         effectiveAppearance.performAsCurrentDrawingAppearance {
@@ -386,5 +376,13 @@ final class PopoutInfoStripView: NSView {
         busyBorderGradientLayer?.removeAllAnimations()
         busyBorderGradientLayer?.removeFromSuperlayer()
         busyBorderGradientLayer = nil
+    }
+
+    private func sectionColor(for thread: MagentThread) -> NSColor? {
+        let settings = PersistenceService.shared.loadSettings()
+        guard settings.shouldUseThreadSections(for: thread.projectId) else { return nil }
+        let sections = settings.sections(for: thread.projectId)
+        let effectiveSectionId = ThreadManager.shared.effectiveSectionId(for: thread, settings: settings)
+        return sections.first(where: { $0.id == effectiveSectionId })?.color
     }
 }

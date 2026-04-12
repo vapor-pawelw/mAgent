@@ -125,6 +125,7 @@ final class ThreadDetailViewController: NSViewController {
 
     var thread: MagentThread
     let threadManager = ThreadManager.shared
+    let headerInfoStrip = PopoutInfoStripView()
     let tabBarStack = NSStackView()
     let terminalContainer: NSView = AppBackgroundView()
     let topBar = NSStackView()
@@ -343,6 +344,18 @@ final class ThreadDetailViewController: NSViewController {
             self,
             selector: #selector(handleSettingsChanged(_:)),
             name: .magentSettingsDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSectionsDidChange),
+            name: .magentSectionsDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleThreadsDidChange),
+            name: .magentThreadsDidChange,
             object: nil
         )
 
@@ -601,13 +614,20 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         view.addSubview(topBar)
+        headerInfoStrip.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(headerInfoStrip)
         view.addSubview(terminalContainer)
         setupPromptTOCOverlay()
 
         terminalBottomToView = terminalContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
 
         NSLayoutConstraint.activate([
-            topBar.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
+            headerInfoStrip.topAnchor.constraint(equalTo: view.topAnchor),
+            headerInfoStrip.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            headerInfoStrip.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            headerInfoStrip.heightAnchor.constraint(equalToConstant: 48),
+
+            topBar.topAnchor.constraint(equalTo: headerInfoStrip.bottomAnchor, constant: 4),
             topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
             topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
             topBar.heightAnchor.constraint(equalToConstant: 32),
@@ -623,6 +643,7 @@ final class ThreadDetailViewController: NSViewController {
         setupScrollOverlay()
         refreshOverlayVisibilitySettings()
         refreshTerminalChromeAppearance()
+        refreshHeaderInfoStrip()
     }
 
     func setupTerminalBannerOverlay() {
@@ -1180,6 +1201,7 @@ final class ThreadDetailViewController: NSViewController {
         }
         refreshTabStatusIndicators()
         rebindAllTabActions()
+        refreshHeaderInfoStrip()
     }
 
     @objc private func handleDeadSessionsNotification(_ notification: Notification) {
@@ -1230,6 +1252,7 @@ final class ThreadDetailViewController: NSViewController {
         refreshDiffViewerIfVisible()
         syncTransientState()
         schedulePromptTOCRefresh()
+        refreshHeaderInfoStrip()
     }
 
     @objc private func handleInitialPromptInjectionFailedNotification(_ notification: Notification) {
@@ -1282,6 +1305,7 @@ final class ThreadDetailViewController: NSViewController {
         }
         refreshTabTooltips()
         syncTransientState()
+        refreshHeaderInfoStrip()
     }
 
     @objc private func handleAgentBusyNotification(_ notification: Notification) {
@@ -1298,6 +1322,7 @@ final class ThreadDetailViewController: NSViewController {
         }
         refreshTabTooltips()
         syncTransientState()
+        refreshHeaderInfoStrip()
     }
 
     @objc private func handleAgentRateLimitNotification(_ notification: Notification) {
@@ -1318,6 +1343,7 @@ final class ThreadDetailViewController: NSViewController {
             }
         }
         refreshTabTooltips()
+        refreshHeaderInfoStrip()
     }
 
     @objc private func handleThreadCreationFinished(_ notification: Notification) {
@@ -1334,6 +1360,7 @@ final class ThreadDetailViewController: NSViewController {
         // Thread is ready — reload tabs now that sessions exist.
         // Web-only threads (no tmux sessions) are handled inside setupTabs which
         // selects the first web tab automatically.
+        refreshHeaderInfoStrip()
         Task { await setupTabs(requireStartupOverlayForInitialSession: true) }
     }
 
@@ -1354,6 +1381,7 @@ final class ThreadDetailViewController: NSViewController {
         thread.actualBranch = latest.actualBranch
         thread.verifiedJiraTicket = latest.verifiedJiraTicket
         refreshJiraButton()
+        refreshHeaderInfoStrip()
     }
 
     @objc private func handleShowDiffViewerNotification(_ notification: Notification) {
@@ -1365,6 +1393,14 @@ final class ThreadDetailViewController: NSViewController {
 
     @objc private func handleHideDiffViewerNotification() {
         hideDiffViewer()
+    }
+
+    @objc private func handleSectionsDidChange() {
+        refreshHeaderInfoStrip()
+    }
+
+    @objc private func handleThreadsDidChange() {
+        refreshHeaderInfoStrip()
     }
 
     @objc private func handleSettingsChanged(_ notification: Notification) {
@@ -1387,6 +1423,7 @@ final class ThreadDetailViewController: NSViewController {
         refreshJiraButton()
         refreshOverlayVisibilitySettings()
         updateTerminalScrollControlsState()
+        refreshHeaderInfoStrip()
     }
 
     private func reloadTerminalViewsForUpdatedTerminalPreferences() {
@@ -1463,6 +1500,12 @@ final class ThreadDetailViewController: NSViewController {
             topBar.needsDisplay = true
             pinSeparator.needsDisplay = true
         }
+    }
+
+    func refreshHeaderInfoStrip() {
+        guard isViewLoaded else { return }
+        let latest = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        headerInfoStrip.refresh(from: latest)
     }
 
     private func embeddedPreferences(for settings: AppSettings) -> GhosttyEmbeddedPreferences {

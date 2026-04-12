@@ -157,6 +157,12 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             .magentAgentWaitingForInput,
             .magentStatusSyncCompleted,
             .magentSettingsDidChange,
+            .magentSectionsDidChange,
+            .magentPullRequestInfoChanged,
+            .magentJiraTicketInfoChanged,
+            .magentKeepAliveChanged,
+            .magentFavoritesChanged,
+            .magentThreadsDidChange,
         ] {
             nc.addObserver(self, selector: #selector(refreshInfoStrip), name: name, object: nil)
         }
