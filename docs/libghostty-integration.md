@@ -327,6 +327,8 @@ This pattern works for both paths:
 
 **Terminal-view cache surface preservation:** `ReusableTerminalViewCache.store()` sets `preserveSurfaceOnDetach = true` on the `TerminalSurfaceView` before calling `removeFromSuperview()`. This prevents `viewDidMoveToWindow(nil)` from calling `destroySurface()`, so the live Ghostty surface survives while cached. When the view is re-attached to a window, `preserveSurfaceOnDetach` is cleared automatically and the existing surface continues rendering — no session restart. If the cached view is evicted (or deallocated without re-attachment), `deinit` cleans up the preserved surface.
 
+**Tab-close cache eviction rule:** closing a tab can happen while that thread is not currently visible (or via IPC), so no `ThreadDetailViewController` may exist to remove/evict the view. In `removeTabBySessionName`, always evict the closing session from `ReusableTerminalViewCache` *before* `tmux.killSession`. Otherwise a detached cached surface can still hold a live PTY and libghostty may terminate the process when the PTY closes.
+
 ## Link Opening and Hover (GHOSTTY_ACTION_OPEN_URL / GHOSTTY_ACTION_MOUSE_OVER_LINK)
 
 Ghostty fires two actions for link interaction:
