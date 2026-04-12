@@ -130,6 +130,13 @@ final class SplitViewController: NSSplitViewController {
 
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(handleThreadPoppedOut(_:)),
+            name: .magentThreadPoppedOut,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(handlePopOutThreadRequested(_:)),
             name: .magentPopOutThreadRequested,
             object: nil
@@ -601,6 +608,7 @@ final class SplitViewController: NSSplitViewController {
         currentDetailVC = nil
         PopoutWindowManager.shared.popOutThread(thread, from: view.window)
         presentDetachedThreadPlaceholder(thread)
+        threadListVC.refreshThreadRowInPlace(threadId: thread.id)
     }
 
     @objc private func handleThreadReturnedToMain(_ notification: Notification) {
@@ -611,19 +619,27 @@ final class SplitViewController: NSSplitViewController {
            ThreadManager.shared.activeThreadId == threadId {
             showThread(thread)
         }
-        // Refresh sidebar to remove badge/tint
-        threadListVC.reloadData()
+        threadListVC.refreshThreadRowInPlace(threadId: threadId)
+    }
+
+    @objc private func handleThreadPoppedOut(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
+        if ThreadManager.shared.activeThreadId == threadId,
+           let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) {
+            presentDetachedThreadPlaceholder(thread)
+        }
+        threadListVC.refreshThreadRowInPlace(threadId: threadId)
     }
 
     @objc private func handlePopOutThreadRequested(_ notification: Notification) {
         guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
-        // If the requested thread is currently shown, pop it out
+        // Only replace the main content with the detached placeholder when the
+        // currently active thread is the one being popped out.
         if let detailVC = currentDetailVC, detailVC.thread.id == threadId {
             popOutCurrentThread()
         } else if let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) {
-            // Thread is not currently shown — show it first, then pop out
-            showThread(thread)
-            popOutCurrentThread()
+            PopoutWindowManager.shared.popOutThread(thread, from: view.window)
+            threadListVC.refreshThreadRowInPlace(threadId: thread.id)
         }
     }
 

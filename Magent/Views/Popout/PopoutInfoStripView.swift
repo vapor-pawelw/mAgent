@@ -4,15 +4,23 @@ import MagentCore
 /// Thin info bar (48pt) displayed at the top of pop-out windows.
 /// Shows thread identity, branch, status, and optional tab name.
 final class PopoutInfoStripView: NSView {
+    private static let busySeparatorAnimationKey = "popout-info-strip-busy-separator-shift"
     private let threadIconView = NSImageView()
     private let descriptionLabel = NSTextField(labelWithString: "")
     private let branchLabel = NSTextField(labelWithString: "")
     private let dirtyDot = NSView()
     private let jiraLabel = NSTextField(labelWithString: "")
     private let prLabel = NSTextField(labelWithString: "")
-    private let statusIndicator = NSImageView()
+    private let trailingAccessoryStack = NSStackView()
+    private let stateIndicator = NSImageView()
+    private let keepAliveIndicator = NSImageView()
+    private let favoriteIndicator = NSImageView()
+    private let pinnedIndicator = NSImageView()
     private let busySpinner = NSProgressIndicator()
     private let bottomBorder = NSView()
+    private var busyBorderGradientLayer: CAGradientLayer?
+    private var currentThreadId: UUID?
+    private var currentSessionName: String?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -65,19 +73,34 @@ final class PopoutInfoStripView: NSView {
         prLabel.isHidden = true
         addSubview(prLabel)
 
-        // Status indicator
-        statusIndicator.translatesAutoresizingMaskIntoConstraints = false
-        statusIndicator.imageScaling = .scaleProportionallyUpOrDown
-        statusIndicator.isHidden = true
-        addSubview(statusIndicator)
-
         // Busy spinner
         busySpinner.translatesAutoresizingMaskIntoConstraints = false
         busySpinner.style = .spinning
         busySpinner.controlSize = .small
         busySpinner.isIndeterminate = true
         busySpinner.isHidden = true
-        addSubview(busySpinner)
+
+        trailingAccessoryStack.orientation = .horizontal
+        trailingAccessoryStack.alignment = .centerY
+        trailingAccessoryStack.spacing = 6
+        trailingAccessoryStack.detachesHiddenViews = true
+        trailingAccessoryStack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(trailingAccessoryStack)
+
+        for indicator in [stateIndicator, keepAliveIndicator, favoriteIndicator, pinnedIndicator] {
+            indicator.translatesAutoresizingMaskIntoConstraints = false
+            indicator.imageScaling = .scaleProportionallyUpOrDown
+            indicator.isHidden = true
+            trailingAccessoryStack.addArrangedSubview(indicator)
+        }
+        trailingAccessoryStack.addArrangedSubview(busySpinner)
+
+        keepAliveIndicator.image = NSImage(systemSymbolName: "shield.righthalf.filled", accessibilityDescription: "Keep Alive")
+        favoriteIndicator.image = NSImage(systemSymbolName: "heart.fill", accessibilityDescription: "Favorite")
+        pinnedIndicator.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
+        keepAliveIndicator.toolTip = "Keep Alive — protected from idle eviction"
+        favoriteIndicator.toolTip = "Favorite thread"
+        pinnedIndicator.toolTip = "Pinned thread"
 
         // Bottom border
         bottomBorder.translatesAutoresizingMaskIntoConstraints = false
@@ -93,15 +116,19 @@ final class PopoutInfoStripView: NSView {
 
             descriptionLabel.leadingAnchor.constraint(equalTo: threadIconView.trailingAnchor, constant: 6),
             descriptionLabel.centerYAnchor.constraint(equalTo: threadIconView.centerYAnchor),
-            descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: statusIndicator.leadingAnchor, constant: -8),
+            descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAccessoryStack.leadingAnchor, constant: -8),
 
-            statusIndicator.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            statusIndicator.centerYAnchor.constraint(equalTo: threadIconView.centerYAnchor),
-            statusIndicator.widthAnchor.constraint(equalToConstant: 14),
-            statusIndicator.heightAnchor.constraint(equalToConstant: 14),
+            trailingAccessoryStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            trailingAccessoryStack.centerYAnchor.constraint(equalTo: threadIconView.centerYAnchor),
 
-            busySpinner.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            busySpinner.centerYAnchor.constraint(equalTo: threadIconView.centerYAnchor),
+            stateIndicator.widthAnchor.constraint(equalToConstant: 14),
+            stateIndicator.heightAnchor.constraint(equalToConstant: 14),
+            keepAliveIndicator.widthAnchor.constraint(equalToConstant: 12),
+            keepAliveIndicator.heightAnchor.constraint(equalToConstant: 12),
+            favoriteIndicator.widthAnchor.constraint(equalToConstant: 12),
+            favoriteIndicator.heightAnchor.constraint(equalToConstant: 12),
+            pinnedIndicator.widthAnchor.constraint(equalToConstant: 12),
+            pinnedIndicator.heightAnchor.constraint(equalToConstant: 12),
             busySpinner.widthAnchor.constraint(equalToConstant: 14),
             busySpinner.heightAnchor.constraint(equalToConstant: 14),
 
@@ -126,22 +153,53 @@ final class PopoutInfoStripView: NSView {
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             self.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.85).cgColor
-            self.bottomBorder.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
             self.dirtyDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
             self.descriptionLabel.textColor = NSColor(resource: .textPrimary)
             self.branchLabel.textColor = NSColor(resource: .textSecondary)
             self.jiraLabel.textColor = .controlAccentColor
             self.prLabel.textColor = .controlAccentColor
+            self.keepAliveIndicator.contentTintColor = .systemCyan
+            self.favoriteIndicator.contentTintColor = NSColor(resource: .primaryBrand)
+            self.pinnedIndicator.contentTintColor = NSColor(resource: .primaryBrand)
         }
     }
 
     override var wantsUpdateLayer: Bool { true }
 
+    override func mouseDown(with event: NSEvent) {
+        guard bounds.contains(convert(event.locationInWindow, from: nil)),
+              let currentThreadId else { return }
+
+        var userInfo: [String: Any] = [
+            "threadId": currentThreadId,
+            "centerInSidebar": true,
+        ]
+        if let currentSessionName {
+            userInfo["sessionName"] = currentSessionName
+        }
+        NotificationCenter.default.post(
+            name: .magentNavigateToThread,
+            object: self,
+            userInfo: userInfo
+        )
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func layout() {
+        super.layout()
+        busyBorderGradientLayer?.frame = bottomBorder.bounds.insetBy(dx: -bottomBorder.bounds.width, dy: 0)
+    }
+
     // MARK: - Refresh
 
     func refresh(from thread: MagentThread) {
+        currentThreadId = thread.id
+        currentSessionName = nil
         threadIconView.image = NSImage(systemSymbolName: thread.threadIcon.symbolName, accessibilityDescription: nil)
-        threadIconView.contentTintColor = .controlAccentColor
 
         descriptionLabel.stringValue = thread.taskDescription ?? thread.name
         branchLabel.stringValue = thread.currentBranch
@@ -163,18 +221,21 @@ final class PopoutInfoStripView: NSView {
             prLabel.isHidden = true
         }
 
-        // Status (priority: busy > rate-limit > waiting > completion > hidden)
+        updateTrailingIndicators(thread: thread)
+        updateThreadIconTint(thread: thread)
         updateStatusIndicator(thread: thread)
+        updateBottomBorder(thread: thread)
     }
 
     func configureForTab(thread: MagentThread, sessionName: String) {
+        currentThreadId = thread.id
+        currentSessionName = sessionName
         let tabIndex = thread.tmuxSessionNames.firstIndex(of: sessionName).map { $0 + 1 } ?? 1
         let threadName = thread.taskDescription ?? thread.name
         descriptionLabel.stringValue = "\(threadName) — Tab \(tabIndex)"
         branchLabel.stringValue = thread.currentBranch
         dirtyDot.isHidden = !thread.isDirty
         threadIconView.image = NSImage(systemSymbolName: thread.threadIcon.symbolName, accessibilityDescription: nil)
-        threadIconView.contentTintColor = .controlAccentColor
 
         // PR info for tab popout
         if let prInfo = thread.pullRequestInfo {
@@ -184,41 +245,146 @@ final class PopoutInfoStripView: NSView {
             prLabel.isHidden = true
         }
 
+        updateTrailingIndicators(thread: thread)
+        updateThreadIconTint(thread: thread)
         updateStatusIndicator(thread: thread)
+        updateBottomBorder(thread: thread)
+    }
+
+    private func updateTrailingIndicators(thread: MagentThread) {
+        keepAliveIndicator.isHidden = !thread.isKeepAlive
+        favoriteIndicator.isHidden = !thread.isFavorite
+        pinnedIndicator.isHidden = !thread.isPinned
+    }
+
+    private func updateThreadIconTint(thread: MagentThread) {
+        if thread.hasAllSessionsDead {
+            threadIconView.contentTintColor = .tertiaryLabelColor
+        } else if thread.hasWaitingForInput {
+            threadIconView.contentTintColor = .systemOrange
+        } else if thread.hasUnreadAgentCompletion {
+            threadIconView.contentTintColor = .systemGreen
+        } else {
+            threadIconView.contentTintColor = NSColor(resource: .primaryBrand)
+        }
     }
 
     private func updateStatusIndicator(thread: MagentThread) {
         if thread.isAnyBusy {
-            statusIndicator.isHidden = true
+            stateIndicator.isHidden = true
             busySpinner.isHidden = false
             busySpinner.startAnimation(nil)
         } else if thread.isBlockedByRateLimit {
             busySpinner.isHidden = true
             busySpinner.stopAnimation(nil)
-            statusIndicator.isHidden = false
+            stateIndicator.isHidden = false
             if thread.isRateLimitPropagatedOnly {
-                statusIndicator.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Rate limited (propagated)")
-                statusIndicator.contentTintColor = .systemOrange
+                stateIndicator.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Rate limited (propagated)")
+                stateIndicator.contentTintColor = .systemOrange
             } else {
-                statusIndicator.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Rate limited")
-                statusIndicator.contentTintColor = .systemRed
+                stateIndicator.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Rate limited")
+                stateIndicator.contentTintColor = .systemRed
             }
         } else if thread.hasWaitingForInput {
             busySpinner.isHidden = true
             busySpinner.stopAnimation(nil)
-            statusIndicator.isHidden = false
-            statusIndicator.image = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: "Waiting for input")
-            statusIndicator.contentTintColor = .systemYellow
-        } else if thread.hasUnreadAgentCompletion {
-            busySpinner.isHidden = true
-            busySpinner.stopAnimation(nil)
-            statusIndicator.isHidden = false
-            statusIndicator.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Completed")
-            statusIndicator.contentTintColor = .systemGreen
+            stateIndicator.isHidden = false
+            stateIndicator.image = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: "Waiting for input")
+            stateIndicator.contentTintColor = .systemYellow
         } else {
             busySpinner.isHidden = true
             busySpinner.stopAnimation(nil)
-            statusIndicator.isHidden = true
+            stateIndicator.isHidden = true
         }
+    }
+
+    private func updateBottomBorder(thread: MagentThread) {
+        if thread.isAnyBusy, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            startBusyBorderGradient()
+            return
+        }
+
+        stopBusyBorderGradient()
+
+        let borderColor: NSColor
+        if thread.isBlockedByRateLimit {
+            borderColor = thread.isRateLimitPropagatedOnly
+                ? .systemOrange.withAlphaComponent(0.5)
+                : .systemRed.withAlphaComponent(0.5)
+        } else if thread.hasWaitingForInput {
+            borderColor = .systemOrange.withAlphaComponent(0.5)
+        } else if thread.hasUnreadAgentCompletion {
+            borderColor = .systemGreen.withAlphaComponent(0.5)
+        } else {
+            let subtlePurple = NSColor.systemPurple.blended(withFraction: 0.35, of: .secondaryLabelColor)
+                ?? NSColor.systemPurple
+            borderColor = subtlePurple.withAlphaComponent(0.28)
+        }
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.bottomBorder.layer?.backgroundColor = borderColor.cgColor
+        }
+    }
+
+    private func startBusyBorderGradient() {
+        let gradientLayer: CAGradientLayer
+        if let existing = busyBorderGradientLayer {
+            gradientLayer = existing
+        } else {
+            let created = CAGradientLayer()
+            created.startPoint = CGPoint(x: 0, y: 0.5)
+            created.endPoint = CGPoint(x: 1, y: 0.5)
+            bottomBorder.layer?.backgroundColor = NSColor.clear.cgColor
+            bottomBorder.layer?.addSublayer(created)
+            busyBorderGradientLayer = created
+            gradientLayer = created
+        }
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let accentColor = NSColor.controlAccentColor
+            var hue: CGFloat = 0
+            var saturation: CGFloat = 0
+            var brightness: CGFloat = 0
+            var alpha: CGFloat = 0
+            accentColor.usingColorSpace(.sRGB)?.getHue(
+                &hue,
+                saturation: &saturation,
+                brightness: &brightness,
+                alpha: &alpha
+            )
+            let brightColor = NSColor(
+                hue: hue,
+                saturation: max(saturation * 0.7, 0.3),
+                brightness: min(brightness * 1.1, 1.0),
+                alpha: 0.8
+            )
+            let dimColor = NSColor.white.withAlphaComponent(0.12)
+            gradientLayer.colors = [
+                dimColor.cgColor,
+                brightColor.withAlphaComponent(0.45).cgColor,
+                brightColor.cgColor,
+                brightColor.withAlphaComponent(0.45).cgColor,
+                dimColor.cgColor,
+            ]
+        }
+
+        gradientLayer.locations = [0.0, 0.35, 0.5, 0.65, 1.0]
+        gradientLayer.frame = bottomBorder.bounds.insetBy(dx: -bottomBorder.bounds.width, dy: 0)
+
+        if gradientLayer.animation(forKey: Self.busySeparatorAnimationKey) == nil {
+            let animation = CABasicAnimation(keyPath: "position.x")
+            animation.fromValue = -bottomBorder.bounds.width / 2
+            animation.toValue = bottomBorder.bounds.width * 1.5
+            animation.duration = 2.6
+            animation.repeatCount = .infinity
+            animation.timingFunction = CAMediaTimingFunction(name: .linear)
+            gradientLayer.add(animation, forKey: Self.busySeparatorAnimationKey)
+        }
+    }
+
+    private func stopBusyBorderGradient() {
+        busyBorderGradientLayer?.removeAllAnimations()
+        busyBorderGradientLayer?.removeFromSuperlayer()
+        busyBorderGradientLayer = nil
     }
 }

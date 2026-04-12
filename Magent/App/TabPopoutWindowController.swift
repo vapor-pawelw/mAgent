@@ -205,6 +205,7 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         guard !isReturningToThread else { return }
+        guard !PopoutWindowManager.shared.isApplicationTerminating else { return }
         PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
     }
 

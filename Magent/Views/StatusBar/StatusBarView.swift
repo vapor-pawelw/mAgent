@@ -78,7 +78,7 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
         case .done:
             return "checkmark.circle.fill"
         case .separateWindows:
-            return "macwindow"
+            return "macwindow.on.rectangle"
         case .rateLimited:
             return "hourglass"
         case .favorites:
@@ -145,6 +145,11 @@ private struct ThreadStatusPopoverRowTrailingAction {
     let symbolName: String
     let tintColor: NSColor
     let tooltip: String
+}
+
+private struct ThreadStatusPopoverFooterAction {
+    let title: String
+    let action: () -> Void
 }
 
 private final class ThreadStatusPopoverRowView: NSView {
@@ -370,6 +375,129 @@ private final class ThreadStatusPopoverRowView: NSView {
     }
 }
 
+private final class ThreadStatusPopoverSeparatorView: NSView {
+    private static let busyAnimationKey = "status-popover-busy-separator-shift"
+    private let status: ThreadStatusSummaryKind
+    private let lineLayer = CALayer()
+    private var busyGradientLayer: CAGradientLayer?
+
+    init(status: ThreadStatusSummaryKind) {
+        self.status = status
+        super.init(frame: .zero)
+        wantsLayer = true
+        lineLayer.cornerRadius = 0.5
+        layer?.addSublayer(lineLayer)
+        updateAppearance()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        lineLayer.frame = bounds
+        busyGradientLayer?.frame = bounds.insetBy(dx: -bounds.width, dy: 0)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateAppearance()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
+        if status == .busy, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            configureBusyGradient()
+            lineLayer.isHidden = true
+        } else {
+            busyGradientLayer?.removeFromSuperlayer()
+            busyGradientLayer = nil
+            lineLayer.isHidden = false
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                lineLayer.backgroundColor = self.resolvedStaticColor().cgColor
+            }
+        }
+    }
+
+    private func resolvedStaticColor() -> NSColor {
+        switch status {
+        case .waiting:
+            return .systemOrange.withAlphaComponent(0.5)
+        case .done:
+            return .systemGreen.withAlphaComponent(0.5)
+        case .separateWindows:
+            let subtlePurple = NSColor.systemPurple.blended(withFraction: 0.35, of: .secondaryLabelColor)
+                ?? NSColor.systemPurple
+            return subtlePurple.withAlphaComponent(0.28)
+        case .rateLimited:
+            return .systemRed.withAlphaComponent(0.5)
+        case .busy, .favorites:
+            return .white.withAlphaComponent(0.12)
+        }
+    }
+
+    private func configureBusyGradient() {
+        let gradientLayer: CAGradientLayer
+        if let existing = busyGradientLayer {
+            gradientLayer = existing
+        } else {
+            let created = CAGradientLayer()
+            created.startPoint = CGPoint(x: 0, y: 0.5)
+            created.endPoint = CGPoint(x: 1, y: 0.5)
+            created.cornerRadius = 0.5
+            layer?.addSublayer(created)
+            busyGradientLayer = created
+            gradientLayer = created
+        }
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let accentColor = NSColor.controlAccentColor
+            var hue: CGFloat = 0
+            var saturation: CGFloat = 0
+            var brightness: CGFloat = 0
+            var alpha: CGFloat = 0
+            accentColor.usingColorSpace(.sRGB)?.getHue(
+                &hue,
+                saturation: &saturation,
+                brightness: &brightness,
+                alpha: &alpha
+            )
+            let brightColor = NSColor(
+                hue: hue,
+                saturation: max(saturation * 0.7, 0.3),
+                brightness: min(brightness * 1.1, 1.0),
+                alpha: 0.8
+            )
+            let dimColor = NSColor.white.withAlphaComponent(0.12)
+            gradientLayer.colors = [
+                dimColor.cgColor,
+                brightColor.withAlphaComponent(0.45).cgColor,
+                brightColor.cgColor,
+                brightColor.withAlphaComponent(0.45).cgColor,
+                dimColor.cgColor,
+            ]
+        }
+        gradientLayer.locations = [0.0, 0.35, 0.5, 0.65, 1.0]
+        gradientLayer.frame = bounds.insetBy(dx: -bounds.width, dy: 0)
+
+        if gradientLayer.animation(forKey: Self.busyAnimationKey) == nil {
+            let animation = CABasicAnimation(keyPath: "position.x")
+            animation.fromValue = -bounds.width / 2
+            animation.toValue = bounds.width * 1.5
+            animation.duration = 2.6
+            animation.repeatCount = .infinity
+            animation.timingFunction = CAMediaTimingFunction(name: .linear)
+            gradientLayer.add(animation, forKey: Self.busyAnimationKey)
+        }
+    }
+}
+
 private final class ThreadStatusPopoverViewController: NSViewController {
     private static let popoverWidth: CGFloat = 510
     private static let contentWidth: CGFloat = popoverWidth - 16
@@ -379,6 +507,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
     private let trailingAction: ThreadStatusPopoverRowTrailingAction?
     private let onRowTrailingAction: ((UUID) -> Void)?
     private let onMarkAllDoneAsRead: (() -> Void)?
+    private let footerAction: ThreadStatusPopoverFooterAction?
     private let limitReachedMessage: String?
     private let containerStack = NSStackView()
     private var entries: [ThreadStatusPopoverEntry]
@@ -389,6 +518,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
         trailingAction: ThreadStatusPopoverRowTrailingAction? = nil,
         onRowTrailingAction: ((UUID) -> Void)? = nil,
         onMarkAllDoneAsRead: (() -> Void)? = nil,
+        footerAction: ThreadStatusPopoverFooterAction? = nil,
         limitReachedMessage: String? = nil,
         onSelectThread: @escaping (UUID) -> Void
     ) {
@@ -397,6 +527,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
         self.trailingAction = trailingAction
         self.onRowTrailingAction = onRowTrailingAction
         self.onMarkAllDoneAsRead = onMarkAllDoneAsRead
+        self.footerAction = footerAction
         self.limitReachedMessage = limitReachedMessage
         self.onSelectThread = onSelectThread
         super.init(nibName: nil, bundle: nil)
@@ -459,12 +590,12 @@ private final class ThreadStatusPopoverViewController: NSViewController {
         ])
         containerStack.addArrangedSubview(headerRow)
 
-        let headerSeparator = NSBox()
-        headerSeparator.boxType = .separator
+        let headerSeparator = ThreadStatusPopoverSeparatorView(status: status)
         headerSeparator.translatesAutoresizingMaskIntoConstraints = false
         containerStack.addArrangedSubview(headerSeparator)
         NSLayoutConstraint.activate([
             headerSeparator.widthAnchor.constraint(equalToConstant: Self.contentWidth),
+            headerSeparator.heightAnchor.constraint(equalToConstant: 1),
             headerRow.widthAnchor.constraint(equalToConstant: Self.contentWidth),
         ])
 
@@ -500,12 +631,12 @@ private final class ThreadStatusPopoverViewController: NSViewController {
                 infoLabel.bottomAnchor.constraint(equalTo: infoRow.bottomAnchor, constant: -6),
             ])
 
-            let infoSeparator = NSBox()
-            infoSeparator.boxType = .separator
+            let infoSeparator = ThreadStatusPopoverSeparatorView(status: status)
             infoSeparator.translatesAutoresizingMaskIntoConstraints = false
             containerStack.addArrangedSubview(infoSeparator)
             NSLayoutConstraint.activate([
                 infoSeparator.widthAnchor.constraint(equalToConstant: Self.contentWidth),
+                infoSeparator.heightAnchor.constraint(equalToConstant: 1),
             ])
         }
 
@@ -514,12 +645,12 @@ private final class ThreadStatusPopoverViewController: NSViewController {
 
         for (index, entry) in entries.enumerated() {
             if index > 0 {
-                let separator = NSBox()
-                separator.boxType = .separator
+                let separator = ThreadStatusPopoverSeparatorView(status: status)
                 separator.translatesAutoresizingMaskIntoConstraints = false
                 containerStack.addArrangedSubview(separator)
                 NSLayoutConstraint.activate([
                     separator.widthAnchor.constraint(equalToConstant: Self.contentWidth),
+                    separator.heightAnchor.constraint(equalToConstant: 1),
                 ])
             }
 
@@ -540,21 +671,33 @@ private final class ThreadStatusPopoverViewController: NSViewController {
             ])
         }
 
+        let resolvedFooterAction: ThreadStatusPopoverFooterAction?
         if status == .done, !entries.isEmpty, onMarkAllDoneAsRead != nil {
-            let separator = NSBox()
-            separator.boxType = .separator
+            resolvedFooterAction = ThreadStatusPopoverFooterAction(
+                title: String(localized: .ThreadStrings.threadMarkAllAsRead),
+                action: { [weak self] in self?.onMarkAllDoneAsRead?() }
+            )
+        } else if !entries.isEmpty {
+            resolvedFooterAction = footerAction
+        } else {
+            resolvedFooterAction = nil
+        }
+
+        if let resolvedFooterAction {
+            let separator = ThreadStatusPopoverSeparatorView(status: status)
             separator.translatesAutoresizingMaskIntoConstraints = false
             containerStack.addArrangedSubview(separator)
             NSLayoutConstraint.activate([
                 separator.widthAnchor.constraint(equalToConstant: Self.contentWidth),
+                separator.heightAnchor.constraint(equalToConstant: 1),
             ])
 
             let footer = NSView()
             footer.translatesAutoresizingMaskIntoConstraints = false
             let markAllButton = NSButton(
-                title: String(localized: .ThreadStrings.threadMarkAllAsRead),
+                title: resolvedFooterAction.title,
                 target: self,
-                action: #selector(markAllAsReadTapped)
+                action: #selector(footerActionTapped)
             )
             markAllButton.bezelStyle = .inline
             markAllButton.isBordered = true
@@ -576,8 +719,12 @@ private final class ThreadStatusPopoverViewController: NSViewController {
         view.setFrameSize(NSSize(width: Self.popoverWidth, height: height))
     }
 
-    @objc private func markAllAsReadTapped() {
-        onMarkAllDoneAsRead?()
+    @objc private func footerActionTapped() {
+        if status == .done {
+            onMarkAllDoneAsRead?()
+        } else {
+            footerAction?.action()
+        }
     }
 
     private func sectionColor(for thread: MagentThread, settings: AppSettings) -> NSColor? {
@@ -1590,6 +1737,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let trailingAction: ThreadStatusPopoverRowTrailingAction?
         let onRowTrailingAction: ((UUID) -> Void)?
         let onMarkAllDoneAsRead: (() -> Void)?
+        let footerAction: ThreadStatusPopoverFooterAction?
         let limitReachedMessage: String?
         switch status {
         case .done:
@@ -1600,6 +1748,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             )
             onRowTrailingAction = { [weak self] threadId in self?.markDoneThreadAsRead(threadId) }
             onMarkAllDoneAsRead = { [weak self] in self?.markAllCompletedThreadsAsRead(nil) }
+            footerAction = nil
             limitReachedMessage = nil
         case .favorites:
             trailingAction = ThreadStatusPopoverRowTrailingAction(
@@ -1609,15 +1758,30 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             )
             onRowTrailingAction = { [weak self] threadId in self?.removeFavoriteThread(threadId) }
             onMarkAllDoneAsRead = nil
+            footerAction = nil
             if ThreadManager.shared.favoriteThreadCount >= ThreadManager.maxFavoriteThreadCount {
                 limitReachedMessage = "Favorites limit reached (\(ThreadManager.maxFavoriteThreadCount)/\(ThreadManager.maxFavoriteThreadCount)). Remove one to add another."
             } else {
                 limitReachedMessage = nil
             }
+        case .separateWindows:
+            trailingAction = ThreadStatusPopoverRowTrailingAction(
+                symbolName: "xmark.circle",
+                tintColor: NSColor.systemPurple.withAlphaComponent(0.9),
+                tooltip: "Return to Main Window"
+            )
+            onRowTrailingAction = { [weak self] threadId in self?.returnPoppedOutThreadToMain(threadId) }
+            onMarkAllDoneAsRead = nil
+            footerAction = ThreadStatusPopoverFooterAction(
+                title: "Close All Windows",
+                action: { [weak self] in self?.returnAllPoppedOutThreadsToMain() }
+            )
+            limitReachedMessage = nil
         default:
             trailingAction = nil
             onRowTrailingAction = nil
             onMarkAllDoneAsRead = nil
+            footerAction = nil
             limitReachedMessage = nil
         }
 
@@ -1631,6 +1795,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             trailingAction: trailingAction,
             onRowTrailingAction: onRowTrailingAction,
             onMarkAllDoneAsRead: onMarkAllDoneAsRead,
+            footerAction: footerAction,
             limitReachedMessage: limitReachedMessage,
             onSelectThread: { [weak self] threadId in
                 self?.activePopover?.close()
@@ -1669,6 +1834,16 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
     private func removeFavoriteThread(_ threadId: UUID) {
         _ = ThreadManager.shared.toggleThreadFavorite(threadId: threadId)
+        refresh()
+    }
+
+    private func returnPoppedOutThreadToMain(_ threadId: UUID) {
+        PopoutWindowManager.shared.returnThreadToMain(threadId)
+        refresh()
+    }
+
+    private func returnAllPoppedOutThreadsToMain() {
+        PopoutWindowManager.shared.returnAllThreadsToMain()
         refresh()
     }
 

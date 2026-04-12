@@ -1343,6 +1343,7 @@ extension ThreadListViewController: ThreadManagerDelegate {
                 rowView.showsRateLimitHighlight = updated.hasUnreadRateLimit
                 rowView.showsCompletionHighlight = updated.hasUnreadAgentCompletion && !updated.hasUnreadRateLimit
                 rowView.showsWaitingHighlight = updated.hasWaitingForInput && !updated.hasUnreadAgentCompletion && !updated.hasUnreadRateLimit
+                rowView.showsPopoutTint = PopoutWindowManager.shared.isThreadPoppedOut(updated.id)
                 rowView.showsBusyShimmer = updated.isAnyBusy
                 rowView.showsArchivingOverlay = updated.isArchiving
                 rowView.configureSignEmoji(
@@ -1402,5 +1403,10 @@ extension ThreadListViewController: ThreadManagerDelegate {
                 }
             }
         }
+    }
+
+    func refreshThreadRowInPlace(threadId: UUID) {
+        guard let thread = threadManager.threads.first(where: { $0.id == threadId }) else { return }
+        updateSidebarInPlace(with: [thread])
     }
 }

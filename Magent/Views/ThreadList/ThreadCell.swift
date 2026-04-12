@@ -252,6 +252,7 @@ final class ThreadCell: NSTableCellView {
     private var prStatusBadge: StatusBadgeView?
     private var primaryDirtyDot: NSImageView?
     private var secondaryDirtyDot: NSImageView?
+    private var popoutImageView: NSImageView?
     private var pinImageView: NSImageView?
     private(set) var archiveButton: NSButton?
     private var trailingStackView: NSStackView?
@@ -271,7 +272,6 @@ final class ThreadCell: NSTableCellView {
     private var codexRateLimitBadge: TopBorderBadge?
     private var keepAliveBadge: TopBorderBadge?
     private var favoriteBadge: TopBorderBadge?
-    private var popoutBadge: TopBorderBadge?
     private var pinnedBadge: TopBorderBadge?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
@@ -577,6 +577,15 @@ final class ThreadCell: NSTableCellView {
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
 
+        let popoutIV = NSImageView()
+        popoutIV.translatesAutoresizingMaskIntoConstraints = false
+        popoutIV.setContentHuggingPriority(.required, for: .horizontal)
+        popoutIV.setContentCompressionResistancePriority(.required, for: .horizontal)
+        popoutIV.image = Self.cachedSymbolImage("macwindow.on.rectangle")
+        popoutIV.contentTintColor = .systemPurple
+        popoutIV.toolTip = "Open in separate window"
+        popoutIV.isHidden = true
+
         let pinIV = NSImageView()
         pinIV.translatesAutoresizingMaskIntoConstraints = false
         pinIV.setContentHuggingPriority(.required, for: .horizontal)
@@ -592,7 +601,7 @@ final class ThreadCell: NSTableCellView {
         archiveBtn.action = #selector(archiveButtonClicked)
         archiveBtn.isHidden = true
 
-        let stack = NSStackView(views: [archiveBtn, pinIV])
+        let stack = NSStackView(views: [archiveBtn, popoutIV, pinIV])
         stack.orientation = .horizontal
         stack.spacing = Self.trailingMarkerSpacing
         stack.distribution = .fill
@@ -608,12 +617,15 @@ final class ThreadCell: NSTableCellView {
         NSLayoutConstraint.activate([
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -trailingAlignmentInset),
+            popoutIV.widthAnchor.constraint(equalToConstant: 15),
+            popoutIV.heightAnchor.constraint(equalToConstant: 15),
             pinIV.widthAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
             pinIV.heightAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
             archiveBtn.widthAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
             archiveBtn.heightAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
         ])
         trailingStackView = stack
+        popoutImageView = popoutIV
         pinImageView = pinIV
         archiveButton = archiveBtn
 
@@ -817,12 +829,7 @@ final class ThreadCell: NSTableCellView {
         }
 
         let isPopout = PopoutWindowManager.shared.isThreadPoppedOut(thread.id)
-        if isPopout {
-            ensurePopoutBadge()
-            // Re-ensure pin badge is last (same pattern as keepAlive does).
-            if thread.isPinned { ensurePinnedBadge() }
-        }
-        popoutBadge?.isHidden = !isPopout
+        popoutImageView?.isHidden = !isPopout
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
@@ -877,6 +884,7 @@ final class ThreadCell: NSTableCellView {
         textField?.maximumNumberOfLines = 1
 
         pinImageView?.isHidden = true
+        popoutImageView?.isHidden = true
         archiveButton?.isHidden = true
 
         let resolvedBranch = currentBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -926,8 +934,6 @@ final class ThreadCell: NSTableCellView {
             rateLimitedAgentTypes: rateLimitedAgentTypes,
             directlyRateLimitedAgentTypes: directlyRateLimitedAgentTypes
         )
-
-        popoutBadge?.isHidden = true
 
         let showDuration = PersistenceService.shared.loadSettings().showBusyStateDuration
         configureDuration(since: showDuration ? busyStateSince : nil)
@@ -1189,22 +1195,6 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
-    private func ensurePopoutBadge() {
-        ensureTopBorderBadgeStack()
-        if popoutBadge == nil {
-            let badge = TopBorderBadge(bareIcon: true)
-            badge.label.isHidden = true
-            badge.iconView.image = Self.cachedSymbolImage("macwindow")
-            badge.iconView.contentTintColor = .systemPurple
-            badge.iconView.isHidden = false
-            badge.isHidden = true
-            badge.toolTip = "Open in separate window"
-            popoutBadge = badge
-        }
-        if let badge = popoutBadge, badge.superview !== topBorderBadgeStack {
-            topBorderBadgeStack?.addArrangedSubview(badge)
-        }
-    }
     private func ensurePinnedBadge() {
         ensureTopBorderBadgeStack()
         if pinnedBadge == nil {
@@ -1224,7 +1214,7 @@ final class ThreadCell: NSTableCellView {
     private func updateTopBorderBadgeOrder() {
         guard let stack = topBorderBadgeStack else { return }
 
-        let trailingBadges = [favoriteBadge, popoutBadge, pinnedBadge].compactMap { badge -> TopBorderBadge? in
+        let trailingBadges = [favoriteBadge, pinnedBadge].compactMap { badge -> TopBorderBadge? in
             guard let badge, badge.superview === stack else { return nil }
             return badge
         }
@@ -1253,7 +1243,6 @@ final class ThreadCell: NSTableCellView {
         codexRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         keepAliveBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         favoriteBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        popoutBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         pinnedBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         priorityCapsule?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         // Pin/favorite icons: primary brand by default, white when selected.
@@ -1263,8 +1252,8 @@ final class ThreadCell: NSTableCellView {
         if let pin = pinnedBadge {
             pin.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
         }
-        if let popout = popoutBadge {
-            popout.iconView.contentTintColor = .systemPurple
+        if let popout = popoutImageView {
+            popout.contentTintColor = .systemPurple
         }
     }
 

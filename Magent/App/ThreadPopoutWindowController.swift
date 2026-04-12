@@ -248,6 +248,7 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         guard !isReturningToMain else { return }
+        guard !PopoutWindowManager.shared.isApplicationTerminating else { return }
         // User closed the window directly — return thread to main
         PopoutWindowManager.shared.returnThreadToMain(threadId)
     }

@@ -22,6 +22,8 @@ final class PopoutWindowManager: PopoutStateProviding {
     private(set) var threadWindows: [UUID: ThreadPopoutWindowController] = [:]
     private(set) var tabWindows: [String: TabPopoutWindowController] = [:]
     private var suppressAutomaticStateSaves = false
+    private var hasRestoredPersistedState = false
+    private(set) var isApplicationTerminating = false
 
     // MARK: - PopoutStateProviding
 
@@ -69,6 +71,10 @@ final class PopoutWindowManager: PopoutStateProviding {
         return false
     }
 
+    func beginApplicationTermination() {
+        isApplicationTerminating = true
+    }
+
     // MARK: - Thread Pop-out
 
     @discardableResult
@@ -108,6 +114,13 @@ final class PopoutWindowManager: PopoutStateProviding {
         )
 
         saveStateIfAllowed()
+    }
+
+    func returnAllThreadsToMain() {
+        let threadIds = Array(threadWindows.keys)
+        for threadId in threadIds {
+            returnThreadToMain(threadId)
+        }
     }
 
     // MARK: - Tab Detach
@@ -163,6 +176,17 @@ final class PopoutWindowManager: PopoutStateProviding {
         tabWindows[sessionName]?.window?.makeKeyAndOrderFront(nil)
     }
 
+    func revealAllWindowsWithoutFocus() {
+        for controller in threadWindows.values {
+            controller.showWindow(nil)
+            controller.window?.orderFrontRegardless()
+        }
+        for controller in tabWindows.values {
+            controller.showWindow(nil)
+            controller.window?.orderFrontRegardless()
+        }
+    }
+
     // MARK: - Close All
 
     func closeAll() {
@@ -213,15 +237,44 @@ final class PopoutWindowManager: PopoutStateProviding {
         PersistenceService.shared.savePopoutWindowState(state)
     }
 
-    func restoreState(threads: [MagentThread]) {
-        guard let state = PersistenceService.shared.loadPopoutWindowState() else { return }
+    @discardableResult
+    func restoreState(threads: [MagentThread]) -> Bool {
+        guard !hasRestoredPersistedState else { return false }
+        guard let state = PersistenceService.shared.loadPopoutWindowState() else { return false }
+        hasRestoredPersistedState = true
+        return applyPersistedState(state, threads: threads)
+    }
 
-        for popout in state.threadPopouts {
+    @discardableResult
+    func ensurePersistedWindowsRestored(threads: [MagentThread]) -> Bool {
+        guard let state = PersistenceService.shared.loadPopoutWindowState() else { return false }
+        return applyPersistedState(state, threads: threads)
+    }
+
+    @discardableResult
+    private func applyPersistedState(_ state: PopoutWindowState, threads: [MagentThread]) -> Bool {
+        let threadPopouts = deduplicatedThreadPopouts(from: state.threadPopouts)
+        let tabPopouts = deduplicatedTabPopouts(from: state.tabPopouts)
+        var restoredAny = false
+
+        for popout in threadPopouts {
             guard let thread = threads.first(where: { $0.id == popout.threadId }) else { continue }
             guard !thread.isMain else { continue }
 
-            let controller = ThreadPopoutWindowController(thread: thread, sourceWindow: nil)
-            threadWindows[thread.id] = controller
+            closeDuplicateThreadWindows(threadId: thread.id, keeping: threadWindows[thread.id])
+
+            let controller: ThreadPopoutWindowController
+            let wasCreated: Bool
+            if let existing = threadWindows[thread.id] {
+                controller = existing
+                wasCreated = false
+            } else {
+                let created = ThreadPopoutWindowController(thread: thread, sourceWindow: nil)
+                threadWindows[thread.id] = created
+                controller = created
+                wasCreated = true
+            }
+            controller.showWindow(nil)
 
             let frame = NSRect(
                 x: popout.windowFrame.x,
@@ -232,25 +285,40 @@ final class PopoutWindowManager: PopoutStateProviding {
             if isFrameVisibleOnCurrentScreens(frame) {
                 controller.window?.setFrame(frame, display: true)
             }
-            controller.window?.makeKeyAndOrderFront(nil)
+            controller.window?.orderFrontRegardless()
+            restoredAny = true
 
-            NotificationCenter.default.post(
-                name: .magentThreadPoppedOut,
-                object: nil,
-                userInfo: ["threadId": thread.id]
-            )
+            if wasCreated {
+                NotificationCenter.default.post(
+                    name: .magentThreadPoppedOut,
+                    object: nil,
+                    userInfo: ["threadId": thread.id]
+                )
+            }
         }
 
-        for popout in state.tabPopouts {
+        for popout in tabPopouts {
             guard let thread = threads.first(where: { $0.id == popout.threadId }) else { continue }
             guard thread.tmuxSessionNames.contains(popout.sessionName) else { continue }
 
-            let controller = TabPopoutWindowController(
-                sessionName: popout.sessionName,
-                thread: thread,
-                sourceWindow: nil
-            )
-            tabWindows[popout.sessionName] = controller
+            closeDuplicateTabWindows(sessionName: popout.sessionName, keeping: tabWindows[popout.sessionName])
+
+            let controller: TabPopoutWindowController
+            let wasCreated: Bool
+            if let existing = tabWindows[popout.sessionName] {
+                controller = existing
+                wasCreated = false
+            } else {
+                let created = TabPopoutWindowController(
+                    sessionName: popout.sessionName,
+                    thread: thread,
+                    sourceWindow: nil
+                )
+                tabWindows[popout.sessionName] = created
+                controller = created
+                wasCreated = true
+            }
+            controller.showWindow(nil)
 
             let frame = NSRect(
                 x: popout.windowFrame.x,
@@ -261,14 +329,18 @@ final class PopoutWindowManager: PopoutStateProviding {
             if isFrameVisibleOnCurrentScreens(frame) {
                 controller.window?.setFrame(frame, display: true)
             }
-            controller.window?.makeKeyAndOrderFront(nil)
+            controller.window?.orderFrontRegardless()
+            restoredAny = true
 
-            NotificationCenter.default.post(
-                name: .magentTabDetached,
-                object: nil,
-                userInfo: ["sessionName": popout.sessionName, "threadId": thread.id]
-            )
+            if wasCreated {
+                NotificationCenter.default.post(
+                    name: .magentTabDetached,
+                    object: nil,
+                    userInfo: ["sessionName": popout.sessionName, "threadId": thread.id]
+                )
+            }
         }
+        return restoredAny
     }
 
     // MARK: - Notification Observers
@@ -319,6 +391,57 @@ final class PopoutWindowManager: PopoutStateProviding {
     private func saveStateIfAllowed() {
         guard !suppressAutomaticStateSaves else { return }
         saveState()
+    }
+
+    private func deduplicatedThreadPopouts(
+        from popouts: [PopoutWindowState.ThreadPopout]
+    ) -> [PopoutWindowState.ThreadPopout] {
+        var seen = Set<UUID>()
+        return popouts.reversed().filter { popout in
+            seen.insert(popout.threadId).inserted
+        }.reversed()
+    }
+
+    private func deduplicatedTabPopouts(
+        from popouts: [PopoutWindowState.TabPopout]
+    ) -> [PopoutWindowState.TabPopout] {
+        var seen = Set<String>()
+        return popouts.reversed().filter { popout in
+            seen.insert(popout.sessionName).inserted
+        }.reversed()
+    }
+
+    private func closeDuplicateThreadWindows(
+        threadId: UUID,
+        keeping keeper: ThreadPopoutWindowController?
+    ) {
+        let duplicateControllers: [ThreadPopoutWindowController] = NSApp.windows.compactMap { window -> ThreadPopoutWindowController? in
+            guard let controller = window.windowController as? ThreadPopoutWindowController,
+                  controller.threadId == threadId,
+                  controller !== keeper else { return nil }
+            return controller
+        }
+        for controller in duplicateControllers {
+            controller.isReturningToMain = true
+            controller.tearDown()
+            controller.window?.close()
+        }
+    }
+
+    private func closeDuplicateTabWindows(
+        sessionName: String,
+        keeping keeper: TabPopoutWindowController?
+    ) {
+        let duplicateControllers: [TabPopoutWindowController] = NSApp.windows.compactMap { window -> TabPopoutWindowController? in
+            guard let controller = window.windowController as? TabPopoutWindowController,
+                  controller.sessionName == sessionName,
+                  controller !== keeper else { return nil }
+            return controller
+        }
+        for controller in duplicateControllers {
+            controller.isReturningToThread = true
+            controller.window?.close()
+        }
     }
 
     private func isFrameVisibleOnCurrentScreens(_ frame: NSRect) -> Bool {

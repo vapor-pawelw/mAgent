@@ -136,9 +136,31 @@ final class AppCoordinator {
             presentConfiguration(over: splitVC)
         } else {
             Task {
+                ThreadManager.shared.primePersistedThreadsForLaunch()
+                let restoredPopouts = PopoutWindowManager.shared.restoreState(
+                    threads: ThreadManager.shared.threads
+                )
+                if restoredPopouts {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let window = self?.window else { return }
+                        window.makeKeyAndOrderFront(nil)
+                        DispatchQueue.main.async {
+                            PopoutWindowManager.shared.revealAllWindowsWithoutFocus()
+                        }
+                    }
+                }
+
                 await ThreadManager.shared.restoreThreads()
                 ThreadManager.shared.startSessionMonitor()
-                PopoutWindowManager.shared.restoreState(threads: ThreadManager.shared.threads)
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
+                    let restoredLater = PopoutWindowManager.shared.ensurePersistedWindowsRestored(
+                        threads: ThreadManager.shared.threads
+                    )
+                    guard restoredLater, let window = self?.window else { return }
+                    window.makeKeyAndOrderFront(nil)
+                    PopoutWindowManager.shared.revealAllWindowsWithoutFocus()
+                }
 
                 // Warn about projects with invalid paths
                 let invalidProjects = settings.projects.filter { !$0.isValid }

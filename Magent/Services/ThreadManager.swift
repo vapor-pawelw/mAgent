@@ -162,6 +162,11 @@ final class ThreadManager {
         threads = persistence.loadThreads().filter { !$0.isArchived }
     }
 
+    func primePersistedThreadsForLaunch() {
+        loadThreads()
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
     func restoreThreads() async {
         loadThreads()
         installClaudeHooksSettings()

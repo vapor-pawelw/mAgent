@@ -9,6 +9,8 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Detached sessions stay protected from idle eviction and manual session cleanup while visible in a pop-out window.
 - Pop-out window state is persisted across app relaunch. Reopened detached tabs should reconnect to the same live tmux session instead of showing an empty placeholder.
 - Pop-out window frames are saved continuously on move/resize/screen changes, so restart restores separate thread and detached-tab windows at their latest size and position instead of their last graceful-quit frame.
+- The separate-window header is clickable: clicking anywhere in the info strip selects and centers that thread in the main sidebar.
+- The separate-window header uses the same state language as sidebar rows. The bottom separator line carries completion/waiting/rate-limit/busy state, and the trailing accessories show only high-signal badges such as busy, waiting, rate-limited, keep-alive, favorite, and pinned.
 
 ## Implementation notes
 
@@ -17,12 +19,14 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Detaching a background tab must not replace the currently visible content with a detached placeholder. Only the selected detached tab should show `DetachedTabPlaceholderView` in the main thread view.
 - Cold-launch restoration cannot rely on `ReusableTerminalViewCache` alone. Detached-tab windows must be able to recreate their `TerminalSurfaceView` from the same tmux command used by the in-thread terminal view when no cached surface survives the relaunch.
 - Persist pop-out state on structural changes (`pop out`, `return`, `detach`, `reattach`) and on window frame changes. Saving only during app termination is not enough if the user restarts from a crash, force-quit, or any path that bypasses orderly shutdown.
+- During app termination, pop-out windows must not "return to main" as part of their normal close handlers before state is saved. That shutdown path can wipe `popout-windows.json` and make relaunch restore look broken even when launch-time restore is correct.
 
 ## Relevant files
 
 - `Magent/App/PopoutWindowManager.swift`
 - `Magent/App/ThreadPopoutWindowController.swift`
 - `Magent/App/TabPopoutWindowController.swift`
+- `Magent/Views/Popout/PopoutInfoStripView.swift`
 - `Magent/Views/Terminal/ThreadDetailViewController.swift`
 - `Magent/Views/Terminal/ThreadDetailViewController+Actions.swift`
 - `Magent/Views/Terminal/ThreadDetailViewController+TabBar.swift`

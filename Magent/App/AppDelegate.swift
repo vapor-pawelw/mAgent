@@ -131,7 +131,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func applicationWillTerminate(_ notification: Notification) {
         coordinator?.persistMainWindowFrame()
-        PopoutWindowManager.shared.saveState()
         UpdateService.shared.stopPeriodicUpdateChecks()
         NotificationCenter.default.removeObserver(self, name: .magentSettingsDidChange, object: nil)
         if let systemAppearanceObserver {
@@ -152,7 +151,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func applicationDidBecomeActive(_ notification: Notification) {
         applyAppAppearanceAndTerminalPreferences()
         ThreadManager.shared.startSessionMonitor()
-        coordinator?.showMainWindow()
+        let hasVisibleAppWindow = NSApp.windows.contains { window in
+            window.isVisible && !window.isMiniaturized
+        }
+        if !hasVisibleAppWindow {
+            coordinator?.showMainWindow()
+        }
+        DispatchQueue.main.async {
+            PopoutWindowManager.shared.revealAllWindowsWithoutFocus()
+        }
     }
 
     func applicationDidChangeScreenParameters(_ notification: Notification) {
@@ -164,7 +171,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        PopoutWindowManager.shared.saveState()
+        PopoutWindowManager.shared.beginApplicationTermination()
         return .terminateNow
     }
 

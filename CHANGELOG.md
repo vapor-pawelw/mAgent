@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 #### Features
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
-- Threads opened in separate windows now use a subtle purple row tint, and their top-right window badge matches the other circular sidebar badges while keeping its purple icon.
+- Threads opened in separate windows now use a subtle purple row tint and a more prominent trailing window icon in the sidebar.
 
 #### Bug Fixes
 - Fixed launch-time thread navigation so the selected thread is centered only after the sidebar has fully loaded and laid out, avoiding premature scroll jumps during startup.
@@ -31,7 +31,7 @@ All notable changes to this project will be documented in this file.
 
 ### Status Bar
 #### Features
-- Added a `windows` status in the bottom bar for threads opened in separate windows. Clicking it lists those threads and uses the same centered sidebar navigation as Favorites.
+- Added a `windows` status in the bottom bar for threads opened in separate windows. Clicking it lists those threads, uses the same centered sidebar navigation as Favorites, and includes actions to return individual windows or all windows to the main app.
 
 #### Bug Fixes
 - Fixed favorites popover navigation using abrupt sidebar row reveal. Selecting a favorite thread now uses the same centered, smooth animated scroll (with row pulse) as the sidebar's selected-thread jump control.
@@ -42,6 +42,7 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Focusing a thread now clears unread completion state immediately, even if the thread was already selected or its separate window was already focused when the agent finished.
 - Separate thread and detached-tab windows now persist their latest size and position continuously, so app restart restores the same extracted windows in the same place.
+- Fixed separate-window quit/relaunch restore so popped-out thread windows stay popped out across normal app restart instead of collapsing back into the main window.
 ## 1.5.4 - 2026-04-10
 
 
