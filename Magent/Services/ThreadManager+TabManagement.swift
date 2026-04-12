@@ -452,6 +452,11 @@ extension ThreadManager {
             object: nil,
             userInfo: ["threadId": closingThreadId, "sessionName": sessionName]
         )
+        // Tab-close can be initiated while this thread is not currently displayed.
+        // In that case no ThreadDetailViewController is around to free/evict the view.
+        // Evict any cached surface before killing tmux so libghostty cannot terminate
+        // the app when the PTY closes on a detached cached terminal.
+        ReusableTerminalViewCache.shared.evictSessions([sessionName])
 
         try? await tmux.killSession(name: sessionName)
         NSLog("[TabClose] removeTabBySessionName: killSession done")
