@@ -51,6 +51,10 @@ magent-cli create-thread --project <name> [options]
 | `--select` | Switch the GUI to the newly created thread. By default, CLI-created threads appear in the sidebar without switching focus. |
 | `--no-submit` | Inject the prompt text into the agent input but don't press Enter. The user can review and submit manually. |
 
+`--select` uses the same UI selection semantics as sidebar navigation:
+- if the target thread is in the main window, Magent selects it there and shows its content;
+- if the target thread is popped out, Magent brings that pop-out window to front instead of replacing the main-window content.
+
 If neither `--name` nor `--description` is given, a random name is generated.
 `--base-thread` and `--base-branch` are mutually exclusive.
 

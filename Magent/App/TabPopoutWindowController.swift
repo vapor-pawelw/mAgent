@@ -121,6 +121,13 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
         view.onCopy = { [sessionName = sessionName] in
             Task { await TmuxService.shared.copySelectionToClipboard(sessionName: sessionName) }
         }
+        view.onBecomeFirstResponder = { [threadId] in
+            NotificationCenter.default.post(
+                name: .magentFocusedThreadContextChanged,
+                object: nil,
+                userInfo: ["threadId": threadId]
+            )
+        }
         view.resolveTmuxMouseOpenableURL = { [sessionName = sessionName] in
             await TmuxService.shared.recentMouseOpenableURL(sessionName: sessionName)
         }

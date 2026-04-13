@@ -197,6 +197,7 @@ extension ThreadDetailViewController {
         setScrollFABVisible(false)
         promptTOCCanShowForCurrentTab = false
         applyPromptTOCVisibility()
+        postFocusedThreadContextChangedIfKeyWindow()
     }
 
     @discardableResult
@@ -252,6 +253,7 @@ extension ThreadDetailViewController {
         view.window?.makeFirstResponder(tv)
         currentTabIndex = index
         updateTerminalScrollControlsState()
+        postFocusedThreadContextChangedIfKeyWindow()
 
         let canShowTOC = thread.agentTmuxSessions.contains(sessionName)
         promptTOCCanShowForCurrentTab = canShowTOC

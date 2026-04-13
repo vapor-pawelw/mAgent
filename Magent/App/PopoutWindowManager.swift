@@ -169,7 +169,10 @@ final class PopoutWindowManager: PopoutStateProviding {
     // MARK: - Bring to Front
 
     func bringToFront(threadId: UUID) {
-        threadWindows[threadId]?.window?.makeKeyAndOrderFront(nil)
+        guard let controller = threadWindows[threadId] else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        controller.window?.makeKeyAndOrderFront(nil)
+        controller.focusCurrentTabForNavigation()
     }
 
     func bringToFront(sessionName: String) {

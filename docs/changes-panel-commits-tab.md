@@ -2,6 +2,11 @@
 
 ## User Behavior
 
+- The changes panel/diff context follows the currently focused thread tab/session, not only the sidebar's main selected row.
+- Focusing a tab in a popped-out thread window immediately switches panel context to that thread.
+- Clicking a popped-out thread row in the sidebar also switches panel context to that thread while keeping main-window content unchanged.
+- When panel context is showing a non-selected thread (for example a popped-out thread), the panel shows a context label (`Showing: <thread> (Pop-out)`).
+- Closing the pop-out window that currently owns panel context snaps context back to the main selected thread.
 - The bottom-left sidebar panel is always visible for every thread, regardless of dirty state or commit count.
 - When a thread has no uncommitted changes and no branch commits, the COMMITS tab shows a "No commits" empty state label. The ALL CHANGES tab shows "No changes in this branch" in the same situation.
 - **COMMITS is the left-most (default) tab.** It contains an "Uncommitted" row at the top only when the working tree has uncommitted changes; when clean, the row is hidden entirely. If uncommitted changes exist, the "Uncommitted" row is pre-selected.
@@ -95,6 +100,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - `ThreadListViewController.onCommitSelected` is wired in `ThreadListViewController.swift` setup.
 - `ThreadListViewController.onAllChangesRequested` is wired in `ThreadListViewController.swift` setup.
 - `ThreadListViewController.onRefreshRequested` is wired in `ThreadListViewController.swift` setup.
+- Diff/changes context is tracked separately from main selection in `ThreadListViewController` (`diffInspectionThreadID` + `isDiffInspectionPopoutContext`), and all panel actions/loaders resolve thread context from that state.
 - `handleCommitSelected(_:)` in `ThreadListViewController+SidebarActions.swift` — launches async task to call `GitService.commitDiffStats`, then calls `diffPanelView.updateCommitEntries`. Guard: `selectedThreadID == thread.id` to drop stale results.
 - `loadAllChangesForSelectedThread()` in `ThreadListViewController+SidebarActions.swift` — lazily loads `GitService.diffStats(worktreePath:baseBranch:)` for the selected non-main thread, then calls `diffPanelView.updateAllBranchEntries`. It captures the current `diffPanelRefreshGeneration` so stale lazy-load results cannot overwrite a newer panel refresh.
 - `manuallyRefreshSelectedThreadGitState()` in `ThreadListViewController+SidebarActions.swift` guards against overlapping taps, runs `refreshBranchStates()`, `refreshDirtyStates()`, and `refreshDeliveredStates()`, then calls `refreshDiffPanel(resetPagination:false, preserveSelection:true)` for the still-selected thread.
@@ -114,6 +120,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 
 ## Gotchas
 
+- Do not assume `selectedThreadID` is the same as the current changes-panel context. Use `diffInspectionThreadID ?? selectedThreadID` when guarding async panel updates.
 - **Background refresh and sidebar reloads must not reset selection or tab**: `refreshDiffPanel` is called on agent completion, load-more, and after structural sidebar reloads — not only on explicit thread-switch. Pass `preserveSelection: true` in all cases where the thread did not change. This includes the case where `selectedCommitHash == nil` (user is on the CHANGES tab with "Uncommitted" selected) — without `preserveSelection: true`, the tab would reset to `.commits` on every background refresh.
 - **Manual refresh must refresh thread git metadata before reloading panel content**: the refresh button is intended to update branch labels and dirty/delivered state immediately, not just rerun `diffStats`. Run `refreshBranchStates()`, `refreshDirtyStates()`, and `refreshDeliveredStates()` before `refreshDiffPanel(...)`, and keep `preserveSelection: true` / `resetPagination: false` so a manual sync behaves like a non-destructive background refresh.
 - **`outlineViewSelectionDidChange` must be suppressed during `reloadData()`**: NSOutlineView fires `outlineViewSelectionDidChange` mid-reload when rows are shuffled (e.g. via `bumpThreadToTopOfSection`). The previously-selected row index can temporarily map to a different thread, making `selectionChanged = true` and causing a `preserveSelection: false` refresh — which resets the panel. The handler is now guarded by `guard !isReloadingData else { return }`. Since `outlineViewSelectionDidChange` is suppressed during `reloadData()`, `threadManager(didUpdateThreads:)` must explicitly call `refreshDiffPanel(for: selected, preserveSelection: true)` after a structural reload (not just `refreshDiffPanelContext`, which only updates labels and does not refresh panel content). In-place updates (non-structural) continue to use `refreshDiffPanelContext` as before.

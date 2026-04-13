@@ -607,26 +607,23 @@ final class SplitViewController: NSSplitViewController {
         detailVC.cacheTerminalViewsForReuse()
         currentDetailVC = nil
         PopoutWindowManager.shared.popOutThread(thread, from: view.window)
-        presentDetachedThreadPlaceholder(thread)
+        selectFallbackMainThread(afterPoppingOut: thread.id)
         threadListVC.refreshThreadRowInPlace(threadId: thread.id)
     }
 
     @objc private func handleThreadReturnedToMain(_ notification: Notification) {
         guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
-        // If we're currently showing the placeholder for this thread, replace with real detail VC
-        if contentContainerVC.currentChild is DetachedThreadPlaceholderView,
-           let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }),
-           ThreadManager.shared.activeThreadId == threadId {
-            showThread(thread)
+        if threadListVC.diffInspectionThreadID == threadId {
+            threadListVC.setDiffInspectionContextToSelectedThread()
+            focusMainWindowAndCurrentThread()
         }
         threadListVC.refreshThreadRowInPlace(threadId: threadId)
     }
 
     @objc private func handleThreadPoppedOut(_ notification: Notification) {
         guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
-        if ThreadManager.shared.activeThreadId == threadId,
-           let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) {
-            presentDetachedThreadPlaceholder(thread)
+        if threadListVC.selectedThreadID == threadId {
+            selectFallbackMainThread(afterPoppingOut: threadId)
         }
         threadListVC.refreshThreadRowInPlace(threadId: threadId)
     }
@@ -639,8 +636,28 @@ final class SplitViewController: NSSplitViewController {
             popOutCurrentThread()
         } else if let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) {
             PopoutWindowManager.shared.popOutThread(thread, from: view.window)
+            if threadListVC.selectedThreadID == threadId {
+                selectFallbackMainThread(afterPoppingOut: threadId)
+            }
             threadListVC.refreshThreadRowInPlace(threadId: thread.id)
         }
+    }
+
+    private func selectFallbackMainThread(afterPoppingOut threadId: UUID) {
+        let fallback = ThreadManager.shared.threads.first { thread in
+            thread.id != threadId && !PopoutWindowManager.shared.isThreadPoppedOut(thread.id)
+        }
+        guard let fallback else {
+            showEmptyState()
+            return
+        }
+        threadListVC.selectThread(byId: fallback.id)
+    }
+
+    private func focusMainWindowAndCurrentThread() {
+        NSApp.activate(ignoringOtherApps: true)
+        view.window?.makeKeyAndOrderFront(nil)
+        currentDetailVC?.focusCurrentTabForNavigation()
     }
 
     private func preserveSidebarWidthDuringContentChange(_ change: () -> Void) {
@@ -706,12 +723,15 @@ final class SplitViewController: NSSplitViewController {
 
 extension SplitViewController: ThreadListDelegate {
     func threadList(_ controller: ThreadListViewController, didSelectThread thread: MagentThread) {
-        ThreadManager.shared.setActiveThread(thread.id)
         if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
-            presentDetachedThreadPlaceholder(thread)
-        } else {
-            showThread(thread)
+            PopoutWindowManager.shared.bringToFront(threadId: thread.id)
+            threadListVC.setDiffInspectionContext(threadId: thread.id, isPopoutContext: true)
+            threadListVC.centerAndPulseThreadRow(byId: thread.id)
+            return
         }
+        ThreadManager.shared.setActiveThread(thread.id)
+        showThread(thread)
+        currentDetailVC?.focusCurrentTabForNavigation()
         markFocusedThreadCompletionSeenIfNeeded()
         threadListVC.refreshDiffPanelForSelectedThread()
     }

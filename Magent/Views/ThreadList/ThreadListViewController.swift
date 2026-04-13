@@ -76,6 +76,16 @@ final class SidebarOutlineView: NSOutlineView {
                 return
             }
         }
+        if row >= 0,
+           let cell = view(atColumn: 0, row: row, makeIfNecessary: false) as? ThreadCell,
+           let popOutBtn = cell.popOutButton,
+           !popOutBtn.isHidden {
+            let btnLoc = popOutBtn.convert(loc, from: self)
+            if popOutBtn.bounds.contains(btnLoc) {
+                popOutBtn.sendAction(popOutBtn.action, to: popOutBtn.target)
+                return
+            }
+        }
         super.mouseDown(with: event)
     }
 
@@ -215,6 +225,8 @@ final class ThreadListViewController: NSViewController {
     /// Prevents stale Tasks from running when reloadData() is called rapidly.
     private var remoteCheckGeneration: Int = 0
     private(set) var selectedThreadID: UUID?
+    private(set) var diffInspectionThreadID: UUID?
+    private(set) var isDiffInspectionPopoutContext = false
     private var hasSidebarAppeared = false
     private var didCenterInitialSelectedThreadOnLaunch = false
 
@@ -270,6 +282,12 @@ final class ThreadListViewController: NSViewController {
             self,
             selector: #selector(handleRecoveryReopenRequested(_:)),
             name: .magentRecoveryReopenRequested,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleFocusedThreadContextChanged(_:)),
+            name: .magentFocusedThreadContextChanged,
             object: nil
         )
         checkForPendingPromptRecovery()
@@ -486,9 +504,9 @@ final class ThreadListViewController: NSViewController {
         // If the completed thread is currently selected, refresh the diff panel.
         // resetPagination:false keeps the existing commit range intact so the selected
         // commit stays in the list after the agent's new commit lands.
-        guard let selected = selectedThreadFromState(),
-              selected.id == threadId else { return }
-        refreshDiffPanel(for: selected, resetPagination: false, preserveSelection: true)
+        guard let contextThread = diffInspectionThreadFromState(),
+              contextThread.id == threadId else { return }
+        refreshDiffPanel(for: contextThread, resetPagination: false, preserveSelection: true)
     }
 
     @objc private func settingsDidChange() {
@@ -502,6 +520,11 @@ final class ThreadListViewController: NSViewController {
         }
         pendingSettingsReloadWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+    }
+
+    @objc private func handleFocusedThreadContextChanged(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
+        setDiffInspectionContext(threadId: threadId, isPopoutContext: PopoutWindowManager.shared.isThreadPoppedOut(threadId))
     }
 
     // MARK: - Outline View
@@ -1031,6 +1054,7 @@ final class ThreadListViewController: NSViewController {
         if let threadId = lastOpenedThreadId {
             for row in 0..<outlineView.numberOfRows {
                 if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
+                    guard !PopoutWindowManager.shared.isThreadPoppedOut(thread.id) else { break }
                     let isNewThread = selectedThreadID != thread.id
                     let resolved = recordSelectedThread(thread)
                     if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
@@ -1046,7 +1070,8 @@ final class ThreadListViewController: NSViewController {
             if let fallbackProjectId {
                 for row in 0..<outlineView.numberOfRows {
                     if let thread = outlineView.item(atRow: row) as? MagentThread,
-                       thread.projectId == fallbackProjectId {
+                       thread.projectId == fallbackProjectId,
+                       !PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
                         let isNewThread = selectedThreadID != thread.id
                         let resolved = recordSelectedThread(thread)
                         if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
@@ -1058,7 +1083,8 @@ final class ThreadListViewController: NSViewController {
         } else if let lastOpenedProjectId {
             for row in 0..<outlineView.numberOfRows {
                 if let thread = outlineView.item(atRow: row) as? MagentThread,
-                   thread.projectId == lastOpenedProjectId {
+                   thread.projectId == lastOpenedProjectId,
+                   !PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
                     let isNewThread = selectedThreadID != thread.id
                     let resolved = recordSelectedThread(thread)
                     if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
@@ -1070,7 +1096,8 @@ final class ThreadListViewController: NSViewController {
 
         // Find the first selectable thread item
         for row in 0..<outlineView.numberOfRows {
-            if let thread = outlineView.item(atRow: row) as? MagentThread {
+            if let thread = outlineView.item(atRow: row) as? MagentThread,
+               !PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
                 let isNewThread = selectedThreadID != thread.id
                 let resolved = recordSelectedThread(thread)
                 if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
@@ -1083,6 +1110,12 @@ final class ThreadListViewController: NSViewController {
     }
 
     func selectThread(byId threadId: UUID, scrollRowToVisible: Bool = true) {
+        if PopoutWindowManager.shared.isThreadPoppedOut(threadId) {
+            PopoutWindowManager.shared.bringToFront(threadId: threadId)
+            centerAndPulseThreadRow(byId: threadId)
+            setDiffInspectionContext(threadId: threadId, isPopoutContext: true)
+            return
+        }
         expandAncestorsIfNeeded(for: threadId)
         for row in 0..<outlineView.numberOfRows {
             if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
@@ -1280,17 +1313,58 @@ final class ThreadListViewController: NSViewController {
         return threadManager.threads.first(where: { $0.id == selectedThreadID })
     }
 
+    func diffInspectionThreadFromState() -> MagentThread? {
+        guard let threadId = diffInspectionThreadID ?? selectedThreadID else { return nil }
+        return threadManager.threads.first(where: { $0.id == threadId })
+    }
+
     @discardableResult
     func recordSelectedThread(_ thread: MagentThread) -> MagentThread {
         let resolved = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         selectedThreadID = resolved.id
+        diffInspectionThreadID = resolved.id
+        isDiffInspectionPopoutContext = false
         UserDefaults.standard.set(resolved.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
         UserDefaults.standard.set(resolved.projectId.uuidString, forKey: Self.lastOpenedProjectDefaultsKey)
         return resolved
     }
 
+    func setDiffInspectionContext(threadId: UUID?, isPopoutContext: Bool) {
+        guard let threadId else {
+            diffInspectionThreadID = selectedThreadID
+            isDiffInspectionPopoutContext = false
+            refreshDiffPanelContextForSelectedThread()
+            refreshDiffPanelForSelectedThread()
+            return
+        }
+        if diffInspectionThreadID == threadId, isDiffInspectionPopoutContext == isPopoutContext {
+            return
+        }
+        diffInspectionThreadID = threadId
+        isDiffInspectionPopoutContext = isPopoutContext
+        if let thread = diffInspectionThreadFromState() {
+            refreshDiffPanelContext(for: thread)
+            refreshDiffPanel(for: thread)
+        } else {
+            diffPanelView.clearContextThreadIndicator()
+            diffPanelView.clear()
+            branchMismatchView.clear()
+        }
+    }
+
+    func setDiffInspectionContextToSelectedThread() {
+        setDiffInspectionContext(threadId: selectedThreadID, isPopoutContext: false)
+    }
+
+    func clearDiffInspectionContextIfMatching(threadId: UUID) {
+        guard diffInspectionThreadID == threadId else { return }
+        setDiffInspectionContextToSelectedThread()
+    }
+
     func clearSelectedThreadState() {
         selectedThreadID = nil
+        diffInspectionThreadID = nil
+        isDiffInspectionPopoutContext = false
         diffPanelView?.clear()
         branchMismatchView?.clear()
         updateSelectedThreadJumpCapsuleVisibility()

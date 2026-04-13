@@ -1011,15 +1011,18 @@ extension ThreadListViewController {
     // MARK: - Diff Panel
 
     func refreshDiffPanelForSelectedThread() {
-        guard let thread = selectedThreadFromState() else {
-            clearSelectedThreadState()
+        guard let thread = diffInspectionThreadFromState() else {
+            diffPanelView.clearContextThreadIndicator()
+            diffPanelView.clear()
+            branchMismatchView.clear()
             return
         }
         refreshDiffPanel(for: thread)
     }
 
     func refreshDiffPanelContextForSelectedThread() {
-        guard let thread = selectedThreadFromState() else {
+        guard let thread = diffInspectionThreadFromState() else {
+            diffPanelView.clearContextThreadIndicator()
             diffPanelView.updateBranchInfo(branchName: nil, baseBranch: nil, upstreamStatus: nil)
             return
         }
@@ -1027,7 +1030,7 @@ extension ThreadListViewController {
     }
 
     func manuallyRefreshSelectedThreadGitState() {
-        guard let thread = selectedThreadFromState() else { return }
+        guard let thread = diffInspectionThreadFromState() else { return }
         if isDiffPanelManualRefreshInFlight {
             pendingDiffPanelManualRefresh = true
             return
@@ -1054,9 +1057,9 @@ extension ThreadListViewController {
                     self.diffPanelView.setRefreshInProgress(false)
                 }
 
-                guard let selected = self.selectedThreadFromState(),
-                      selected.id == threadId else { return }
-                self.refreshDiffPanel(for: selected, resetPagination: false, preserveSelection: true)
+                guard let contextThread = self.diffInspectionThreadFromState(),
+                      contextThread.id == threadId else { return }
+                self.refreshDiffPanel(for: contextThread, resetPagination: false, preserveSelection: true)
 
                 if shouldRefreshAgain {
                     DispatchQueue.main.async { [weak self] in
@@ -1068,7 +1071,7 @@ extension ThreadListViewController {
     }
 
     func loadMoreCommitsForSelectedThread() {
-        guard let thread = selectedThreadFromState() else { return }
+        guard let thread = diffInspectionThreadFromState() else { return }
         let nextLimit = diffPanelCommitLimitByThreadId[thread.id, default: diffPanelCommitPageSize] + diffPanelCommitPageSize
         diffPanelCommitLimitByThreadId[thread.id] = nextLimit
         refreshDiffPanel(for: thread, resetPagination: false, preserveSelection: true)
@@ -1079,12 +1082,12 @@ extension ThreadListViewController {
             // "Uncommitted" selected — CHANGES tab already has working-tree entries; nothing to load
             return
         }
-        guard let thread = selectedThreadFromState() else { return }
+        guard let thread = diffInspectionThreadFromState() else { return }
         let worktreePath = thread.worktreePath
         Task {
             let entries = await GitService.shared.commitDiffStats(worktreePath: worktreePath, commitHash: commitHash)
             await MainActor.run {
-                guard self.selectedThreadID == thread.id else { return }
+                guard (self.diffInspectionThreadID ?? self.selectedThreadID) == thread.id else { return }
                 self.diffPanelView.updateCommitEntries(hash: commitHash, entries: entries, subject: "")
             }
         }
@@ -1097,12 +1100,13 @@ extension ThreadListViewController {
         Task {
             let upstreamStatus = await GitService.shared.upstreamTrackingStatus(worktreePath: current.worktreePath)
             await MainActor.run {
-                guard self.selectedThreadID == current.id else { return }
+                guard (self.diffInspectionThreadID ?? self.selectedThreadID) == current.id else { return }
                 guard let latest = self.threadManager.threads.first(where: { $0.id == current.id }) else { return }
                 let latestBranchName = latest.actualBranch ?? latest.branchName
                 let latestBaseBranch = latest.isMain ? nil : self.threadManager.resolveBaseBranch(for: latest)
                 guard latestBranchName == branchName,
                       latestBaseBranch == baseBranch else { return }
+                self.updateDiffContextThreadIndicator(for: latest)
                 self.diffPanelView.updateBranchInfo(
                     branchName: branchName,
                     baseBranch: baseBranch,
@@ -1113,7 +1117,7 @@ extension ThreadListViewController {
     }
 
     func showBaseBranchMenu(anchorView: NSView) {
-        guard let thread = selectedThreadFromState(), !thread.isMain else { return }
+        guard let thread = diffInspectionThreadFromState(), !thread.isMain else { return }
         let currentBase = threadManager.resolveBaseBranch(for: thread)
         let threadId = thread.id
 
@@ -1165,7 +1169,7 @@ extension ThreadListViewController {
 
     @objc private func baseBranchMenuItemSelected(_ sender: NSMenuItem) {
         guard let branch = sender.representedObject as? String,
-              let thread = selectedThreadFromState() else { return }
+              let thread = diffInspectionThreadFromState() else { return }
         threadManager.setBaseBranch(branch, for: thread.id)
         refreshDiffPanel(for: thread)
     }
@@ -1279,9 +1283,10 @@ extension ThreadListViewController {
             }
 
             await MainActor.run {
-                guard self.selectedThreadID == current.id else { return }
+                guard (self.diffInspectionThreadID ?? self.selectedThreadID) == current.id else { return }
                 // Discard stale results: a newer refresh call was made after this task was spawned.
                 guard (self.diffPanelRefreshGeneration[current.id] ?? 0) == generation else { return }
+                self.updateDiffContextThreadIndicator(for: current)
                 self.diffPanelView.update(
                     with: entries,
                     allBranchEntries: allBranchEntries,
@@ -1300,7 +1305,7 @@ extension ThreadListViewController {
     }
 
     func loadAllChangesForSelectedThread() {
-        guard let thread = selectedThreadFromState() else { return }
+        guard let thread = diffInspectionThreadFromState() else { return }
         guard !thread.isMain else { return }
 
         let generation = diffPanelRefreshGeneration[thread.id] ?? 0
@@ -1313,7 +1318,7 @@ extension ThreadListViewController {
             )
 
             await MainActor.run {
-                guard self.selectedThreadID == current.id else { return }
+                guard (self.diffInspectionThreadID ?? self.selectedThreadID) == current.id else { return }
                 guard (self.diffPanelRefreshGeneration[current.id] ?? 0) == generation else { return }
                 self.diffPanelView.updateAllBranchEntries(entries)
             }
@@ -1323,7 +1328,7 @@ extension ThreadListViewController {
     // MARK: - Commit Detail Mode
 
     func handleCommitDoubleTapped(_ commitHash: String?, title: String) {
-        guard let thread = selectedThreadFromState() else { return }
+        guard let thread = diffInspectionThreadFromState() else { return }
         let worktreePath = thread.worktreePath
         Task {
             let entries: [FileDiffEntry]
@@ -1333,10 +1338,22 @@ extension ThreadListViewController {
                 entries = await GitService.shared.workingTreeDiffStats(worktreePath: worktreePath)
             }
             await MainActor.run {
-                guard self.selectedThreadID == thread.id else { return }
+                guard (self.diffInspectionThreadID ?? self.selectedThreadID) == thread.id else { return }
                 self.diffPanelView.enterCommitDetailMode(hash: commitHash, title: title, entries: entries)
             }
         }
+    }
+
+    private func updateDiffContextThreadIndicator(for thread: MagentThread) {
+        let isNonSelectedContext = thread.id != selectedThreadID
+        guard isNonSelectedContext else {
+            diffPanelView.clearContextThreadIndicator()
+            return
+        }
+        let name = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = (name?.isEmpty == false ? name! : thread.name)
+        let suffix = isDiffInspectionPopoutContext ? " (Pop-out)" : ""
+        diffPanelView.setContextThreadIndicator("Showing: \(displayName)\(suffix)")
     }
 
     // MARK: - Branch Mismatch

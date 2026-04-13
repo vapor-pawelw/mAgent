@@ -254,6 +254,7 @@ final class ThreadCell: NSTableCellView {
     private var secondaryDirtyDot: NSImageView?
     private var popoutImageView: NSImageView?
     private var pinImageView: NSImageView?
+    private(set) var popOutButton: NSButton?
     private(set) var archiveButton: NSButton?
     private var trailingStackView: NSStackView?
     private weak var leadingTextStackView: NSStackView?
@@ -284,6 +285,7 @@ final class ThreadCell: NSTableCellView {
     private static let renamePulseAnimationKey = "rename-label-pulse"
 
     var onArchive: (() -> Void)?
+    var onPopOut: (() -> Void)?
 
     private static func descriptionFont() -> NSFont {
         .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
@@ -601,7 +603,18 @@ final class ThreadCell: NSTableCellView {
         archiveBtn.action = #selector(archiveButtonClicked)
         archiveBtn.isHidden = true
 
-        let stack = NSStackView(views: [archiveBtn, popoutIV, pinIV])
+        let popOutBtn = NSButton()
+        popOutBtn.translatesAutoresizingMaskIntoConstraints = false
+        popOutBtn.setContentHuggingPriority(.required, for: .horizontal)
+        popOutBtn.isBordered = false
+        popOutBtn.image = Self.cachedSymbolImage("macwindow.badge.plus")
+        popOutBtn.contentTintColor = .tertiaryLabelColor
+        popOutBtn.toolTip = "Pop out into separate window"
+        popOutBtn.target = self
+        popOutBtn.action = #selector(popOutButtonClicked)
+        popOutBtn.isHidden = true
+
+        let stack = NSStackView(views: [popOutBtn, archiveBtn, popoutIV, pinIV])
         stack.orientation = .horizontal
         stack.spacing = Self.trailingMarkerSpacing
         stack.distribution = .fill
@@ -623,10 +636,13 @@ final class ThreadCell: NSTableCellView {
             pinIV.heightAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
             archiveBtn.widthAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
             archiveBtn.heightAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
+            popOutBtn.widthAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
+            popOutBtn.heightAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
         ])
         trailingStackView = stack
         popoutImageView = popoutIV
         pinImageView = pinIV
+        popOutButton = popOutBtn
         archiveButton = archiveBtn
 
         if !hasInstalledTextTrailingConstraint {
@@ -830,6 +846,7 @@ final class ThreadCell: NSTableCellView {
 
         let isPopout = PopoutWindowManager.shared.isThreadPoppedOut(thread.id)
         popoutImageView?.isHidden = !isPopout
+        popOutButton?.isHidden = isPopout || thread.isMain
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
@@ -885,6 +902,7 @@ final class ThreadCell: NSTableCellView {
 
         pinImageView?.isHidden = true
         popoutImageView?.isHidden = true
+        popOutButton?.isHidden = true
         archiveButton?.isHidden = true
 
         let resolvedBranch = currentBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1494,5 +1512,9 @@ final class ThreadCell: NSTableCellView {
 
     @objc private func archiveButtonClicked() {
         onArchive?()
+    }
+
+    @objc private func popOutButtonClicked() {
+        onPopOut?()
     }
 }

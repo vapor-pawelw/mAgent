@@ -214,7 +214,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     }
 
     private var currentCapsuleBorderWidth: CGFloat {
-        isSelected ? Self.capsuleBorderWidth : 1
+        (isSelected || showsPopoutTint) ? Self.capsuleBorderWidth : 1
     }
 
     private var currentCapsuleStyle: CapsuleStyle {
@@ -239,11 +239,9 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 border: NSColor.systemGreen.withAlphaComponent(0.5)
             )
         } else if showsPopoutTint {
-            let subtlePurple = NSColor.systemPurple.blended(withFraction: 0.35, of: .secondaryLabelColor)
-                ?? NSColor.systemPurple
             return CapsuleStyle(
-                fill: subtlePurple.withAlphaComponent(0.05),
-                border: subtlePurple.withAlphaComponent(0.28)
+                fill: NSColor.systemPurple.withAlphaComponent(0.12),
+                border: NSColor.systemPurple.withAlphaComponent(0.7)
             )
         } else {
             return CapsuleStyle(

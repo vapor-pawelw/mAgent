@@ -149,6 +149,7 @@ extension ThreadDetailViewController {
         vc.view.isHidden = false
         activeDraftTabId = identifier
         currentTabIndex = displayIndex
+        postFocusedThreadContextChangedIfKeyWindow()
 
         if thread.lastSelectedTabIdentifier != identifier {
             thread.lastSelectedTabIdentifier = identifier
