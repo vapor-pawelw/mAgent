@@ -1370,7 +1370,7 @@ extension ThreadListViewController {
         let name = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = (name?.isEmpty == false ? name! : thread.name)
         let suffix = isDiffInspectionPopoutContext ? " (Pop-out)" : " (Main)"
-        diffPanelView.setContextThreadIndicator("\(displayName)\(suffix)")
+        diffPanelView.setContextThreadIndicator("\(displayName)\(suffix)", isPopout: isDiffInspectionPopoutContext)
     }
 
     // MARK: - Branch Mismatch

@@ -1180,15 +1180,25 @@ final class DiffPanelView: NSView {
             : "Refresh git status, branch, commits, and changes"
     }
 
-    func setContextThreadIndicator(_ text: String?) {
+    func setContextThreadIndicator(_ text: String?, isPopout: Bool = false) {
         let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
         contextThreadIndicatorText = (trimmed?.isEmpty == false) ? trimmed : nil
         commitContextLabel.stringValue = contextThreadIndicatorText ?? ""
+        applyContextBadgeColors(isPopout: isPopout)
         updateContextThreadIndicatorVisibility()
     }
 
     func clearContextThreadIndicator() {
         setContextThreadIndicator(nil)
+    }
+
+    private func applyContextBadgeColors(isPopout: Bool) {
+        let baseColor: NSColor = isPopout ? .systemPurple : .controlAccentColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.contextThreadBadgeView.layer?.backgroundColor = baseColor.withAlphaComponent(0.1).cgColor
+            self.contextThreadBadgeView.layer?.borderColor = baseColor.withAlphaComponent(0.7).cgColor
+        }
+        commitContextLabel.textColor = baseColor
     }
 
     // MARK: - Commit Detail Mode

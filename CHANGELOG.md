@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 #### Features
+- The changes panel context badge now uses purple styling when showing a pop-out thread's info, matching the sidebar's purple popout tint.
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
 - Threads opened in separate windows now use a subtle purple row tint and a more prominent trailing window icon in the sidebar.
 - Popped-out thread rows now use a stronger purple highlight with a 2pt border and keep their row pulse/centering behavior on sidebar click-to-focus.

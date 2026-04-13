@@ -7,7 +7,7 @@
 - Focusing a tab in a popped-out thread window immediately switches panel context to that thread.
 - Clicking a popped-out thread row in the sidebar also switches panel context to that thread while keeping main-window content unchanged.
 - The panel shows a context badge above `COMMITS` / `ALL CHANGES` only when at least one pop-out window exists.
-- The context badge uses selection-accent styling (not pop-out purple) and labels the active context as `<thread> (Pop-out)` or `<thread> (Main)`.
+- The context badge labels the active context as `<thread> (Pop-out)` or `<thread> (Main)`. When showing a pop-out thread's context, the badge uses purple styling (`systemPurple`) matching the sidebar popout tint; for the main-window context it uses the selection accent color.
 - Closing the pop-out window that currently owns panel context snaps context back to the main selected thread.
 - The bottom-left sidebar panel is always visible for every thread, regardless of dirty state or commit count.
 - When a thread has no uncommitted changes and no branch commits, the COMMITS tab shows a "No commits" empty state label. The ALL CHANGES tab shows "No changes in this branch" in the same situation.
