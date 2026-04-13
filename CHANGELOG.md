@@ -9,7 +9,6 @@ All notable changes to this project will be documented in this file.
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
 - Threads opened in separate windows now use a subtle purple row tint and a more prominent trailing window icon in the sidebar.
 - Popped-out thread rows now use a stronger purple highlight with a 2pt border and keep their row pulse/centering behavior on sidebar click-to-focus.
-- Added a per-thread pop-out button in each non-popped-out row's trailing actions (before archive) for one-click move to a separate window.
 
 #### Bug Fixes
 - Fixed launch-time thread navigation so the selected thread is centered only after the sidebar has fully loaded and laid out, avoiding premature scroll jumps during startup.
@@ -57,6 +56,7 @@ All notable changes to this project will be documented in this file.
 - Refined thread info-strip layout/content to mirror sidebar row semantics: centered leading icon, dirty-state dot before the secondary line, and branch/worktree secondary text (showing worktree only when it differs from branch) while keeping description single-line.
 - Fixed thread info-strip rate-limit badges (main thread view + pop-out windows) still showing legacy hourglass icons. The strip now shows Claude/Codex glyphs, matching sidebar rate-limit badges.
 - Fixed occasional unexpected focus jumps to popped-out thread windows by stopping global thread-navigation notifications from forcing pop-out windows to front.
+- Fixed random separate-window focus steals by making pop-out reveal/restore paths non-focusing and limiting app-activation reveal to no-visible-window recovery.
 - Fixed separate-window context jitter by making changes-panel context follow key-window activation (main vs pop-out) instead of non-key responder transitions.
 - Focusing a thread now clears unread completion state immediately, even if the thread was already selected or its separate window was already focused when the agent finished.
 - Separate thread and detached-tab windows now persist their latest size and position continuously, so app restart restores the same extracted windows in the same place.

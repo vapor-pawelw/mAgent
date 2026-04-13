@@ -180,14 +180,18 @@ final class PopoutWindowManager: PopoutStateProviding {
     }
 
     func revealAllWindowsWithoutFocus() {
+        let previousKeyWindow = NSApp.keyWindow
+
         for controller in threadWindows.values {
-            controller.showWindow(nil)
-            controller.window?.orderFrontRegardless()
+            revealWindowWithoutFocus(controller.window)
         }
         for controller in tabWindows.values {
-            controller.showWindow(nil)
-            controller.window?.orderFrontRegardless()
+            revealWindowWithoutFocus(controller.window)
         }
+
+        // Keep whatever was key before reveal as key. This method should never
+        // promote a random pop-out window to focused/key state.
+        previousKeyWindow?.makeKey()
     }
 
     // MARK: - Close All
@@ -277,7 +281,7 @@ final class PopoutWindowManager: PopoutStateProviding {
                 controller = created
                 wasCreated = true
             }
-            controller.showWindow(nil)
+            revealWindowWithoutFocus(controller.window)
 
             let frame = NSRect(
                 x: popout.windowFrame.x,
@@ -288,7 +292,6 @@ final class PopoutWindowManager: PopoutStateProviding {
             if isFrameVisibleOnCurrentScreens(frame) {
                 controller.window?.setFrame(frame, display: true)
             }
-            controller.window?.orderFrontRegardless()
             restoredAny = true
 
             if wasCreated {
@@ -321,7 +324,7 @@ final class PopoutWindowManager: PopoutStateProviding {
                 controller = created
                 wasCreated = true
             }
-            controller.showWindow(nil)
+            revealWindowWithoutFocus(controller.window)
 
             let frame = NSRect(
                 x: popout.windowFrame.x,
@@ -332,7 +335,6 @@ final class PopoutWindowManager: PopoutStateProviding {
             if isFrameVisibleOnCurrentScreens(frame) {
                 controller.window?.setFrame(frame, display: true)
             }
-            controller.window?.orderFrontRegardless()
             restoredAny = true
 
             if wasCreated {
@@ -454,5 +456,13 @@ final class PopoutWindowManager: PopoutStateProviding {
             }
         }
         return false
+    }
+
+    private func revealWindowWithoutFocus(_ window: NSWindow?) {
+        guard let window else { return }
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.orderFront(nil)
     }
 }

@@ -497,7 +497,6 @@ final class SplitViewController: NSSplitViewController {
     }
 
     @objc private func handleMainWindowDidBecomeKey(_ notification: Notification) {
-        currentDetailVC?.postFocusedThreadContextChangedIfKeyWindow()
         markFocusedThreadCompletionSeenIfNeeded()
     }
 

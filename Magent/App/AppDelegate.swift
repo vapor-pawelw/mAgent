@@ -156,9 +156,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         if !hasVisibleAppWindow {
             coordinator?.showMainWindow()
-        }
-        DispatchQueue.main.async {
-            PopoutWindowManager.shared.revealAllWindowsWithoutFocus()
+            DispatchQueue.main.async {
+                PopoutWindowManager.shared.revealAllWindowsWithoutFocus()
+            }
         }
     }
 
