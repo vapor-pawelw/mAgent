@@ -20,6 +20,9 @@ All notable changes to this project will be documented in this file.
 - Removed the busy-row shimmer effect to reduce sidebar motion; busy threads now keep only border/separator animations.
 
 ### Settings
+#### Features
+- Tab detaching is now disabled in release builds by default. Debug builds expose a new `Settings > Debug > Experimental` checkbox (`Enable tab detaching`) so developers can re-enable it when needed.
+
 #### Bug Fixes
 - Fixed `Settings > General > Links` preference persistence. "Open web links in" now stays on the selected value after relaunch instead of reverting.
 - Fixed `Settings > Projects > Hide in sidebar` behavior so hiding a project now closes all of that project's pop-out windows and automatically moves focus to the first remaining visible thread.

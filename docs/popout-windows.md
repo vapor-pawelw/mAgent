@@ -22,7 +22,8 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Hiding a project in `Settings > Projects` force-closes any thread/tab pop-outs from that project and moves main-window selection to the first remaining visible thread.
 - Thread actions use key-window context across main and pop-out windows. When a detached tab window is key, thread-level actions resolve to that tab's parent thread.
 - Keyboard shortcuts and Thread menu actions are parity-routed across window types (`New Thread`, `Fork Thread`, `AI Rename`, and contextual tab/thread actions).
-- Detached-tab shortcut behavior is explicit: `Cmd+W` returns the detached tab to its parent thread window, while `Cmd+Shift+D` and `Cmd+Shift+O` are no-op with feedback.
+- Detached-tab shortcut behavior is explicit: `Cmd+W` returns the detached tab to its parent thread window, while `Cmd+Shift+O` is no-op with feedback.
+- Tab detaching is production-disabled. In debug builds it can be re-enabled via `Settings > Debug > Experimental > Enable tab detaching` (off by default); all detach UI and shortcut paths must honor `AppSettings.isTabDetachFeatureEnabled`.
 
 ## Implementation notes
 
