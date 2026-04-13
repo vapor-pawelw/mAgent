@@ -834,7 +834,14 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
         var x = event.scrollingDeltaX
         var y = event.scrollingDeltaY
-        let precision = event.hasPreciseScrollingDeltas
+        let phase = event.phase
+        let momentumPhase = event.momentumPhase
+        // Some physical mouse wheels report "precise" deltas but still emit
+        // no scroll phases. Treat those events as discrete notches so one
+        // wheel tick maps to one normalized step.
+        let treatAsDiscreteWheel = !event.hasPreciseScrollingDeltas
+            || (phase == [] && momentumPhase == [])
+        let precision = !treatAsDiscreteWheel
 
         if precision {
             x *= 1
