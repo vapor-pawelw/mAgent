@@ -58,6 +58,7 @@ All notable changes to this project will be documented in this file.
 - Added a top-bar pop-out button next to Archive in thread view (above terminal), with auto-hide when the thread is already in a separate window.
 
 #### Bug Fixes
+- Fixed paste routing for detached/popped-out terminal windows. `Cmd+V` now pastes into the focused pop-out Ghostty surface instead of occasionally landing in the main-window terminal.
 - Pop-out windows now use section-colored thread icons in the top info strip (instead of default primary styling), keep that strip synced with section/thread metadata changes from the main window, and mirror the same info strip in the main thread view above the tab/action bar.
 - Fixed double header bars in popped-out thread windows by keeping the shared thread info strip only in the pop-out chrome there (while still showing it in the main thread view), and aligned the strip separator baseline to the sidebar selected-thread accent.
 - Refined thread info-strip layout/content to mirror sidebar row semantics: centered leading icon, dirty-state dot before the secondary line, and branch/worktree secondary text (showing worktree only when it differs from branch) while keeping description single-line.

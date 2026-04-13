@@ -239,9 +239,8 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()
-        if result, let surface {
-            ghostty_surface_set_focus(surface, true)
-            GhosttyAppManager.shared.focusedSurface = surface
+        if result {
+            markAsActiveSurface()
             onBecomeFirstResponder?()
         }
         return result
@@ -401,6 +400,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     @discardableResult
     private func sendKeyEvent(_ event: NSEvent, action: ghostty_input_action_e) -> Bool {
         guard let surface else { return false }
+        markAsActiveSurface()
 
         let mods = Self.ghosttyMods(event.modifierFlags)
         let keycode = UInt32(event.keyCode)
@@ -587,6 +587,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        markAsActiveSurface()
         sendMousePos(event)
         refreshHoveredLink(at: convert(event.locationInWindow, from: nil))
         pendingCommandClick = shouldAttemptCommandLinkOpen(with: event)
@@ -676,6 +677,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     }
 
     override public func otherMouseDown(with event: NSEvent) {
+        markAsActiveSurface()
         sendMousePos(event)
         refreshHoveredLink(at: convert(event.locationInWindow, from: nil))
         guard let surface else { return }
@@ -715,6 +717,14 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         let x = pos.x
         let y = bounds.height - pos.y
         ghostty_surface_mouse_pos(surface, x, y, mods)
+    }
+
+    /// Keeps Ghostty's global surface routing aligned with the surface currently
+    /// receiving input, even when AppKit does not re-run responder callbacks.
+    public func markAsActiveSurface() {
+        guard let surface else { return }
+        ghostty_surface_set_focus(surface, true)
+        GhosttyAppManager.shared.focusedSurface = surface
     }
 
     private func shouldAttemptCommandLinkOpen(with event: NSEvent) -> Bool {

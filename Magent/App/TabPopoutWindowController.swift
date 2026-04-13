@@ -228,6 +228,10 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
+        if let terminalView {
+            _ = window?.makeFirstResponder(terminalView)
+            terminalView.markAsActiveSurface()
+        }
         NotificationCenter.default.post(
             name: .magentFocusedThreadContextChanged,
             object: self,

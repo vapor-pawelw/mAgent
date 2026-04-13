@@ -137,6 +137,7 @@ public final class GhosttyAppManager {
     /// so bracketed-paste behavior matches normal Cmd+V.
     public func pasteText(_ text: String, on surface: ghostty_surface_t?) -> Bool {
         guard let surface, !text.isEmpty else { return false }
+        focusedSurface = surface
         pendingSyntheticPasteText = text
         let action = "paste_from_clipboard"
         let handled = action.withCString { ptr in
@@ -221,7 +222,13 @@ public final class GhosttyAppManager {
         applyEmbeddedPreferences(embeddedPreferences, effectiveAppearance: effectiveAppearance)
     }
 
-    public func openURL(_ urlString: String) {
+    public func openURL(_ urlString: String, sourceSurfaceAddress: Int? = nil) {
+        if let sourceSurfaceAddress,
+           let sourceSurface = registeredSurfaces[sourceSurfaceAddress],
+           let surfaceView = terminalSurfaceView(for: sourceSurface) {
+            surfaceView.handleResolvedURLString(urlString)
+            return
+        }
         if let surface = focusedSurface,
            let surfaceView = terminalSurfaceView(for: surface) {
             surfaceView.handleResolvedURLString(urlString)
@@ -487,8 +494,14 @@ private func ghosttyActionCallback(
             action.action.open_url.url,
             length: Int(action.action.open_url.len)
         ) ?? ""
+        let sourceSurfaceAddress: Int?
+        if target.tag == GHOSTTY_TARGET_SURFACE {
+            sourceSurfaceAddress = Int(bitPattern: target.target.surface)
+        } else {
+            sourceSurfaceAddress = nil
+        }
         DispatchQueue.main.async {
-            GhosttyAppManager.shared.openURL(openedURL)
+            GhosttyAppManager.shared.openURL(openedURL, sourceSurfaceAddress: sourceSurfaceAddress)
         }
         return true
     case GHOSTTY_ACTION_SCROLLBAR:

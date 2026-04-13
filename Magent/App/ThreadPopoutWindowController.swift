@@ -233,6 +233,7 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             ]
         )
         detailVC.focusCurrentTabForNavigation()
+        detailVC.currentTerminalView()?.markAsActiveSurface()
         markThreadCompletionSeenIfFocused()
     }
 
