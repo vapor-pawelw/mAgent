@@ -201,6 +201,7 @@ final class DiffPanelView: NSView {
     private var worktreePath: String?
     private var hasMoreCommits = false
     private var forceVisible = false
+    private var contextThreadIndicatorText: String?
 
     // MARK: - Collapse state
     private static let collapsedKey = "DiffPanelView.collapsed"
@@ -943,6 +944,8 @@ final class DiffPanelView: NSView {
         forceVisible = false
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         commitsTabButton.isHidden = true
+        contextThreadIndicatorText = nil
+        commitContextLabel.stringValue = ""
         commitContextLabel.isHidden = true
         branchInfoLabel.isHidden = true
         baseLineStack.isHidden = true
@@ -989,7 +992,7 @@ final class DiffPanelView: NSView {
     }
 
     private func rebuildCommitsRows() {
-        commitContextLabel.isHidden = true
+        updateContextThreadIndicatorVisibility()
         // "Uncommitted" row — only shown when there are uncommitted changes
         if !uncommittedEntries.isEmpty {
             let uncommittedRow = makeUncommittedRow()
@@ -1021,7 +1024,7 @@ final class DiffPanelView: NSView {
     }
 
     private func rebuildChangesRows() {
-        commitContextLabel.isHidden = true
+        updateContextThreadIndicatorVisibility()
 
         if allBranchEntries == nil {
             if !isLoadingAllChanges {
@@ -1126,7 +1129,6 @@ final class DiffPanelView: NSView {
     @objc private func commitsTabTapped() {
         guard activeTab != .commits else { return }
         activeTab = .commits
-        commitContextLabel.isHidden = true
         selectedFilePath = nil
         updateTabTitles()
         rebuildRows()
@@ -1158,6 +1160,17 @@ final class DiffPanelView: NSView {
             : "Refresh git status, branch, commits, and changes"
     }
 
+    func setContextThreadIndicator(_ text: String?) {
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        contextThreadIndicatorText = (trimmed?.isEmpty == false) ? trimmed : nil
+        commitContextLabel.stringValue = contextThreadIndicatorText ?? ""
+        updateContextThreadIndicatorVisibility()
+    }
+
+    func clearContextThreadIndicator() {
+        setContextThreadIndicator(nil)
+    }
+
     // MARK: - Commit Detail Mode
 
     func enterCommitDetailMode(hash: String?, title: String, entries: [FileDiffEntry]) {
@@ -1169,7 +1182,7 @@ final class DiffPanelView: NSView {
 
         tabBarStack.isHidden = true
         infoButton.isHidden = true
-        commitContextLabel.isHidden = true
+        updateContextThreadIndicatorVisibility()
         commitDetailHeaderView.isHidden = false
 
         rebuildRows()
@@ -1193,6 +1206,10 @@ final class DiffPanelView: NSView {
         commitDetailHeaderView.isHidden = true
         tabBarStack.isHidden = false
         // infoButton visibility is restored by updateTabTitles()
+    }
+
+    private func updateContextThreadIndicatorVisibility() {
+        commitContextLabel.isHidden = contextThreadIndicatorText == nil
     }
 
     private func rebuildCommitDetailRows() {

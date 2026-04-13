@@ -4,7 +4,7 @@ This doc covers thread pop-out windows and detached terminal tabs.
 
 ## User-facing behavior
 
-- A non-main thread can be opened in a separate window while remaining selected in the main sidebar.
+- A non-main thread can be opened in a separate window while keeping the main-window thread selection independent.
 - Individual terminal tabs can be detached into their own windows and later returned to the parent thread.
 - Detached sessions stay protected from idle eviction and manual session cleanup while visible in a pop-out window.
 - Pop-out window state is persisted across app relaunch. Reopened detached tabs should reconnect to the same live tmux session instead of showing an empty placeholder.
@@ -15,6 +15,9 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - The strip uses sidebar-like state language: the bottom separator line carries completion/waiting/rate-limit/busy state; busy is shown only via separator animation (no trailing spinner).
 - Rate-limit state in the strip uses agent-specific glyphs (Claude/Codex) with the same color semantics as sidebar badges (red for direct, orange for propagated-only), not generic hourglass symbols.
 - Trailing strip accessories are limited to rate-limit/waiting indicator, keep-alive, favorite, and pinned badges.
+- Clicking a popped-out thread row in the sidebar is focus-only: Magent brings that pop-out window to front, focuses its active/recent tab, and pulses the row in place. It does not switch main-window content.
+- Popped-out rows are visually persistent in the sidebar (purple + pop-out icon) and use a 2pt capsule border to match the selected-row weight.
+- Thread rows that are not already popped out show a dedicated pop-out action button in the trailing row controls (before archive).
 
 ## Implementation notes
 
@@ -25,6 +28,7 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Persist pop-out state on structural changes (`pop out`, `return`, `detach`, `reattach`) and on window frame changes. Saving only during app termination is not enough if the user restarts from a crash, force-quit, or any path that bypasses orderly shutdown.
 - During app termination, pop-out windows must not "return to main" as part of their normal close handlers before state is saved. That shutdown path can wipe `popout-windows.json` and make relaunch restore look broken even when launch-time restore is correct.
 - Do not focus pop-out windows on generic `.magentNavigateToThread` notifications. Those events are shared across multiple UI flows (status bar, sidebar jumps, etc.); pop-out windows should only come front when the user explicitly opens/reveals them.
+- Main-window `activeThreadId` is for main content routing only. Popped-out threads should not become the main active thread through sidebar selection/navigation paths.
 
 ## Relevant files
 

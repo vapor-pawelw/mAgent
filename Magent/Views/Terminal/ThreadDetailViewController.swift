@@ -898,6 +898,12 @@ final class ThreadDetailViewController: NSViewController {
         return tabSlots[currentTabIndex]
     }
 
+    func focusCurrentTabForNavigation() {
+        guard !tabSlots.isEmpty else { return }
+        let index = min(max(currentTabIndex, 0), tabSlots.count - 1)
+        selectTab(at: index)
+    }
+
     /// Look up a terminal view by tmux session name (not display index).
     func terminalView(forSession name: String) -> TerminalSurfaceView? {
         guard let idx = thread.tmuxSessionNames.firstIndex(of: name) else { return nil }
@@ -1007,6 +1013,9 @@ final class ThreadDetailViewController: NSViewController {
     private func configureTerminalViewHandlers(_ view: TerminalSurfaceView, sessionName: String) {
         view.onCopy = { [sessionName = sessionName] in
             Task { await TmuxService.shared.copySelectionToClipboard(sessionName: sessionName) }
+        }
+        view.onBecomeFirstResponder = { [weak self] in
+            self?.postFocusedThreadContextChangedIfKeyWindow()
         }
         view.onSubmitLine = { [weak self, sessionName = sessionName] line in
             Task { @MainActor [weak self] in
@@ -1121,6 +1130,15 @@ final class ThreadDetailViewController: NSViewController {
         let ensureTerminalFeatures = TmuxService.ensureTerminalFeaturesShellCommand()
         let tmuxInner = "tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \(quotedWd) \(quotedStartCmd) && { \(ensureTerminalFeatures); } && tmux attach-session -t \(sessionName); }"
         return "/bin/sh -c \(sq(tmuxInner))"
+    }
+
+    func postFocusedThreadContextChangedIfKeyWindow() {
+        guard view.window?.isKeyWindow == true else { return }
+        NotificationCenter.default.post(
+            name: .magentFocusedThreadContextChanged,
+            object: self,
+            userInfo: ["threadId": thread.id]
+        )
     }
 
     /// Handles `magentTabWillClose` posted by `removeTabBySessionName` immediately before

@@ -2193,6 +2193,9 @@ extension Notification.Name {
     static let magentTabDetached = Notification.Name("magentTabDetached")
     /// Posted to request popping out a specific thread. Carries "threadId" (UUID).
     static let magentPopOutThreadRequested = Notification.Name("magentPopOutThreadRequested")
+    /// Posted when terminal/web/draft focus indicates the thread whose changes context
+    /// should be shown in the sidebar diff panel. Carries "threadId" (UUID).
+    static let magentFocusedThreadContextChanged = Notification.Name("magentFocusedThreadContextChanged")
 }
 
 // MARK: - Errors

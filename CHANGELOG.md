@@ -8,9 +8,12 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
 - Threads opened in separate windows now use a subtle purple row tint and a more prominent trailing window icon in the sidebar.
+- Popped-out thread rows now use a stronger purple highlight with a 2pt border and keep their row pulse/centering behavior on sidebar click-to-focus.
+- Added a per-thread pop-out button in each non-popped-out row's trailing actions (before archive) for one-click move to a separate window.
 
 #### Bug Fixes
 - Fixed launch-time thread navigation so the selected thread is centered only after the sidebar has fully loaded and laid out, avoiding premature scroll jumps during startup.
+- Fixed sidebar interaction with popped-out threads so clicking their rows now focuses the pop-out window without changing main-window content/selection.
 
 ### Settings
 #### Bug Fixes
@@ -49,6 +52,19 @@ All notable changes to this project will be documented in this file.
 - Focusing a thread now clears unread completion state immediately, even if the thread was already selected or its separate window was already focused when the agent finished.
 - Separate thread and detached-tab windows now persist their latest size and position continuously, so app restart restores the same extracted windows in the same place.
 - Fixed separate-window quit/relaunch restore so popped-out thread windows stay popped out across normal app restart instead of collapsing back into the main window.
+- Fixed main-window content replacement when popping out the currently visible thread by switching main focus to another non-popped-out thread instead of showing a detached placeholder.
+
+### Changes Panel
+#### Features
+- Changes/commits panel context now follows the currently focused thread tab/session (including pop-out windows) instead of strictly following main sidebar selection.
+- Added a context label when the panel is showing a non-selected thread, including a `(Pop-out)` suffix for separate-window context.
+
+#### Bug Fixes
+- Fixed refresh/load/commit-selection guards in the changes panel to use focused context thread state, preventing stale updates when main selection differs from focused pop-out thread.
+
+### CLI
+#### Bug Fixes
+- Documented `create-thread --select` semantics for popped-out targets: selection now focuses the pop-out window instead of replacing main-window content.
 ## 1.5.4 - 2026-04-10
 
 

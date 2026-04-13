@@ -29,6 +29,8 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     public var onSubmitLine: ((String) -> Void)?
     /// Called after the user scrolls the terminal surface.
     public var onScroll: (() -> Void)?
+    /// Called when the terminal surface becomes first responder.
+    public var onBecomeFirstResponder: (() -> Void)?
     /// When true, the surface is preserved when the view is removed from its window
     /// (e.g. when cached for reuse across thread switches). The flag is automatically
     /// cleared once the view re-attaches to a window.
@@ -240,6 +242,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         if result, let surface {
             ghostty_surface_set_focus(surface, true)
             GhosttyAppManager.shared.focusedSurface = surface
+            onBecomeFirstResponder?()
         }
         return result
     }

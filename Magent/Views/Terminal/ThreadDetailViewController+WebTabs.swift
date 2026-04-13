@@ -229,6 +229,7 @@ extension ThreadDetailViewController {
 
         currentTabIndex = displayIndex
         activeWebTabId = identifier
+        postFocusedThreadContextChangedIfKeyWindow()
 
         if thread.lastSelectedTabIdentifier != identifier {
             thread.lastSelectedTabIdentifier = identifier

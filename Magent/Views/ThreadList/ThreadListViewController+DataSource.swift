@@ -658,11 +658,30 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             }
             return false
         }
-        if let itemThread = item as? MagentThread,
-           resolvedThreadSnapshot(for: itemThread).isArchiving {
-            return false
+        if let itemThread = item as? MagentThread {
+            let thread = resolvedThreadSnapshot(for: itemThread)
+            let eventType = NSApp.currentEvent?.type
+            let isMouseSelectionEvent = eventType == .leftMouseDown || eventType == .leftMouseUp
+            if thread.isArchiving {
+                return false
+            }
+            if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
+                if isMouseSelectionEvent {
+                    PopoutWindowManager.shared.bringToFront(threadId: thread.id)
+                    centerAndPulseThreadRow(byId: thread.id)
+                    setDiffInspectionContext(threadId: thread.id, isPopoutContext: true)
+                }
+                return false
+            }
+            if selectedThreadID == thread.id {
+                if isMouseSelectionEvent {
+                    delegate?.threadList(self, didSelectThread: thread)
+                }
+                return false
+            }
+            return true
         }
-        return item is MagentThread
+        return false
     }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
@@ -1096,6 +1115,13 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.onArchive = { [weak self] in
                 self?.triggerArchive(for: thread)
             }
+            cell.onPopOut = {
+                NotificationCenter.default.post(
+                    name: .magentPopOutThreadRequested,
+                    object: nil,
+                    userInfo: ["threadId": thread.id]
+                )
+            }
             return cell
         }
 
@@ -1158,7 +1184,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             // selection after a structural reload). Preserve the active tab and commit selection.
             // resetPagination:false keeps the previously-loaded commit range intact so the
             // selected commit doesn't fall off the list.
-            refreshDiffPanel(for: resolved, resetPagination: false, preserveSelection: true)
+            let context = diffInspectionThreadFromState() ?? resolved
+            refreshDiffPanel(for: context, resetPagination: false, preserveSelection: true)
         }
     }
 }
@@ -1232,14 +1259,14 @@ extension ThreadListViewController: ThreadManagerDelegate {
         // After a structural reload, outlineViewSelectionDidChange is suppressed (isReloadingData),
         // so we must explicitly refresh the diff panel here — with preserveSelection:true so the
         // active tab and selected commit are not reset by the background refresh.
-        if let selected = selectedThreadFromState() {
-            refreshBranchMismatchView(for: selected)
+        if let contextThread = diffInspectionThreadFromState() {
+            refreshBranchMismatchView(for: contextThread)
             if didStructuralReload {
                 // resetPagination:false preserves the currently-loaded commit count so a
                 // structural reload doesn't shrink the list and lose the selected commit hash.
-                refreshDiffPanel(for: selected, resetPagination: false, preserveSelection: true)
+                refreshDiffPanel(for: contextThread, resetPagination: false, preserveSelection: true)
             } else {
-                refreshDiffPanelContext(for: selected)
+                refreshDiffPanelContext(for: contextThread)
             }
         } else if outlineView.selectedRow < 0 {
             clearSelectedThreadState()

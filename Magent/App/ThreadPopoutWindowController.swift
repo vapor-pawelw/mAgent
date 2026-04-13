@@ -220,6 +220,7 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowDidBecomeKey(_ notification: Notification) {
+        detailVC.focusCurrentTabForNavigation()
         markThreadCompletionSeenIfFocused()
     }
 
@@ -260,6 +261,10 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
     private func markThreadCompletionSeenIfFocused() {
         guard window?.isKeyWindow == true else { return }
         ThreadManager.shared.markThreadCompletionSeen(threadId: threadId)
+    }
+
+    func focusCurrentTabForNavigation() {
+        detailVC.focusCurrentTabForNavigation()
     }
 }
 
