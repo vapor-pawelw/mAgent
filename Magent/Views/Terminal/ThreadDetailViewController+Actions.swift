@@ -921,6 +921,8 @@ extension ThreadDetailViewController {
     /// Keyboard entry point for detaching the current tab (Cmd+Shift+D).
     /// Full implementation wired by the parallel popout-integration agent.
     func detachCurrentTabFromKeyboard() {
+        let settings = PersistenceService.shared.loadSettings()
+        guard settings.isTabDetachFeatureEnabled else { return }
         let index = currentTabIndex
         guard index >= 0, index < tabSlots.count else { return }
         guard case .terminal = tabSlots[index] else { return }
@@ -930,6 +932,8 @@ extension ThreadDetailViewController {
     /// Detach a terminal tab at the given index into a separate pop-out window.
     /// Stores the terminal view in cache, shows a placeholder, and creates the pop-out.
     func detachTab(at index: Int) {
+        let settings = PersistenceService.shared.loadSettings()
+        guard settings.isTabDetachFeatureEnabled else { return }
         guard index >= 0, index < tabSlots.count else { return }
         guard case .terminal(let sessionName) = tabSlots[index] else { return }
         guard let terminalIndex = thread.tmuxSessionNames.firstIndex(of: sessionName),

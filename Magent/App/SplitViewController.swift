@@ -239,6 +239,8 @@ final class SplitViewController: NSSplitViewController {
             return nil
         }
         if matchesBinding(.detachTab, keyCode: event.keyCode, modifiers: eventModifiers) {
+            let settings = PersistenceService.shared.loadSettings()
+            guard settings.isTabDetachFeatureEnabled else { return nil }
             _ = performDetachTabShortcut(contextThreadId: nil)
             return nil
         }
@@ -370,6 +372,9 @@ final class SplitViewController: NSSplitViewController {
 
     @discardableResult
     func performDetachTabShortcut(contextThreadId: UUID?) -> Bool {
+        let settings = PersistenceService.shared.loadSettings()
+        guard settings.isTabDetachFeatureEnabled else { return false }
+
         if let threadId = contextThreadId {
             if let controller = PopoutWindowManager.shared.threadWindows[threadId] {
                 controller.detailVC.detachCurrentTabFromKeyboard()

@@ -178,7 +178,8 @@ final class SettingsGeneralViewController: NSViewController {
         keybindsGrid.columnSpacing = 12
         keybindsGrid.translatesAutoresizingMaskIntoConstraints = false
 
-        for action in KeyBindingAction.allCases {
+        for action in KeyBindingAction.allCases where action != .detachTab || settings.isTabDetachFeatureEnabled {
+            // Keep Detach Tab hidden unless the debug experimental toggle is enabled.
             let binding = settings.keyBindings.binding(for: action)
 
             let nameLabel = NSTextField(labelWithString: action.displayName)

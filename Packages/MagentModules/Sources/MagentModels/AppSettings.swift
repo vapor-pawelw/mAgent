@@ -141,6 +141,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var aiRenameIcon: Bool
     public var aiRenameDescription: Bool
     public var aiRenameBranch: Bool
+    public var experimentalEnableTabDetach: Bool
     public var keyBindings: KeyBindingSettings
 
     public init(
@@ -200,6 +201,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         aiRenameIcon: Bool = true,
         aiRenameDescription: Bool = true,
         aiRenameBranch: Bool = true,
+        experimentalEnableTabDetach: Bool = false,
         keyBindings: KeyBindingSettings = KeyBindingSettings()
     ) {
         self.projects = projects
@@ -258,6 +260,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.aiRenameIcon = aiRenameIcon
         self.aiRenameDescription = aiRenameDescription
         self.aiRenameBranch = aiRenameBranch
+        self.experimentalEnableTabDetach = experimentalEnableTabDetach
         self.keyBindings = keyBindings
     }
 
@@ -322,6 +325,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         aiRenameIcon = try container.decodeIfPresent(Bool.self, forKey: .aiRenameIcon) ?? true
         aiRenameDescription = try container.decodeIfPresent(Bool.self, forKey: .aiRenameDescription) ?? true
         aiRenameBranch = try container.decodeIfPresent(Bool.self, forKey: .aiRenameBranch) ?? true
+        experimentalEnableTabDetach = try container.decodeIfPresent(Bool.self, forKey: .experimentalEnableTabDetach) ?? false
         keyBindings = try container.decodeIfPresent(KeyBindingSettings.self, forKey: .keyBindings) ?? KeyBindingSettings()
     }
 
@@ -384,6 +388,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(aiRenameIcon, forKey: .aiRenameIcon)
         try container.encode(aiRenameDescription, forKey: .aiRenameDescription)
         try container.encode(aiRenameBranch, forKey: .aiRenameBranch)
+        try container.encode(experimentalEnableTabDetach, forKey: .experimentalEnableTabDetach)
         try container.encode(keyBindings, forKey: .keyBindings)
     }
 
@@ -442,6 +447,14 @@ public nonisolated struct AppSettings: Codable, Sendable {
 
     public var sidebarDescriptionLineLimit: Int {
         narrowThreads ? 1 : 2
+    }
+
+    public var isTabDetachFeatureEnabled: Bool {
+#if DEBUG
+        experimentalEnableTabDetach
+#else
+        false
+#endif
     }
 
     public var availableActiveAgents: [AgentType] {
@@ -557,6 +570,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case aiRenameIcon
         case aiRenameDescription
         case aiRenameBranch
+        case experimentalEnableTabDetach
         case keyBindings
 
         // Legacy keys kept for migration.

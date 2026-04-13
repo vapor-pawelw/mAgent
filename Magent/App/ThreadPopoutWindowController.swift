@@ -136,10 +136,11 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             return nil
         }
 
-        // Cmd+Shift+D → detach current tab
         let detachBinding = bindings.binding(for: .detachTab)
         if event.keyCode == detachBinding.keyCode
             && flags == detachBinding.modifiers.nsEventFlags {
+            let settings = PersistenceService.shared.loadSettings()
+            guard settings.isTabDetachFeatureEnabled else { return nil }
             detailVC.detachCurrentTabFromKeyboard()
             return nil
         }

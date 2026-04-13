@@ -5,6 +5,7 @@ import MagentCore
 final class SettingsDebugViewController: NSViewController {
 
     private let persistence = PersistenceService.shared
+    private var enableTabDetachCheckbox: NSButton?
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
@@ -59,6 +60,22 @@ final class SettingsDebugViewController: NSViewController {
         )
         showWhatsNewButton.bezelStyle = .rounded
         changelogSection.addArrangedSubview(showWhatsNewButton)
+
+        let (experimentalCard, experimentalSection) = createSectionCard(
+            title: "Experimental",
+            description: "Debug builds only. Features in this section are disabled by default."
+        )
+        stackView.addArrangedSubview(experimentalCard)
+
+        let settings = persistence.loadSettings()
+        let checkbox = NSButton(
+            checkboxWithTitle: "Enable tab detaching",
+            target: self,
+            action: #selector(enableTabDetachToggled)
+        )
+        checkbox.state = settings.experimentalEnableTabDetach ? .on : .off
+        experimentalSection.addArrangedSubview(checkbox)
+        enableTabDetachCheckbox = checkbox
 
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
@@ -123,6 +140,14 @@ final class SettingsDebugViewController: NSViewController {
                 message: "No matching section for version \(version) was found in bundled CHANGELOG.md."
             )
         }
+    }
+
+    @objc private func enableTabDetachToggled() {
+        guard let enableTabDetachCheckbox else { return }
+        var settings = persistence.loadSettings()
+        settings.experimentalEnableTabDetach = enableTabDetachCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
     }
 
     private func relaunchApp() {

@@ -378,6 +378,7 @@ extension ThreadDetailViewController {
 
     func rebindAllTabActions() {
         let settings = PersistenceService.shared.loadSettings()
+        let isTabDetachEnabled = settings.isTabDetachFeatureEnabled
         let count = tabItems.count
 
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
@@ -419,7 +420,9 @@ extension ThreadDetailViewController {
                     let resumeID = threadManager.conversationID(for: thread.id, sessionName: sessionName)
                     let isForwardedContinuation = thread.forwardedTmuxSessions.contains(sessionName)
                     item.isDetached = PopoutWindowManager.shared.isTabDetached(sessionName: sessionName)
-                    item.onDetach = { [weak self] in self?.detachTab(at: i) }
+                    // Tab detaching is production-disabled and can be enabled only via
+                    // the debug Experimental setting.
+                    item.onDetach = isTabDetachEnabled ? { [weak self] in self?.detachTab(at: i) } : nil
                     item.onShowDetachedWindow = {
                         PopoutWindowManager.shared.bringToFront(sessionName: sessionName)
                     }

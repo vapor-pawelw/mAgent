@@ -447,6 +447,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             returnItem.target = self
             menu.addItem(returnItem)
         } else if onDetach != nil {
+            // The detach action is exposed only when the feature is enabled upstream.
+            // Production keeps this disabled; debug can opt in via Experimental settings.
             let detachItem = NSMenuItem(title: "Detach Tab", action: #selector(detachTabTapped), keyEquivalent: "")
             detachItem.image = NSImage(systemSymbolName: "rectangle.on.rectangle", accessibilityDescription: nil)
             detachItem.target = self
