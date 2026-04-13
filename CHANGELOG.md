@@ -19,6 +19,10 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Fixed `Settings > General > Links` preference persistence. "Open web links in" now stays on the selected value after relaunch instead of reverting.
 
+### Terminal
+#### Bug Fixes
+- Suppressed right-click context menus inside embedded terminal surfaces. Right-click is now swallowed so neither Ghostty's native menu nor AppKit fallback menus appear over terminal content.
+
 ### Web Tab
 #### Bug Fixes
 - Fixed host:port URL parsing in the in-app web view address bar. Entries like `localhost:3000/docs#api` now open as HTTP(S) URLs and preserve query/fragment anchors.

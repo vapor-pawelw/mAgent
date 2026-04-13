@@ -662,21 +662,13 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     }
 
     override public func rightMouseDown(with event: NSEvent) {
-        guard let surface else { return super.rightMouseDown(with: event) }
         sendMousePos(event)
-        let mods = Self.ghosttyMods(event.modifierFlags)
-        if !ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, mods) {
-            super.rightMouseDown(with: event)
-        }
+        // Intentionally swallow right-click in the embedded terminal to avoid
+        // showing either Ghostty's native context menu or AppKit fallback menus.
     }
 
     override public func rightMouseUp(with event: NSEvent) {
-        guard let surface else { return super.rightMouseUp(with: event) }
         sendMousePos(event)
-        let mods = Self.ghosttyMods(event.modifierFlags)
-        if !ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, mods) {
-            super.rightMouseUp(with: event)
-        }
     }
 
     override public func rightMouseDragged(with event: NSEvent) {
