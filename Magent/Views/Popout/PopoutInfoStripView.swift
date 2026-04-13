@@ -16,6 +16,9 @@ final class PopoutInfoStripView: NSView {
     private let favoriteIndicator = NSImageView()
     private let pinnedIndicator = NSImageView()
     private let bottomBorder = NSView()
+    private var descriptionTopConstraint: NSLayoutConstraint?
+    private var descriptionCenterYConstraint: NSLayoutConstraint?
+    private var secondLineTopConstraint: NSLayoutConstraint?
     private var busyBorderGradientLayer: CAGradientLayer?
     private var currentThreadId: UUID?
     private var currentSessionName: String?
@@ -92,6 +95,13 @@ final class PopoutInfoStripView: NSView {
         bottomBorder.wantsLayer = true
         addSubview(bottomBorder)
 
+        let descriptionTop = descriptionLabel.topAnchor.constraint(equalTo: topAnchor, constant: 6)
+        let descriptionCenterY = descriptionLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
+        let secondLineTop = secondLineStack.topAnchor.constraint(equalTo: descriptionLabel.bottomAnchor, constant: 2)
+        descriptionTopConstraint = descriptionTop
+        descriptionCenterYConstraint = descriptionCenterY
+        secondLineTopConstraint = secondLineTop
+
         NSLayoutConstraint.activate([
             // Line 1
             threadIconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
@@ -100,7 +110,7 @@ final class PopoutInfoStripView: NSView {
             threadIconView.heightAnchor.constraint(equalToConstant: 16),
 
             descriptionLabel.leadingAnchor.constraint(equalTo: threadIconView.trailingAnchor, constant: 6),
-            descriptionLabel.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            descriptionTop,
             descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAccessoryStack.leadingAnchor, constant: -8),
 
             trailingAccessoryStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -117,7 +127,7 @@ final class PopoutInfoStripView: NSView {
 
             // Line 2
             secondLineStack.leadingAnchor.constraint(equalTo: descriptionLabel.leadingAnchor),
-            secondLineStack.topAnchor.constraint(equalTo: descriptionLabel.bottomAnchor, constant: 2),
+            secondLineTop,
             secondLineStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAccessoryStack.leadingAnchor, constant: -8),
 
             dirtyDot.widthAnchor.constraint(equalToConstant: 7),
@@ -129,6 +139,9 @@ final class PopoutInfoStripView: NSView {
             bottomBorder.bottomAnchor.constraint(equalTo: bottomAnchor),
             bottomBorder.heightAnchor.constraint(equalToConstant: 1),
         ])
+
+        // Default to two-line layout; single-line mode is enabled dynamically.
+        descriptionCenterY.isActive = false
     }
 
     override func updateLayer() {
@@ -217,6 +230,7 @@ final class PopoutInfoStripView: NSView {
             branchLabel.stringValue = branch
             branchLabel.isHidden = branch.isEmpty
             dirtyDot.isHidden = branch.isEmpty || !thread.isDirty
+            updateLineLayout(hasSecondLine: !branch.isEmpty)
             return
         }
 
@@ -240,6 +254,7 @@ final class PopoutInfoStripView: NSView {
             branchLabel.stringValue = branchWorktreeParts.joined(separator: "  ·  ")
             branchLabel.isHidden = false
             dirtyDot.isHidden = !thread.isDirty
+            updateLineLayout(hasSecondLine: true)
         } else {
             if let tabPrefix {
                 descriptionLabel.stringValue = "\(tabPrefix) — \(resolvedBranchName)"
@@ -250,12 +265,21 @@ final class PopoutInfoStripView: NSView {
                 branchLabel.stringValue = worktreeName
                 branchLabel.isHidden = false
                 dirtyDot.isHidden = !thread.isDirty
+                updateLineLayout(hasSecondLine: true)
             } else {
                 branchLabel.stringValue = ""
                 branchLabel.isHidden = true
                 dirtyDot.isHidden = true
+                updateLineLayout(hasSecondLine: false)
             }
         }
+    }
+
+    private func updateLineLayout(hasSecondLine: Bool) {
+        secondLineStack.isHidden = !hasSecondLine
+        descriptionTopConstraint?.isActive = hasSecondLine
+        secondLineTopConstraint?.isActive = hasSecondLine
+        descriptionCenterYConstraint?.isActive = !hasSecondLine
     }
 
     private func updateThreadIconTint(thread: MagentThread) {

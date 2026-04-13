@@ -1115,13 +1115,6 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.onArchive = { [weak self] in
                 self?.triggerArchive(for: thread)
             }
-            cell.onPopOut = {
-                NotificationCenter.default.post(
-                    name: .magentPopOutThreadRequested,
-                    object: nil,
-                    userInfo: ["threadId": thread.id]
-                )
-            }
             return cell
         }
 

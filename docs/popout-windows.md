@@ -17,7 +17,6 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Trailing strip accessories are limited to rate-limit/waiting indicator, keep-alive, favorite, and pinned badges.
 - Clicking a popped-out thread row in the sidebar is focus-only: Magent brings that pop-out window to front, focuses its active/recent tab, and pulses the row in place. It does not switch main-window content.
 - Popped-out rows are visually persistent in the sidebar (purple + pop-out icon) and use a 2pt capsule border to match the selected-row weight.
-- Thread rows that are not already popped out show a dedicated pop-out action button in the trailing row controls (before archive).
 - The thread top bar (above the terminal) also includes a pop-out button next to Archive in the main window thread view.
 - That top-bar pop-out button is hidden for the main thread, hidden in pop-out windows themselves, and hidden when the thread is already popped out.
 
@@ -30,6 +29,7 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Persist pop-out state on structural changes (`pop out`, `return`, `detach`, `reattach`) and on window frame changes. Saving only during app termination is not enough if the user restarts from a crash, force-quit, or any path that bypasses orderly shutdown.
 - During app termination, pop-out windows must not "return to main" as part of their normal close handlers before state is saved. That shutdown path can wipe `popout-windows.json` and make relaunch restore look broken even when launch-time restore is correct.
 - Do not focus pop-out windows on generic `.magentNavigateToThread` notifications. Those events are shared across multiple UI flows (status bar, sidebar jumps, etc.); pop-out windows should only come front when the user explicitly opens/reveals them.
+- "Reveal without focus" paths (restore/reopen/app-activation recovery) must not use focus-stealing APIs (`showWindow`, `orderFrontRegardless`, `makeKeyAndOrderFront`, `NSApp.activate`). Use non-focusing `orderFront` behavior and preserve the existing key window.
 - Main-window `activeThreadId` is for main content routing only. Popped-out threads should not become the main active thread through sidebar selection/navigation paths.
 - Context handoff between main and pop-out windows must be key-window-driven. Post `.magentFocusedThreadContextChanged` with explicit `isPopoutContext` on `windowDidBecomeKey`, and ignore responder-level callbacks from non-key pop-out windows to avoid random context switches.
 

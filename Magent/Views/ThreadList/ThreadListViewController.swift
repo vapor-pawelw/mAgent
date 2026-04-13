@@ -76,16 +76,6 @@ final class SidebarOutlineView: NSOutlineView {
                 return
             }
         }
-        if row >= 0,
-           let cell = view(atColumn: 0, row: row, makeIfNecessary: false) as? ThreadCell,
-           let popOutBtn = cell.popOutButton,
-           !popOutBtn.isHidden {
-            let btnLoc = popOutBtn.convert(loc, from: self)
-            if popOutBtn.bounds.contains(btnLoc) {
-                popOutBtn.sendAction(popOutBtn.action, to: popOutBtn.target)
-                return
-            }
-        }
         super.mouseDown(with: event)
     }
 
