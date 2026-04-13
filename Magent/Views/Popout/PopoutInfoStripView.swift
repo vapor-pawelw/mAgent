@@ -206,6 +206,20 @@ final class PopoutInfoStripView: NSView {
     }
 
     private func applySidebarStyleText(from thread: MagentThread, tabPrefix: String?) {
+        if thread.isMain {
+            let branch = thread.currentBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+            let mainLabel = "Main worktree"
+            if let tabPrefix {
+                descriptionLabel.stringValue = "\(tabPrefix) — \(mainLabel)"
+            } else {
+                descriptionLabel.stringValue = mainLabel
+            }
+            branchLabel.stringValue = branch
+            branchLabel.isHidden = branch.isEmpty
+            dirtyDot.isHidden = branch.isEmpty || !thread.isDirty
+            return
+        }
+
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
         let branchName = (thread.actualBranch ?? thread.branchName).trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
