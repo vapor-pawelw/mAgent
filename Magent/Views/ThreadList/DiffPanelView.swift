@@ -179,6 +179,7 @@ final class DiffPanelView: NSView {
     private let topRightButtonStack = NSStackView()
     private let refreshButton = NSButton()
     private let infoButton = NSButton()
+    private let contextThreadBadgeView = NSView()
     private let commitContextLabel = NSTextField(labelWithString: "")
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
@@ -348,14 +349,21 @@ final class DiffPanelView: NSView {
         topRightButtonStack.addArrangedSubview(infoButton)
         addSubview(topRightButtonStack)
 
-        // Commit context label — shown under tab bar when viewing a specific commit's changes
-        commitContextLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-        commitContextLabel.textColor = NSColor(resource: .textSecondary)
+        contextThreadBadgeView.wantsLayer = true
+        contextThreadBadgeView.layer?.cornerRadius = 5
+        contextThreadBadgeView.layer?.backgroundColor = NSColor.systemPurple.withAlphaComponent(0.92).cgColor
+        contextThreadBadgeView.translatesAutoresizingMaskIntoConstraints = false
+        contextThreadBadgeView.isHidden = true
+        addSubview(contextThreadBadgeView)
+
+        // Context badge label — highlights when diff panel shows a non-selected thread.
+        commitContextLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        commitContextLabel.textColor = .white
         commitContextLabel.lineBreakMode = .byTruncatingTail
         commitContextLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         commitContextLabel.translatesAutoresizingMaskIntoConstraints = false
         commitContextLabel.isHidden = true
-        addSubview(commitContextLabel)
+        contextThreadBadgeView.addSubview(commitContextLabel)
 
         // Stack view for file/commit entries
         stackView.orientation = .vertical
@@ -491,11 +499,16 @@ final class DiffPanelView: NSView {
             topRightButtonStack.centerYAnchor.constraint(equalTo: tabBarStack.centerYAnchor),
             topRightButtonStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
 
-            commitContextLabel.topAnchor.constraint(equalTo: tabBarStack.bottomAnchor, constant: 2),
-            commitContextLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            commitContextLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            contextThreadBadgeView.topAnchor.constraint(equalTo: tabBarStack.bottomAnchor, constant: 2),
+            contextThreadBadgeView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            contextThreadBadgeView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
 
-            scrollView.topAnchor.constraint(equalTo: commitContextLabel.bottomAnchor, constant: 2),
+            commitContextLabel.topAnchor.constraint(equalTo: contextThreadBadgeView.topAnchor, constant: 2),
+            commitContextLabel.leadingAnchor.constraint(equalTo: contextThreadBadgeView.leadingAnchor, constant: 8),
+            commitContextLabel.trailingAnchor.constraint(equalTo: contextThreadBadgeView.trailingAnchor, constant: -8),
+            commitContextLabel.bottomAnchor.constraint(equalTo: contextThreadBadgeView.bottomAnchor, constant: -2),
+
+            scrollView.topAnchor.constraint(equalTo: contextThreadBadgeView.bottomAnchor, constant: 2),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: branchInfoStack.topAnchor, constant: -4),
@@ -1209,7 +1222,9 @@ final class DiffPanelView: NSView {
     }
 
     private func updateContextThreadIndicatorVisibility() {
-        commitContextLabel.isHidden = contextThreadIndicatorText == nil
+        let isVisible = contextThreadIndicatorText != nil
+        contextThreadBadgeView.isHidden = !isVisible
+        commitContextLabel.isHidden = !isVisible
     }
 
     private func rebuildCommitDetailRows() {

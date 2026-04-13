@@ -113,6 +113,7 @@ final class ReusableTerminalViewCache {
 // MARK: - ThreadDetailViewController
 
 final class ThreadDetailViewController: NSViewController {
+    let isPopoutContext: Bool
     static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
     static let lastOpenedTabDefaultsKey = "MagentLastOpenedSessionName"
     static let promptTOCPositionDefaultsPrefix = "MagentPromptTOCPosition"
@@ -139,6 +140,7 @@ final class ThreadDetailViewController: NSViewController {
     let reviewButton = NSButton()
     let continueInButton = NSButton()
     let exportContextButton = NSButton()
+    let popOutThreadButton = NSButton()
     let terminalBannerOverlay = BannerOverlayView()
     let scrollOverlay = TerminalScrollOverlayView()
     let togglePromptTOCButton = NSButton()
@@ -243,7 +245,8 @@ final class ThreadDetailViewController: NSViewController {
     let prJiraSeparator = VerticalSeparatorView()
     let pinSeparator = VerticalSeparatorView()
 
-    init(thread: MagentThread, showsHeaderInfoStrip: Bool = true) {
+    init(thread: MagentThread, showsHeaderInfoStrip: Bool = true, isPopoutContext: Bool = false) {
+        self.isPopoutContext = isPopoutContext
         self.showsHeaderInfoStrip = showsHeaderInfoStrip
         self.thread = thread
         self.primaryTabIndex = thread.isMain ? -1 : 0
@@ -536,6 +539,16 @@ final class ThreadDetailViewController: NSViewController {
         archiveThreadButton.action = #selector(archiveThreadTapped)
         archiveThreadButton.isHidden = thread.isMain
 
+        popOutThreadButton.bezelStyle = .texturedRounded
+        popOutThreadButton.image = NSImage(
+            systemSymbolName: "macwindow.on.rectangle",
+            accessibilityDescription: "Open thread in separate window"
+        )
+        popOutThreadButton.target = self
+        popOutThreadButton.action = #selector(popOutThreadTapped)
+        popOutThreadButton.toolTip = "Open thread in separate window"
+        popOutThreadButton.isHidden = !shouldShowTopBarPopOutButton()
+
         reviewButton.bezelStyle = .texturedRounded
         reviewButton.image = NSImage(systemSymbolName: "text.magnifyingglass", accessibilityDescription: String(localized: .NotificationStrings.reviewChanges))
         reviewButton.target = self
@@ -589,8 +602,8 @@ final class ThreadDetailViewController: NSViewController {
         topBar.alignment = .centerY
         topBar.detachesHiddenViews = true
         topBar.translatesAutoresizingMaskIntoConstraints = false
-        // Review button next to add-tab, then tab bar, then PR/Jira, then utility buttons, then archive
-        for view in [addTabButton, reviewButton, continueInButton, tabBarStack, openPRButton, openInJiraButton, prJiraSeparator, openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, archiveThreadButton] as [NSView] {
+        // Review button next to add-tab, then tab bar, then PR/Jira, then utility buttons, then pop-out/archive.
+        for view in [addTabButton, reviewButton, continueInButton, tabBarStack, openPRButton, openInJiraButton, prJiraSeparator, openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, popOutThreadButton, archiveThreadButton] as [NSView] {
             topBar.addArrangedSubview(view)
         }
         let trailingTopBarSpacing: CGFloat = 8
@@ -604,6 +617,7 @@ final class ThreadDetailViewController: NSViewController {
             exportContextButton,
             resyncLocalPathsButton,
             archiveSeparator,
+            popOutThreadButton,
         ] as [NSView] {
             topBar.setCustomSpacing(trailingTopBarSpacing, after: view)
         }
@@ -1137,7 +1151,10 @@ final class ThreadDetailViewController: NSViewController {
         NotificationCenter.default.post(
             name: .magentFocusedThreadContextChanged,
             object: self,
-            userInfo: ["threadId": thread.id]
+            userInfo: [
+                "threadId": thread.id,
+                "isPopoutContext": isPopoutContext,
+            ]
         )
     }
 
@@ -1437,6 +1454,7 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     @objc private func handleThreadsDidChange() {
+        popOutThreadButton.isHidden = !shouldShowTopBarPopOutButton()
         refreshHeaderInfoStrip()
     }
 
@@ -1456,6 +1474,7 @@ final class ThreadDetailViewController: NSViewController {
             reloadTerminalViewsForUpdatedTerminalPreferences()
         }
         resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
+        popOutThreadButton.isHidden = !shouldShowTopBarPopOutButton()
         refreshOpenPRButtonIcon()
         refreshJiraButton()
         refreshOverlayVisibilitySettings()
@@ -1500,6 +1519,7 @@ final class ThreadDetailViewController: NSViewController {
             reviewButton,
             exportContextButton,
             resyncLocalPathsButton,
+            popOutThreadButton,
             archiveThreadButton,
         ]
     }
@@ -1526,6 +1546,10 @@ final class ThreadDetailViewController: NSViewController {
                 systemSymbolName: "arrow.triangle.2.circlepath",
                 accessibilityDescription: "Sync local-only files"
             )
+            popOutThreadButton.image = NSImage(
+                systemSymbolName: "macwindow.on.rectangle",
+                accessibilityDescription: "Open thread in separate window"
+            )
             addTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Tab")
             updatePromptTOCToggleButtonState(canShow: promptTOCCanShowForCurrentTab)
 
@@ -1543,6 +1567,12 @@ final class ThreadDetailViewController: NSViewController {
         guard isViewLoaded, showsHeaderInfoStrip else { return }
         let latest = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         headerInfoStrip.refresh(from: latest)
+    }
+
+    private func shouldShowTopBarPopOutButton() -> Bool {
+        guard showsHeaderInfoStrip else { return false }
+        guard !thread.isMain else { return false }
+        return !PopoutWindowManager.shared.isThreadPoppedOut(thread.id)
     }
 
     private func embeddedPreferences(for settings: AppSettings) -> GhosttyEmbeddedPreferences {

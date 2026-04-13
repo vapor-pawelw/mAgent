@@ -90,6 +90,17 @@ extension ThreadDetailViewController {
         }
     }
 
+    @objc func popOutThreadTapped() {
+        guard !thread.isMain else { return }
+        guard showsHeaderInfoStrip else { return }
+        guard !PopoutWindowManager.shared.isThreadPoppedOut(thread.id) else { return }
+        NotificationCenter.default.post(
+            name: .magentPopOutThreadRequested,
+            object: self,
+            userInfo: ["threadId": thread.id]
+        )
+    }
+
     @objc func resyncLocalPathsTapped() {
         let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         let settings = PersistenceService.shared.loadSettings()

@@ -15,7 +15,11 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
     init(thread: MagentThread, sourceWindow: NSWindow?) {
         self.threadId = thread.id
         self.infoStrip = PopoutInfoStripView()
-        self.detailVC = ThreadDetailViewController(thread: thread, showsHeaderInfoStrip: false)
+        self.detailVC = ThreadDetailViewController(
+            thread: thread,
+            showsHeaderInfoStrip: false,
+            isPopoutContext: true
+        )
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
@@ -220,6 +224,14 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowDidBecomeKey(_ notification: Notification) {
+        NotificationCenter.default.post(
+            name: .magentFocusedThreadContextChanged,
+            object: self,
+            userInfo: [
+                "threadId": threadId,
+                "isPopoutContext": true,
+            ]
+        )
         detailVC.focusCurrentTabForNavigation()
         markThreadCompletionSeenIfFocused()
     }

@@ -524,7 +524,10 @@ final class ThreadListViewController: NSViewController {
 
     @objc private func handleFocusedThreadContextChanged(_ notification: Notification) {
         guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
-        setDiffInspectionContext(threadId: threadId, isPopoutContext: PopoutWindowManager.shared.isThreadPoppedOut(threadId))
+        let explicitPopoutContext = notification.userInfo?["isPopoutContext"] as? Bool
+        let isPopoutContext = explicitPopoutContext
+            ?? PopoutWindowManager.shared.isThreadPoppedOut(threadId)
+        setDiffInspectionContext(threadId: threadId, isPopoutContext: isPopoutContext)
     }
 
     // MARK: - Outline View

@@ -121,11 +121,15 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
         view.onCopy = { [sessionName = sessionName] in
             Task { await TmuxService.shared.copySelectionToClipboard(sessionName: sessionName) }
         }
-        view.onBecomeFirstResponder = { [threadId] in
+        view.onBecomeFirstResponder = { [weak self, threadId] in
+            guard self?.window?.isKeyWindow == true else { return }
             NotificationCenter.default.post(
                 name: .magentFocusedThreadContextChanged,
                 object: nil,
-                userInfo: ["threadId": threadId]
+                userInfo: [
+                    "threadId": threadId,
+                    "isPopoutContext": true,
+                ]
             )
         }
         view.resolveTmuxMouseOpenableURL = { [sessionName = sessionName] in
@@ -221,6 +225,17 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
         guard !isReturningToThread else { return }
         guard !PopoutWindowManager.shared.isApplicationTerminating else { return }
         PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        NotificationCenter.default.post(
+            name: .magentFocusedThreadContextChanged,
+            object: self,
+            userInfo: [
+                "threadId": threadId,
+                "isPopoutContext": true,
+            ]
+        )
     }
 
     func windowDidMove(_ notification: Notification) {

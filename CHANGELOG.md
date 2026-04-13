@@ -44,12 +44,16 @@ All notable changes to this project will be documented in this file.
 - Fixed `favorites`/`done` popover navigation overriding the destination thread's selected tab. Opening a thread from those popovers now preserves that thread's last-selected tab.
 
 ### Thread
+#### Features
+- Added a top-bar pop-out button next to Archive in thread view (above terminal), with auto-hide when the thread is already in a separate window.
+
 #### Bug Fixes
 - Pop-out windows now use section-colored thread icons in the top info strip (instead of default primary styling), keep that strip synced with section/thread metadata changes from the main window, and mirror the same info strip in the main thread view above the tab/action bar.
 - Fixed double header bars in popped-out thread windows by keeping the shared thread info strip only in the pop-out chrome there (while still showing it in the main thread view), and aligned the strip separator baseline to the sidebar selected-thread accent.
 - Refined thread info-strip layout/content to mirror sidebar row semantics: centered leading icon, dirty-state dot before the secondary line, and branch/worktree secondary text (showing worktree only when it differs from branch) while keeping description single-line.
 - Fixed thread info-strip rate-limit badges (main thread view + pop-out windows) still showing legacy hourglass icons. The strip now shows Claude/Codex glyphs, matching sidebar rate-limit badges.
 - Fixed occasional unexpected focus jumps to popped-out thread windows by stopping global thread-navigation notifications from forcing pop-out windows to front.
+- Fixed separate-window context jitter by making changes-panel context follow key-window activation (main vs pop-out) instead of non-key responder transitions.
 - Focusing a thread now clears unread completion state immediately, even if the thread was already selected or its separate window was already focused when the agent finished.
 - Separate thread and detached-tab windows now persist their latest size and position continuously, so app restart restores the same extracted windows in the same place.
 - Fixed separate-window quit/relaunch restore so popped-out thread windows stay popped out across normal app restart instead of collapsing back into the main window.
@@ -58,7 +62,7 @@ All notable changes to this project will be documented in this file.
 ### Changes Panel
 #### Features
 - Changes/commits panel context now follows the currently focused thread tab/session (including pop-out windows) instead of strictly following main sidebar selection.
-- Added a context label when the panel is showing a non-selected thread, including a `(Pop-out)` suffix for separate-window context.
+- Added a prominent purple context badge when the panel is showing a non-selected thread, including a `(Pop-out)` suffix for separate-window context.
 
 #### Bug Fixes
 - Fixed refresh/load/commit-selection guards in the changes panel to use focused context thread state, preventing stale updates when main selection differs from focused pop-out thread.
