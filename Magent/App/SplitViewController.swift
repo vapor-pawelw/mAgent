@@ -760,7 +760,10 @@ final class SplitViewController: NSSplitViewController {
             showEmptyState()
             return
         }
-        threadListVC.selectThread(byId: fallback.id)
+        // Fallback selection happens as a side-effect of pop-out (including drop-to-replace
+        // and move-between-popouts). The user's scroll position in the sidebar should not
+        // jump to wherever the fallback row happens to live.
+        threadListVC.selectThread(byId: fallback.id, scrollRowToVisible: false)
     }
 
     private func focusMainWindowAndCurrentThread() {
