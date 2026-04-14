@@ -876,14 +876,17 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             y *= 1
         } else {
             // Discrete mouse wheels often report large per-notch deltas (for example 15)
-            // and Ghostty applies its own internal line scaling. Normalize to one signed
-            // step so each notch maps to a small, predictable history movement.
-            x = x == 0 ? 0 : (x > 0 ? 1 : -1)
-            y = y == 0 ? 0 : (y > 0 ? 1 : -1)
+            // and Ghostty would otherwise compound that with its own line scaling. We
+            // pin Ghostty's `mouse-scroll-multiplier` to 1 in the embedded override
+            // config, so the value we forward here is exactly what tmux receives. Map
+            // each wheel notch to a fixed 5-line step.
+            x = x == 0 ? 0 : (x > 0 ? 5 : -5)
+            y = y == 0 ? 0 : (y > 0 ? 5 : -5)
         }
 
         // Keep each wheel event bounded so one notch/gesture step cannot jump
-        // excessively through terminal history.
+        // excessively through terminal history. With `mouse-scroll-multiplier = 1`
+        // in the embedded ghostty config, this clamp is also what reaches tmux.
         y = max(-5, min(5, y))
 
         // ghostty_input_scroll_mods_t is a packed bitfield:

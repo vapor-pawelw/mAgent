@@ -58,7 +58,7 @@ All notable changes to this project will be documented in this file.
 ### Terminal
 #### Bug Fixes
 - Fixed `magentDefaultScroll` wheel jumps still feeling too large by removing tmux's hardcoded `-N 6` wheel multiplier. Wheel up/down now use single-line copy-mode steps per wheel event.
-- Fixed remaining oversized physical mouse-wheel jumps by normalizing discrete Ghostty wheel deltas to one signed step per event before forwarding to `ghostty_surface_mouse_scroll`, including coarse per-notch packets (for example `±15`) that AppKit may still tag as "precise" and phase-bearing.
+- Fixed each physical mouse-wheel notch still scrolling roughly 15 lines in the embedded terminal. Magent's per-event ±5 line cap was being silently tripled by Ghostty's default `mouse-scroll-multiplier = 3.0`; the embedded Ghostty config now pins that multiplier to 1, and discrete wheel notches are forwarded as a fixed 5-line step, so one wheel notch scrolls exactly 5 lines of tmux history.
 
 ### Status Bar
 #### Features

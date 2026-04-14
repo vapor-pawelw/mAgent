@@ -348,6 +348,12 @@ public final class GhosttyAppManager {
             // between "history only" and "allow app capture" is enforced at the tmux layer via
             // WheelUpPane/WheelDownPane bindings set by applyMouseWheelScrollSettings.
             lines.append("mouse-reporting = true")
+            // Ghostty's default mouse-scroll-multiplier is 3.0 and silently inflates the
+            // number of mouse-wheel sequences forwarded to the embedded app (here: tmux).
+            // With the multiplier in place, our ±5 line cap in TerminalSurfaceView.scrollWheel
+            // turned into 15 tmux WheelUpPane events per notch. Force the multiplier to 1
+            // so what Magent sends to ghostty_surface_mouse_scroll is what tmux receives.
+            lines.append("mouse-scroll-multiplier = 1")
         case .inheritGhosttyGlobal:
             break
         }
