@@ -48,3 +48,4 @@ GitHub Releases read release notes from the matching `CHANGELOG.md` version sect
 - Launch-time `What's New` is shown once per app version, tracked in `AppSettings.lastShownChangelogVersion`.
 - If no matching `## <version> - ...` section exists for the current app version, launch skips the popup.
 - Debug Settings includes a `What's New` helper to reopen the current-version popup for testing.
+- Rendering (`ChangelogWindowController.attributedReleaseNotes`) groups bullets under each `### <Domain>` heading, draws a brand-tinted horizontal separator directly under the domain heading, and styles `#### Features` / `#### Bug Fixes` subsection labels in uppercase with the app's primary brand color. Duplicate `### <Domain>` headings within the same release are auto-merged at render time (`mergeDuplicateDomains`) as a safety net — but the on-disk file should still be clean per the rules above.
