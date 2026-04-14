@@ -84,7 +84,7 @@ final class StickyHeaderOverlayView: NSView {
         projectContainer.addSubview(projectNameLabel)
 
         projectPinIcon.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
-        projectPinIcon.contentTintColor = NSColor(resource: .textSecondary)
+        projectPinIcon.contentTintColor = NSColor(resource: .primaryBrand)
         projectPinIcon.translatesAutoresizingMaskIntoConstraints = false
         projectPinIcon.isHidden = true
         projectContainer.addSubview(projectPinIcon)

@@ -1201,7 +1201,7 @@ final class ThreadCell: NSTableCellView {
             let badge = TopBorderBadge(bareIcon: true)
             badge.label.isHidden = true
             badge.iconView.image = Self.cachedSymbolImage("pin.fill")
-            badge.iconView.contentTintColor = NSColor(resource: .textSecondary)
+            badge.iconView.contentTintColor = NSColor(resource: .primaryBrand)
             badge.iconView.isHidden = false
             badge.isHidden = true
             pinnedBadge = badge

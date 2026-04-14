@@ -152,7 +152,7 @@ final class PopoutInfoStripView: NSView {
             self.branchLabel.textColor = NSColor(resource: .textSecondary)
             self.keepAliveIndicator.contentTintColor = .systemCyan
             self.favoriteIndicator.contentTintColor = NSColor(resource: .primaryBrand)
-            self.pinnedIndicator.contentTintColor = NSColor(resource: .textSecondary)
+            self.pinnedIndicator.contentTintColor = NSColor(resource: .primaryBrand)
         }
     }
 

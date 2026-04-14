@@ -864,7 +864,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             }
             if project.isPinned {
                 cell.imageView?.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
-                cell.imageView?.contentTintColor = NSColor(resource: .textSecondary)
+                cell.imageView?.contentTintColor = NSColor(resource: .primaryBrand)
                 cell.imageView?.isHidden = false
             } else {
                 cell.imageView?.image = nil

@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
 - Threads opened in separate windows now use a subtle purple row tint and a more prominent trailing window icon in the sidebar.
 - Popped-out thread rows now use a stronger purple highlight with a 2pt border and keep their row pulse/centering behavior on sidebar click-to-focus.
+- Pinned thread and project indicators now render in the app's primary brand color consistently across the sidebar, sticky header, tab bar, and pop-out info strip.
 
 #### Bug Fixes
 - Fixed `Create New Repository…` from the sidebar add-repo menu sometimes appearing to do nothing. Repo creation now shows a persistent progress banner with spinner, reports explicit success/failure banners, and seeds the initial empty commit with transient git identity/signing-hook overrides so local git config does not block creation.
@@ -23,7 +24,6 @@ All notable changes to this project will be documented in this file.
 - Fixed sidebar interaction with popped-out threads so clicking their rows now focuses the pop-out window without changing main-window content/selection.
 - Fixed repeated sidebar scroll blinks after hiding a project. Background thread updates no longer treat hidden-project threads as visible sidebar structure changes.
 - Fixed sidebar scroll jumps when creating a new thread. Toggling the create-thread busy state no longer triggers redundant full sidebar reloads, and auto-selecting the new thread now uses the same id-based selection path as all other navigation.
-- Fixed pinned thread badges/icons rendering with a yellow/brand tint in some views; pinned indicators now use the neutral text-secondary tint consistently.
 - Removed the busy-row shimmer effect to reduce sidebar motion; busy threads now keep only border/separator animations.
 
 ### Settings
