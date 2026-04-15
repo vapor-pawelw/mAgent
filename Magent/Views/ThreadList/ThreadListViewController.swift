@@ -1161,9 +1161,19 @@ final class ThreadListViewController: NSViewController {
                 let isNewThread = selectedThreadID != thread.id
                 let resolved = recordSelectedThread(thread)
                 if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
-                outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                // `selectRowIndexes` also triggers NSOutlineView's internal
+                // `scrollRowToVisible(_:)` path — the explicit call below is not the
+                // only source of scrolling. When the caller opted out of scrolling
+                // (e.g. pop-out fallback selection), suppress the internal auto-scroll
+                // too, otherwise a fallback row that lives far from the viewport would
+                // still jump the sidebar.
                 if scrollRowToVisible {
+                    outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                     outlineView.scrollRowToVisible(row)
+                } else {
+                    preserveSidebarSelectionViewport {
+                        outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                    }
                 }
                 return
             }
