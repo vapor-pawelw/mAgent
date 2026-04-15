@@ -875,18 +875,17 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             x *= 1
             y *= 1
         } else {
-            // Discrete mouse wheels often report large per-notch deltas (for example 15)
-            // and Ghostty would otherwise compound that with its own line scaling. We
-            // pin Ghostty's `mouse-scroll-multiplier` to 1 in the embedded override
-            // config, so the value we forward here is exactly what tmux receives. Map
-            // each wheel notch to a fixed 5-line step.
+            // Discrete wheels: map each notch to a fixed 5-line step. With
+            // Magent's pinned `mouse-scroll-multiplier = 1` in the embedded
+            // override config and tmux's copy-mode wheel bindings stripped
+            // to `send -X scroll-up` (no `-N` multiplier), this forwards
+            // exactly 5 wheel events per notch and tmux scrolls 5 lines.
             x = x == 0 ? 0 : (x > 0 ? 5 : -5)
             y = y == 0 ? 0 : (y > 0 ? 5 : -5)
         }
 
         // Keep each wheel event bounded so one notch/gesture step cannot jump
-        // excessively through terminal history. With `mouse-scroll-multiplier = 1`
-        // in the embedded ghostty config, this clamp is also what reaches tmux.
+        // excessively through terminal history.
         y = max(-5, min(5, y))
 
         // ghostty_input_scroll_mods_t is a packed bitfield:

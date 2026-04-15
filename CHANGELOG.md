@@ -39,10 +39,7 @@ All notable changes to this project will be documented in this file.
 ### Terminal
 #### Bug Fixes
 - Suppressed right-click context menus inside embedded terminal surfaces. Right-click is now swallowed so neither Ghostty's native menu nor AppKit fallback menus appear over terminal content.
-- Fixed oversized physical mouse-wheel jumps in embedded Ghostty terminals. Non-precision wheel events are now normalized to one signed step per notch before forwarding to Ghostty, preventing large raw deltas from producing 20-30 line jumps.
-- Fixed `magentDefaultScroll` wheel jumps still feeling too large by removing tmux's hardcoded `-N 6` wheel multiplier. Wheel up/down now use single-line copy-mode steps per wheel event.
-- Fixed each physical mouse-wheel notch still scrolling roughly 15 lines in the embedded terminal. Magent's per-event ±5 line cap was being silently tripled by Ghostty's default `mouse-scroll-multiplier = 3.0`; the embedded Ghostty config now pins that multiplier to 1, and discrete wheel notches are forwarded as a fixed 5-line step, so one wheel notch scrolls exactly 5 lines of tmux history.
-- Reduced wheel-scroll jump size in embedded Ghostty terminals by clamping each wheel event to at most 5 lines up/down, preventing large one-step scroll leaps.
+- Fixed oversized physical mouse-wheel jumps in embedded terminals. Each wheel notch now scrolls exactly 5 lines of tmux history (previously ~15-30), matching the scroll feel of standalone Ghostty. The fix combines a per-event ±5 line cap, a pinned `mouse-scroll-multiplier = 1` in the embedded Ghostty config, and an override of tmux's default `copy-mode`/`copy-mode-vi` wheel bindings which were silently multiplying every wheel event by 5.
 
 ### Web Tab
 #### Bug Fixes
