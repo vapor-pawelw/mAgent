@@ -131,12 +131,38 @@ public final class TmuxService: Sendable {
             _ = try? await ShellExecutor.run(
                 "tmux bind-key -T root WheelDownPane if-shell -F '#{pane_in_mode}' \"if-shell -F '#{scroll_position}' 'send-keys -X scroll-down' 'send-keys -X cancel'\" ''"
             )
+            // Strip tmux's default copy-mode / copy-mode-vi wheel multipliers:
+            // both tables default to `send -N5 -X scroll-up`, which turns each
+            // wheel event forwarded from ghostty into five scroll-up commands
+            // (giving ~15 lines per physical notch once combined with ghostty's
+            // own accumulated delta). We want one scroll-up per wheel event so
+            // Magent's embedded terminal scrolls a fixed, small number of
+            // lines per notch.
+            for table in ["copy-mode", "copy-mode-vi"] {
+                _ = try? await ShellExecutor.run(
+                    "tmux bind-key -T \(table) WheelUpPane select-pane \\; send-keys -X scroll-up"
+                )
+                _ = try? await ShellExecutor.run(
+                    "tmux bind-key -T \(table) WheelDownPane select-pane \\; send-keys -X scroll-down"
+                )
+            }
         case .allowAppsToCapture:
             _ = try? await ShellExecutor.run("tmux set-option -g mouse on")
             // Restore tmux's default wheel behavior: apps that request mouse reporting
             // receive wheel events; plain shell / no-mouse apps go to copy-mode.
             _ = try? await ShellExecutor.run("tmux unbind-key -T root WheelUpPane 2>/dev/null; true")
             _ = try? await ShellExecutor.run("tmux unbind-key -T root WheelDownPane 2>/dev/null; true")
+            // Also strip the `-N5` copy-mode multiplier in this mode so that
+            // once a pane is in copy-mode, each wheel event still scrolls one
+            // line rather than five.
+            for table in ["copy-mode", "copy-mode-vi"] {
+                _ = try? await ShellExecutor.run(
+                    "tmux bind-key -T \(table) WheelUpPane select-pane \\; send-keys -X scroll-up"
+                )
+                _ = try? await ShellExecutor.run(
+                    "tmux bind-key -T \(table) WheelDownPane select-pane \\; send-keys -X scroll-down"
+                )
+            }
         case .inheritGhosttyGlobal:
             // Don't touch tmux mouse settings — governed by the user's own tmux config.
             break
