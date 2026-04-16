@@ -3,6 +3,12 @@
 Before releasing, make sure `CHANGELOG.md` has user-facing notes under `## Unreleased`.
 See [docs/changelog.md](./changelog.md) for the changelog workflow.
 
+If the release ships a notable highlight feature, also update the curated
+"What's New" highlight popup (`Magent/Services/WhatsNewContent.swift`). See
+[docs/whats-new-popup.md](./whats-new-popup.md) for the entry/image checklist.
+Releases without a new highlight can leave the existing entry in place —
+users who already saw it won't re-see it.
+
 Use the interactive helper to run the full release flow:
 
 ```bash

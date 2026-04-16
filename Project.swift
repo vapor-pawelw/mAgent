@@ -35,6 +35,8 @@ let project = Project(
                 "Magent/Services/ThreadManager.swift",
                 "Magent/Services/ThreadManager+*.swift",
                 "Magent/Services/UpdateService.swift",
+                "Magent/Services/WhatsNewContent.swift",
+                "Magent/Services/WhatsNewService.swift",
                 "Magent/Utilities/AgentMenuBuilder.swift",
                 "Magent/Utilities/ColorDot.swift",
                 "Magent/Utilities/OpenActionIcons.swift",

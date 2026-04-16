@@ -5,7 +5,7 @@ import UserNotifications
 import MagentCore
 
 @objc(AppDelegate)
-class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, NSMenuItemValidation {
 
     private var coordinator: AppCoordinator?
     private var ipcServer: IPCSocketServer?
@@ -156,6 +156,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         coordinator?.start()
         showCurrentVersionChangelogIfNeeded()
 
+        let parentForWhatsNew = coordinator?.mainSplitViewController()?.view.window
+        WhatsNewService.shared.showIfNeededOnLaunch(over: parentForWhatsNew)
+
         let server = IPCSocketServer()
         self.ipcServer = server
         Task { await server.start() }
@@ -239,6 +242,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: String(localized: .AppStrings.appMenuSettings), action: #selector(openSettings(_:)), keyEquivalent: ",")
         appMenu.addItem(withTitle: "Changelog…", action: #selector(openChangelog(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "What's New…", action: #selector(openWhatsNew(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(
             withTitle: String(localized: .AppStrings.appMenuQuit(appDisplayName)),
@@ -438,6 +442,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     @objc private func openChangelog(_ sender: Any?) {
         ChangelogWindowController.showChangelog()
+    }
+
+    @objc private func openWhatsNew(_ sender: Any?) {
+        let parentWindow = coordinator?.mainSplitViewController()?.view.window
+            ?? NSApp.mainWindow
+        WhatsNewService.shared.showCurrent(over: parentWindow)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(openWhatsNew(_:)) {
+            return WhatsNewService.shared.hasEntryToShow
+        }
+        return true
     }
 
     func userNotificationCenter(
