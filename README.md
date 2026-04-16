@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/main-view.png" alt="mAgent main view" width="800">
+  <img src="docs/screenshots/magent-tab-agent-view.png" alt="mAgent main view" width="800">
 </p>
 
 ## Install
@@ -26,32 +26,70 @@ Requires **macOS 14+**, **tmux** (`brew install tmux`), and **git**.
 
 ## Threads & Worktrees
 
-Create a thread and get a git worktree, branch, and agent session instantly. Threads auto-name themselves and rename the branch based on your first prompt.
-
-Organize with color-coded Kanban sections (TODO, In Progress, Reviewing, Done), drag-to-reorder, pinning, and auto-assigned work type icons. The sidebar shows live status at a glance: busy, waiting for input, rate-limited, unread completions, and uncommitted changes.
+Create a thread and get a git worktree, branch, and agent session instantly. Pick an agent, base branch, and reasoning effort up front — or kick one off with just a prompt. Threads auto-name themselves and rename the branch based on your first prompt.
 
 <p align="center">
-  <img src="docs/screenshots/new-thread.png" alt="New thread dialog" width="600">
+  <img src="docs/screenshots/magent-new-thread-1.png" alt="New thread dialog" width="800">
+</p>
+
+Organize with color-coded Kanban sections (TODO, In Progress, Reviewing, Done), drag-to-reorder, pinning, and priority levels. The sidebar shows live status at a glance: busy, waiting for input, rate-limited, unread completions, and uncommitted changes.
+
+<p align="center">
+  <img src="docs/screenshots/magent-thread-priority.png" alt="Thread priority menu" width="800">
+</p>
+
+Auto-assigned work type icons classify threads from their first prompt (bug, feature, refactor, docs, etc.), with manual override.
+
+<p align="center">
+  <img src="docs/screenshots/magent-thread-sign.png" alt="Thread icon picker" width="800">
+</p>
+
+Branches can be renamed by AI from the current conversation, keeping the worktree name stable while giving the branch a meaningful title.
+
+<p align="center">
+  <img src="docs/screenshots/magent-thread-ai-rename.png" alt="AI rename dialog" width="800">
 </p>
 
 ## Multi-Agent Terminal
 
 GPU-accelerated embedded terminal (libghostty) with tmux for session persistence. Run Claude Code, Codex, or any custom CLI as your agent, with per-project defaults.
 
-Each thread supports multiple tabs: agent, terminal, web, and draft. Tabs can be pinned, reordered, and renamed. Agent completion is detected automatically with configurable sounds and system notifications.
+Each thread supports multiple tabs — agent, terminal, web, and draft — that can be pinned, reordered, and renamed. Agent completion is detected automatically with configurable sounds and system notifications.
 
 <p align="center">
-  <img src="docs/screenshots/agent-working.png" alt="Agent working in terminal" width="800">
+  <img src="docs/screenshots/magent-terminal-tab.png" alt="Terminal tab" width="800">
 </p>
 
-## Git Integration
+Web tabs open in-app for PR reviews, CI dashboards, or docs without leaving the thread.
+
+<p align="center">
+  <img src="docs/screenshots/magent-web-tab.png" alt="Web tab" width="800">
+</p>
+
+Pop tabs out into standalone windows to run several agents side-by-side.
+
+<p align="center">
+  <img src="docs/screenshots/magent-multi-windows.png" alt="Multiple agent windows" width="800">
+</p>
+
+A searchable Table of Contents indexes every prompt in the conversation so you can jump back to earlier turns instantly.
+
+<p align="center">
+  <img src="docs/screenshots/magent-table-of-contents.png" alt="Prompt Table of Contents" width="800">
+</p>
+
+## Git & PR Integration
 
 Branch stacking with base branch selection and automatic retargeting when parent branches rename. PR detection and creation for GitHub, GitLab, and Bitbucket with review status badges. Bidirectional file sync between worktrees with merge tool support.
 
 One-click code review tabs, delivery tracking (cherry-pick detection), diff stats, and automatic worktree recovery.
 
+## Jira Integration
+
+First-class Jira support: look up tickets from the thread, open them in-app, and create threads directly from a Jira issue with the ticket key pre-filled in the branch and commit prefix. Thread rows surface ticket status inline, so you can track work without leaving mAgent.
+
 <p align="center">
-  <img src="docs/screenshots/context-menu.png" alt="Thread context menu" width="800">
+  <img src="docs/screenshots/magent-jira-integration.png" alt="Jira integration" width="800">
 </p>
 
 ## Smart Session Management
@@ -59,10 +97,6 @@ One-click code review tabs, delivery tracking (cherry-pick detection), diff stat
 Idle sessions are automatically evicted to keep resource usage low, with configurable limits and Keep Alive protection for important threads. Rate limits are detected from terminal output with countdown timers and sound alerts when limits lift.
 
 A persistent status bar shows active sessions, rate limit state, and thread counts.
-
-<p align="center">
-  <img src="docs/screenshots/prompt-toc.png" alt="Prompt Table of Contents" width="800">
-</p>
 
 ## CLI Automation
 
