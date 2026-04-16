@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Added a polished "What's New" changelog window on launch after upgrading. It reads from bundled `CHANGELOG.md`, shows only the current app version section, and appears once per version.
 - Refined the "What's New" / Changelog window layout. Each domain (for example `Tab`, `Terminal`, `Sidebar`) is now a single grouped section with a brand-tinted separator under its heading, and `Features` / `Bug Fixes` subsection labels are styled in the app's primary brand color. Duplicate domain headings within the same release are now merged automatically when rendering.
+- Added a curated highlight popup that appears once per release to spotlight a single new feature with a screenshot and short description. Re-openable any time via `mAgent → What's New…`.
 
 ### Sidebar
 #### Features
