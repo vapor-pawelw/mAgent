@@ -129,6 +129,9 @@ final class ThreadDetailViewController: NSViewController {
     let threadManager = ThreadManager.shared
     let headerInfoStrip = PopoutInfoStripView()
     let tabBarStack = NSStackView()
+    let tabBarScrollView = TabBarScrollView()
+    let tabScrollLeftButton = NSButton()
+    let tabScrollRightButton = NSButton()
     let terminalContainer: NSView = AppBackgroundView()
     let topBar = NSStackView()
     let openPRButton = MiddleClickButton()
@@ -441,6 +444,7 @@ final class ThreadDetailViewController: NSViewController {
     override func viewDidLayout() {
         super.viewDidLayout()
         clampPromptTOCPositionIfNeeded()
+        refreshTabScrollArrowsVisibility()
     }
 
 
@@ -487,14 +491,26 @@ final class ThreadDetailViewController: NSViewController {
         tabBarStack.alignment = .centerY
         tabBarStack.translatesAutoresizingMaskIntoConstraints = false
 
-        openPRButton.bezelStyle = .texturedRounded
+        configureTabBarScrollView()
+
+        // PR/Jira buttons live in a `PopoutInfoStripView`'s capsule action row when
+        // either our own header strip is shown (main window) OR the embedding pop-out
+        // window installs them into its own info strip. They only fall back to the
+        // top bar with textured chrome when neither host exists.
+        let prJiraHostedInInfoStrip = showsHeaderInfoStrip || isPopoutContext
+        let prJiraBezelStyle: NSButton.BezelStyle = prJiraHostedInInfoStrip ? .inline : .texturedRounded
+        let prJiraControlSize: NSControl.ControlSize = prJiraHostedInInfoStrip ? .small : .regular
+
+        openPRButton.bezelStyle = prJiraBezelStyle
+        openPRButton.controlSize = prJiraControlSize
         openPRButton.image = openPRButtonImage(for: .unknown)
         openPRButton.imageScaling = .scaleProportionallyDown
         openPRButton.target = self
         openPRButton.action = #selector(openPRTapped(_:))
         openPRButton.toolTip = "Open Pull Request\n\(externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks()))"
 
-        openInJiraButton.bezelStyle = .texturedRounded
+        openInJiraButton.bezelStyle = prJiraBezelStyle
+        openInJiraButton.controlSize = prJiraControlSize
         openInJiraButton.image = jiraButtonImage()
         openInJiraButton.imageScaling = .scaleProportionallyDown
         openInJiraButton.target = self
@@ -582,6 +598,22 @@ final class ThreadDetailViewController: NSViewController {
         addTabButton.menu = addTabContextMenu
         updatePromptTOCToggleButtonState(canShow: false)
 
+        tabScrollLeftButton.bezelStyle = .texturedRounded
+        tabScrollLeftButton.image = NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Scroll tabs left")
+        tabScrollLeftButton.imageScaling = .scaleProportionallyDown
+        tabScrollLeftButton.target = self
+        tabScrollLeftButton.action = #selector(tabScrollLeftTapped)
+        tabScrollLeftButton.toolTip = "Scroll tabs left"
+        tabScrollLeftButton.isHidden = true
+
+        tabScrollRightButton.bezelStyle = .texturedRounded
+        tabScrollRightButton.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: "Scroll tabs right")
+        tabScrollRightButton.imageScaling = .scaleProportionallyDown
+        tabScrollRightButton.target = self
+        tabScrollRightButton.action = #selector(tabScrollRightTapped)
+        tabScrollRightButton.toolTip = "Scroll tabs right"
+        tabScrollRightButton.isHidden = true
+
         prJiraSeparator.translatesAutoresizingMaskIntoConstraints = false
         prJiraSeparator.isHidden = true
         prJiraSeparator.setContentHuggingPriority(.required, for: .horizontal)
@@ -602,23 +634,24 @@ final class ThreadDetailViewController: NSViewController {
         topBar.alignment = .centerY
         topBar.detachesHiddenViews = true
         topBar.translatesAutoresizingMaskIntoConstraints = false
-        // Review button next to add-tab, then tab bar, then PR/Jira, then utility buttons, then pop-out/archive.
-        for view in [addTabButton, reviewButton, continueInButton, tabBarStack, openPRButton, openInJiraButton, prJiraSeparator, openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, popOutThreadButton, archiveThreadButton] as [NSView] {
+        // Review button next to add-tab, then tab bar scroll view, then (optionally) PR/Jira,
+        // then utility buttons, then pop-out/archive. PR/Jira move into the header info strip
+        // when it's shown; otherwise fall back to the top bar position.
+        var topBarViews: [NSView] = [addTabButton, reviewButton, continueInButton, tabScrollLeftButton, tabBarScrollView, tabScrollRightButton]
+        if !prJiraHostedInInfoStrip {
+            topBarViews.append(contentsOf: [openPRButton, openInJiraButton, prJiraSeparator])
+        }
+        topBarViews.append(contentsOf: [openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, popOutThreadButton, archiveThreadButton])
+        for view in topBarViews {
             topBar.addArrangedSubview(view)
         }
         let trailingTopBarSpacing: CGFloat = 8
-        for view in [
-            tabBarStack,
-            openPRButton,
-            openInJiraButton,
-            prJiraSeparator,
-            openInXcodeButton,
-            openInFinderButton,
-            exportContextButton,
-            resyncLocalPathsButton,
-            archiveSeparator,
-            popOutThreadButton,
-        ] as [NSView] {
+        var customSpacingAfter: [NSView] = [tabBarScrollView]
+        if !prJiraHostedInInfoStrip {
+            customSpacingAfter.append(contentsOf: [openPRButton, openInJiraButton, prJiraSeparator])
+        }
+        customSpacingAfter.append(contentsOf: [openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, popOutThreadButton])
+        for view in customSpacingAfter {
             topBar.setCustomSpacing(trailingTopBarSpacing, after: view)
         }
 
@@ -633,6 +666,7 @@ final class ThreadDetailViewController: NSViewController {
         if showsHeaderInfoStrip {
             headerInfoStrip.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(headerInfoStrip)
+            headerInfoStrip.installActionButtons([openPRButton, openInJiraButton])
         }
         view.addSubview(terminalContainer)
         setupPromptTOCOverlay()
@@ -1524,6 +1558,8 @@ final class ThreadDetailViewController: NSViewController {
             resyncLocalPathsButton,
             popOutThreadButton,
             archiveThreadButton,
+            tabScrollLeftButton,
+            tabScrollRightButton,
         ]
     }
 

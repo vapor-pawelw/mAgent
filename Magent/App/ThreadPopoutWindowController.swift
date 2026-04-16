@@ -169,6 +169,11 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
 
         window.contentView = rootView
 
+        // Hand the detail VC's PR/Jira buttons to our info strip's action row.
+        // The detail VC styles them as inline capsules in popout context but
+        // doesn't add them to its own top bar — installation lives here.
+        infoStrip.installActionButtons([detailVC.openPRButton, detailVC.openInJiraButton])
+
         // Refresh info strip with current thread state
         if let latestThread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) {
             infoStrip.refresh(from: latestThread)
