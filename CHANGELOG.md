@@ -81,6 +81,7 @@ All notable changes to this project will be documented in this file.
 - Added ballot box with check (`☑️`) to thread sign emojis (next to the existing checkmark option) for finer task-state labeling.
 
 #### Bug Fixes
+- Fixed thread switches occasionally showing a blank page with no tab selected. Thread view now primes a debounced "Loading thread..." overlay so slow switches always show progress while fast-path switches stay flash-free.
 - Fixed missing branch-name compatibility symlinks for some worktrees. Non-main worktrees now auto-create and maintain `<worktrees-base>/<current-branch>` symlinks during branch-state refresh, branch-accept, and branch-rename flows.
 - Detached tabs now reopen with their live terminal session instead of a blank window, including after app relaunch, and the main-window `Detach Tab` shortcut now routes correctly.
 - Fixed pop-out thread replacement drag/drop over embedded terminal surfaces inserting raw thread UUID text into terminal input. Thread drags now use a dedicated pasteboard type so Ghostty no longer consumes drops as plain text.
