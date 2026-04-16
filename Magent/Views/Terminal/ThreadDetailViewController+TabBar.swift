@@ -3,6 +3,109 @@ import MagentCore
 
 extension ThreadDetailViewController {
 
+    // MARK: - Tab Bar Scroll View
+
+    /// Wraps `tabBarStack` inside `tabBarScrollView` so the tab strip can
+    /// overflow horizontally instead of compressing tabs when space is tight.
+    func configureTabBarScrollView() {
+        let documentContainer = NSView()
+        documentContainer.translatesAutoresizingMaskIntoConstraints = false
+        documentContainer.addSubview(tabBarStack)
+
+        NSLayoutConstraint.activate([
+            tabBarStack.topAnchor.constraint(equalTo: documentContainer.topAnchor),
+            tabBarStack.bottomAnchor.constraint(equalTo: documentContainer.bottomAnchor),
+            tabBarStack.leadingAnchor.constraint(equalTo: documentContainer.leadingAnchor),
+            tabBarStack.trailingAnchor.constraint(equalTo: documentContainer.trailingAnchor),
+        ])
+
+        tabBarScrollView.translatesAutoresizingMaskIntoConstraints = false
+        tabBarScrollView.documentView = documentContainer
+
+        // Pin the document view height to the scroll view's clip view so the
+        // scroll view only scrolls horizontally, never vertically.
+        NSLayoutConstraint.activate([
+            documentContainer.heightAnchor.constraint(equalTo: tabBarScrollView.contentView.heightAnchor),
+            tabBarScrollView.heightAnchor.constraint(equalToConstant: 30),
+        ])
+
+        // Take all leftover horizontal space inside topBar so the scroll region
+        // grows/shrinks with window width before other buttons compress.
+        tabBarScrollView.setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
+        tabBarScrollView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        // Refresh arrow button visibility whenever the user scrolls (so edge-dimming
+        // tracks the current offset) or the clip view resizes.
+        tabBarScrollView.contentView.postsBoundsChangedNotifications = true
+        tabBarScrollView.contentView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTabBarScrollBoundsChanged),
+            name: NSView.boundsDidChangeNotification,
+            object: tabBarScrollView.contentView
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTabBarScrollBoundsChanged),
+            name: NSView.frameDidChangeNotification,
+            object: tabBarScrollView.contentView
+        )
+    }
+
+    // MARK: - Tab Scroll Arrows
+
+    @objc func handleTabBarScrollBoundsChanged() {
+        refreshTabScrollArrowsVisibility()
+    }
+
+    /// Show arrow buttons only when tabs overflow the visible scroll area; when
+    /// shown, disable whichever arrow is at its edge so the state matches what
+    /// clicking would actually do.
+    func refreshTabScrollArrowsVisibility() {
+        guard let documentContainer = tabBarScrollView.documentView else { return }
+        let clipBounds = tabBarScrollView.contentView.bounds
+        let overflow = documentContainer.bounds.width > clipBounds.width + 0.5
+
+        tabScrollLeftButton.isHidden = !overflow
+        tabScrollRightButton.isHidden = !overflow
+
+        if overflow {
+            let epsilon: CGFloat = 0.5
+            tabScrollLeftButton.isEnabled = clipBounds.origin.x > epsilon
+            let maxOffset = documentContainer.bounds.width - clipBounds.width
+            tabScrollRightButton.isEnabled = clipBounds.origin.x < maxOffset - epsilon
+        }
+    }
+
+    @objc func tabScrollLeftTapped() {
+        scrollTabBar(by: -tabScrollStep())
+    }
+
+    @objc func tabScrollRightTapped() {
+        scrollTabBar(by: tabScrollStep())
+    }
+
+    private func tabScrollStep() -> CGFloat {
+        // Prefer one tab width when available, otherwise a sensible default.
+        let width = tabItems.first?.frame.width ?? 120
+        return max(80, width + tabBarStack.spacing)
+    }
+
+    private func scrollTabBar(by delta: CGFloat) {
+        guard let documentContainer = tabBarScrollView.documentView else { return }
+        let clipView = tabBarScrollView.contentView
+        let maxOffset = max(0, documentContainer.bounds.width - clipView.bounds.width)
+        let targetX = max(0, min(maxOffset, clipView.bounds.origin.x + delta))
+        let targetOrigin = NSPoint(x: targetX, y: clipView.bounds.origin.y)
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            ctx.allowsImplicitAnimation = true
+            clipView.animator().setBoundsOrigin(targetOrigin)
+            tabBarScrollView.reflectScrolledClipView(clipView)
+        }
+    }
+
     // MARK: - Tab Bar Layout
 
     func rebuildTabBar() {
@@ -30,12 +133,11 @@ extension ThreadDetailViewController {
             tabBarStack.addArrangedSubview(tabItems[i])
         }
 
-        // Flexible spacer so tabs stay compact and don't stretch
-        let spacer = NSView()
-        spacer.translatesAutoresizingMaskIntoConstraints = false
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        tabBarStack.addArrangedSubview(spacer)
+        // Tab set just changed — defer the arrow refresh until the new layout
+        // settles so we read the correct document/clip widths.
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshTabScrollArrowsVisibility()
+        }
     }
 
     // MARK: - Tab Management

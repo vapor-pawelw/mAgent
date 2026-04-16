@@ -42,8 +42,8 @@ Each tab within a thread:
 Tabs can also display in-app web content (WKWebView) alongside terminal tabs:
 
 - **"Web" type** in the New Thread and New Tab sheets creates a web tab. Threads created with Web type get a worktree and branch but no tmux session. URL is optional — blank creates an empty web tab with an address bar.
-- **Option-click** on the Jira or PR toolbar button opens the opposite destination (browser vs Magent web tab) from the current preference.
-- `Settings > General > Links` lets the user choose whether Magent opens supported web targets in the default browser or in a Magent web tab by default. PR/Jira toolbar buttons and matching thread menu actions follow that preference, and Option-click on those toolbar buttons opens the opposite destination as a quick override.
+- **Option-click** on the Jira or PR capsule button (in the thread info bar's bottom-right action row, or in the pop-out window's info strip) opens the opposite destination (browser vs Magent web tab) from the current preference.
+- `Settings > General > Links` lets the user choose whether Magent opens supported web targets in the default browser or in a Magent web tab by default. PR/Jira capsule buttons and matching thread menu actions follow that preference, and Option-click on those buttons opens the opposite destination as a quick override.
 - The `Settings > General > Links` selection must persist across relaunches (no reset to default).
 - In terminal tabs, **Cmd-click** on a supported link follows the current browser-vs-Magent preference, while **Option-click** opens it in the opposite destination.
 - **Right-click "+"** on the tab bar quick-creates a blank web tab; on the sidebar it opens the thread sheet with Web pre-selected

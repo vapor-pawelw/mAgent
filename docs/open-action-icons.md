@@ -2,12 +2,12 @@
 
 ## User Behavior
 
-- The top-right thread toolbar buttons and their matching right-click menu actions now use the same visual icon source for `Open in Finder` and pull-request / open-PR actions.
+- The thread top-bar utility buttons (Finder, Xcode, etc.) and the thread info bar capsule action buttons (PR/Jira), along with their matching right-click menu actions, use the same visual icon source for `Open in Finder` and pull-request / open-PR actions.
 - `Open in Finder` in thread context menus uses the real Finder app icon instead of a generic folder symbol.
-- Pull-request actions in thread context menus use the same hosting-provider icon as the top-right PR button when Magent knows the remote provider; otherwise they fall back to the existing generic external-link symbol.
-- When Magent can detect an existing PR/MR for the current branch, toolbar and menu actions open the direct PR/MR web page instead of a host-specific filtered listing page.
+- Pull-request actions in thread context menus use the same hosting-provider icon as the info-bar PR capsule when Magent knows the remote provider; otherwise they fall back to the existing generic external-link symbol.
+- When Magent can detect an existing PR/MR for the current branch, the PR capsule and menu actions open the direct PR/MR web page instead of a host-specific filtered listing page.
 - For non-main threads, PR/MR actions stay hidden until Magent gets a definitive branch lookup result from the provider CLI. A missing/failed lookup should not leave a dead "Show PR" affordance on screen.
-- When the provider CLI confirms that the branch has no PR/MR yet, the non-main thread toolbar button and context menu switch to a create action instead of linking to a filtered listing page. The creation URL should prefill source branch and target/base branch whenever the hosting provider supports it, and should also prefill the PR/MR title from the thread description when available.
+- When the provider CLI confirms that the branch has no PR/MR yet, the non-main thread PR capsule and context menu switch to a create action instead of linking to a filtered listing page. The creation URL should prefill source branch and target/base branch whenever the hosting provider supports it, and should also prefill the PR/MR title from the thread description when available.
 - The `CHANGES` panel file context menu now uses the Finder app icon for `Show in Finder` so Finder-related actions look consistent everywhere in the app.
 - PR/MR metadata is populated during startup restore and refreshed on the session monitor, so sidebar labels and open actions should not wait for a long idle period after launch.
 

@@ -11,6 +11,7 @@ final class PopoutInfoStripView: NSView {
     private let branchLabel = NSTextField(labelWithString: "")
     private let dirtyDot = NSView()
     private let trailingAccessoryStack = NSStackView()
+    private let actionButtonStack = NSStackView()
     private let stateIndicator = NSImageView()
     private let keepAliveIndicator = NSImageView()
     private let favoriteIndicator = NSImageView()
@@ -76,6 +77,13 @@ final class PopoutInfoStripView: NSView {
         trailingAccessoryStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(trailingAccessoryStack)
 
+        actionButtonStack.orientation = .horizontal
+        actionButtonStack.alignment = .centerY
+        actionButtonStack.spacing = 6
+        actionButtonStack.detachesHiddenViews = true
+        actionButtonStack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(actionButtonStack)
+
         for indicator in [stateIndicator, keepAliveIndicator, favoriteIndicator, pinnedIndicator] {
             indicator.translatesAutoresizingMaskIntoConstraints = false
             indicator.imageScaling = .scaleProportionallyUpOrDown
@@ -113,8 +121,13 @@ final class PopoutInfoStripView: NSView {
             descriptionTop,
             descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAccessoryStack.leadingAnchor, constant: -8),
 
+            // Top-right row: status indicators aligned with description (line 1).
             trailingAccessoryStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            trailingAccessoryStack.centerYAnchor.constraint(equalTo: threadIconView.centerYAnchor),
+            trailingAccessoryStack.topAnchor.constraint(equalTo: topAnchor, constant: 7),
+
+            // Bottom-right row: action buttons aligned with branch/secondary line.
+            actionButtonStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            actionButtonStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -7),
 
             stateIndicator.widthAnchor.constraint(equalToConstant: 14),
             stateIndicator.heightAnchor.constraint(equalToConstant: 14),
@@ -128,7 +141,7 @@ final class PopoutInfoStripView: NSView {
             // Line 2
             secondLineStack.leadingAnchor.constraint(equalTo: descriptionLabel.leadingAnchor),
             secondLineTop,
-            secondLineStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAccessoryStack.leadingAnchor, constant: -8),
+            secondLineStack.trailingAnchor.constraint(lessThanOrEqualTo: actionButtonStack.leadingAnchor, constant: -8),
 
             dirtyDot.widthAnchor.constraint(equalToConstant: 7),
             dirtyDot.heightAnchor.constraint(equalToConstant: 7),
@@ -185,6 +198,22 @@ final class PopoutInfoStripView: NSView {
     override func layout() {
         super.layout()
         busyBorderGradientLayer?.frame = bottomBorder.bounds.insetBy(dx: -bottomBorder.bounds.width, dy: 0)
+    }
+
+    // MARK: - Action Buttons
+
+    /// Install (or replace) the capsule-styled action buttons shown in the
+    /// bottom-right corner of the strip. Callers retain ownership — the strip
+    /// only arranges layout. Passing an empty array removes any existing buttons.
+    func installActionButtons(_ buttons: [NSView]) {
+        for existing in actionButtonStack.arrangedSubviews {
+            actionButtonStack.removeArrangedSubview(existing)
+            existing.removeFromSuperview()
+        }
+        for button in buttons {
+            button.translatesAutoresizingMaskIntoConstraints = false
+            actionButtonStack.addArrangedSubview(button)
+        }
     }
 
     // MARK: - Refresh

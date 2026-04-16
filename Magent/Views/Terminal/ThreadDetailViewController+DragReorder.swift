@@ -194,10 +194,9 @@ extension ThreadDetailViewController {
 
 extension ThreadDetailViewController: NSGestureRecognizerDelegate {
     func gestureRecognizerShouldBegin(_ gestureRecognizer: NSGestureRecognizer) -> Bool {
-        guard let pan = gestureRecognizer as? NSPanGestureRecognizer,
-              let tabView = pan.view as? TabItemView else { return true }
+        guard let tabView = gestureRecognizer.view as? TabItemView else { return true }
 
-        let location = pan.location(in: tabView)
+        let location = gestureRecognizer.location(in: tabView)
         let closeBounds = tabView.closeButton.convert(tabView.closeButton.bounds, to: tabView)
         if closeBounds.contains(location) { return false }
 

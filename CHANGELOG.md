@@ -51,6 +51,7 @@ All notable changes to this project will be documented in this file.
 
 ### Tab
 #### Features
+- The tab bar now scrolls horizontally when tabs overflow the available space instead of compressing them. Navigate via the new chevron arrow buttons that appear on either side of the tab strip when overflow exists, by spinning the mouse scroll wheel over the tab bar, or with a trackpad horizontal swipe. The scroll bar itself stays hidden — overflow is communicated only by the arrows.
 - Added tab hover tooltips in the thread detail view. Hover now shows tab type, terminal tmux session name (for terminal tabs), and live tab status details (busy, waiting for input, keep-alive, dead session, and rate-limit state).
 
 #### Bug Fixes
@@ -75,6 +76,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 #### Features
+- Moved the Pull Request and Jira buttons out of the thread top utility bar into the thread info bar's bottom-right corner, styled as compact capsules. The status indicators (state, keep-alive, favorite, pinned) now sit in the top-right corner of the info bar so the right side mirrors the two-line layout on the left. Pop-out windows show the same capsule action buttons in their info strip.
 - Added a per-thread "Sync description and priority from Jira" toggle under the Jira context submenu. When enabled, the thread's description and priority are automatically kept in sync with its detected Jira ticket on every detection refresh, the AI auto-description generator stays out of the way, and a small Jira badge appears in the thread row's top-right corner.
 - Added a top-bar pop-out button next to Archive in thread view (above terminal), with auto-hide when the thread is already in a separate window.
 - Keyboard shortcuts and Thread-menu actions now work from pop-out windows with key-window thread context (including detached-tab windows resolving to their parent thread).
