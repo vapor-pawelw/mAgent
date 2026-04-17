@@ -51,6 +51,13 @@ final class TerminalScrollOverlayView: NSView {
     private let buttonStack = NSStackView()
     private var trackingArea: NSTrackingArea?
 
+    // Tracks whether the current mouseDown→mouseUp sequence was a plain tap
+    // (no meaningful drag). Used by the fallback that routes clicks in the
+    // container's padding/gaps to the nearest enabled button, without
+    // interfering with drag-to-reposition.
+    private var mouseDownLocation: NSPoint?
+    private static let dragSlop: CGFloat = 4
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         setup()
@@ -161,9 +168,28 @@ final class TerminalScrollOverlayView: NSView {
     // the terminal. The buttons themselves absorb their own events; we only
     // need to handle the gaps/insets of the container view.
 
-    override func mouseDown(with event: NSEvent) {}
+    override func mouseDown(with event: NSEvent) {
+        mouseDownLocation = convert(event.locationInWindow, from: nil)
+    }
+
     override func mouseDragged(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) {}
+
+    override func mouseUp(with event: NSEvent) {
+        defer { mouseDownLocation = nil }
+        guard isScrollEnabled, let start = mouseDownLocation else { return }
+        let end = convert(event.locationInWindow, from: nil)
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        // If the user dragged meaningfully, the pan gesture recognizer owns it.
+        guard (dx * dx + dy * dy) <= Self.dragSlop * Self.dragSlop else { return }
+        guard bounds.contains(end) else { return }
+        // If the click already landed on a button, AppKit routed it there; we
+        // only handle clicks that fell into the container's padding/gaps.
+        let target = [upButton, downButton, toBottomButton].min(by: { a, b in
+            abs(end.x - a.frame.midX) < abs(end.x - b.frame.midX)
+        })
+        target?.performClick(nil)
+    }
 
     // MARK: - Actions
 
@@ -259,6 +285,12 @@ final class TerminalScrollToBottomPillButton: NSView {
             titleLabel.textColor = contentTint
         }
     }
+
+    // Override the full mouseDown/Dragged/Up trio so the click cannot fall through
+    // to the Ghostty surface underneath — otherwise the mouseDown starts a text
+    // selection in the terminal before our mouseUp handler fires.
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseDragged(with event: NSEvent) {}
 
     override func mouseUp(with event: NSEvent) {
         let location = convert(event.locationInWindow, from: nil)

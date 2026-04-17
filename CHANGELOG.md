@@ -44,6 +44,8 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Suppressed right-click context menus inside embedded terminal surfaces. Right-click is now swallowed so neither Ghostty's native menu nor AppKit fallback menus appear over terminal content.
 - Fixed oversized physical mouse-wheel jumps in embedded terminals. Each wheel notch now scrolls exactly 5 lines of tmux history (previously ~15-30), matching the scroll feel of standalone Ghostty. The fix combines a per-event ±5 line cap, a pinned `mouse-scroll-multiplier = 1` in the embedded Ghostty config, and an override of tmux's default `copy-mode`/`copy-mode-vi` wheel bindings which were silently multiplying every wheel event by 5.
+- Fixed clicking the "Scroll to bottom" pill in the bottom-left of the terminal starting a stray text selection in the terminal underneath.
+- Made the scroll up/down/jump-to-bottom cluster easier to hit by routing clicks that land in its padding and inter-button gaps to the nearest button, without changing the overlay's visual size.
 
 ### Web Tab
 #### Bug Fixes
