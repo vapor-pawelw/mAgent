@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.6.0 - 2026-04-17
+
+
 ### General
 
 #### Features
@@ -162,6 +167,7 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - `magent-cli archive-thread` now treats `--force` on dirty worktrees as "archive anyway with auto-commit" instead of discarding uncommitted work, and refusal/help text now recommends manual commit first for a more meaningful message.
 - Documented `create-thread --select` semantics for popped-out targets: selection now focuses the pop-out window instead of replacing main-window content.
+
 
 ## 1.5.4 - 2026-04-10
 
