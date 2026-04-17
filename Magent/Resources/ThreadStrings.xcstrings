@@ -986,7 +986,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Archive \"%@\" and discard uncommitted changes?"
+            "value": "Archive \"%@\" anyway? (Auto-commit first)"
           }
         }
       }
@@ -997,7 +997,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Archive \"%@\" and discard ignored files?"
+            "value": "Archive \"%@\" and delete ignored files?"
           }
         }
       }
@@ -1008,7 +1008,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The worktree at %@ has uncommitted or untracked changes. Archiving removes the worktree directory — this work cannot be recovered. The git branch is kept (push it first if you want these commits on the remote)."
+            "value": "The worktree at %@ has uncommitted or untracked changes. Choosing Archive Anyway will first auto-commit tracked/untracked changes with a generic message: \"Uncommitted changes on <branch> (<worktree>)\". Then archive removes the worktree directory. Suggested: commit manually first if you want a better commit message."
           }
         }
       }
@@ -1019,7 +1019,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The worktree at %@ has uncommitted or untracked changes. Archiving removes the worktree directory, so this work cannot be recovered. The git branch is kept."
+            "value": "The worktree at %@ has uncommitted or untracked changes. Choosing Archive Anyway will auto-commit tracked/untracked changes with a generic message, then archive the worktree. Suggested: commit manually first for a better message."
           }
         }
       }
@@ -1074,7 +1074,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Archive and Discard Changes"
+            "value": "Archive Anyway (Auto-Commit)"
           }
         }
       }

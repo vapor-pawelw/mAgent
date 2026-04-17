@@ -703,6 +703,38 @@ public final class GitService: Sendable {
             && !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Stages all tracked/untracked (non-ignored) changes and commits them with `message`.
+    /// - Returns: `true` when a commit was created, `false` when there was nothing to commit.
+    public func commitAllChanges(worktreePath: String, message: String) async throws -> Bool {
+        let addResult = await ShellExecutor.execute(
+            "git -c core.hooksPath=/dev/null add -A",
+            workingDirectory: worktreePath
+        )
+        guard addResult.exitCode == 0 else {
+            let error = addResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw GitError.commandFailed(error.isEmpty ? "Failed to stage changes before archive." : error)
+        }
+
+        let commitResult = await ShellExecutor.execute(
+            "git -c core.hooksPath=/dev/null commit -m \(shellQuote(message))",
+            workingDirectory: worktreePath
+        )
+        if commitResult.exitCode == 0 {
+            return true
+        }
+
+        let combined = "\(commitResult.stdout)\n\(commitResult.stderr)"
+            .lowercased()
+        if combined.contains("nothing to commit") || combined.contains("no changes added to commit") {
+            return false
+        }
+
+        let stderr = commitResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stdout = commitResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reason = !stderr.isEmpty ? stderr : stdout
+        throw GitError.commandFailed(reason.isEmpty ? "Failed to create archive auto-commit." : reason)
+    }
+
     /// Lists ignored (in `.gitignore`) files/directories present in the worktree that
     /// are likely to contain user-authored content the user cares about — notes,
     /// secrets, local config. Common build/cache directories are filtered out so
