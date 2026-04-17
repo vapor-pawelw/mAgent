@@ -13,6 +13,11 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Fixed occasional selected-state icon tint inconsistencies on non-main thread rows. Selection now consistently tints thread icons white.
 
+### Thread
+
+#### Bug Fixes
+- Fixed focus steals to the main window while typing in a pop-out thread window. Returning a different pop-out thread to main no longer forcibly re-keys the main window when another pop-out is currently focused.
+
 ## 1.6.0 - 2026-04-17
 
 
