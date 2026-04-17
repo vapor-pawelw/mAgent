@@ -1508,6 +1508,7 @@ final class ThreadListViewController: NSViewController {
             rowView.wantsLayer = true
             guard let layer = rowView.layer else { return }
             layer.removeAnimation(forKey: "selectedThreadRowPulse")
+            layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
 
             let pulse = CAKeyframeAnimation(keyPath: "transform.scale")
             pulse.values = [1.0, 1.05, 1.0]
