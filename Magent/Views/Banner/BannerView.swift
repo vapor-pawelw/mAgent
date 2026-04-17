@@ -27,22 +27,15 @@ enum BannerStyle {
     }
 
     var backgroundColor: NSColor {
-        switch self {
-        case .info:
-            return NSColor(srgbRed: 0.12, green: 0.39, blue: 0.89, alpha: 0.96)
-        case .warning:
-            return NSColor(srgbRed: 0.71, green: 0.46, blue: 0.09, alpha: 0.96)
-        case .error:
-            return NSColor(srgbRed: 0.75, green: 0.21, blue: 0.24, alpha: 0.96)
-        }
+        NSColor.windowBackgroundColor
     }
 
     var foregroundColor: NSColor {
-        NSColor.white.withAlphaComponent(0.98)
+        NSColor.labelColor
     }
 
     var secondaryForegroundColor: NSColor {
-        NSColor.white.withAlphaComponent(0.82)
+        NSColor.secondaryLabelColor
     }
 }
 
@@ -124,11 +117,70 @@ final class BannerOverlayView: NSView {
     }
 }
 
-private final class BannerButton: NSButton {
+private class BannerButton: NSButton {
     override var mouseDownCanMoveWindow: Bool { false }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+}
+
+/// Banner action button with a custom-drawn background whose bounds match its frame.
+/// Using the system `.rounded` bezel would inset the visible edge ~6pt from the frame,
+/// breaking leading-edge alignment with the banner icon circle.
+private final class BannerActionButton: BannerButton {
+    private let horizontalInset: CGFloat = 10
+    private let verticalInset: CGFloat = 4
+    private var isHovered = false
+    private var trackingArea: NSTrackingArea?
+
+    override var intrinsicContentSize: NSSize {
+        let base = super.intrinsicContentSize
+        return NSSize(width: base.width + horizontalInset * 2,
+                      height: base.height + verticalInset * 2)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingArea { removeTrackingArea(existing) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        applyBackground()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        applyBackground()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        applyBackground()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyBackground()
+    }
+
+    private func applyBackground() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let base = NSColor.quaternaryLabelColor
+            let color = isHovered ? NSColor.tertiaryLabelColor : base
+            layer?.backgroundColor = color.cgColor
+        }
     }
 }
 
@@ -143,6 +195,7 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
     var onUserInteraction: (() -> Void)?
 
     private let iconView = NSImageView()
+    private let iconCircleView = NSView()
     private let spinnerView = NSProgressIndicator()
     private let messageLabel = NSTextField(wrappingLabelWithString: "")
     private let closeButton = BannerButton()
@@ -172,18 +225,20 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
     private func setup() {
         wantsLayer = true
         layer?.cornerRadius = 10
-        layer?.backgroundColor = config.style.backgroundColor.cgColor
+        iconCircleView.wantsLayer = true
+        iconCircleView.layer?.cornerRadius = 11
+        applyAdaptiveColors()
 
         let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.2)
-        shadow.shadowOffset = NSSize(width: 0, height: -2)
-        shadow.shadowBlurRadius = 6
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
+        shadow.shadowOffset = NSSize(width: 0, height: -3)
+        shadow.shadowBlurRadius = 14
         self.shadow = shadow
 
         let rootStack = NSStackView()
         rootStack.orientation = .vertical
-        rootStack.alignment = .width
-        rootStack.spacing = 8
+        rootStack.alignment = .leading
+        rootStack.spacing = 16
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rootStack)
 
@@ -200,8 +255,11 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
         headerRow.addSubview(leadingAccessoryView)
         headerRow.addSubview(trailingAccessoryView)
 
+        iconCircleView.translatesAutoresizingMaskIntoConstraints = false
+        iconCircleView.isHidden = config.showsSpinner
+
         iconView.image = config.style.icon
-        iconView.contentTintColor = config.style.foregroundColor
+        iconView.contentTintColor = config.style.tintColor
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.isHidden = config.showsSpinner
 
@@ -209,10 +267,10 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
         spinnerView.controlSize = .small
         spinnerView.isIndeterminate = true
         spinnerView.translatesAutoresizingMaskIntoConstraints = false
-        spinnerView.appearance = NSAppearance(named: .darkAqua)
         spinnerView.isHidden = !config.showsSpinner
         if config.showsSpinner { spinnerView.startAnimation(nil) }
 
+        leadingAccessoryView.addSubview(iconCircleView)
         leadingAccessoryView.addSubview(iconView)
         leadingAccessoryView.addSubview(spinnerView)
 
@@ -247,19 +305,24 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
 
         NSLayoutConstraint.activate([
             leadingAccessoryView.leadingAnchor.constraint(equalTo: headerRow.leadingAnchor),
-            leadingAccessoryView.centerYAnchor.constraint(equalTo: headerRow.centerYAnchor),
-            leadingAccessoryView.widthAnchor.constraint(equalToConstant: 20),
-            leadingAccessoryView.heightAnchor.constraint(equalToConstant: 20),
+            leadingAccessoryView.topAnchor.constraint(equalTo: headerRow.topAnchor),
+            leadingAccessoryView.widthAnchor.constraint(equalToConstant: 22),
+            leadingAccessoryView.heightAnchor.constraint(equalToConstant: 22),
 
             trailingAccessoryView.trailingAnchor.constraint(equalTo: headerRow.trailingAnchor),
-            trailingAccessoryView.centerYAnchor.constraint(equalTo: headerRow.centerYAnchor),
-            trailingAccessoryView.widthAnchor.constraint(equalTo: leadingAccessoryView.widthAnchor),
-            trailingAccessoryView.heightAnchor.constraint(equalTo: leadingAccessoryView.heightAnchor),
+            trailingAccessoryView.topAnchor.constraint(equalTo: headerRow.topAnchor),
+            trailingAccessoryView.widthAnchor.constraint(equalToConstant: 20),
+            trailingAccessoryView.heightAnchor.constraint(equalToConstant: 20),
+
+            iconCircleView.centerYAnchor.constraint(equalTo: leadingAccessoryView.centerYAnchor),
+            iconCircleView.centerXAnchor.constraint(equalTo: leadingAccessoryView.centerXAnchor),
+            iconCircleView.widthAnchor.constraint(equalToConstant: 22),
+            iconCircleView.heightAnchor.constraint(equalToConstant: 22),
 
             iconView.centerYAnchor.constraint(equalTo: leadingAccessoryView.centerYAnchor),
             iconView.centerXAnchor.constraint(equalTo: leadingAccessoryView.centerXAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 18),
-            iconView.heightAnchor.constraint(equalToConstant: 18),
+            iconView.widthAnchor.constraint(equalToConstant: 13),
+            iconView.heightAnchor.constraint(equalToConstant: 13),
 
             spinnerView.centerYAnchor.constraint(equalTo: leadingAccessoryView.centerYAnchor),
             spinnerView.centerXAnchor.constraint(equalTo: leadingAccessoryView.centerXAnchor),
@@ -271,7 +334,7 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
 
             messageLabel.topAnchor.constraint(equalTo: headerRow.topAnchor),
             messageLabel.bottomAnchor.constraint(equalTo: headerRow.bottomAnchor),
-            messageLabel.leadingAnchor.constraint(equalTo: leadingAccessoryView.trailingAnchor, constant: 10),
+            messageLabel.leadingAnchor.constraint(equalTo: leadingAccessoryView.trailingAnchor, constant: 8),
             messageLabel.trailingAnchor.constraint(equalTo: trailingAccessoryView.leadingAnchor, constant: -10),
             headerRow.heightAnchor.constraint(greaterThanOrEqualToConstant: 20),
         ])
@@ -294,12 +357,27 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
 
         translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            rootStack.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            rootStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            rootStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            rootStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
+            rootStack.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            rootStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            rootStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            rootStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
+            // Under rootStack.alignment = .leading, arranged rows only get a leading anchor.
+            // headerRow must span full width so the X button lands at the banner trailing edge.
+            headerRow.trailingAnchor.constraint(equalTo: rootStack.trailingAnchor),
             heightAnchor.constraint(greaterThanOrEqualToConstant: 46),
         ])
+    }
+
+    private func applyAdaptiveColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            iconCircleView.layer?.backgroundColor = config.style.tintColor.withAlphaComponent(0.18).cgColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyAdaptiveColors()
     }
 
     private func normalizedAttributedMessage(_ attributed: NSAttributedString) -> NSAttributedString {
@@ -323,13 +401,10 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
         row.translatesAutoresizingMaskIntoConstraints = false
 
         for action in config.actions {
-            let button = BannerButton(title: action.title, target: self, action: #selector(actionTapped(_:)))
-            button.bezelStyle = .rounded
+            let button = BannerActionButton(title: action.title, target: self, action: #selector(actionTapped(_:)))
+            button.isBordered = false
             button.controlSize = .small
             button.font = .systemFont(ofSize: 12, weight: .medium)
-            // Banner backgrounds are always dark/saturated — force dark appearance so
-            // AppKit renders button text in white rather than following the system theme.
-            button.appearance = NSAppearance(named: .darkAqua)
             button.tag = actionButtons.count
             button.translatesAutoresizingMaskIntoConstraints = false
             row.addArrangedSubview(button)
@@ -338,11 +413,10 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
 
         if hasDetails {
             let title = config.detailsCollapsedTitle ?? "Show Details"
-            let button = BannerButton(title: title, target: self, action: #selector(toggleDetails))
-            button.bezelStyle = .rounded
+            let button = BannerActionButton(title: title, target: self, action: #selector(toggleDetails))
+            button.isBordered = false
             button.controlSize = .small
             button.font = .systemFont(ofSize: 12, weight: .medium)
-            button.appearance = NSAppearance(named: .darkAqua)
             button.translatesAutoresizingMaskIntoConstraints = false
             row.addArrangedSubview(button)
             detailsToggleButton = button

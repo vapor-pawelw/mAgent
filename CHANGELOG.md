@@ -13,6 +13,11 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Fixed occasional selected-state icon tint inconsistencies on non-main thread rows. Selection now consistently tints thread icons white.
 
+### Banners
+
+#### Features
+- Restyled in-app banners with a lighter, less shouty look: the banner background now uses the standard sidebar/window surface with a soft drop shadow, and the style color (info/warning/error) shows as a dimmed circle behind the icon instead of filling the whole banner. Icon, text, buttons and the top-right dismiss `X` now share a consistent 16pt inset on all sides with pixel-aligned leading edges.
+
 ## 1.6.0 - 2026-04-17
 
 

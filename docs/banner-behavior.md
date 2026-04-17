@@ -21,6 +21,15 @@
 - **Embedded-banner gotcha**: banners shown over a terminal tab should be mounted inside a dedicated `BannerOverlayView` that sits above the terminal content, not added directly to `terminalContainer`. Ghostty and other floating terminal overlays can otherwise retake frontmost position and steal banner clicks.
 - **Multi-window routing**: `BannerManager.shared` keeps a weak-ref list of registered overlays (`registerContainer(_:)` / `unregisterContainer(_:)`). `show(...)` picks the overlay whose window is currently key, falling back to main/visible/first. Any new window type that can host user-initiated work (pop-out thread/tab windows, future auxiliary windows) must install its own `BannerOverlayView` and register it, or errors surfaced from that window's flows will be shown in an invisible main window instead.
 
+## Visual Styling
+
+- Banner background uses `NSColor.windowBackgroundColor` (sidebar-like surface), not a saturated style fill. Style color (blue/yellow/red) is expressed via a 22pt circle behind the icon using `tintColor.withAlphaComponent(0.18)`; the icon itself is tinted with the full `tintColor`. Text uses `labelColor` / `secondaryLabelColor`.
+- Drop shadow: `NSShadow` with 0.28 alpha, offset (0, -3), blur 14.
+- **Adaptive color gotcha**: both `layer?.backgroundColor` for the banner and `iconCircleView.layer?.backgroundColor` must be set inside `effectiveAppearance.performAsCurrentDrawingAppearance { }`, and re-applied in `viewDidChangeEffectiveAppearance`. Deriving CGColors from dynamic NSColors outside that block can permanently capture the wrong appearance variant.
+- **Layout contract**: `rootStack.alignment = .leading` — every arranged row (header, actions, details) gets its leading anchored to the stack leading via NSStackView's alignment guarantee. That is how the icon circle's leading and the first action button's leading end up on the same vertical line. `headerRow` additionally gets an explicit `trailingAnchor = rootStack.trailingAnchor` so the top-right `X` lands at the banner's trailing edge (under `.leading` alignment the row would otherwise collapse to intrinsic width).
+- Shared banner insets: all four sides = 16pt. Vertical spacing between rows (`rootStack.spacing`) = 16pt.
+- **Action buttons use `BannerActionButton`, not the system `.rounded` bezel**: `NSButton.rounded` draws its bezel inset several points inside its own frame, so its visible leading edge cannot be made to line up with other subviews via shared anchors. `BannerActionButton` is borderless and draws its own layer-backed rounded fill that exactly matches its frame, so anchoring to the same leading guide as the icon circle produces pixel-aligned leading edges. Keep this class for any new banner action buttons.
+
 ## Current Non-Dismissible Progress Examples
 
 - Update installation in `UpdateService.installUpdate(...)`
