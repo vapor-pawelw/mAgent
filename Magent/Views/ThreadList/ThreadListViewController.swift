@@ -1530,10 +1530,22 @@ final class ThreadListViewController: NSViewController {
             rowView.wantsLayer = true
             guard let layer = rowView.layer else { return }
             layer.removeAnimation(forKey: "selectedThreadRowPulse")
-            layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
 
-            let pulse = CAKeyframeAnimation(keyPath: "transform.scale")
-            pulse.values = [1.0, 1.05, 1.0]
+            // Scale from the center without touching anchorPoint — changing anchorPoint
+            // on an NSView-backed layer shifts its position and displaces the row.
+            // Instead, bake the centering translation into each transform value directly.
+            let w = layer.bounds.width, h = layer.bounds.height
+            func centeredScale(_ s: CGFloat) -> CATransform3D {
+                // Translate to center, scale, translate back.
+                var t = CATransform3DIdentity
+                t = CATransform3DTranslate(t, w / 2, h / 2, 0)
+                t = CATransform3DScale(t, s, s, 1)
+                t = CATransform3DTranslate(t, -w / 2, -h / 2, 0)
+                return t
+            }
+
+            let pulse = CAKeyframeAnimation(keyPath: "transform")
+            pulse.values = [centeredScale(1.0), centeredScale(1.05), centeredScale(1.0)]
             pulse.keyTimes = [0.0, 0.5, 1.0]
             pulse.duration = 0.3
             pulse.timingFunctions = [
