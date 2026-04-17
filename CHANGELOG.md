@@ -20,6 +20,9 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 
+#### Features
+- Restyled the prompt Table of Contents overlay to match the scroll-to-bottom and navigation overlays: removed the border and updated the background to use the same semi-transparent dark/light theme colors. Header background now smoothly animates in when the TOC expands for a more polished appearance.
+
 #### Bug Fixes
 - Fixed focus steals to the main window while typing in a pop-out thread window. Returning a different pop-out thread to main no longer forcibly re-keys the main window when another pop-out is currently focused.
 ## 1.6.0 - 2026-04-17
