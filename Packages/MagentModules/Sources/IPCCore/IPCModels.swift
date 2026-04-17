@@ -205,6 +205,15 @@ public nonisolated struct IPCThreadInfo: Encodable, Sendable {
     public var jiraTicketKey: String?
     public var branchName: String?
     public var archivedAt: String?
+    public var createdAt: String?
+    /// Last path component of `worktreePath` — the on-disk worktree directory name.
+    public var worktreeName: String?
+    public var isFavorite: Bool?
+    public var isPinned: Bool?
+    public var isSidebarHidden: Bool?
+    public var priority: Int?
+    public var signEmoji: String?
+    public var threadIcon: String?
 
     public init(thread: MagentThread, projectName: String, baseBranch: String? = nil) {
         self.id = thread.id.uuidString

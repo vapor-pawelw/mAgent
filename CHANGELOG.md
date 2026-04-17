@@ -134,7 +134,7 @@ All notable changes to this project will be documented in this file.
 
 ### CLI
 #### Features
-- Added `magent-cli list-archived [--project <name>] [--limit <n>]` to list recently archived threads (most recent first). Each result includes the thread's branch name and ISO-8601 archive timestamp so past work can be located after a thread is archived.
+- Added `magent-cli list-archived [--project <name>] [--limit <n>]` to list recently archived threads (most recent first). Each result now includes the thread's branch name, full worktree path and directory name, created/archived timestamps, primary agent type, base branch, Jira ticket key, priority, icon, sign emoji, and favorite/pinned/hidden flags so past work can be fully identified after archive. `magent-cli thread-info` also now resolves archived threads by name or ID.
 
 #### Bug Fixes
 - Documented `create-thread --select` semantics for popped-out targets: selection now focuses the pop-out window instead of replacing main-window content.

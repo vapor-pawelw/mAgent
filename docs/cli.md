@@ -146,10 +146,17 @@ magent-cli list-archived [--project <name>] [--limit <n>]
 
 Each returned thread includes:
 - `branchName` — the git branch the worktree was attached to (the branch is preserved on archive)
-- `archivedAt` — ISO-8601 timestamp of when the thread was archived
+- `worktreePath` / `worktreeName` — the full path and last-component directory name of the (now-removed) worktree
+- `archivedAt` / `createdAt` — ISO-8601 timestamps for archive and original creation
+- `agentType` — the thread's primary agent (`claude`, `codex`, `custom`, `terminal`) derived from the first agent session at archive time
+- `jiraTicketKey` — linked Jira ticket key, if any (only when Jira sync is enabled)
+- `baseBranch` — the branch the thread was based on
+- `priority`, `threadIcon`, `signEmoji`, `isFavorite`, `isPinned`, `isSidebarHidden` — persisted sidebar metadata
 - the same `sectionName` / `taskDescription` / `projectName` fields as `list-threads`
 
 Use `--limit` to cap the result count (e.g. `--limit 10` for the ten most recent archives). Use `--project` to scope to a single project.
+
+`thread-info --thread <name>` / `--thread-id <id>` also resolves archived threads, returning the same enriched metadata (without runtime `status`, which is only meaningful for active threads).
 
 ### thread-info
 

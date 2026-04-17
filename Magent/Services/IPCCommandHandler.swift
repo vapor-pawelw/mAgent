@@ -676,6 +676,19 @@ final class IPCCommandHandler {
         return IPCResponse(ok: true, id: request.id, threads: infos)
     }
 
+    /// Looks up an archived thread by ID or name from persistence. Archived threads are
+    /// not present in `ThreadManager.threads`, so `resolveThread` can't find them.
+    private func resolveArchivedThread(_ request: IPCRequest) -> MagentThread? {
+        let archived = persistence.loadThreads().filter { $0.isArchived }
+        if let threadId = request.threadId, let uuid = UUID(uuidString: threadId) {
+            return archived.first(where: { $0.id == uuid })
+        }
+        if let name = request.threadName {
+            return archived.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame })
+        }
+        return nil
+    }
+
     /// Lists archived threads (most recently archived first). Archived threads live in
     /// `threads.json` but not in `ThreadManager.threads`, so we load them from persistence.
     private func listArchived(_ request: IPCRequest) -> IPCResponse {
@@ -716,17 +729,48 @@ final class IPCCommandHandler {
 
         let infos = archived.map { thread -> IPCThreadInfo in
             let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
-            var info = IPCThreadInfo(thread: thread, projectName: projectName)
-            info.sectionName = resolveSectionName(for: thread, settings: settings)
-            info.sectionId = thread.sectionId?.uuidString
-            info.branchName = thread.branchName
-            info.baseBranch = thread.baseBranch
-            if let archivedAt = thread.archivedAt {
-                info.archivedAt = isoFormatter.string(from: archivedAt)
-            }
-            return info
+            return makeArchivedThreadInfo(thread: thread, projectName: projectName, settings: settings, isoFormatter: isoFormatter)
         }
         return IPCResponse(ok: true, id: request.id, threads: infos)
+    }
+
+    /// Builds a rich `IPCThreadInfo` for an archived thread. Archived threads aren't in
+    /// `ThreadManager.threads`, so runtime status isn't meaningful — but persisted metadata
+    /// (branch, worktree path, agent, Jira ticket, priority, icon, timestamps) is still
+    /// useful for locating past work.
+    private func makeArchivedThreadInfo(
+        thread: MagentThread,
+        projectName: String,
+        settings: AppSettings,
+        isoFormatter: ISO8601DateFormatter
+    ) -> IPCThreadInfo {
+        var info = IPCThreadInfo(thread: thread, projectName: projectName)
+        info.sectionName = resolveSectionName(for: thread, settings: settings)
+        info.sectionId = thread.sectionId?.uuidString
+        info.branchName = thread.branchName
+        info.baseBranch = thread.baseBranch
+        info.worktreeName = (thread.worktreePath as NSString).lastPathComponent
+        info.createdAt = isoFormatter.string(from: thread.createdAt)
+        if let archivedAt = thread.archivedAt {
+            info.archivedAt = isoFormatter.string(from: archivedAt)
+        }
+        // Pick the first agent session's type (if any) as the representative agent for this thread.
+        if let firstAgentSession = thread.agentTmuxSessions.first,
+           let agent = thread.sessionAgentTypes[firstAgentSession] {
+            info.agentType = agent.rawValue
+        } else if let anyAgent = thread.sessionAgentTypes.values.first {
+            info.agentType = anyAgent.rawValue
+        }
+        if AppFeatures.jiraSyncEnabled {
+            info.jiraTicketKey = thread.jiraTicketKey
+        }
+        info.isFavorite = thread.isFavorite
+        info.isPinned = thread.isPinned
+        info.isSidebarHidden = thread.isSidebarHidden
+        info.priority = thread.priority
+        info.signEmoji = thread.signEmoji
+        info.threadIcon = thread.threadIcon.rawValue
+        return info
     }
 
     private func sendPrompt(_ request: IPCRequest) async -> IPCResponse {
@@ -1254,7 +1298,18 @@ final class IPCCommandHandler {
         let thread: MagentThread
         switch resolveThread(request) {
         case .found(let t): thread = t
-        case .error(let err): return err
+        case .error(let err):
+            // Fall back to archived threads in persistence so callers can introspect
+            // recently archived threads (branch name, worktree path, timestamps, etc.).
+            if let archived = resolveArchivedThread(request) {
+                let settings = persistence.loadSettings()
+                let projectName = settings.projects.first(where: { $0.id == archived.projectId })?.name ?? "unknown"
+                let isoFormatter = ISO8601DateFormatter()
+                isoFormatter.formatOptions = [.withInternetDateTime]
+                let info = makeArchivedThreadInfo(thread: archived, projectName: projectName, settings: settings, isoFormatter: isoFormatter)
+                return IPCResponse(ok: true, id: request.id, thread: info)
+            }
+            return err
         }
 
         let settings = persistence.loadSettings()
