@@ -1417,11 +1417,8 @@ final class ThreadCell: NSTableCellView {
 
     private func updateMainTextColorForSelection() {
         let isEmphasized = backgroundStyle == .emphasized
-        let isDark = effectiveAppearance.name == .darkAqua
-        if isEmphasized && isDark {
-            textField?.textColor = .white
-        } else if isConfiguredAsMain {
-            textField?.textColor = .labelColor
+        if isConfiguredAsMain {
+            textField?.textColor = isEmphasized ? .white : .labelColor
         }
     }
 
