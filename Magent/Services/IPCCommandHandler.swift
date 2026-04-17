@@ -856,19 +856,16 @@ final class IPCCommandHandler {
         } catch ThreadManagerError.dirtyWorktree(let worktreePath, let notableIgnoredFiles) {
             // Keep the refusal distinct from generic archive failures so CLI users
             // and coding agents see clearly that this is a safety stop, not a bug.
-            // The message explicitly names the destructive consequence of `--force`
-            // so agents pause to reconfirm intent before passing it.
             var message = """
             Refusing to archive thread \"\(thread.name)\": worktree at \(worktreePath) has uncommitted or untracked changes.
 
-            Archiving runs `git worktree remove --force`, which DELETES the worktree directory. Any uncommitted work will be ABANDONED and cannot be recovered (the git branch is kept, but working-tree changes are not on any branch).
-
             Options:
               1. Commit or stash the changes first, then re-run archive-thread.
-              2. If the user has explicitly confirmed they want to discard this work, pass --force. Agents: do NOT pass --force without explicit user confirmation that the uncommitted changes should be thrown away.
+              2. Pass --force to archive anyway. --force now auto-commits tracked/untracked changes first using a generic commit message (`Uncommitted changes on <branch> (<worktree>)`), then archives.
+                 Suggested: prefer committing yourself first for a more meaningful commit message.
             """
             if !notableIgnoredFiles.isEmpty {
-                message += "\n\nIgnored files that will also be deleted (not tracked by git, not recoverable by restore):\n  "
+                message += "\n\nIgnored files that are still deleted on archive (not tracked by git, not recoverable by restore):\n  "
                     + notableIgnoredFiles.prefix(10).joined(separator: "\n  ")
                 if notableIgnoredFiles.count > 10 {
                     message += "\n  ... and \(notableIgnoredFiles.count - 10) more"
@@ -886,7 +883,7 @@ final class IPCCommandHandler {
             \(files.count > 10 ? "  ... and \(files.count - 10) more\n" : "")
             Options:
               1. Move/back up these files first, then re-run archive-thread.
-              2. If the user has explicitly confirmed they want to discard these files, pass --force. Agents: do NOT pass --force without explicit user confirmation.
+              2. Pass --force to archive anyway. Note: this case has no tracked/untracked changes to auto-commit, so ignored files will still be deleted.
             """
             return .failure(message, id: request.id)
         } catch {

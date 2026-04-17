@@ -2262,14 +2262,14 @@ enum ThreadManagerError: LocalizedError {
         case .archiveCancelled:
             return "Archive cancelled."
         case .dirtyWorktree(let worktreePath, let notableIgnoredFiles):
-            var message = "Worktree has uncommitted changes at \(worktreePath). Archiving will remove the worktree directory and abandon this work. Commit or stash first, or pass --force (CLI) / confirm the destructive archive prompt (GUI) to proceed anyway."
+            var message = "Worktree has uncommitted changes at \(worktreePath). Commit or stash first, or pass --force (CLI) / choose Archive Anyway (GUI) to auto-commit with a generic message before archiving."
             if !notableIgnoredFiles.isEmpty {
-                message += "\n\nThe following ignored files (not tracked by git, not recoverable after archive) will also be deleted:\n  "
+                message += "\n\nIgnored files (not tracked by git) are still deleted on archive:\n  "
                     + notableIgnoredFiles.joined(separator: "\n  ")
             }
             return message
         case .notableIgnoredFilesWouldBeDeleted(let worktreePath, let files):
-            return "Worktree \(worktreePath) is clean but contains ignored files that would be deleted with the directory. Ignored files are not stored on any branch, so they cannot be recovered by restore. Move or back them up first, or pass --force (CLI) / confirm the destructive archive prompt (GUI) to proceed anyway. Files:\n  "
+            return "Worktree \(worktreePath) is clean but contains ignored files that would be deleted with the directory. Ignored files are not stored on any branch, so they cannot be recovered by restore. Move or back them up first, or pass --force (CLI) / choose Archive Anyway (GUI) to proceed. Files:\n  "
                 + files.joined(separator: "\n  ")
         case .localFileSyncFailed(let message):
             return message

@@ -604,6 +604,21 @@ extension ThreadManager {
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
+    private func archiveAutoCommitMessage(for thread: MagentThread, resolvedBranchName: String?) -> String {
+        let branchName = resolvedBranchName ?? thread.branchName
+        let worktreeName = URL(fileURLWithPath: thread.worktreePath).lastPathComponent
+        return "Uncommitted changes on \(branchName) (\(worktreeName))"
+    }
+
+    private func autoCommitBeforeForcedArchiveIfNeeded(_ thread: MagentThread) async throws {
+        let isDirty = await git.isDirty(worktreePath: thread.worktreePath)
+        guard isDirty else { return }
+
+        let resolvedBranchName = await git.getCurrentBranch(workingDirectory: thread.worktreePath)
+        let commitMessage = archiveAutoCommitMessage(for: thread, resolvedBranchName: resolvedBranchName)
+        _ = try await git.commitAllChanges(worktreePath: thread.worktreePath, message: commitMessage)
+    }
+
     /// - Parameters:
     ///   - awaitLocalSync: When `true`, local-file sync runs eagerly (off the main actor
     ///     but awaited) so the result/warning can be returned to the caller. When `false`
@@ -622,11 +637,8 @@ extension ThreadManager {
             throw ThreadManagerError.cannotDeleteMainThread
         }
 
-        // Dirty-worktree guard. Archiving runs `git worktree remove --force`, which
-        // unconditionally deletes the worktree directory — any uncommitted, untracked,
-        // or ignored content would be abandoned silently. Refuse unless `force` is
-        // set, so the GUI can prompt for a destructive confirmation and the CLI can
-        // require an explicit `--force` flag.
+        // Dirty-worktree guard. Archive removes the worktree directory. Refuse unless
+        // `force` is set so GUI/CLI can confirm intent first.
         //
         // We list "notable" ignored files (e.g. `.agents/` notes, `.env` files) so
         // the user knows data that isn't in git at all — not recoverable by restore —
@@ -648,6 +660,10 @@ extension ThreadManager {
                     files: notableIgnored
                 )
             }
+        } else {
+            // `force` no longer discards dirty worktrees. Instead, create a generic
+            // safety commit before archive so uncommitted/untracked changes are kept.
+            try await autoCommitBeforeForcedArchiveIfNeeded(thread)
         }
 
         // If the archive fails before the thread is removed from the list, clear the archiving flag.
