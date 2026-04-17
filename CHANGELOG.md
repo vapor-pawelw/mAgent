@@ -4,7 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Sidebar
+
+#### Features
+- Restyled the main worktree row in the sidebar: removed the old leading accent stripe and switched to a subtle primary-tinted capsule with a 1pt border, matching the existing capsule system.
+- Added a dedicated non-customizable main-worktree icon (`house.fill`) so the main row is visually distinct from regular threads.
+
+#### Bug Fixes
+- Fixed occasional selected-state icon tint inconsistencies on non-main thread rows. Selection now consistently tints thread icons white.
 
 ## 1.6.0 - 2026-04-17
 

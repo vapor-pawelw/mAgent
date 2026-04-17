@@ -448,6 +448,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if let itemThread = item as? MagentThread {
             let thread = resolvedThreadSnapshot(for: itemThread)
             let isSelected = outlineView.isRowSelected(outlineView.row(forItem: item))
+            rowView.isMainWorktreeRow = thread.isMain
             rowView.busyBorderPhaseKey = thread.id
             rowView.showsRateLimitHighlight = thread.hasUnreadRateLimit
             rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion && !thread.hasUnreadRateLimit
@@ -462,6 +463,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 isSelected: isSelected
             )
         } else {
+            rowView.isMainWorktreeRow = false
             rowView.showsRateLimitHighlight = false
             rowView.showsCompletionHighlight = false
             rowView.showsWaitingHighlight = false
@@ -1088,7 +1090,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     directlyRateLimitedAgentTypes: thread.directlyRateLimitedAgentTypes,
                     currentBranch: currentBranch,
                     busyStateSince: thread.busyStateSince,
-                    leadingOffset: 3 + 6 // accent bar width + spacing (matches icon flow)
+                    leadingOffset: 0
                 )
                 return cell
             }
@@ -1433,6 +1435,7 @@ extension ThreadListViewController: ThreadManagerDelegate {
             // Reconfigure the row view (busy border, highlight borders, sign emoji).
             if let rowView = outlineView.rowView(atRow: row, makeIfNecessary: false) as? AlwaysEmphasizedRowView {
                 let isSelected = outlineView.isRowSelected(row)
+                rowView.isMainWorktreeRow = updated.isMain
                 rowView.busyBorderPhaseKey = updated.id
                 rowView.showsRateLimitHighlight = updated.hasUnreadRateLimit
                 rowView.showsCompletionHighlight = updated.hasUnreadAgentCompletion && !updated.hasUnreadRateLimit
@@ -1470,7 +1473,7 @@ extension ThreadListViewController: ThreadManagerDelegate {
                         directlyRateLimitedAgentTypes: updated.directlyRateLimitedAgentTypes,
                         currentBranch: currentBranch,
                         busyStateSince: updated.busyStateSince,
-                        leadingOffset: 3 + 6
+                        leadingOffset: 0
                     )
                 } else {
                     let shouldUseSections = settings.shouldUseThreadSections(for: updated.projectId)

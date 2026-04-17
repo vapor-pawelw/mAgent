@@ -13,7 +13,8 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - Rate-limit top-border badges can show a tiny 2pt red corner dot to indicate a directly-detected local source (non-propagated marker) for that agent on this thread.
 - Duration badge is a pill on the capsule's bottom-right with a persistent border. The duration label tints with a color gradient based on thread age: light blue (<15 min), green (<8 hrs), yellow (<1 day), orange (<3 days), red (3+ days). This provides at-a-glance visual feedback on activity age.
 - **Priority capsule**: Optional pill sitting immediately to the left of the duration badge on the capsule's bottom-right. Shown only when the thread has an explicit 1–5 priority. Renders cumulative dots (`●○○○○` through `●●●●●`) in a monospaced 9pt font so the string width is stable across levels. Dot color tints by level: 1 blue, 2 green, 3 yellow, 4 orange, 5 red. The capsule is filled with `windowBackgroundColor` (matches the sidebar background behind the row capsules) and uses the same `TopBorderBadge`-style border treatment as the duration pill so both badges read as a matched pair. 2pt inner padding on all sides.
-- The `Main worktree` row shows a tinted accent bar at the leading edge (same inset as non-main thread icons).
+- The `Main worktree` row uses the same capsule geometry as other rows, but with a very subtle primary-tinted fill/border in its default state (1pt border) so it is visually distinct without a dedicated stripe.
+- The main row always uses a dedicated non-customizable `house.fill` icon. Tint behavior follows thread-row selection semantics: primary color when unselected, white when selected.
 - Regular thread rows use a three-line vertical stack:
   - line 1 (primary): task description when set; otherwise the branch name.
   - line 2 (secondary / `subtitleLabel`): branch · worktree when a description is shown; worktree only when no description and the worktree name differs from the branch; hidden otherwise.
@@ -48,7 +49,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - Outline view uses `indentationPerLevel = 0`. All indentation is managed via capsule-relative padding in `ThreadCell`.
 - `AlwaysEmphasizedRowView.drawBackground(in:)` handles all selection/state drawing (not `drawSelection`). `selectionHighlightStyle = .none` on the outline view suppresses AppKit's own selection rect.
 - `AlwaysEmphasizedRowView.isSelected.didSet` pushes `backgroundStyle` to child cell views and updates sign emoji selection color.
-- `ThreadCell` owns the main-row accent bar, toggled via `configureAsMain(...)`.
+- `ThreadCell.configureAsMain(...)` owns the dedicated main-row content state (fixed title/subtitle behavior and fixed `house.fill` icon). `AlwaysEmphasizedRowView` owns the capsule visual treatment for main rows.
 - Dynamic row heights computed in `heightOfRowByItem` using `ThreadCell.estimatedDescriptionLineCount` (text width estimation) and `ThreadCell.sidebarRowHeight(descriptionLines:hasSubtitle:hasPRRow:narrowThreads:)`.
 - The archiving overlay is owned by `AlwaysEmphasizedRowView`, covering the full row bounds.
 - Archive preflight failures (for example dirty-worktree / ignored-file refusals) must clear `isArchiving` immediately so this overlay never remains stuck on a live thread row.
@@ -61,7 +62,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 ## Gotchas
 
 - When displaying branch and worktree names together, check for equality first — if the same, show once.
-- Keep the main-row accent bar at `sidebarHorizontalInset` so it aligns with non-main thread icons.
+- Keep the main-row default capsule tint subtle (closer to selected-row styling than default rows, but much dimmer) so it distinguishes the main worktree without overpowering status highlights.
 - `SidebarProjectMainSpacer` is skipped entirely when `projectHeaderToMainRowGap = 0` — inserting a 0-height spacer row crashes `NSOutlineView`.
 - Do not rely on `NSScrollView.contentInsets` for overlay-aware bottom spacing in this sidebar. Effective behavior changes with sibling panel visibility; use explicit content padding rows (`SidebarBottomPadding`) instead.
 - The PR/ticket row (`prRow`) contains `[jiraTicketTF, jiraBadge, dotSep, prNumTF, prBadge]` with `detachesHiddenViews = true`. Never merge branch/worktree and PR/ticket into one secondary line.

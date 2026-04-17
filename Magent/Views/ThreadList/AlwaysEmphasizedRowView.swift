@@ -130,6 +130,13 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     var showsPopoutTint = false {
         didSet { needsDisplay = true }
     }
+    var isMainWorktreeRow = false {
+        didSet {
+            guard isMainWorktreeRow != oldValue else { return }
+            needsDisplay = true
+            updateSignEmojiBadge()
+        }
+    }
     var showsArchivingOverlay = false {
         didSet { updateArchivingOverlay() }
     }
@@ -232,6 +239,11 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             return CapsuleStyle(
                 fill: NSColor.systemPurple.withAlphaComponent(0.12),
                 border: NSColor.systemPurple.withAlphaComponent(0.7)
+            )
+        } else if isMainWorktreeRow {
+            return CapsuleStyle(
+                fill: NSColor.controlAccentColor.withAlphaComponent(0.045),
+                border: NSColor.controlAccentColor.withAlphaComponent(0.26)
             )
         } else {
             return CapsuleStyle(

@@ -274,11 +274,9 @@ final class ThreadCell: NSTableCellView {
     private var pinImageView: NSImageView?
     private(set) var archiveButton: NSButton?
     private var trailingStackView: NSStackView?
-    private weak var leadingTextStackView: NSStackView?
     private weak var secondaryRowStack: NSStackView?
     private weak var prRowStack: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
-    private var mainAccentBar: NSView?
     private var durationLabel: NSTextField?
     private var durationTimer: Timer?
     private var currentDurationSince: Date?
@@ -372,6 +370,7 @@ final class ThreadCell: NSTableCellView {
     override var backgroundStyle: NSView.BackgroundStyle {
         didSet {
             updateMainTextColorForSelection()
+            updateMainIconTintForSelection()
             updateTopBorderBadgeColors()
             updateLeadingIconTint()
         }
@@ -487,8 +486,6 @@ final class ThreadCell: NSTableCellView {
         verticalStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
         secondaryRowStack = secondaryRow
         prRowStack = prRow
-        leadingTextStackView = verticalStack
-
         let stack = NSStackView(views: [iv, verticalStack])
         stack.orientation = .horizontal
         stack.spacing = 6
@@ -513,31 +510,6 @@ final class ThreadCell: NSTableCellView {
             constraints.append(stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -ThreadListViewController.sidebarTrailingInset))
         }
         NSLayoutConstraint.activate(constraints)
-    }
-
-    private func ensureMainAccentBar() {
-        guard mainAccentBar == nil, let leadingTextStackView else { return }
-
-        let accentBar = NSView()
-        accentBar.translatesAutoresizingMaskIntoConstraints = false
-        accentBar.wantsLayer = true
-        accentBar.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.45).cgColor
-        accentBar.isHidden = true
-        addSubview(accentBar)
-
-        // Position the accent bar where the icon sits in non-main threads:
-        // same horizontal inset, centered vertically with the text stack.
-        NSLayoutConstraint.activate([
-            accentBar.leadingAnchor.constraint(
-                equalTo: leadingAnchor,
-                constant: ThreadListViewController.sidebarHorizontalInset
-            ),
-            accentBar.centerYAnchor.constraint(equalTo: leadingTextStackView.centerYAnchor),
-            accentBar.widthAnchor.constraint(equalToConstant: 3),
-            accentBar.heightAnchor.constraint(equalTo: leadingTextStackView.heightAnchor),
-        ])
-
-        mainAccentBar = accentBar
     }
 
     private func setLeadingOffset(_ offset: CGFloat) {
@@ -662,10 +634,8 @@ final class ThreadCell: NSTableCellView {
         isConfiguredAsMain = false
         ensureTrailingStack()
         ensureLeadingStack()
-        ensureMainAccentBar()
         setLeadingOffset(leadingOffset)
         setDimmedAppearance(isHidden: thread.isSidebarHidden, isArchiving: thread.isArchiving)
-        mainAccentBar?.isHidden = true
 
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
         let branchName = (thread.actualBranch ?? thread.branchName).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -896,10 +866,8 @@ final class ThreadCell: NSTableCellView {
         isConfiguredAsMain = true
         ensureTrailingStack()
         ensureLeadingStack()
-        ensureMainAccentBar()
         setLeadingOffset(leadingOffset)
         setDimmedAppearance(isHidden: false, isArchiving: false)
-        mainAccentBar?.isHidden = false
 
         textField?.stringValue = "Main worktree"
         textField?.font = .systemFont(
@@ -924,7 +892,9 @@ final class ThreadCell: NSTableCellView {
         }
 
         imageView?.image = nil
-        imageView?.isHidden = true
+        imageView?.image = Self.cachedSymbolImage("house.fill")
+        imageView?.isHidden = false
+        updateMainIconTintForSelection()
 
         setDirtyDot(primaryDirtyDot, visible: false)
         setDirtyDot(secondaryDirtyDot, visible: isDirty)
@@ -1400,13 +1370,12 @@ final class ThreadCell: NSTableCellView {
 
     private func updateLeadingIconTint() {
         guard !isConfiguredAsMain else { return }
-        if hasAllDead {
+        if isRowVisuallySelected {
+            imageView?.contentTintColor = .white
+        } else if hasAllDead {
             imageView?.contentTintColor = .tertiaryLabelColor
         } else {
-            let isRowSelected = (superview as? NSTableRowView)?.isSelected ?? false
-            if isRowSelected {
-                imageView?.contentTintColor = .controlAccentColor
-            } else if hasWaitingForInput {
+            if hasWaitingForInput {
                 imageView?.contentTintColor = .systemOrange
             } else if hasUnreadCompletion {
                 imageView?.contentTintColor = .systemGreen
@@ -1423,9 +1392,28 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
+    private func updateMainIconTintForSelection() {
+        guard isConfiguredAsMain else { return }
+        imageView?.contentTintColor = isRowVisuallySelected ? .white : NSColor(resource: .primaryBrand)
+    }
+
+    private var isRowVisuallySelected: Bool {
+        if backgroundStyle == .emphasized {
+            return true
+        }
+        return (superview as? NSTableRowView)?.isSelected ?? false
+    }
+
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        updateLeadingIconTint()
+        updateMainIconTintForSelection()
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateMainTextColorForSelection()
+        updateMainIconTintForSelection()
         updateTopBorderBadgeColors()
     }
 

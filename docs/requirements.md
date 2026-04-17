@@ -196,7 +196,8 @@ For the main thread, the sidebar uses these rules:
 
 - Line 1: `Main worktree`
 - Line 2: current branch name when available
-- A vertical accent bar appears on the main-thread row instead of the project header row.
+- The row uses a subtle primary-tinted capsule with a 1pt border (no dedicated accent stripe).
+- The row icon is fixed to `house.fill` (non-customizable for main threads). It is primary-tinted by default and switches to white when selected.
 
 ### Non-Main Thread Rename Actions
 
