@@ -2,6 +2,8 @@ import Foundation
 import MagentCore
 
 extension ThreadManager {
+    private static let archivedPathRediscoverySuppressionWindow: TimeInterval = 15 * 60
+    private static let archivedHistoryLimitPerProject = 100
 
     // MARK: - Worktree Sync
 
@@ -33,11 +35,17 @@ extension ThreadManager {
         // Load persisted threads once — used for archived-path exclusion and later merge/save.
         var allPersistedThreads = persistence.loadThreads()
 
-        // Collect paths of archived threads so we don't re-discover them
-        // when the worktree directory wasn't fully cleaned up.
+        // Collect paths of recently archived threads so we don't immediately
+        // re-discover them while archive cleanup is still in flight.
+        // If a directory still exists long after archive, let sync re-discover it.
+        let now = Date()
         let archivedPaths = Set(
             allPersistedThreads
-                .filter { $0.projectId == project.id && $0.isArchived }
+                .filter { thread in
+                    guard thread.projectId == project.id, thread.isArchived else { return false }
+                    guard let archivedAt = thread.archivedAt else { return false }
+                    return now.timeIntervalSince(archivedAt) <= Self.archivedPathRediscoverySuppressionWindow
+                }
                 .map(\.worktreePath)
         )
 
@@ -101,17 +109,23 @@ extension ThreadManager {
             }
         }
 
-        // Prune archived records whose worktree directories no longer exist on disk.
-        // This self-heals accumulation from delete/archive whose fire-and-forget cleanup
-        // eventually succeeded.
-        let countBefore = allPersistedThreads.count
-        allPersistedThreads.removeAll { thread in
-            thread.projectId == project.id
-                && thread.isArchived
-                && !thread.isMain
-                && !fm.fileExists(atPath: thread.worktreePath)
-        }
-        if allPersistedThreads.count != countBefore {
+        // Keep archived history bounded per project so persistence doesn't grow
+        // unbounded. Preserve the most recently archived entries.
+        let archivedForProject = allPersistedThreads
+            .filter { $0.projectId == project.id && $0.isArchived && !$0.isMain }
+            .sorted { lhs, rhs in
+                let lhsDate = lhs.archivedAt ?? .distantPast
+                let rhsDate = rhs.archivedAt ?? .distantPast
+                if lhsDate != rhsDate { return lhsDate > rhsDate }
+                return lhs.createdAt > rhs.createdAt
+            }
+        if archivedForProject.count > Self.archivedHistoryLimitPerProject {
+            let archivedIdsToRemove = Set(
+                archivedForProject
+                    .dropFirst(Self.archivedHistoryLimitPerProject)
+                    .map(\.id)
+            )
+            allPersistedThreads.removeAll { archivedIdsToRemove.contains($0.id) }
             changed = true
         }
 

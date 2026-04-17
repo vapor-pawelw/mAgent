@@ -21,6 +21,8 @@
 - `ThreadManager.restoreArchivedThread(id:)` recreates the worktree from the saved branch/base-branch metadata, unarchives the persisted thread, re-adds it to the active thread list, and posts a navigation notification back to the restored thread.
 - Restore intentionally does not recreate all previous tmux tabs. The restored thread comes back with clean persisted session state, and the first live session is recreated lazily when the thread is opened.
 - Archived threads now persist `archivedAt`, which is used to sort the Threads-settings history card by actual archive time instead of relying on thread creation order or JSON array order.
+- Worktree-sync archived-path suppression is time-bounded: archived paths are excluded from auto-discovery for 15 minutes after archive to avoid immediate re-import races while cleanup is still in flight.
+- Archived-history retention is bounded per project during worktree sync: only the most recent 100 archived thread records are kept, preventing unbounded `threads.json` growth while preserving practical restore history.
 - The archive and restore banners use `NSAttributedString` passed via `BannerManager.show(attributedMessage:...)`. `BannerConfig` accepts an optional `attributedMessage`; `BannerView` applies it to `messageLabel.attributedStringValue` when present, falling back to `stringValue`/`message` for plain-text callers. The attributed layout is: header label (11pt) / title (14pt semibold) / branch · worktree-folder (11pt monospace) / optional warning line (12pt medium). Foreground colors are intentionally omitted from the attributed string so the shared banner renderer can supply its own high-contrast text color for the fixed tinted banner background.
 - Archive/restore banner copy now relies on the shared banner renderer to normalize paragraph style to leading alignment. Keep the banner headline as passive label text rather than selectable text-editing content, otherwise AppKit can flip the multi-line attributed message into centered/selectable behavior after interaction and break timeout/dismiss affordances.
 
@@ -42,6 +44,12 @@
 - Polished the Settings recently-archived row UI: each row now shows the thread's SF Symbol icon, rows are separated by `NSBox` dividers, and rows have vertical padding with center-Y alignment.
 - Added `RecentlyArchivedPopoverViewController` — a compact popover (360pt wide, ≤480pt tall) that replicates the recently-archived list with symmetric 12pt horizontal padding (leading = trailing), auto-refreshes on `magentArchivedThreadsDidChange`, and is shown from a new `archivebox` toolbar button in `SplitViewController`.
 - Wired a second toolbar item (`recentlyArchivedToolbarItemId`) in `SplitViewController`'s `NSToolbarDelegate` between `.flexibleSpace` and the existing Settings item.
+
+## What changed in the recently-archived-list thread
+
+- Fixed a regression in worktree sync that pruned archived records whenever their worktree directory was missing, which is the normal archived state after `git worktree remove`.
+- Replaced permanent archived-path exclusion with a 15-minute suppression window after archive, so stale leftover directories do not re-import immediately but still become discoverable later if they remain on disk.
+- Added per-project archived-history retention during sync: keep the newest 100 archived records and prune older ones.
 
 ## What changed in the top-bar-light-mode thread
 
