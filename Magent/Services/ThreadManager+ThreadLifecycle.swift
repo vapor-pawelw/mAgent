@@ -622,6 +622,16 @@ extension ThreadManager {
             throw ThreadManagerError.cannotDeleteMainThread
         }
 
+        // If the archive fails before the thread is removed from the list, clear the archiving flag.
+        // Keep this before any throwing preflight checks so early validation failures
+        // (dirty/ignored worktree refusal) also clear the "Archiving..." UI state.
+        var archiveCompleted = false
+        defer {
+            if !archiveCompleted {
+                clearThreadArchivingState(id: thread.id)
+            }
+        }
+
         // Dirty-worktree guard. Archiving runs `git worktree remove --force`, which
         // unconditionally deletes the worktree directory — any uncommitted, untracked,
         // or ignored content would be abandoned silently. Refuse unless `force` is
@@ -647,14 +657,6 @@ extension ThreadManager {
                     worktreePath: thread.worktreePath,
                     files: notableIgnored
                 )
-            }
-        }
-
-        // If the archive fails before the thread is removed from the list, clear the archiving flag.
-        var archiveCompleted = false
-        defer {
-            if !archiveCompleted {
-                clearThreadArchivingState(id: thread.id)
             }
         }
 

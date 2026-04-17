@@ -109,6 +109,7 @@ Before the app is usable, the user must complete a configuration step:
 6. The git worktree is removed/pruned
 7. The thread disappears from the sidebar/list
 8. Thread metadata may be retained for history
+9. If archive fails or is refused (for example dirty-worktree safety checks), the thread remains visible and any `Archiving...` row overlay is cleared immediately.
 
 ### Persistence
 

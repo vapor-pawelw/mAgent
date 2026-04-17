@@ -105,6 +105,7 @@ All notable changes to this project will be documented in this file.
 - Added ballot box with check (`☑️`) to thread sign emojis (next to the existing checkmark option) for finer task-state labeling.
 
 #### Bug Fixes
+- Fixed threads getting stuck in the sidebar's `Archiving...` state after archive preflight failures (for example dirty worktree / ignored-file safety refusals). Failed archive attempts now always clear the archiving overlay.
 - Fixed AI Rename, auto task description, and auto work-type icon generation silently failing for many users. Magent's background `claude -p` invocations now inherit the `USER`/`LOGNAME` environment variables required by the macOS Keychain lookup, so authentication no longer returns a silent 401 and the rename/description/icon pipeline actually completes.
 - Fixed error banners triggered from pop-out windows (AI rename failures, shell errors, etc.) only rendering in the main window. Pop-out windows now host their own banner overlay so failures from work initiated there are visible in the same window the user is looking at.
 - Fixed the app silently quitting after archiving or deleting a thread that had pop-out windows, multiple tabs, or cached terminal surfaces. Embedded terminal surfaces are now always torn down before their backing tmux sessions are killed, regardless of which code path triggered the kill.
