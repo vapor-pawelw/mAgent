@@ -31,13 +31,20 @@ The surface is resolved by `sessionName` at execution time (via `thread.tmuxSess
 
 ## Mouse event absorption
 
-`TerminalScrollOverlayView` overrides `mouseDown`, `mouseDragged`, and `mouseUp` with empty implementations to prevent mouse events from escaping the overlay. Without this, clicks in the inset padding around the three buttons fall through the responder chain and reach the Ghostty surface, which starts a text selection.
+Both overlays must override the full `mouseDown`/`mouseDragged`/`mouseUp` trio, not just `mouseUp`. If only `mouseUp` is overridden, the initial `mouseDown` still falls through the responder chain to the Ghostty surface and starts a text selection before our handler fires.
 
-The `TerminalScrollToBottomPillButton` FAB does not need the same treatment because its `mouseUp` override gives AppKit a reason to track the event pair within the view, which implicitly prevents propagation.
+`TerminalScrollOverlayView` (the draggable cluster):
+- `mouseDown` records the press location.
+- `mouseDragged` is absorbed; the `NSPanGestureRecognizer` drives reposition instead.
+- `mouseUp` routes clicks that landed in the container's padding or inter-button gaps to the nearest enabled button via `performClick(nil)`, but only when the cursor did not move more than ~4 pt (so drag gestures still win). The NSButton children continue to handle clicks that land directly on their own frames. This expands the effective hit area without changing the overlay's visual size.
+
+`TerminalScrollToBottomPillButton` (the FAB pill):
+- `mouseDown` and `mouseDragged` are absorbed; `mouseUp` triggers `onTap` when the release is still inside `bounds`.
 
 ## Gotchas
 
 - Keep terminal overlays attached to `terminalContainer` and re-added above terminal surfaces after lazy tab creation; otherwise Ghostty's metal-backed surface can render over them. See `docs/libghostty-integration.md`.
 - Avoid using constraint changes for the standalone pill's entrance/exit animation. Constraint-driven movement would couple layout state to transient animation state and can leave the pill in the wrong resting position if visibility toggles rapidly.
 - Do not call `bindingAction("scroll_to_bottom")` before `TmuxService.scrollToBottom()` resolves. Ghostty's scrollback grows when tmux redraws after exiting copy-mode, so a premature Ghostty scroll anchors to a stale bottom and the fresh live-pane content ends up off-screen.
-- `TerminalScrollOverlayView` must absorb mouse events (override `mouseDown/Dragged/Up` to do nothing). The NSButton children handle their own events; without absorbing container-level events the inset padding areas leak clicks to the terminal.
+- Both overlays must override the full `mouseDown`/`mouseDragged`/`mouseUp` trio. Overriding only `mouseUp` still lets the `mouseDown` fall through to Ghostty and start a text selection.
+- When growing the hit area of the draggable cluster, prefer forwarding gap/padding clicks to the nearest button in `mouseUp` (with a small drag-slop threshold so the pan gesture still wins) instead of enlarging the buttons themselves — the visual size of the overlay is intentionally compact.
