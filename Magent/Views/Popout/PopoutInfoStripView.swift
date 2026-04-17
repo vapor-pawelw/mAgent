@@ -159,7 +159,11 @@ final class PopoutInfoStripView: NSView {
 
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            self.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.85).cgColor
+            let isDark = self.effectiveAppearance.name == .darkAqua
+            let bgColor = isDark
+                ? NSColor(resource: .surface).withAlphaComponent(0.85)
+                : NSColor(resource: .appBackground)
+            self.layer?.backgroundColor = bgColor.cgColor
             self.dirtyDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
             self.descriptionLabel.textColor = NSColor(resource: .textPrimary)
             self.branchLabel.textColor = NSColor(resource: .textSecondary)
@@ -376,7 +380,10 @@ final class PopoutInfoStripView: NSView {
         } else if thread.hasUnreadAgentCompletion {
             borderColor = .systemGreen.withAlphaComponent(0.5)
         } else {
-            borderColor = NSColor.white.withAlphaComponent(0.12)
+            let isDark = effectiveAppearance.name == .darkAqua
+            borderColor = isDark
+                ? NSColor.white.withAlphaComponent(0.12)
+                : NSColor.black.withAlphaComponent(0.1)
         }
 
         effectiveAppearance.performAsCurrentDrawingAppearance {
@@ -416,7 +423,10 @@ final class PopoutInfoStripView: NSView {
                 brightness: min(brightness * 1.1, 1.0),
                 alpha: 0.8
             )
-            let dimColor = NSColor.white.withAlphaComponent(0.12)
+            let isDark = self.effectiveAppearance.name == .darkAqua
+            let dimColor = isDark
+                ? NSColor.white.withAlphaComponent(0.12)
+                : NSColor.black.withAlphaComponent(0.08)
             gradientLayer.colors = [
                 dimColor.cgColor,
                 brightColor.withAlphaComponent(0.45).cgColor,

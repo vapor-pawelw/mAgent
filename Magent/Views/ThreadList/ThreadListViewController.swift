@@ -101,6 +101,29 @@ final class SidebarOutlineView: NSOutlineView {
 
 }
 
+private final class SidebarBackgroundView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        updateBg()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateBg()
+    }
+
+    private func updateBg() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let isDark = self.effectiveAppearance.name == .darkAqua
+            self.layer?.backgroundColor = isDark
+                ? NSColor.windowBackgroundColor.cgColor
+                : NSColor(resource: .appBackground).cgColor
+        }
+    }
+}
+
 final class ThreadListViewController: NSViewController {
 
     static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
@@ -244,12 +267,11 @@ final class ThreadListViewController: NSViewController {
     // MARK: - Lifecycle
 
     override func loadView() {
-        view = NSView()
+        view = SidebarBackgroundView()
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
         setupOutlineView()
 
         threadManager.delegate = self

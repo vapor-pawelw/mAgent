@@ -1184,8 +1184,9 @@ private final class PromptTOCEntryRowView: NSView {
         }
 
         layer.borderColor = NSColor.clear.cgColor
+        let isDark = effectiveAppearance.name == .darkAqua
         layer.backgroundColor = showsAlternateBackground
-            ? NSColor.separatorColor.withAlphaComponent(0.08).cgColor
+            ? NSColor.separatorColor.withAlphaComponent(isDark ? 0.08 : 0.14).cgColor
             : NSColor.clear.cgColor
     }
 }
@@ -1740,7 +1741,7 @@ final class PromptTableOfContentsView: NSView {
             if effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
                 backgroundColor = NSColor(srgbRed: 0.10, green: 0.11, blue: 0.14, alpha: 0.94)
             } else {
-                backgroundColor = NSColor.white.withAlphaComponent(0.94)
+                backgroundColor = NSColor(srgbRed: 0.92, green: 0.92, blue: 0.93, alpha: 0.94)
             }
             layer?.backgroundColor = backgroundColor.cgColor
 

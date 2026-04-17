@@ -438,7 +438,10 @@ private final class ThreadStatusPopoverSeparatorView: NSView {
         case .rateLimited:
             return .systemRed.withAlphaComponent(0.5)
         case .busy, .favorites:
-            return .white.withAlphaComponent(0.12)
+            let isDark = effectiveAppearance.name == .darkAqua
+            return isDark
+                ? NSColor.white.withAlphaComponent(0.12)
+                : NSColor.black.withAlphaComponent(0.08)
         }
     }
 
@@ -474,7 +477,10 @@ private final class ThreadStatusPopoverSeparatorView: NSView {
                 brightness: min(brightness * 1.1, 1.0),
                 alpha: 0.8
             )
-            let dimColor = NSColor.white.withAlphaComponent(0.12)
+            let isDark = self.effectiveAppearance.name == .darkAqua
+            let dimColor = isDark
+                ? NSColor.white.withAlphaComponent(0.12)
+                : NSColor.black.withAlphaComponent(0.08)
             gradientLayer.colors = [
                 dimColor.cgColor,
                 brightColor.withAlphaComponent(0.45).cgColor,
@@ -965,7 +971,11 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
     private func updateLayerColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = NSColor(resource: .surface).cgColor
+            let isDark = self.effectiveAppearance.name == .darkAqua
+            let bg: NSColor = isDark
+                ? NSColor(resource: .surface)
+                : NSColor(resource: .appBackground)
+            layer?.backgroundColor = bg.cgColor
         }
     }
 

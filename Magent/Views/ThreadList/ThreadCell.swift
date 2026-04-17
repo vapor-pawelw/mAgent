@@ -55,7 +55,11 @@ private final class PriorityCapsuleView: NSView {
             } else if hasCompletionHighlight {
                 borderColor = NSColor.systemGreen.withAlphaComponent(0.5).cgColor
             } else {
-                borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+                let isDark = appearance.name == .darkAqua
+                let color = isDark
+                    ? NSColor.white.withAlphaComponent(0.12)
+                    : NSColor.black.withAlphaComponent(0.08)
+                borderColor = color.cgColor
             }
             self.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
             self.layer?.borderColor = borderColor
@@ -174,7 +178,11 @@ private final class TopBorderBadge: NSView {
             } else if hasCompletionHighlight {
                 borderColor = NSColor.systemGreen.withAlphaComponent(0.5).cgColor
             } else {
-                borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+                let isDark = appearance.name == .darkAqua
+                let color = isDark
+                    ? NSColor.white.withAlphaComponent(0.12)
+                    : NSColor.black.withAlphaComponent(0.08)
+                borderColor = color.cgColor
             }
 
             if self.isBareIcon {
@@ -1129,16 +1137,28 @@ final class ThreadCell: NSTableCellView {
         .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
     }
 
-    /// Maps 1–5 priority to a calm tint (blue → green → yellow → orange → red).
-    /// Alpha values are tuned to match the existing duration-label palette.
-    private static func priorityTintColor(forLevel level: Int) -> NSColor {
-        switch level {
-        case 1: return NSColor.systemBlue.withAlphaComponent(0.75)
-        case 2: return NSColor.systemGreen.withAlphaComponent(0.8)
-        case 3: return NSColor.systemYellow.withAlphaComponent(0.8)
-        case 4: return NSColor.systemOrange.withAlphaComponent(0.8)
-        default: return NSColor.systemRed.withAlphaComponent(0.75)
+    private enum PriorityLevel: Int {
+        case lowest = 1, low, medium, high, highest
+
+        init(raw: Int) {
+            self = PriorityLevel(rawValue: raw) ?? .highest
         }
+
+        /// Tint color for the priority capsule label.
+        /// systemYellow is invisible on white, so medium maps to systemOrange in light mode.
+        func tintColor(isDark: Bool) -> NSColor {
+            switch self {
+            case .lowest:  return NSColor.systemBlue.withAlphaComponent(isDark ? 0.75 : 1.0)
+            case .low:     return NSColor.systemGreen.withAlphaComponent(isDark ? 0.80 : 1.0)
+            case .medium:  return isDark ? NSColor.systemYellow.withAlphaComponent(0.80) : NSColor.systemOrange
+            case .high:    return NSColor.systemOrange.withAlphaComponent(isDark ? 0.80 : 1.0)
+            case .highest: return NSColor.systemRed.withAlphaComponent(isDark ? 0.75 : 1.0)
+            }
+        }
+    }
+
+    private static func priorityTintColor(forLevel level: Int, isDark: Bool) -> NSColor {
+        PriorityLevel(raw: level).tintColor(isDark: isDark)
     }
 
     /// Builds the 5-character cumulative dot string for a given priority level.
@@ -1168,7 +1188,8 @@ final class ThreadCell: NSTableCellView {
             return
         }
         capsule.label.stringValue = Self.priorityDotsString(forLevel: priority)
-        capsule.label.textColor = Self.priorityTintColor(forLevel: priority)
+        let isDarkForPriority = effectiveAppearance.name == .darkAqua
+        capsule.label.textColor = Self.priorityTintColor(forLevel: priority, isDark: isDarkForPriority)
         capsule.isHidden = false
         capsule.toolTip = "Priority \(priority): \(Self.priorityLabel(forLevel: priority))"
         capsule.needsDisplay = true
@@ -1263,7 +1284,8 @@ final class ThreadCell: NSTableCellView {
         // Re-apply elapsed-time tint after updateColors resets label to secondaryLabelColor.
         if let since = currentDurationSince {
             let elapsed = max(0, Int(Date().timeIntervalSince(since)))
-            durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed)
+            let isDark = effectiveAppearance.name == .darkAqua
+            durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed, isDark: isDark)
         }
         claudeRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         codexRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
@@ -1272,12 +1294,13 @@ final class ThreadCell: NSTableCellView {
         pinnedBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         jiraSyncBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         priorityCapsule?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        // Pin/favorite icons: primary brand by default, white when selected.
+        // Pin/favorite icons: primary brand by default, white when selected in dark mode.
+        let isDark = effectiveAppearance.name == .darkAqua
         if let favorite = favoriteBadge {
-            favorite.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
+            favorite.iconView.contentTintColor = (rowSelected && isDark) ? .white : NSColor(resource: .primaryBrand)
         }
         if let pin = pinnedBadge {
-            pin.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
+            pin.iconView.contentTintColor = (rowSelected && isDark) ? .white : NSColor(resource: .primaryBrand)
         }
         if let popout = popoutImageView {
             popout.contentTintColor = .systemPurple
@@ -1316,25 +1339,30 @@ final class ThreadCell: NSTableCellView {
             text = "\(elapsed / 86400)d"
         }
         durationLabel?.stringValue = text
-        durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed)
+        let isDark = effectiveAppearance.name == .darkAqua
+        durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed, isDark: isDark)
         durationBadge?.toolTip = "Busy for \(text)"
     }
 
     /// Returns a subtle tint for the duration label based on elapsed seconds.
     /// Light blue → light green → green → yellow → orange → red as activity ages.
-    private static func durationLabelColor(elapsed: Int) -> NSColor {
-        if elapsed < 900 {           // < 15 min — light blue
-            return NSColor.systemCyan.withAlphaComponent(0.7)
-        } else if elapsed < 7200 {   // < 2 hrs — light green
-            return NSColor.systemMint.withAlphaComponent(0.75)
-        } else if elapsed < 28800 {  // < 8 hrs — green
-            return NSColor.systemGreen.withAlphaComponent(0.7)
-        } else if elapsed < 86400 {  // < 1 day — yellow
-            return NSColor.systemYellow.withAlphaComponent(0.65)
-        } else if elapsed < 259200 { // < 3 days — orange
-            return NSColor.systemOrange.withAlphaComponent(0.65)
-        } else {                     // ≥ 3 days — red
-            return NSColor.systemRed.withAlphaComponent(0.6)
+    /// Uses lower opacity in dark mode (colors are already vivid against dark bg);
+    /// uses full opacity in light mode so the same colors stay readable on white.
+    private static func durationLabelColor(elapsed: Int, isDark: Bool = true) -> NSColor {
+        if elapsed < 900 {
+            // systemCyan is too light on white; use systemBlue in light mode
+            return isDark ? NSColor.systemCyan.withAlphaComponent(0.7) : NSColor.systemBlue
+        } else if elapsed < 7200 {
+            return isDark ? NSColor.systemTeal.withAlphaComponent(0.75) : NSColor.systemTeal
+        } else if elapsed < 28800 {
+            return NSColor.systemGreen.withAlphaComponent(isDark ? 0.7 : 1.0)
+        } else if elapsed < 86400 {
+            // systemYellow is invisible on white; use systemOrange in light mode
+            return isDark ? NSColor.systemYellow.withAlphaComponent(0.65) : NSColor.systemOrange
+        } else if elapsed < 259200 {
+            return NSColor.systemOrange.withAlphaComponent(isDark ? 0.65 : 1.0)
+        } else {
+            return NSColor.systemRed.withAlphaComponent(isDark ? 0.6 : 1.0)
         }
     }
 
@@ -1360,7 +1388,8 @@ final class ThreadCell: NSTableCellView {
         guard let dot else { return }
         if visible {
             dot.image = Self.cachedSymbolImage("circle.fill")
-            dot.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
+            let isDark = effectiveAppearance.name == .darkAqua
+            dot.contentTintColor = NSColor.systemOrange.withAlphaComponent(isDark ? 0.7 : 1.0)
             dot.isHidden = false
         } else {
             dot.image = nil
@@ -1371,7 +1400,8 @@ final class ThreadCell: NSTableCellView {
     private func updateLeadingIconTint() {
         guard !isConfiguredAsMain else { return }
         if isRowVisuallySelected {
-            imageView?.contentTintColor = .white
+            let isDark = effectiveAppearance.name == .darkAqua
+            imageView?.contentTintColor = isDark ? .white : .labelColor
         } else if hasAllDead {
             imageView?.contentTintColor = .tertiaryLabelColor
         } else {
@@ -1387,14 +1417,18 @@ final class ThreadCell: NSTableCellView {
 
     private func updateMainTextColorForSelection() {
         let isEmphasized = backgroundStyle == .emphasized
-        if isConfiguredAsMain {
-            textField?.textColor = isEmphasized ? .white : .labelColor
+        let isDark = effectiveAppearance.name == .darkAqua
+        if isEmphasized && isDark {
+            textField?.textColor = .white
+        } else if isConfiguredAsMain {
+            textField?.textColor = .labelColor
         }
     }
 
     private func updateMainIconTintForSelection() {
         guard isConfiguredAsMain else { return }
-        imageView?.contentTintColor = isRowVisuallySelected ? .white : NSColor(resource: .primaryBrand)
+        let isDark = effectiveAppearance.name == .darkAqua
+        imageView?.contentTintColor = (isRowVisuallySelected && isDark) ? .white : NSColor(resource: .primaryBrand)
     }
 
     private var isRowVisuallySelected: Bool {
@@ -1415,6 +1449,17 @@ final class ThreadCell: NSTableCellView {
         updateMainTextColorForSelection()
         updateMainIconTintForSelection()
         updateTopBorderBadgeColors()
+        updateAppearanceSensitiveColors()
+    }
+
+    private func updateAppearanceSensitiveColors() {
+        let isDark = effectiveAppearance.name == .darkAqua
+        // Keep-alive badge: systemCyan is illegible on white
+        keepAliveBadge?.iconView.contentTintColor = isDark ? .systemCyan : .systemTeal
+        // Dirty dots: orange at 0.7 alpha is too faint on white
+        let dirtyColor = NSColor.systemOrange.withAlphaComponent(isDark ? 0.7 : 1.0)
+        primaryDirtyDot?.contentTintColor = dirtyColor
+        secondaryDirtyDot?.contentTintColor = dirtyColor
     }
 
     private func statusDescriptions(for thread: MagentThread) -> [String] {

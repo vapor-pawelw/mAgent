@@ -10,7 +10,7 @@ private enum TerminalOverlayStyle {
         if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
             return NSColor(srgbRed: 0.10, green: 0.11, blue: 0.14, alpha: 0.94)
         }
-        return NSColor.white.withAlphaComponent(0.94)
+        return NSColor(srgbRed: 0.92, green: 0.92, blue: 0.93, alpha: 0.94)
     }
 
     static func borderColor(for appearance: NSAppearance) -> NSColor {

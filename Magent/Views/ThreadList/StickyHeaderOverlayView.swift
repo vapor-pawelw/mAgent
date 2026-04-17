@@ -238,7 +238,10 @@ final class StickyHeaderOverlayView: NSView {
     private func updateBackground() {
         let appearance = window?.effectiveAppearance ?? NSApp.effectiveAppearance
         appearance.performAsCurrentDrawingAppearance {
-            let bgColor = NSColor.windowBackgroundColor
+            let isDark = appearance.name == .darkAqua
+            let bgColor: NSColor = isDark
+                ? NSColor.windowBackgroundColor
+                : NSColor(resource: .appBackground)
             opaqueBackground.layer?.backgroundColor = bgColor.cgColor
 
             // Rebuild the gradient sublayer

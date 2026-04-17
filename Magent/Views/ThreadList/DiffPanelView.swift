@@ -285,6 +285,11 @@ final class DiffPanelView: NSView {
         setupViews()
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateSeparatorColor()
+    }
+
     private func setupViews() {
         translatesAutoresizingMaskIntoConstraints = false
 
@@ -295,9 +300,9 @@ final class DiffPanelView: NSView {
 
         // Separator (visual line inside the handle area)
         separatorView.wantsLayer = true
-        separatorView.layer?.backgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.4).cgColor
         separatorView.translatesAutoresizingMaskIntoConstraints = false
         handleView.addSubview(separatorView)
+        updateSeparatorColor()
 
         // Tab bar — COMMITS first (leftmost), then CHANGES
         let commitsBtn = commitsTabButton
@@ -1283,6 +1288,16 @@ final class DiffPanelView: NSView {
             self.contextThreadBadgeView.layer?.borderColor = baseColor.withAlphaComponent(0.7).cgColor
         }
         commitContextLabel.textColor = baseColor
+    }
+
+    private func updateSeparatorColor() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let isDark = self.effectiveAppearance.name == .darkAqua
+            let separatorColor = isDark
+                ? NSColor(resource: .textSecondary).withAlphaComponent(0.4)
+                : NSColor(resource: .textSecondary).withAlphaComponent(0.6)
+            self.separatorView.layer?.backgroundColor = separatorColor.cgColor
+        }
     }
 
     // MARK: - Commit Detail Mode

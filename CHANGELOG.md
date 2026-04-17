@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Appearance
+
+#### Bug Fixes
+- Fixed light mode theme throughout: sidebar, status bar, thread info bar, sticky headers, and terminal overlays no longer render as pure white — all surfaces now use a unified cool gray (`AppBackground`).
+- Fixed thread selection in light mode tinting all content (labels, icons, badges) white — selection now keeps dark text and icons in light mode.
+- Fixed priority capsule, busy-duration label, dirty dot, and keep-alive badge colors being illegible on light backgrounds (e.g. cyan and yellow replaced with darker readable hues at full opacity).
+- Fixed `systemCyan`/`systemYellow` duration and priority tints being too faint on white — replaced with `systemBlue`/`systemOrange` fallbacks in light mode.
+
 ### Sidebar
 
 #### Bug Fixes

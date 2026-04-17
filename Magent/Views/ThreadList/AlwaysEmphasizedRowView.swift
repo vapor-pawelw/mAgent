@@ -178,7 +178,10 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             needsDisplay = true
             // Push backgroundStyle to child cell views so they can react to
             // selection changes (icon tint, badge colors, text color).
-            let style: NSView.BackgroundStyle = isSelected ? .emphasized : .normal
+            // In light mode our selection is a pale tint, not a dark bg — push .normal
+            // so AppKit doesn't auto-invert adaptive colors (labelColor etc.) to white.
+            let isDark = effectiveAppearance.name == .darkAqua
+            let style: NSView.BackgroundStyle = (isSelected && isDark) ? .emphasized : .normal
             for case let cell as NSTableCellView in subviews {
                 cell.backgroundStyle = style
             }
@@ -216,8 +219,12 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
 
     private var currentCapsuleStyle: CapsuleStyle {
         if isSelected {
+            let isDark = effectiveAppearance.name == .darkAqua
+            let fillColor = isDark
+                ? NSColor.controlAccentColor.withAlphaComponent(0.1)
+                : NSColor.controlAccentColor.withAlphaComponent(0.2)
             return CapsuleStyle(
-                fill: NSColor.controlAccentColor.withAlphaComponent(0.1),
+                fill: fillColor,
                 border: .controlAccentColor
             )
         } else if showsRateLimitHighlight {
@@ -246,10 +253,13 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 border: NSColor.controlAccentColor.withAlphaComponent(0.26)
             )
         } else {
-            return CapsuleStyle(
-                fill: NSColor.white.withAlphaComponent(0.05),
-                border: NSColor.white.withAlphaComponent(0.12)
-            )
+            let borderColor = effectiveAppearance.name == .darkAqua
+                ? NSColor.white.withAlphaComponent(0.12)
+                : NSColor.black.withAlphaComponent(0.08)
+            let fillColor = effectiveAppearance.name == .darkAqua
+                ? NSColor.white.withAlphaComponent(0.05)
+                : NSColor.black.withAlphaComponent(0.03)
+            return CapsuleStyle(fill: fillColor, border: borderColor)
         }
     }
 
@@ -289,9 +299,15 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 yRadius: Self.capsuleCornerRadius
             )
             // Brighten fill slightly when the context menu is open for this row.
-            let fillColor = showsContextMenuHighlight
-                ? NSColor.white.withAlphaComponent(0.1)
-                : style.fill
+            let isDark = effectiveAppearance.name == .darkAqua
+            let fillColor: NSColor
+            if showsContextMenuHighlight {
+                fillColor = isDark
+                    ? NSColor.white.withAlphaComponent(0.1)
+                    : NSColor.black.withAlphaComponent(0.06)
+            } else {
+                fillColor = style.fill
+            }
             fillColor.setFill()
             fillPath.fill()
 
@@ -305,7 +321,10 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 )
                 if showsContextMenuHighlight {
                     borderPath.lineWidth = 1
-                    NSColor.white.withAlphaComponent(0.3).setStroke()
+                    let highlightBorderColor = isDark
+                        ? NSColor.white.withAlphaComponent(0.3)
+                        : NSColor.black.withAlphaComponent(0.15)
+                    highlightBorderColor.setStroke()
                 } else {
                     borderPath.lineWidth = 1
                     style.border.setStroke()
@@ -514,7 +533,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             return
         }
         let fontSize: CGFloat = (emoji == "↑" || emoji == "↓") ? 14 : 11
-        let textColor: NSColor = isSelected ? .white : (tintColor ?? .labelColor)
+        let isDark = effectiveAppearance.name == .darkAqua
+        let textColor: NSColor = (isSelected && isDark) ? .white : (tintColor ?? .labelColor)
 
         let badge = ensureSignEmojiBadge()
         badge.configure(
@@ -528,7 +548,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
 
     private func updateSignEmojiSelectionColor() {
         guard let badge = signEmojiBadge, !badge.isHidden else { return }
-        badge.updateTextColor(isSelected ? .white : (signEmojiTintColor ?? .labelColor))
+        let isDarkForEmoji = effectiveAppearance.name == .darkAqua
+        badge.updateTextColor((isSelected && isDarkForEmoji) ? .white : (signEmojiTintColor ?? .labelColor))
         updateSignEmojiBadge()
     }
 
