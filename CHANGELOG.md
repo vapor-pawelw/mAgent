@@ -18,6 +18,11 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Restyled in-app banners with a lighter, less shouty look: the banner background now uses the standard sidebar/window surface with a soft drop shadow, and the style color (info/warning/error) shows as a dimmed circle behind the icon instead of filling the whole banner. Icon, text, buttons and the top-right dismiss `X` now share a consistent 16pt inset on all sides with pixel-aligned leading edges.
 
+### Thread
+
+#### Features
+- Restyled the prompt Table of Contents overlay to match the scroll-to-bottom and navigation overlays: removed the border and updated the background to use the same semi-transparent dark/light theme colors. Header background now smoothly animates in when the TOC expands for a more polished appearance.
+
 ## 1.6.0 - 2026-04-17
 
 
