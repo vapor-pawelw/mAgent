@@ -120,6 +120,7 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Fixed refresh/load/commit-selection guards in the changes panel to use focused context thread state, preventing stale updates when main selection differs from focused pop-out thread.
 - Fixed changes-panel context not returning to the selected main thread after repeated clicks/typing in the main Ghostty tab when responder state did not change.
+- Fixed inline diff viewer rendering in every thread window at once. Diff open/close events from the changes panel now apply only to the main-window thread view, so pop-out windows no longer mirror the same diff panel.
 
 ### New Thread Sheet
 #### Bug Fixes
