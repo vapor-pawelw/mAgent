@@ -3,14 +3,6 @@ import MagentCore
 
 extension ThreadManager {
 
-    struct KnownGoodSessionContext {
-        let threadId: UUID
-        let expectedPath: String
-        let projectPath: String
-        let isAgentSession: Bool
-        let validatedAt: Date
-    }
-
     static let knownGoodSessionTTL: TimeInterval = 120
 
     /// Fast-path check for `ThreadDetailViewController.ensureSessionPrepared`: returns

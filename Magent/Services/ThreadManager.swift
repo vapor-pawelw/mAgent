@@ -54,19 +54,62 @@ final class ThreadManager {
     let git = GitService.shared
     let tmux = TmuxService.shared
 
-    var threads: [MagentThread] = []
-    var pendingThreadIds: Set<UUID> = []
+    // MARK: - Extracted service containers (Phase 1)
+
+    let store = ThreadStore()
+    let sessionTracker = SessionTracker()
+
+    // MARK: - ThreadStore forwarding
+
+    var threads: [MagentThread] {
+        get { store.threads }
+        set { store.threads = newValue }
+    }
+    var activeThreadId: UUID? {
+        get { store.activeThreadId }
+        set { store.activeThreadId = newValue }
+    }
+    var pendingThreadIds: Set<UUID> {
+        get { store.pendingThreadIds }
+        set { store.pendingThreadIds = newValue }
+    }
     /// When true, the next `didCreateThread` delegate call will skip sidebar auto-selection.
-    /// Set by the IPC handler when `--select` is not passed; consumed and reset by the delegate.
-    var skipNextAutoSelect: Bool = false
-    var activeThreadId: UUID?
+    var skipNextAutoSelect: Bool {
+        get { store.skipNextAutoSelect }
+        set { store.skipNextAutoSelect = newValue }
+    }
+
+    // MARK: - SessionTracker forwarding
+
+    var knownGoodSessionContexts: [String: KnownGoodSessionContext] {
+        get { sessionTracker.knownGoodSessionContexts }
+        set { sessionTracker.knownGoodSessionContexts = newValue }
+    }
+    var sessionLastVisitedAt: [String: Date] {
+        get { sessionTracker.sessionLastVisitedAt }
+        set { sessionTracker.sessionLastVisitedAt = newValue }
+    }
+    var sessionLastBusyAt: [String: Date] {
+        get { sessionTracker.sessionLastBusyAt }
+        set { sessionTracker.sessionLastBusyAt = newValue }
+    }
+    var evictedIdleSessions: Set<String> {
+        get { sessionTracker.evictedIdleSessions }
+        set { sessionTracker.evictedIdleSessions = newValue }
+    }
+    var sessionsBeingRecreated: Set<String> {
+        get { sessionTracker.sessionsBeingRecreated }
+        set { sessionTracker.sessionsBeingRecreated = newValue }
+    }
+
+    // MARK: - Remaining inline state (extracted in later phases)
+
     /// Dedupes completion attention events across legacy bell sources and the
     /// synthetic busy->idle completion path.
     var recentBellBySession: [String: Date] = [:]
     var autoRenameInProgress: Set<UUID> = []
     /// Tracks threads for which an auto-rename failure banner has already been shown this session.
     var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
-    var knownGoodSessionContexts: [String: KnownGoodSessionContext] = [:]
     var initialPromptInjectionFailuresBySession: [String: InitialPromptInjectionFailureInfo] = [:]
     /// Sessions that have a prompt queued and are waiting for the agent to become ready.
     var pendingPromptInjectionSessions: [String: InitialPromptInjectionFailureInfo] = [:]
@@ -107,14 +150,6 @@ final class ThreadManager {
     var ignoredRateLimitCacheLoaded = false
     var ignoredRateLimitCacheDirty = false
     var lastPublishedRateLimitSummary: String?
-    /// Tracks when each tmux session was last viewed by the user (tab selected).
-    var sessionLastVisitedAt: [String: Date] = [:]
-    /// Tracks when each tmux session last transitioned from busy to idle.
-    var sessionLastBusyAt: [String: Date] = [:]
-    /// Sessions intentionally killed by idle eviction. checkForDeadSessions skips these;
-    /// cleared when the user revisits the thread, allowing on-demand recreation.
-    var evictedIdleSessions: Set<String> = []
-    var sessionsBeingRecreated: Set<String> = []
     var sessionMonitorTimer: Timer?
     var isSessionMonitorTickRunning = false
     var lastStaleSessionCleanupAt: Date = .distantPast
