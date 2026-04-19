@@ -225,6 +225,30 @@ final class ThreadManager {
         return svc
     }()
 
+    // MARK: - Extracted service containers (Phase 5)
+
+    lazy var agentSetupService: AgentSetupService = {
+        let svc = AgentSetupService(store: store, sessionTracker: sessionTracker, persistence: persistence, tmux: tmux, git: git)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        svc.hasActiveRateLimit = { [weak self] agent, now in
+            self?.rateLimitService.hasActiveRateLimit(for: agent, now: now) ?? false
+        }
+        svc.effectiveAgentTypeForProject = { [weak self] projectId in
+            self?.effectiveAgentType(for: projectId)
+        }
+        svc.triggerAutoRenameIfNeeded = { [weak self] threadId, sessionName, prompt in
+            _ = await self?.autoRenameThreadAfterFirstPromptIfNeeded(
+                threadId: threadId,
+                sessionName: sessionName,
+                prompt: prompt
+            )
+        }
+        return svc
+    }()
+
     // MARK: - ThreadStore forwarding
 
     var threads: [MagentThread] {
@@ -380,28 +404,43 @@ final class ThreadManager {
         set { gitStateService.baseBranchResets = newValue }
     }
 
-    // MARK: - Remaining inline state (extracted in later phases)
+    // MARK: - AgentSetupService forwarding
+
+    var initialPromptInjectionFailuresBySession: [String: InitialPromptInjectionFailureInfo] {
+        get { agentSetupService.initialPromptInjectionFailuresBySession }
+        set { agentSetupService.initialPromptInjectionFailuresBySession = newValue }
+    }
+    var pendingPromptInjectionSessions: [String: InitialPromptInjectionFailureInfo] {
+        get { agentSetupService.pendingPromptInjectionSessions }
+        set { agentSetupService.pendingPromptInjectionSessions = newValue }
+    }
+    var pendingPromptInjectionTasks: [String: Task<Void, Never>] {
+        get { agentSetupService.pendingPromptInjectionTasks }
+        set { agentSetupService.pendingPromptInjectionTasks = newValue }
+    }
+    var initialPromptInjectionCompletionsBySession: [String: Date] {
+        get { agentSetupService.initialPromptInjectionCompletionsBySession }
+        set { agentSetupService.initialPromptInjectionCompletionsBySession = newValue }
+    }
+    var initialPromptAutoRelaunchAttempts: Set<String> {
+        get { agentSetupService.initialPromptAutoRelaunchAttempts }
+        set { agentSetupService.initialPromptAutoRelaunchAttempts = newValue }
+    }
+    var pendingPromptRecoveriesByThread: [UUID: [PendingPromptRecoveryInfo]] {
+        get { agentSetupService.pendingPromptRecoveriesByThread }
+        set { agentSetupService.pendingPromptRecoveriesByThread = newValue }
+    }
+
+    // MARK: - Remaining inline state
 
     var autoRenameInProgress: Set<UUID> = []
     /// Tracks threads for which an auto-rename failure banner has already been shown this session.
     var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
-    var initialPromptInjectionFailuresBySession: [String: InitialPromptInjectionFailureInfo] = [:]
-    /// Sessions that have a prompt queued and are waiting for the agent to become ready.
-    var pendingPromptInjectionSessions: [String: InitialPromptInjectionFailureInfo] = [:]
-    /// In-flight injection tasks, keyed by session name. Used to cancel polling when
-    /// the user triggers manual "Inject Now" from the pending-prompt banner.
-    var pendingPromptInjectionTasks: [String: Task<Void, Never>] = [:]
-    /// Timestamp of the last successful prompt-bearing injection per session.
-    /// Lets callers wait for the actual tmux send to complete before renaming sessions.
-    var initialPromptInjectionCompletionsBySession: [String: Date] = [:]
-    /// One-shot guard for launch-time auto-recovery when an agent exits back to shell
-    /// before the retained initial prompt can be injected.
-    var initialPromptAutoRelaunchAttempts: Set<String> = []
     /// Per-thread cache of AI-generated rename payloads, keyed by normalized prompt.
     /// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
     /// Cleared when a thread is archived or deleted.
     var promptRenameResultCache: [UUID: [String: CachedRenameResult]] = [:]
-    // baseBranchResets is forwarded to gitStateService — see forwarding computed property below.
+    // baseBranchResets is forwarded to gitStateService — see forwarding computed property above.
     var sessionMonitorTimer: Timer?
     var isSessionMonitorTickRunning = false
     var lastTmuxZombieHealthCheckAt: Date = .distantPast
@@ -419,9 +458,6 @@ final class ThreadManager {
     /// Human-readable summary of the most recent sync failure, used by the status bar.
     var lastStatusSyncFailureSummary: String?
     var _cachedRemoteByProjectId: [UUID: GitRemote] = [:]
-    /// Pending prompt recoveries for .newTab entries, keyed by thread ID.
-    /// Stored at launch and shown as embedded banners when the thread is selected.
-    var pendingPromptRecoveriesByThread: [UUID: [PendingPromptRecoveryInfo]] = [:]
 
     // MARK: - Lifecycle
 

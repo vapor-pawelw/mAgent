@@ -1,0 +1,2049 @@
+import AppKit
+import Foundation
+import UserNotifications
+import MagentCore
+
+final class AgentSetupService {
+
+    let store: ThreadStore
+    let sessionTracker: SessionTracker
+    let persistence: PersistenceService
+    let tmux: TmuxService
+    let git: GitService
+
+    // MARK: - Callbacks
+
+    /// Called whenever the service mutates thread state that the UI needs to reflect.
+    var onThreadsChanged: (() -> Void)?
+
+    /// Returns true when the given agent currently has an active tracked rate limit.
+    var hasActiveRateLimit: ((AgentType, Date) -> Bool)?
+
+    /// Returns the effective agent type for a project (forwarded to ThreadManager.effectiveAgentType).
+    var effectiveAgentTypeForProject: ((UUID) -> AgentType?)?
+
+    /// Triggers auto-rename after prompt history grows on a thread (forwarded to ThreadManager+Rename).
+    var triggerAutoRenameIfNeeded: ((UUID, String, String) async -> Void)?
+
+    // MARK: - Owned State
+
+    var initialPromptInjectionFailuresBySession: [String: ThreadManager.InitialPromptInjectionFailureInfo] = [:]
+    /// Sessions that have a prompt queued and are waiting for the agent to become ready.
+    var pendingPromptInjectionSessions: [String: ThreadManager.InitialPromptInjectionFailureInfo] = [:]
+    /// In-flight injection tasks, keyed by session name. Used to cancel polling when
+    /// the user triggers manual "Inject Now" from the pending-prompt banner.
+    var pendingPromptInjectionTasks: [String: Task<Void, Never>] = [:]
+    /// Timestamp of the last successful prompt-bearing injection per session.
+    var initialPromptInjectionCompletionsBySession: [String: Date] = [:]
+    /// One-shot guard for launch-time auto-recovery when an agent exits back to shell
+    /// before the retained initial prompt can be injected.
+    var initialPromptAutoRelaunchAttempts: Set<String> = []
+    /// Per-thread cache of pending prompt recoveries shown as embedded banners.
+    var pendingPromptRecoveriesByThread: [UUID: [ThreadManager.PendingPromptRecoveryInfo]] = [:]
+
+    // MARK: - Init
+
+    init(store: ThreadStore, sessionTracker: SessionTracker, persistence: PersistenceService, tmux: TmuxService, git: GitService) {
+        self.store = store
+        self.sessionTracker = sessionTracker
+        self.persistence = persistence
+        self.tmux = tmux
+        self.git = git
+    }
+
+    // MARK: - Private Constants
+
+    private static let agentPromptCaptureLines = 120
+    private static let agentPromptTimeoutLogLines = 8
+    private static let recentPromptDetectionLines = 12
+    private static let maxSubmittedPromptsPerSession = 250
+
+    // MARK: - Session Environment
+
+    func sessionEnvironmentVariables(
+        threadId: UUID,
+        worktreePath: String? = nil,
+        projectPath: String,
+        worktreeName: String,
+        projectName: String,
+        agentType: AgentType? = nil
+    ) -> [(String, String)] {
+        var envVars: [(String, String)] = [
+            ("MAGENT_PROJECT_PATH", projectPath),
+            ("MAGENT_WORKTREE_NAME", worktreeName),
+            ("MAGENT_PROJECT_NAME", projectName),
+            ("MAGENT_THREAD_ID", threadId.uuidString),
+            ("MAGENT_SOCKET", IPCSocketServer.socketPath),
+        ]
+        if let worktreePath {
+            envVars.insert(("MAGENT_WORKTREE_PATH", worktreePath), at: 0)
+        }
+        if let agentType {
+            envVars.append(("MAGENT_AGENT_TYPE", agentType.rawValue))
+        }
+        return envVars
+    }
+
+    func shellExportCommand(for environmentVariables: [(String, String)]) -> String {
+        environmentVariables
+            .map { key, value in
+                "export \(key)=\(ShellExecutor.shellQuote(value))"
+            }
+            .joined(separator: " && ")
+    }
+
+    func resolvedModelLabel(for agentType: AgentType?, modelId: String?) -> String? {
+        guard let agentType, let modelId else { return nil }
+        return AgentModelsService.shared.config(for: agentType)?
+            .models.first(where: { $0.id == modelId })?
+            .label
+    }
+
+    func applySessionEnvironmentVariables(
+        sessionName: String,
+        environmentVariables: [(String, String)]
+    ) async {
+        await withTaskGroup(of: Void.self) { group in
+            for (key, value) in environmentVariables {
+                group.addTask { [tmux] in
+                    try? await tmux.setEnvironment(sessionName: sessionName, key: key, value: value)
+                }
+            }
+        }
+    }
+
+    // MARK: - Agent Readiness
+
+    /// Waits until the pane can be captured, which is enough to start sending keys.
+    /// This avoids paying a fixed startup delay on fast machines while still giving
+    /// tmux a brief window to finish creating the pane on slower ones.
+    private func waitForPaneCaptureReady(
+        sessionName: String,
+        timeout: TimeInterval = 1.0,
+        interval: TimeInterval = 0.05
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await tmux.capturePane(sessionName: sessionName, lastLines: 1) != nil {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        return false
+    }
+
+    /// Polls tmux pane content for the actual agent input prompt marker.
+    /// Returns `true` only when the user prompt is visible, or `false` on timeout.
+    /// For agents that show placeholder text on the prompt line (e.g. Codex),
+    /// uses ANSI-aware capture to distinguish placeholder from user-typed text
+    /// and only considers the prompt ready when it's empty or showing placeholder.
+    func waitForAgentPrompt(
+        sessionName: String,
+        agentType: AgentType?,
+        timeout: TimeInterval = 10,
+        interval: TimeInterval = 0.3
+    ) async -> Bool {
+        let needsAnsi = agentType == .codex
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let content: String?
+            if needsAnsi {
+                content = await tmux.capturePaneWithEscapes(
+                    sessionName: sessionName,
+                    lastLines: Self.agentPromptCaptureLines
+                )
+            } else {
+                content = await tmux.capturePane(
+                    sessionName: sessionName,
+                    lastLines: Self.agentPromptCaptureLines
+                )
+            }
+            if let content, isAgentPromptReady(content, agentType: agentType) {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        // Log final pane state on timeout for diagnostics
+        let finalContent = await tmux.capturePane(
+            sessionName: sessionName,
+            lastLines: Self.agentPromptCaptureLines
+        ) ?? "<nil>"
+        let finalLines = finalContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map(String.init)
+            .reversed()
+            .drop(while: { $0.trimmingCharacters(in: .whitespaces).isEmpty })
+            .reversed()
+            .suffix(Self.agentPromptTimeoutLogLines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        NSLog("[waitForAgentPrompt] TIMEOUT session=\(sessionName) agentType=\(agentType?.rawValue ?? "nil") finalLines=\(finalLines)")
+        return false
+    }
+
+    /// Polls the tmux pane until the last ~20 characters of `prompt` are visible,
+    /// confirming the TUI has finished processing the paste before Enter is sent.
+    /// This replaces the old fixed sleep and avoids the race between paste-buffer
+    /// delivery and the Enter key arriving while the TUI event loop is still consuming
+    /// buffered input.
+    /// Returns `true` when the fingerprint is found, `false` on timeout (graceful
+    /// fallback — Enter is sent anyway).
+    func waitForPromptToAppear(
+        sessionName: String,
+        prompt: String,
+        timeout: TimeInterval = 3.0,
+        interval: TimeInterval = 0.15
+    ) async -> Bool {
+        // Use the last 20 characters of the trimmed prompt as a fingerprint.
+        // Resilient to line-wrapping and any cursor character the TUI appends.
+        let fingerprint = String(prompt.trimmingCharacters(in: .whitespacesAndNewlines).suffix(20))
+        guard !fingerprint.isEmpty else { return true }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let content = await tmux.capturePane(sessionName: sessionName, lastLines: 50),
+               content.contains(fingerprint) {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        return false
+    }
+
+    /// Checks whether captured pane content contains an interactive shell blocker
+    /// (e.g. an oh-my-zsh update prompt, homebrew yes/no, "press any key" pause).
+    /// Used to distinguish a timed-out agent-readiness wait from a blocked shell.
+    func detectsInteractiveShellBlocker(_ content: String) -> Bool {
+        let blockerPatterns = ["[Y/n]", "[y/N]", "[y/n]", "[N/y]", "[n/Y]",
+                               "(Y/n)", "(y/N)", "(y/n)", "(N/y)",
+                               "Press any key", "press any key"]
+        return blockerPatterns.contains { content.contains($0) }
+    }
+
+    private func isAgentPromptReady(_ paneContent: String, agentType: AgentType?) -> Bool {
+        switch agentType {
+        case .claude:
+            if paneContentShowsEscToInterrupt(paneContent) { return false }
+            if paneShowsBarePromptMarker(paneContent, marker: "\u{276F}", agentType: agentType) {
+                return true
+            }
+            return false
+        case .codex:
+            return paneShowsBarePromptMarker(paneContent, marker: "\u{203A}", agentType: agentType)
+        case .custom, .none:
+            let content = paneContent.trimmingCharacters(in: .whitespacesAndNewlines)
+            return content.filter({ !$0.isWhitespace }).count > 50
+        }
+    }
+
+    func isAgentContentReady(_ content: String, agentType: AgentType?) -> Bool {
+        isAgentPromptReady(content, agentType: agentType)
+    }
+
+    /// Returns true when the "esc to interrupt" status bar text is visible in the
+    /// last 15 non-empty lines of pane content. Mirrors SessionLifecycleService.paneContentShowsEscToInterrupt.
+    private func paneContentShowsEscToInterrupt(_ paneContent: String) -> Bool {
+        let nonEmpty = paneContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .suffix(15)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return nonEmpty.contains { line in
+            // Status line with leading bullet/arrows
+            if line.range(
+                of: #"^\s*(?:[•⏵]+[[:space:]]*)?esc to interrupt\b"#,
+                options: [.regularExpression, .caseInsensitive]
+            ) != nil { return true }
+            // Status with middle-dot context, e.g. "· esc to interrupt"
+            return line.range(
+                of: #"\s·\s*esc to interrupt\b"#,
+                options: [.regularExpression, .caseInsensitive]
+            ) != nil
+        }
+    }
+
+    private func paneShowsBarePromptMarker(
+        _ paneContent: String,
+        marker: Character,
+        agentType: AgentType?
+    ) -> Bool {
+        let recentLines = latestScopedPaneLines(from: paneContent, agentType: agentType)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .suffix(Self.recentPromptDetectionLines)
+        guard !recentLines.isEmpty else { return false }
+        let bareMarker = String(marker)
+        return recentLines.contains { line in
+            // Strip ANSI escapes for the structural check
+            let plain = AgentSetupService.stripAnsiEscapes(line)
+            let filtered = plain.filter { !$0.isWhitespace }
+            if filtered == bareMarker { return true }
+            // Line starts with the marker (e.g. Codex "› placeholder text").
+            // Only treat as ready if the text after the marker is placeholder
+            // (rendered dim via SGR 2) or absent — not user-typed input.
+            guard plain.hasPrefix(bareMarker) else { return false }
+            return AgentSetupService.isPromptLineEmpty(line, marker: bareMarker)
+        }
+    }
+
+    /// Returns `true` when the text after the prompt marker is either absent or
+    /// rendered as placeholder (SGR 2 / dim). When the line contains ANSI
+    /// escapes, any non-whitespace text after the marker that is NOT preceded
+    /// by a dim escape (`\e[2m`) is considered user-typed input.
+    /// If the line has no ANSI escapes at all (plain capture), falls back to
+    /// treating any text after the marker as placeholder (safe for injection).
+    static func isPromptLineEmpty(_ line: String, marker: String) -> Bool {
+        let hasAnsi = line.contains("\u{1b}[")
+        guard hasAnsi else {
+            // Plain capture (no ANSI) — can't distinguish placeholder from input.
+            // Treat as ready (backwards-compatible).
+            return true
+        }
+        // Find the marker in the plain text and check what follows in the raw line.
+        // After the marker + reset escape, placeholder text starts with \e[2m (dim).
+        // User-typed text does NOT have the dim escape.
+        guard let markerRange = line.range(of: marker) else { return true }
+        let afterMarker = line[markerRange.upperBound...]
+        // Strip leading ANSI escapes and whitespace to find the first content
+        let stripped = AgentSetupService.stripLeadingAnsiAndWhitespace(String(afterMarker))
+        if stripped.isEmpty { return true }
+        // Check if the text content is preceded by a dim (SGR 2) escape
+        // in the original after-marker substring
+        return afterMarker.contains("\u{1b}[2m")
+    }
+
+    static func stripAnsiEscapes(_ string: String) -> String {
+        string.replacingOccurrences(
+            of: #"\x1b\[[0-9;]*[a-zA-Z]"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+
+    private static func stripLeadingAnsiAndWhitespace(_ string: String) -> String {
+        var s = string[...]
+        while !s.isEmpty {
+            if s.first?.isWhitespace == true {
+                s = s.dropFirst()
+            } else if s.hasPrefix("\u{1b}[") {
+                // Skip the full escape sequence
+                if let end = s.firstIndex(where: { $0.isLetter && $0 != "[" }) {
+                    s = s[s.index(after: end)...]
+                } else {
+                    break
+                }
+            } else {
+                break
+            }
+        }
+        return String(s)
+    }
+
+    private func latestScopedPaneLines(from paneContent: String, agentType: AgentType?) -> [String] {
+        let lines = paneContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map(String.init)
+        guard agentType == .codex,
+              let scopeSeparatorIndex = lines.lastIndex(where: isPaneScopeSeparator) else {
+            return lines
+        }
+        let latestScopeStart = lines.index(after: scopeSeparatorIndex)
+        guard latestScopeStart < lines.endIndex else { return lines }
+        return Array(lines[latestScopeStart...])
+    }
+
+    private func isPaneScopeSeparator(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 20 else { return false }
+        return trimmed.allSatisfy { $0 == "─" }
+    }
+
+    private func showInjectionRetryBanner(
+        message: String,
+        sessionName: String,
+        actionTitle: String = "Retry",
+        terminalCommand: String = "",
+        agentContext: String,
+        initialPrompt: String?,
+        shouldSubmitInitialPrompt: Bool,
+        agentType: AgentType?
+    ) async {
+        clearMagentBusy(sessionName: sessionName)
+        await MainActor.run {
+            BannerManager.shared.show(
+                message: message,
+                style: .warning,
+                duration: nil,
+                isDismissible: true,
+                actions: [BannerAction(title: actionTitle) { [weak self] in
+                    self?.injectAfterStart(
+                        sessionName: sessionName,
+                        terminalCommand: terminalCommand,
+                        agentContext: agentContext,
+                        initialPrompt: initialPrompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    )
+                }]
+            )
+        }
+    }
+
+    private func postInitialPromptInjectionFailure(
+        sessionName: String,
+        prompt: String,
+        shouldSubmitInitialPrompt: Bool,
+        agentType: AgentType?,
+        requiresAgentRelaunch: Bool = false
+    ) async {
+        clearMagentBusy(sessionName: sessionName)
+        pendingPromptInjectionSessions.removeValue(forKey: sessionName)
+        pendingPromptInjectionTasks.removeValue(forKey: sessionName)
+        initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
+        initialPromptAutoRelaunchAttempts.remove(sessionName)
+        initialPromptInjectionFailuresBySession[sessionName] = ThreadManager.InitialPromptInjectionFailureInfo(
+            prompt: prompt,
+            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+            agentType: agentType,
+            requiresAgentRelaunch: requiresAgentRelaunch
+        )
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: .magentInitialPromptInjectionFailed,
+                object: nil,
+                userInfo: [
+                    "sessionName": sessionName,
+                    "prompt": prompt,
+                    "shouldSubmitInitialPrompt": shouldSubmitInitialPrompt,
+                    "agentType": agentType?.rawValue as Any,
+                ]
+            )
+        }
+    }
+
+    func initialPromptInjectionFailure(for sessionName: String) -> ThreadManager.InitialPromptInjectionFailureInfo? {
+        initialPromptInjectionFailuresBySession[sessionName]
+    }
+
+    func clearInitialPromptInjectionFailure(for sessionName: String) {
+        initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
+    }
+
+    func clearTrackedInitialPromptInjection(for sessionName: String) {
+        initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
+        initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
+        initialPromptAutoRelaunchAttempts.remove(sessionName)
+        clearPendingPromptInjection(for: sessionName)
+    }
+
+    // MARK: - Pending Prompt Recovery (per-thread)
+
+    func addPendingPromptRecovery(for threadId: UUID, info: ThreadManager.PendingPromptRecoveryInfo) {
+        pendingPromptRecoveriesByThread[threadId, default: []].append(info)
+        NotificationCenter.default.post(
+            name: .magentPendingPromptRecovery,
+            object: nil,
+            userInfo: ["threadId": threadId]
+        )
+    }
+
+    func pendingPromptRecoveries(for threadId: UUID) -> [ThreadManager.PendingPromptRecoveryInfo] {
+        pendingPromptRecoveriesByThread[threadId] ?? []
+    }
+
+    func removePendingPromptRecovery(for threadId: UUID, tempFileURL: URL) {
+        guard var entries = pendingPromptRecoveriesByThread[threadId] else { return }
+        entries.removeAll { $0.tempFileURL == tempFileURL }
+        if entries.isEmpty {
+            pendingPromptRecoveriesByThread.removeValue(forKey: threadId)
+        } else {
+            pendingPromptRecoveriesByThread[threadId] = entries
+        }
+        NotificationCenter.default.post(
+            name: .magentPendingPromptRecovery,
+            object: nil,
+            userInfo: ["threadId": threadId]
+        )
+    }
+
+    func clearAllPendingPromptRecoveries(for threadId: UUID) {
+        guard pendingPromptRecoveriesByThread.removeValue(forKey: threadId) != nil else { return }
+        NotificationCenter.default.post(
+            name: .magentPendingPromptRecovery,
+            object: nil,
+            userInfo: ["threadId": threadId]
+        )
+    }
+
+    /// Removes all pending prompt recoveries for a thread and deletes their temp files.
+    func cleanupPendingPromptRecoveries(for threadId: UUID) {
+        guard let entries = pendingPromptRecoveriesByThread.removeValue(forKey: threadId) else { return }
+        for entry in entries {
+            try? FileManager.default.removeItem(at: entry.tempFileURL)
+        }
+    }
+
+    func clearTrackedInitialPromptInjection(forSessions sessionNames: some Sequence<String>) {
+        for sessionName in sessionNames {
+            clearTrackedInitialPromptInjection(for: sessionName)
+        }
+    }
+
+    func pendingPromptInjection(for sessionName: String) -> ThreadManager.InitialPromptInjectionFailureInfo? {
+        pendingPromptInjectionSessions[sessionName]
+    }
+
+    func didCompleteInitialPromptInjection(for sessionName: String) -> Bool {
+        initialPromptInjectionCompletionsBySession[sessionName] != nil
+    }
+
+    func hasTrackedInitialPromptInjection(for sessionName: String) -> Bool {
+        pendingPromptInjectionSessions[sessionName] != nil
+            || pendingPromptInjectionTasks[sessionName] != nil
+            || initialPromptInjectionFailuresBySession[sessionName] != nil
+            || initialPromptInjectionCompletionsBySession[sessionName] != nil
+    }
+
+    /// Waits for a prompt-bearing injection to finish sending keys before callers perform
+    /// session-sensitive work such as tmux renames.
+    func waitForInitialPromptInjectionSettlement(
+        sessionName: String,
+        timeout: TimeInterval = 35
+    ) async -> Bool {
+        if didCompleteInitialPromptInjection(for: sessionName) {
+            return true
+        }
+        if initialPromptInjectionFailure(for: sessionName) != nil {
+            return false
+        }
+
+        let wasTrackedAtStart = hasTrackedInitialPromptInjection(for: sessionName)
+        guard wasTrackedAtStart else { return false }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            // Callers may wait on this before renaming tmux sessions. If that caller is
+            // cancelled, do not keep polling the old session name until timeout.
+            guard !Task.isCancelled else { return false }
+            if didCompleteInitialPromptInjection(for: sessionName) {
+                return true
+            }
+            if initialPromptInjectionFailure(for: sessionName) != nil {
+                return false
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+
+        return didCompleteInitialPromptInjection(for: sessionName)
+    }
+
+    func clearPendingPromptInjection(for sessionName: String) {
+        pendingPromptInjectionSessions.removeValue(forKey: sessionName)
+        pendingPromptInjectionTasks[sessionName]?.cancel()
+        pendingPromptInjectionTasks.removeValue(forKey: sessionName)
+    }
+
+    private func supportsAgentShellRelaunch(_ agentType: AgentType?) -> Bool {
+        switch agentType {
+        case .claude, .codex:
+            return true
+        case .custom, .none:
+            return false
+        }
+    }
+
+    private func agentRelaunchCommand(sessionName: String, agentType: AgentType?) -> String? {
+        guard let thread = store.threads.first(where: { $0.agentTmuxSessions.contains(sessionName) }) else {
+            return nil
+        }
+        guard let resolvedAgentType = agentType ?? self.agentType(for: thread, sessionName: sessionName),
+              supportsAgentShellRelaunch(resolvedAgentType) else {
+            return nil
+        }
+
+        let settings = persistence.loadSettings()
+        let preAgentCommand = preAgentInjectionCommand(for: thread.projectId, settings: settings)
+        let resumeSessionID = thread.sessionConversationIDs[sessionName]
+        var parts = [String]()
+
+        if resolvedAgentType == .claude {
+            installClaudeHooksSettings(
+                for: settings.appAppearanceMode,
+                preserveAgentColorTheme: settings.preserveAgentColorTheme
+            )
+            parts.append("unset CLAUDECODE")
+        }
+        if !preAgentCommand.isEmpty {
+            parts.append("{ \(preAgentCommand) ; } || true")
+        }
+        parts.append(
+            agentCommand(
+                settings: settings,
+                agentType: resolvedAgentType,
+                resumeSessionID: resumeSessionID
+            )
+        )
+
+        return parts.joined(separator: " && ")
+    }
+
+    private func availableAgentRelaunchCommand(
+        sessionName: String,
+        agentType: AgentType?
+    ) async -> String? {
+        guard await detectedAgentTypeInSession(sessionName) == nil else { return nil }
+        return agentRelaunchCommand(sessionName: sessionName, agentType: agentType)
+    }
+
+    @discardableResult
+    func relaunchAgentInExistingSession(
+        sessionName: String,
+        initialPrompt: String? = nil,
+        shouldSubmitInitialPrompt: Bool = true,
+        agentContext: String,
+        agentType: AgentType?
+    ) -> Bool {
+        guard let thread = store.threads.first(where: { $0.agentTmuxSessions.contains(sessionName) }),
+              let resolvedAgentType = agentType ?? self.agentType(for: thread, sessionName: sessionName),
+              let terminalCommand = agentRelaunchCommand(sessionName: sessionName, agentType: resolvedAgentType) else {
+            return false
+        }
+
+        trustDirectoryIfNeeded(thread.worktreePath, agentType: resolvedAgentType)
+        injectAfterStart(
+            sessionName: sessionName,
+            terminalCommand: terminalCommand,
+            agentContext: agentContext,
+            initialPrompt: initialPrompt,
+            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+            agentType: resolvedAgentType
+        )
+        return true
+    }
+
+    private func autoRelaunchAgentAfterPromptLaunchFailureIfNeeded(
+        sessionName: String,
+        prompt: String,
+        shouldSubmitInitialPrompt: Bool,
+        agentType: AgentType?
+    ) async -> Bool {
+        guard !initialPromptAutoRelaunchAttempts.contains(sessionName) else { return false }
+        guard await availableAgentRelaunchCommand(sessionName: sessionName, agentType: agentType) != nil else {
+            return false
+        }
+
+        initialPromptAutoRelaunchAttempts.insert(sessionName)
+        return relaunchAgentInExistingSession(
+            sessionName: sessionName,
+            initialPrompt: prompt,
+            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+            agentContext: "",
+            agentType: agentType
+        )
+    }
+
+    /// Cancels the in-flight polling task and immediately injects the pending prompt.
+    func injectPendingPromptNow(sessionName: String, prompt: String, shouldSubmitInitialPrompt: Bool, agentType: AgentType?) {
+        clearPendingPromptInjection(for: sessionName)
+        NSLog("[injectPendingPromptNow] session=\(sessionName) submit=\(shouldSubmitInitialPrompt)")
+        Task {
+            if shouldSubmitInitialPrompt {
+                do {
+                    try await tmux.sendText(sessionName: sessionName, text: prompt)
+                } catch {
+                    NSLog("[injectPendingPromptNow] sendText failed: \(error)")
+                    await postInitialPromptInjectionFailure(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    )
+                    return
+                }
+                let appeared = await waitForPromptToAppear(sessionName: sessionName, prompt: prompt)
+                if !appeared {
+                    NSLog("[injectPendingPromptNow] prompt fingerprint not found — sending Enter anyway")
+                }
+                try? await tmux.sendEnter(sessionName: sessionName)
+            } else {
+                do {
+                    try await tmux.sendText(sessionName: sessionName, text: prompt)
+                } catch {
+                    NSLog("[injectPendingPromptNow] sendText failed: \(error)")
+                    await postInitialPromptInjectionFailure(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    )
+                    return
+                }
+            }
+            self.postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: true)
+        }
+    }
+
+    // MARK: - Injection
+
+    func effectiveInjection(for projectId: UUID) -> (terminalCommand: String, agentContext: String) {
+        let settings = persistence.loadSettings()
+        let project = settings.projects.first(where: { $0.id == projectId })
+        let termCmd = (project?.terminalInjectionCommand?.isEmpty == false)
+            ? project!.terminalInjectionCommand! : settings.terminalInjectionCommand
+        let agentCtx = (project?.agentContextInjection?.isEmpty == false)
+            ? project!.agentContextInjection! : settings.agentContextInjection
+        return (termCmd, agentCtx)
+    }
+
+    func preAgentInjectionCommand(for projectId: UUID, settings: AppSettings) -> String {
+        guard let project = settings.projects.first(where: { $0.id == projectId }),
+              let command = project.preAgentInjectionCommand?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !command.isEmpty else { return "" }
+        return command
+    }
+
+    @MainActor
+    func registerPendingPromptCleanup(fileURL: URL?, sessionName: String) {
+        guard let fileURL else { return }
+        PendingInitialPromptStore.clearAfterInjection(fileURL: fileURL, sessionName: sessionName)
+    }
+
+    /// Removes a session from `magentBusySessions` on the owning thread and
+    /// notifies the sidebar so the spinner can update.
+    func clearMagentBusy(sessionName: String) {
+        guard let idx = store.threads.firstIndex(where: {
+            $0.magentBusySessions.contains(sessionName)
+        }) else { return }
+        store.threads[idx].magentBusySessions.remove(sessionName)
+        let callback = onThreadsChanged
+        Task { @MainActor in
+            callback?()
+        }
+    }
+
+    private func postAgentKeysInjectedNotification(sessionName: String, includedInitialPrompt: Bool) {
+        clearMagentBusy(sessionName: sessionName)
+        if includedInitialPrompt {
+            initialPromptInjectionCompletionsBySession[sessionName] = Date()
+            initialPromptAutoRelaunchAttempts.remove(sessionName)
+        }
+        NotificationCenter.default.post(
+            name: .magentAgentKeysInjected,
+            object: nil,
+            userInfo: [
+                "sessionName": sessionName,
+                "includedInitialPrompt": includedInitialPrompt,
+            ]
+        )
+    }
+
+    func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, shouldSubmitInitialPrompt: Bool = true, agentType: AgentType? = nil) {
+        let prompt = initialPrompt.flatMap { $0.isEmpty ? nil : $0 }
+        let hasPrompt = shouldSubmitInitialPrompt && prompt != nil
+
+        // Mark session as magent-busy for the duration of injection/readiness detection.
+        // This ensures the sidebar shows a spinner even before the agent starts.
+        if let idx = store.threads.firstIndex(where: {
+            $0.tmuxSessionNames.contains(sessionName)
+        }), !store.threads[idx].magentBusySessions.contains(sessionName) {
+            store.threads[idx].magentBusySessions.insert(sessionName)
+            let callback = onThreadsChanged
+            Task { @MainActor in
+                callback?()
+            }
+        }
+
+        guard !terminalCommand.isEmpty || !agentContext.isEmpty || prompt != nil else {
+            clearMagentBusy(sessionName: sessionName)
+            return
+        }
+        NSLog("[injectAfterStart] session=\(sessionName) hasPrompt=\(hasPrompt) injectOnly=\(prompt != nil && !shouldSubmitInitialPrompt) hasTermCmd=\(!terminalCommand.isEmpty) agentType=\(agentType?.rawValue ?? "nil")")
+
+        // Track pending prompt injection so the UI can show a "waiting" banner
+        if let prompt {
+            initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
+            initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
+            pendingPromptInjectionSessions[sessionName] = ThreadManager.InitialPromptInjectionFailureInfo(
+                prompt: prompt,
+                shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                agentType: agentType,
+                requiresAgentRelaunch: false
+            )
+            NotificationCenter.default.post(
+                name: .magentPendingPromptInjection,
+                object: nil,
+                userInfo: ["sessionName": sessionName]
+            )
+        }
+
+        // Cancel any prior in-flight injection for this session — but only when
+        // the new call also carries a prompt. A prompt-less call (agent context only,
+        // e.g. from recreateSessionIfNeeded) must not nuke an in-flight prompt task.
+        if prompt != nil {
+            pendingPromptInjectionTasks[sessionName]?.cancel()
+        }
+
+        let task = Task {
+            _ = await waitForPaneCaptureReady(sessionName: sessionName)
+            var didSendTerminalCommand = false
+            if !terminalCommand.isEmpty {
+                // Do not signal magentAgentKeysInjected yet when more startup work
+                // is still pending for this session (agent context or initial prompt).
+                try? await tmux.sendKeys(sessionName: sessionName, keys: terminalCommand)
+                didSendTerminalCommand = true
+            }
+            if let prompt, !shouldSubmitInitialPrompt {
+                // Inject-only mode: paste the prompt text but don't press Enter.
+                // Wait for agent readiness so the text lands in the right input area.
+                NotificationCenter.default.post(name: .magentAgentInjectionStarted, object: nil, userInfo: ["sessionName": sessionName])
+                let promptReady = await waitForAgentPrompt(
+                    sessionName: sessionName,
+                    agentType: agentType,
+                    timeout: 30
+                )
+                guard !Task.isCancelled else {
+                    self.clearMagentBusy(sessionName: sessionName)
+                    return
+                }
+                if !promptReady {
+                    let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
+                    let shellBlockerDetected = detectsInteractiveShellBlocker(paneContent)
+                    let relaunchCommand = shellBlockerDetected ? nil : await self.availableAgentRelaunchCommand(
+                        sessionName: sessionName,
+                        agentType: agentType
+                    )
+                    if relaunchCommand != nil,
+                       await self.autoRelaunchAgentAfterPromptLaunchFailureIfNeeded(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    ) {
+                        return
+                    }
+                    await postInitialPromptInjectionFailure(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType,
+                        requiresAgentRelaunch: relaunchCommand != nil
+                    )
+                    return
+                }
+                do {
+                    try await tmux.sendText(sessionName: sessionName, text: prompt)
+                } catch {
+                    NSLog("[injectAfterStart] sendText failed for inject-only session \(sessionName): \(error)")
+                    await postInitialPromptInjectionFailure(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    )
+                    return
+                }
+                pendingPromptInjectionSessions.removeValue(forKey: sessionName)
+                pendingPromptInjectionTasks.removeValue(forKey: sessionName)
+                postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: true)
+            } else if let prompt, shouldSubmitInitialPrompt {
+                // When an initial prompt is provided, skip the agent context injection
+                // and send only the prompt. The agent context would race with the prompt —
+                // submitting as a first prompt that blocks the real one.
+                // Wait for the agent TUI to be ready before sending the prompt.
+                NotificationCenter.default.post(name: .magentAgentInjectionStarted, object: nil, userInfo: ["sessionName": sessionName])
+                let promptReady = await waitForAgentPrompt(
+                    sessionName: sessionName,
+                    agentType: agentType,
+                    timeout: 30
+                )
+                guard !Task.isCancelled else {
+                    self.clearMagentBusy(sessionName: sessionName)
+                    return
+                }
+                if !promptReady {
+                    let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
+                    let shellBlockerDetected = detectsInteractiveShellBlocker(paneContent)
+                    let relaunchCommand = shellBlockerDetected ? nil : await self.availableAgentRelaunchCommand(
+                        sessionName: sessionName,
+                        agentType: agentType
+                    )
+                    if relaunchCommand != nil,
+                       await self.autoRelaunchAgentAfterPromptLaunchFailureIfNeeded(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    ) {
+                        return
+                    }
+                    await postInitialPromptInjectionFailure(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType,
+                        requiresAgentRelaunch: relaunchCommand != nil
+                    )
+                    return
+                }
+                // Send text and Enter separately — the Enter key gets lost if sent in the
+                // same send-keys call while the TUI is still processing buffered input.
+                // Poll until the pasted text is visible in the pane instead of using a
+                // fixed sleep, so Enter only arrives after the TUI event loop has fully
+                // consumed the paste. Falls back gracefully on timeout.
+                do {
+                    try await tmux.sendText(sessionName: sessionName, text: prompt)
+                } catch {
+                    NSLog("[injectAfterStart] sendText failed for session \(sessionName): \(error)")
+                    await postInitialPromptInjectionFailure(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    )
+                    return
+                }
+                let appeared = await waitForPromptToAppear(sessionName: sessionName, prompt: prompt)
+                if !appeared {
+                    NSLog("[injectAfterStart] prompt fingerprint not found in pane for session \(sessionName) — sending Enter anyway")
+                }
+                try? await tmux.sendEnter(sessionName: sessionName)
+                pendingPromptInjectionSessions.removeValue(forKey: sessionName)
+                pendingPromptInjectionTasks.removeValue(forKey: sessionName)
+                postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: true)
+            } else if !agentContext.isEmpty {
+                // No initial prompt — send agent context as usual
+                if !terminalCommand.isEmpty {
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                }
+                let promptReady = await waitForAgentPrompt(sessionName: sessionName, agentType: agentType)
+                if !promptReady {
+                    let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
+                    if detectsInteractiveShellBlocker(paneContent) {
+                        await showInjectionRetryBanner(
+                            message: "Agent context not injected — shell is waiting for user input. Answer the prompt in the terminal, then retry.",
+                            sessionName: sessionName,
+                            actionTitle: "Retry",
+                            terminalCommand: "",
+                            agentContext: agentContext,
+                            initialPrompt: nil,
+                            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                            agentType: agentType
+                        )
+                    } else if let relaunchCommand = await availableAgentRelaunchCommand(
+                        sessionName: sessionName,
+                        agentType: agentType
+                    ) {
+                        await showInjectionRetryBanner(
+                            message: "Agent launch did not reach its prompt, and this tab is now at a shell prompt. Relaunch the agent, then Magent will retry the saved startup injection.",
+                            sessionName: sessionName,
+                            actionTitle: "Relaunch Agent",
+                            terminalCommand: relaunchCommand,
+                            agentContext: agentContext,
+                            initialPrompt: nil,
+                            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                            agentType: agentType
+                        )
+                    } else {
+                        await showInjectionRetryBanner(
+                            message: "Agent context not injected — the agent input prompt did not appear yet. Retry after the agent finishes starting.",
+                            sessionName: sessionName,
+                            actionTitle: "Retry",
+                            terminalCommand: "",
+                            agentContext: agentContext,
+                            initialPrompt: nil,
+                            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                            agentType: agentType
+                        )
+                    }
+                    return
+                }
+                try? await tmux.sendKeys(sessionName: sessionName, keys: agentContext)
+                postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: false)
+            } else if didSendTerminalCommand {
+                postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: false)
+            }
+        }
+        if prompt != nil {
+            pendingPromptInjectionTasks[sessionName] = task
+        }
+    }
+
+    // MARK: - Agent Type
+
+    func effectiveAgentType(for projectId: UUID) -> AgentType? {
+        let settings = persistence.loadSettings()
+        return resolveAgentType(for: projectId, requestedAgentType: nil, settings: settings)
+    }
+
+    /// Resolves the project's default agent, but when that agent currently has an
+    /// active tracked rate limit, falls back to the first enabled agent that does not.
+    /// If every enabled agent is currently rate-limited (or untracked), keeps the default.
+    func effectiveAgentTypeAvoidingRateLimit(for projectId: UUID, now: Date = Date()) -> AgentType? {
+        let settings = persistence.loadSettings()
+        let activeAgents = settings.availableActiveAgents
+        guard !activeAgents.isEmpty else { return nil }
+        guard let preferred = resolveAgentType(for: projectId, requestedAgentType: nil, settings: settings) else {
+            return activeAgents.first
+        }
+        guard hasActiveRateLimit?(preferred, now) == true else { return preferred }
+
+        for candidate in activeAgents where candidate != preferred {
+            if hasActiveRateLimit?(candidate, now) != true {
+                return candidate
+            }
+        }
+        return preferred
+    }
+
+    func detectedRunningAgentType(
+        paneCommand: String,
+        childProcesses: [(pid: pid_t, args: String)]
+    ) -> AgentType? {
+        if let directMatch = detectedAgentType(from: paneCommand) {
+            return directMatch
+        }
+
+        for child in childProcesses {
+            if let childMatch = detectedAgentType(from: child.args) {
+                return childMatch
+            }
+        }
+
+        return nil
+    }
+
+    func detectedAgentType(from commandLine: String) -> AgentType? {
+        let commandLower = commandLine.lowercased()
+        if commandLower.contains("claude") { return .claude }
+        if commandLower.contains("codex") { return .codex }
+        return nil
+    }
+
+    /// Returns the agent type currently running in the given tmux session, or nil if
+    /// no known agent process is detected (e.g. the pane is at a plain shell prompt).
+    func detectedAgentTypeInSession(_ sessionName: String) async -> AgentType? {
+        guard let paneState = await tmux.activePaneStates(forSessions: [sessionName])[sessionName] else {
+            return nil
+        }
+        if let directMatch = detectedAgentType(from: paneState.command) {
+            return directMatch
+        }
+        let children = paneState.pid > 0
+            ? await tmux.childProcesses(forParents: [paneState.pid])[paneState.pid] ?? []
+            : []
+        return detectedRunningAgentType(paneCommand: paneState.command, childProcesses: children)
+    }
+
+    func agentType(for thread: MagentThread, sessionName: String) -> AgentType? {
+        guard thread.agentTmuxSessions.contains(sessionName) else { return nil }
+        if let stored = thread.sessionAgentTypes[sessionName] {
+            return stored
+        }
+        if let inferred = inferredStoredAgentType(for: thread, sessionName: sessionName) {
+            return inferred
+        }
+        return effectiveAgentTypeForProject?(thread.projectId)
+    }
+
+    func loadingOverlayAgentType(for thread: MagentThread, sessionName: String) async -> AgentType? {
+        guard thread.agentTmuxSessions.contains(sessionName) else { return nil }
+
+        let persistedAgentType = agentType(for: thread, sessionName: sessionName)
+        guard await tmux.hasSession(name: sessionName) else {
+            return persistedAgentType
+        }
+
+        let paneStates = await tmux.activePaneStates(forSessions: [sessionName])
+        guard let paneState = paneStates[sessionName] else {
+            return persistedAgentType
+        }
+
+        if let directMatch = detectedAgentType(from: paneState.command) {
+            return directMatch
+        }
+
+        let childProcessesByPid = paneState.pid > 0
+            ? await tmux.childProcesses(forParents: [paneState.pid])
+            : [:]
+        let children = childProcessesByPid[paneState.pid] ?? []
+
+        if let runningAgent = detectedRunningAgentType(
+            paneCommand: paneState.command,
+            childProcesses: children
+        ) {
+            return runningAgent
+        }
+
+        let shellCommands: Set<String> = ["sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh"]
+        if shellCommands.contains(paneState.command.lowercased()) {
+            return nil
+        }
+
+        return persistedAgentType
+    }
+
+    func migrateSessionAgentTypes(threadIndex index: Int) async -> Bool {
+        guard store.threads.indices.contains(index) else { return false }
+
+        let validAgentSessions = Set(store.threads[index].agentTmuxSessions)
+        let filtered = store.threads[index].sessionAgentTypes.filter { validAgentSessions.contains($0.key) }
+        var updated = filtered
+        var changed = filtered.count != store.threads[index].sessionAgentTypes.count
+
+        for sessionName in store.threads[index].agentTmuxSessions {
+            guard updated[sessionName] == nil else { continue }
+            if let live = await liveSessionAgentType(sessionName: sessionName)
+                ?? inferredStoredAgentType(for: store.threads[index], sessionName: sessionName)
+                ?? effectiveAgentTypeForProject?(store.threads[index].projectId) {
+                updated[sessionName] = live
+                changed = true
+            }
+        }
+
+        guard changed else { return false }
+        store.threads[index].sessionAgentTypes = updated
+        return true
+    }
+
+    @discardableResult
+    func remapSessionAgentTypes(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
+        guard store.threads.indices.contains(index) else { return false }
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        let remapped = Dictionary(
+            uniqueKeysWithValues: store.threads[index].sessionAgentTypes.map { key, value in
+                (sessionRenameMap[key] ?? key, value)
+            }
+        )
+        guard remapped != store.threads[index].sessionAgentTypes else { return false }
+        store.threads[index].sessionAgentTypes = remapped
+        return true
+    }
+
+    @discardableResult
+    func pruneSessionAgentTypesToKnownSessions(threadIndex index: Int) -> Bool {
+        guard store.threads.indices.contains(index) else { return false }
+
+        let validAgentSessions = Set(store.threads[index].agentTmuxSessions)
+        let filtered = store.threads[index].sessionAgentTypes.filter { validAgentSessions.contains($0.key) }
+        guard filtered != store.threads[index].sessionAgentTypes else { return false }
+        store.threads[index].sessionAgentTypes = filtered
+        return true
+    }
+
+    @discardableResult
+    func remapSessionCreationDates(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
+        guard store.threads.indices.contains(index) else { return false }
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        let remapped = Dictionary(
+            uniqueKeysWithValues: store.threads[index].sessionCreatedAts.map { key, value in
+                (sessionRenameMap[key] ?? key, value)
+            }
+        )
+        guard remapped != store.threads[index].sessionCreatedAts else { return false }
+        store.threads[index].sessionCreatedAts = remapped
+        return true
+    }
+
+    @discardableResult
+    func pruneSessionCreationDatesToKnownSessions(threadIndex index: Int) -> Bool {
+        guard store.threads.indices.contains(index) else { return false }
+
+        let validSessions = Set(store.threads[index].tmuxSessionNames)
+        let filtered = store.threads[index].sessionCreatedAts.filter { validSessions.contains($0.key) }
+        guard filtered != store.threads[index].sessionCreatedAts else { return false }
+        store.threads[index].sessionCreatedAts = filtered
+        return true
+    }
+
+    @discardableResult
+    func remapFreshAgentSessions(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
+        guard store.threads.indices.contains(index) else { return false }
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        let remapped = Set(store.threads[index].freshAgentSessions.map { sessionRenameMap[$0] ?? $0 })
+        guard remapped != store.threads[index].freshAgentSessions else { return false }
+        store.threads[index].freshAgentSessions = remapped
+        return true
+    }
+
+    @discardableResult
+    func pruneFreshAgentSessionsToKnownSessions(threadIndex index: Int) -> Bool {
+        guard store.threads.indices.contains(index) else { return false }
+
+        let validAgentSessions = Set(store.threads[index].agentTmuxSessions)
+        let filtered = Set(store.threads[index].freshAgentSessions.filter { validAgentSessions.contains($0) })
+        guard filtered != store.threads[index].freshAgentSessions else { return false }
+        store.threads[index].freshAgentSessions = filtered
+        return true
+    }
+
+    private func inferredStoredAgentType(for thread: MagentThread, sessionName: String) -> AgentType? {
+        if let customName = thread.customTabNames[sessionName] {
+            let trimmed = customName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if trimmed == "claude" || trimmed == "claude code" {
+                return .claude
+            }
+            if trimmed == "codex" {
+                return .codex
+            }
+            if trimmed == "custom" {
+                return .custom
+            }
+        }
+
+        let components = sessionName
+            .split(separator: "-")
+            .map { $0.lowercased() }
+        if components.contains("claude") {
+            return .claude
+        }
+        if components.contains("codex") {
+            return .codex
+        }
+        if components.contains("custom") {
+            return .custom
+        }
+
+        return nil
+    }
+
+    private func liveSessionAgentType(sessionName: String) async -> AgentType? {
+        guard let rawValue = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_AGENT_TYPE")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !rawValue.isEmpty else {
+            return nil
+        }
+        return AgentType(rawValue: rawValue)
+    }
+
+    // MARK: - Agent Conversation IDs
+
+    func conversationID(for threadId: UUID, sessionName: String) -> String? {
+        guard let thread = store.threads.first(where: { $0.id == threadId }) else { return nil }
+        return thread.sessionConversationIDs[sessionName]
+    }
+
+    func scheduleAgentConversationIDRefresh(
+        threadId: UUID,
+        sessionName: String,
+        delaySeconds: TimeInterval = 1.2
+    ) {
+        Task { [weak self] in
+            guard delaySeconds > 0 else {
+                await self?.refreshAgentConversationID(threadId: threadId, sessionName: sessionName)
+                return
+            }
+            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+            await self?.refreshAgentConversationID(threadId: threadId, sessionName: sessionName)
+        }
+    }
+
+    func refreshAgentConversationID(threadId: UUID, sessionName: String) async {
+        guard let threadIndex = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard store.threads[threadIndex].agentTmuxSessions.contains(sessionName) else { return }
+        guard !store.threads[threadIndex].freshAgentSessions.contains(sessionName) else { return }
+
+        let agentType = agentType(for: store.threads[threadIndex], sessionName: sessionName)
+        let worktreePath = store.threads[threadIndex].worktreePath
+        let minimumCreatedAt = (
+            store.threads[threadIndex].sessionCreatedAts[sessionName] ?? store.threads[threadIndex].createdAt
+        ).addingTimeInterval(-2)
+
+        let conversationID: String?
+        switch agentType {
+        case .claude:
+            conversationID = latestClaudeConversationID(
+                worktreePath: worktreePath,
+                notOlderThan: minimumCreatedAt
+            )
+        case .codex:
+            conversationID = await latestCodexConversationID(
+                worktreePath: worktreePath,
+                notOlderThan: minimumCreatedAt
+            )
+        case .custom, .none:
+            conversationID = nil
+        }
+
+        guard let conversationID, !conversationID.isEmpty else { return }
+        guard store.threads[threadIndex].sessionConversationIDs[sessionName] != conversationID else { return }
+
+        store.threads[threadIndex].sessionConversationIDs[sessionName] = conversationID
+        try? persistence.saveActiveThreads(store.threads)
+    }
+
+    private func latestClaudeConversationID(
+        worktreePath: String,
+        notOlderThan minimumCreatedAt: Date? = nil
+    ) -> String? {
+        struct ClaudeSessionIndex: Decodable {
+            struct Entry: Decodable {
+                let sessionId: String
+                let projectPath: String?
+                let modified: String?
+                let fileMtime: Double?
+            }
+            let entries: [Entry]
+        }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let encodedPath = worktreePath.replacingOccurrences(of: "/", with: "-")
+        let candidatePaths = [
+            "\(home)/.claude/projects/\(encodedPath)/sessions-index.json",
+            "\(home)/.agents/projects/\(encodedPath)/sessions-index.json",
+        ]
+
+        let isoWithFractional = ISO8601DateFormatter()
+        isoWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoPlain = ISO8601DateFormatter()
+        isoPlain.formatOptions = [.withInternetDateTime]
+
+        func entryTimestamp(_ entry: ClaudeSessionIndex.Entry) -> Date? {
+            if let modified = entry.modified {
+                if let date = isoWithFractional.date(from: modified) ?? isoPlain.date(from: modified) {
+                    return date
+                }
+            }
+            if let mtime = entry.fileMtime {
+                return Date(timeIntervalSince1970: mtime / 1000.0)
+            }
+            return nil
+        }
+
+        func readIndex(path: String) -> String? {
+            guard let data = FileManager.default.contents(atPath: path),
+                  let index = try? JSONDecoder().decode(ClaudeSessionIndex.self, from: data) else {
+                return nil
+            }
+
+            let scoped = index.entries.filter { entry in
+                guard let projectPath = entry.projectPath, !projectPath.isEmpty else { return true }
+                return projectPath == worktreePath
+            }
+            let entries = scoped.isEmpty ? index.entries : scoped
+            guard !entries.isEmpty else { return nil }
+
+            let sorted = entries.sorted { lhs, rhs in
+                (entryTimestamp(lhs) ?? .distantPast) > (entryTimestamp(rhs) ?? .distantPast)
+            }
+            guard let best = sorted.first, isUUID(best.sessionId) else { return nil }
+            if let minimumCreatedAt,
+               let timestamp = entryTimestamp(best),
+               timestamp < minimumCreatedAt {
+                return nil
+            }
+            return best.sessionId
+        }
+
+        for path in candidatePaths {
+            if let id = readIndex(path: path) {
+                return id
+            }
+        }
+
+        // Fallback: sessions-index.json may not exist (Claude Code doesn't always create it).
+        // Scan for .jsonl session files directly and pick the most recently modified one.
+        let fm = FileManager.default
+        let candidateDirs = candidatePaths.map { (path: String) -> String in
+            (path as NSString).deletingLastPathComponent
+        }
+        for dir in candidateDirs {
+            guard let contents = try? fm.contentsOfDirectory(atPath: dir) else { continue }
+            let jsonlFiles = contents
+                .filter { $0.hasSuffix(".jsonl") }
+                .compactMap { filename -> (sessionId: String, mtime: Date)? in
+                    let sessionId = (filename as NSString).deletingPathExtension
+                    guard isUUID(sessionId) else { return nil }
+                    let fullPath = (dir as NSString).appendingPathComponent(filename)
+                    guard let attrs = try? fm.attributesOfItem(atPath: fullPath),
+                          let mtime = attrs[.modificationDate] as? Date else { return nil }
+                    return (sessionId, mtime)
+                }
+                .sorted { $0.mtime > $1.mtime }
+            if let best = jsonlFiles.first {
+                if let minimumCreatedAt, best.mtime < minimumCreatedAt {
+                    continue
+                }
+                return best.sessionId
+            }
+        }
+        return nil
+    }
+
+    private func latestCodexConversationID(
+        worktreePath: String,
+        notOlderThan minimumCreatedAt: Date? = nil
+    ) async -> String? {
+        let codexDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
+        let dbPath = newestCodexStateDatabase(in: codexDir)
+        guard let dbPath else { return nil }
+
+        let sqlWorktree = sqlQuoted(worktreePath)
+        let freshnessClause: String
+        if let minimumCreatedAt {
+            let minimumTimestamp = Int(minimumCreatedAt.timeIntervalSince1970.rounded(.down))
+            freshnessClause = " AND updated_at >= \(minimumTimestamp)"
+        } else {
+            freshnessClause = ""
+        }
+        let query = "SELECT id FROM threads WHERE cwd = \(sqlWorktree)\(freshnessClause) ORDER BY updated_at DESC LIMIT 1;"
+        let command = "sqlite3 \(ShellExecutor.shellQuote(dbPath)) \(ShellExecutor.shellQuote(query))"
+        let result = await ShellExecutor.execute(command)
+        guard result.exitCode == 0 else { return nil }
+
+        let id = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isUUID(id) else { return nil }
+        return id
+    }
+
+    private func newestCodexStateDatabase(in directoryPath: String) -> String? {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            atPath: directoryPath
+        ) else {
+            return nil
+        }
+
+        let candidates = entries.filter { name in
+            name.hasPrefix("state_") && name.hasSuffix(".sqlite")
+        }
+        guard !candidates.isEmpty else { return nil }
+
+        var bestPath: String?
+        var bestDate = Date.distantPast
+        for name in candidates {
+            let path = "\(directoryPath)/\(name)"
+            let attrs = try? fm.attributesOfItem(atPath: path)
+            let modified = attrs?[.modificationDate] as? Date ?? Date.distantPast
+            if modified > bestDate {
+                bestDate = modified
+                bestPath = path
+            }
+        }
+        return bestPath
+    }
+
+    private func sqlQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "''") + "'"
+    }
+
+    private func isUUID(_ value: String) -> Bool {
+        UUID(uuidString: value.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+    }
+
+    // MARK: - Submitted Prompt History
+
+    func replaceSubmittedPromptHistory(threadId: UUID, sessionName: String, prompts: [String]) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard store.threads[index].agentTmuxSessions.contains(sessionName) else { return }
+
+        var history = prompts
+            .map(normalizedSubmittedPrompt(_:))
+            .filter { !$0.isEmpty }
+        if history.count > Self.maxSubmittedPromptsPerSession {
+            history = Array(history.suffix(Self.maxSubmittedPromptsPerSession))
+        }
+
+        let existing = store.threads[index].submittedPromptsBySession[sessionName] ?? []
+        guard history != existing else { return }
+
+        // Capture before mutating so we can detect growth below.
+        let previousCount = existing.count
+
+        if history.isEmpty {
+            store.threads[index].submittedPromptsBySession.removeValue(forKey: sessionName)
+        } else {
+            store.threads[index].submittedPromptsBySession[sessionName] = history
+        }
+        try? persistence.saveActiveThreads(store.threads)
+
+        // When new prompts appear and the branch hasn't been renamed yet, kick off
+        // auto-rename immediately. This covers threads whose prompts arrive via CLI
+        // injection (sendPrompt IPC) or any other path that updates the history
+        // without going through ThreadDetailViewController's TOC refresh.
+        // All concurrency/duplication guards are enforced inside performAutoRename.
+        //
+        // Pass ALL accumulated prompts (joined) so the AI has full context even when
+        // the first prompt was rate-limited and the user followed up with a short
+        // "continue"/"resume" — the rename model needs the original task description.
+        if history.count > previousCount,
+           !store.threads[index].didAutoRenameFromFirstPrompt {
+            let allPrompts = history.joined(separator: "\n")
+            let capturedId = threadId
+            let capturedSession = sessionName
+            let autoRename = triggerAutoRenameIfNeeded
+            Task {
+                await autoRename?(capturedId, capturedSession, allPrompts)
+            }
+        }
+    }
+
+    /// Appends a single prompt to a session's submitted history, reading the current
+    /// persisted state so concurrent callers cannot overwrite each other's additions.
+    /// Also triggers auto-rename when the history grows (same as `replaceSubmittedPromptHistory`).
+    func appendToSubmittedPromptHistory(threadId: UUID, sessionName: String, prompt: String) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        let current = store.threads[index].submittedPromptsBySession[sessionName] ?? []
+        replaceSubmittedPromptHistory(threadId: threadId, sessionName: sessionName, prompts: current + [prompt])
+    }
+
+    private func normalizedSubmittedPrompt(_ prompt: String) -> String {
+        prompt
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    @discardableResult
+    func remapSubmittedPromptHistory(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
+        guard store.threads.indices.contains(index) else { return false }
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        var changed = false
+        var updated: [String: [String]] = [:]
+        for (sessionName, prompts) in store.threads[index].submittedPromptsBySession {
+            let newName = sessionRenameMap[sessionName] ?? sessionName
+            let existing = updated[newName] ?? []
+            updated[newName] = existing + prompts
+            if newName != sessionName {
+                changed = true
+            }
+        }
+
+        if changed || updated.count != store.threads[index].submittedPromptsBySession.count {
+            store.threads[index].submittedPromptsBySession = updated
+            return true
+        }
+        return false
+    }
+
+    @discardableResult
+    func pruneSubmittedPromptHistoryToKnownSessions(threadIndex index: Int) -> Bool {
+        guard store.threads.indices.contains(index) else { return false }
+
+        let validSessions = Set(store.threads[index].tmuxSessionNames)
+        let filtered = store.threads[index].submittedPromptsBySession.filter { key, prompts in
+            validSessions.contains(key) && !prompts.isEmpty
+        }
+        if filtered != store.threads[index].submittedPromptsBySession {
+            store.threads[index].submittedPromptsBySession = filtered
+            return true
+        }
+        return false
+    }
+
+    // MARK: - Session-State Rekey/Prune
+
+    @discardableResult
+    func remapInitialPromptInjectionState(sessionRenameMap: [String: String]) -> Bool {
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        var changed = false
+
+        func remapDictionary<Value>(_ dictionary: inout [String: Value]) {
+            let originalKeys = Set(dictionary.keys)
+            var remapped: [String: Value] = [:]
+            // Build this manually instead of `Dictionary(uniqueKeysWithValues:)` so a
+            // future caller cannot crash here if two old session names ever collapse to
+            // the same new name during rename reconciliation.
+            for key in dictionary.keys.sorted() {
+                guard let value = dictionary[key] else { continue }
+                remapped[sessionRenameMap[key] ?? key] = value
+            }
+            dictionary = remapped
+            if Set(dictionary.keys) != originalKeys {
+                changed = true
+            }
+        }
+
+        remapDictionary(&initialPromptInjectionFailuresBySession)
+        remapDictionary(&pendingPromptInjectionSessions)
+        remapDictionary(&initialPromptInjectionCompletionsBySession)
+
+        let originalTaskKeys = Set(pendingPromptInjectionTasks.keys)
+        var remappedTasks: [String: Task<Void, Never>] = [:]
+        for key in pendingPromptInjectionTasks.keys.sorted() {
+            guard let task = pendingPromptInjectionTasks[key] else { continue }
+            remappedTasks[sessionRenameMap[key] ?? key] = task
+        }
+        pendingPromptInjectionTasks = remappedTasks
+        if Set(pendingPromptInjectionTasks.keys) != originalTaskKeys {
+            changed = true
+        }
+
+        let originalAutoRelaunchSessions = initialPromptAutoRelaunchAttempts
+        initialPromptAutoRelaunchAttempts = Set(
+            initialPromptAutoRelaunchAttempts.map { sessionRenameMap[$0] ?? $0 }
+        )
+        if initialPromptAutoRelaunchAttempts != originalAutoRelaunchSessions {
+            changed = true
+        }
+
+        return changed
+    }
+
+    // MARK: - Session Naming (delegates to TmuxSessionNaming)
+
+    /// Renames session names produced by Magent without touching unrelated substrings.
+    func renamedSessionName(_ sessionName: String, fromThreadName oldName: String, toThreadName newName: String, repoSlug: String) -> String {
+        TmuxSessionNaming.renamedSessionName(sessionName, fromThreadName: oldName, toThreadName: newName, repoSlug: repoSlug)
+    }
+
+    // MARK: - Symlinks (delegates to SymlinkManager)
+
+    func cleanupAllBrokenSymlinks() {
+        SymlinkManager.cleanupAll(settings: persistence.loadSettings())
+    }
+
+    func createCompatibilitySymlink(from oldPath: String, to newPath: String) {
+        SymlinkManager.createCompatibilitySymlink(from: oldPath, to: newPath)
+    }
+
+    func ensureBranchSymlink(
+        branchName: String,
+        worktreePath: String,
+        worktreesBasePath: String
+    ) {
+        SymlinkManager.ensureBranchSymlink(
+            branchName: branchName,
+            worktreePath: worktreePath,
+            worktreesBasePath: worktreesBasePath
+        )
+    }
+
+    // MARK: - Claude Settings
+
+    /// Path to the Magent-specific Claude Code settings file.
+    static let claudeHooksSettingsPath = "/tmp/magent-claude-hooks.json"
+
+    /// Writes (or refreshes) the Claude Code settings JSON that Magent injects via `--settings`.
+    /// Includes:
+    /// - Stop hook for completion detection
+    /// - Session-only theme hints derived from Magent appearance settings
+    func installClaudeHooksSettings() {
+        let appearanceMode = persistence.loadSettings().appAppearanceMode
+        installClaudeHooksSettings(for: appearanceMode)
+    }
+
+    func installClaudeHooksSettings(for appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) {
+        let themeSuffix = preserveAgentColorTheme ? "-notheme" : ""
+        let marker = "magent-settings-v2-\(appearanceMode.rawValue)\(themeSuffix)"
+        let path = Self.claudeHooksSettingsPath
+        if let existing = try? String(contentsOfFile: path, encoding: .utf8),
+           existing.contains(marker) {
+            return
+        }
+        let eventsPath = "/tmp/magent-agent-completion-events.log"
+        // The Stop hook runs `tmux display-message` to get the session name and
+        // appends it to the event log. Guarded by MAGENT_WORKTREE_NAME so it
+        // only fires inside Magent-managed sessions.
+        var settings: [String: Any] = [
+            "_comment": marker,
+            "hooks": [
+                "Stop": [
+                    [
+                        "hooks": [
+                            [
+                                "type": "command",
+                                "command": "[ -n \"$MAGENT_WORKTREE_NAME\" ] && tmux display-message -p '#{session_name}' >> \(eventsPath) || true",
+                                "timeout": 5,
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]
+
+        // Keep this scoped to Magent-managed sessions via --settings.
+        // Skip theme hints when the user wants to preserve the agent's own default theme.
+        if !preserveAgentColorTheme {
+            switch appearanceMode {
+            case .light:
+                settings["theme"] = "light"
+                settings["terminalTheme"] = "light"
+            case .dark:
+                settings["theme"] = "dark"
+                settings["terminalTheme"] = "dark"
+            case .system:
+                settings["terminalTheme"] = "system"
+            }
+        }
+
+        guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else {
+            return
+        }
+        try? json.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: - Codex Config
+
+    /// Legacy no-op. Codex launch behavior is now configured per Magent session
+    /// via command-line overrides, without writing to user-wide `~/.codex/config.toml`.
+    func ensureCodexBellNotification() {
+        // Intentionally left blank.
+    }
+
+    // MARK: - Codex IPC Instructions
+
+    func installCodexIPCInstructions() {
+        let codexDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex")
+        let filePath = codexDir.appendingPathComponent("AGENTS.md").path
+
+        if let existing = try? String(contentsOfFile: filePath, encoding: .utf8) {
+            // Already up to date
+            if existing.contains(IPCAgentDocs.codexIPCVersion) { return }
+
+            // Replace outdated Magent section if present
+            if let startRange = existing.range(of: IPCAgentDocs.codexIPCMarkerStart),
+               let endRange = existing.range(of: IPCAgentDocs.codexIPCMarkerEnd),
+               startRange.lowerBound <= endRange.lowerBound {
+                var updated = existing
+                updated.replaceSubrange(
+                    startRange.lowerBound..<endRange.upperBound,
+                    with: IPCAgentDocs.codexAgentsMdBlock
+                )
+                try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
+            } else {
+                // Append to existing user content
+                var updated = existing
+                if !updated.hasSuffix("\n") { updated += "\n" }
+                updated += "\n" + IPCAgentDocs.codexAgentsMdBlock + "\n"
+                try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
+            }
+        } else {
+            // No file — create with just the IPC section
+            try? FileManager.default.createDirectory(
+                atPath: codexDir.path,
+                withIntermediateDirectories: true
+            )
+            try? IPCAgentDocs.codexAgentsMdBlock.write(toFile: filePath, atomically: true, encoding: .utf8)
+        }
+    }
+
+    // MARK: - Agent Start Command
+
+    private static let managedZdotdirPath = "/tmp/magent-zdotdir"
+    private static let managedZdotdirMarker = "# magent-zdotdir-v1"
+    private static let managedZdotdirFiles = [".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout"]
+    private static let managedZdotdirLock = NSLock()
+    private static let userShell: String = {
+        ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+    }()
+    private static let startupShell: String = {
+        let shell = userShell
+        let shellName = URL(fileURLWithPath: shell).lastPathComponent.lowercased()
+        return shellName.contains("zsh") ? shell : "/bin/zsh"
+    }()
+
+    private static func managedZdotfileContents(fileName: String) -> String {
+        switch fileName {
+        case ".zshrc":
+            return """
+            \(managedZdotdirMarker)
+            export ZDOTDIR="$HOME"
+            if [ -f "$HOME/.zshrc" ]; then
+              source "$HOME/.zshrc"
+            fi
+            if [ -n "${MAGENT_START_CWD:-}" ] && [ -d "${MAGENT_START_CWD}" ]; then
+              cd -- "${MAGENT_START_CWD}" || true
+            fi
+            unset MAGENT_START_CWD
+            """
+        case ".zshenv", ".zprofile", ".zlogin", ".zlogout":
+            return """
+            \(managedZdotdirMarker)
+            if [ -f "$HOME/\(fileName)" ]; then
+              source "$HOME/\(fileName)"
+            fi
+            """
+        default:
+            return "\(managedZdotdirMarker)\n"
+        }
+    }
+
+    @discardableResult
+    func ensureManagedZdotdir() -> String {
+        Self.managedZdotdirLock.lock()
+        defer { Self.managedZdotdirLock.unlock() }
+
+        let path = Self.managedZdotdirPath
+        let fileManager = FileManager.default
+
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: path, isDirectory: &isDirectory),
+           !isDirectory.boolValue {
+            try? fileManager.removeItem(atPath: path)
+        }
+        try? fileManager.createDirectory(atPath: path, withIntermediateDirectories: true)
+
+        for fileName in Self.managedZdotdirFiles {
+            let filePath = "\(path)/\(fileName)"
+            let desired = Self.managedZdotfileContents(fileName: fileName)
+            if let existing = try? String(contentsOfFile: filePath, encoding: .utf8),
+               existing == desired {
+                continue
+            }
+            try? desired.write(toFile: filePath, atomically: true, encoding: .utf8)
+        }
+
+        return path
+    }
+
+    func cleanupManagedZdotdir() {
+        Self.managedZdotdirLock.lock()
+        defer { Self.managedZdotdirLock.unlock() }
+        try? FileManager.default.removeItem(atPath: Self.managedZdotdirPath)
+    }
+
+    func terminalStartCommand(
+        envExports: String,
+        workingDirectory: String
+    ) -> String {
+        let shell = ShellExecutor.shellQuote(Self.startupShell)
+        let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
+        let startCwd = ShellExecutor.shellQuote(workingDirectory)
+        // Unset CLAUDECODE so agent CLIs can be launched manually from a terminal tab
+        // without triggering the "nested session" error inherited from Magent's parent process.
+        return "unset CLAUDECODE && \(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l"
+    }
+
+    func agentStartCommand(
+        settings: AppSettings,
+        projectId: UUID? = nil,
+        agentType: AgentType?,
+        envExports: String,
+        workingDirectory: String,
+        resumeSessionID: String? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
+    ) -> String {
+        let shell = ShellExecutor.shellQuote(Self.startupShell)
+        let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
+        let startCwd = ShellExecutor.shellQuote(workingDirectory)
+        let preAgentCommand = projectId.map { preAgentInjectionCommand(for: $0, settings: settings) } ?? ""
+
+        guard let agentType else {
+            return terminalStartCommand(envExports: envExports, workingDirectory: workingDirectory)
+        }
+
+        var parts = [String]()
+        if agentType == .claude {
+            installClaudeHooksSettings(for: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
+            parts.append("unset CLAUDECODE")
+        }
+        if !preAgentCommand.isEmpty {
+            // Pre-agent startup commands are best-effort and should not block agent launch.
+            parts.append("{ \(preAgentCommand) ; } || true")
+        }
+        let command = agentCommand(
+            settings: settings,
+            agentType: agentType,
+            resumeSessionID: resumeSessionID,
+            modelId: modelId,
+            reasoningLevel: reasoningLevel
+        )
+        // Use an interactive login shell so zsh loads both login files and `.zshrc`
+        // before resolving the agent binary. Many PATH/custom command setups live in `.zshrc`.
+        parts.append(command)
+        let innerCmd = parts.joined(separator: " && ") + "; exec \(shell) -l"
+        return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -il -c \(ShellExecutor.shellQuote(innerCmd))"
+    }
+
+    private func agentCommand(
+        settings: AppSettings,
+        agentType: AgentType,
+        resumeSessionID: String?,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
+    ) -> String {
+        let fresh = freshAgentCommand(settings: settings, agentType: agentType, modelId: modelId, reasoningLevel: reasoningLevel)
+        guard let resumeSessionID = normalizedResumeID(resumeSessionID),
+              let resume = resumableAgentCommand(
+                settings: settings,
+                agentType: agentType,
+                sessionID: resumeSessionID
+              ) else {
+            return fresh
+        }
+        // Always attempt deterministic resume first; fall back to a fresh session.
+        return "{ \(resume) || \(fresh) ; }"
+    }
+
+    private func freshAgentCommand(settings: AppSettings, agentType: AgentType, modelId: String? = nil, reasoningLevel: String? = nil) -> String {
+        var command = settings.command(for: agentType)
+
+        // Validate against current manifest before emitting CLI flags — stale persisted values are dropped.
+        let validModel = AgentModelsService.shared.validatedModelId(modelId, for: agentType)
+        let validReasoning = AgentModelsService.shared.validatedReasoningLevel(reasoningLevel, for: agentType, modelId: validModel)
+
+        // Append model/reasoning flags before agent-specific session config (which adds -c flags for codex).
+        switch agentType {
+        case .claude:
+            if let validModel {
+                command += " --model \(ShellExecutor.shellQuote(validModel))"
+            }
+            if let validReasoning {
+                command += " --effort \(ShellExecutor.shellQuote(validReasoning))"
+            }
+            command += " --settings \(Self.claudeHooksSettingsPath)"
+            if settings.ipcPromptInjectionEnabled {
+                command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
+            }
+            command = claudeSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
+        case .codex:
+            if let validModel {
+                command += " -m \(ShellExecutor.shellQuote(validModel))"
+            }
+            if let validReasoning {
+                command += " -c \(ShellExecutor.shellQuote("model_reasoning_effort=\"\(validReasoning)\""))"
+            }
+            command = codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
+        case .custom:
+            break
+        }
+        return command
+    }
+
+    private func resumableAgentCommand(
+        settings: AppSettings,
+        agentType: AgentType,
+        sessionID: String
+    ) -> String? {
+        let quotedID = ShellExecutor.shellQuote(sessionID)
+        switch agentType {
+        case .claude:
+            // Use `command claude` to bypass any shell function wrappers.
+            var command = settings.agentSkipPermissions
+                ? "command claude --dangerously-skip-permissions"
+                : "command claude"
+            command += " --resume \(quotedID)"
+            command += " --settings \(Self.claudeHooksSettingsPath)"
+            if settings.ipcPromptInjectionEnabled {
+                command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
+            }
+            return claudeSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
+        case .codex:
+            // Use `command codex` to bypass shell function wrappers (same reason as in AppSettings.command(for:)).
+            var command = "command codex resume \(quotedID)"
+            if settings.agentSkipPermissions {
+                command += " --yolo"
+            } else if settings.agentSandboxEnabled {
+                command += " --full-auto"
+            }
+            return codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
+        case .custom:
+            return nil
+        }
+    }
+
+    private func codexSessionLaunchFlags(for appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {
+        var flags = [
+            "-c \(ShellExecutor.shellQuote("tui.notification_method=\"bel\""))",
+        ]
+        // Keep Codex rendering aligned with the terminal palette in explicit light mode.
+        if !preserveAgentColorTheme && appearanceMode == .light {
+            flags.append("-c \(ShellExecutor.shellQuote("tui.theme=\"ansi\""))")
+        }
+        return flags.joined(separator: " ")
+    }
+
+    private func codexSessionEnvironmentWrappedCommand(_ command: String) -> String {
+        return "env -u NO_COLOR \(command)"
+    }
+
+    private func codexSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {
+        let prefix = "command codex"
+        guard command.hasPrefix(prefix) else { return command }
+
+        let launchFlags = codexSessionLaunchFlags(for: appearanceMode, preserveAgentColorTheme: preserveAgentColorTheme)
+        let suffix = String(command.dropFirst(prefix.count))
+        let configuredCommand = if launchFlags.isEmpty {
+            "\(prefix)\(suffix)"
+        } else {
+            "\(prefix) \(launchFlags)\(suffix)"
+        }
+        return codexSessionEnvironmentWrappedCommand(configuredCommand)
+    }
+
+    private func claudeSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {
+        guard command.hasPrefix("command claude") else { return command }
+        // Claude's current terminal renderer can keep dark-styled truecolor blocks even when
+        // theme hints are set. In explicit light mode, force a basic ANSI profile for this
+        // process only (instead of disabling color completely).
+        if !preserveAgentColorTheme && appearanceMode == .light {
+            return "TERM=screen COLORTERM= \(command)"
+        }
+        return command
+    }
+
+    private func normalizedResumeID(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              isUUID(value) else {
+            return nil
+        }
+        return value
+    }
+
+    // MARK: - Name Availability
+
+    func isNameAvailable(_ name: String, project: Project) async throws -> Bool {
+        let nameInUse = store.threads.contains(where: { $0.name == name })
+        let dirExists = FileManager.default.fileExists(
+            atPath: "\(project.resolvedWorktreesBasePath())/\(name)"
+        )
+        guard !nameInUse && !dirExists else { return false }
+
+        let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: name)
+        let slug = TmuxSessionNaming.repoSlug(from: project.name)
+        let settings = persistence.loadSettings()
+        let agentType = resolveAgentType(for: project.id, requestedAgentType: nil, settings: settings)
+        let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(TmuxSessionNaming.defaultTabDisplayName(for: agentType))
+        let tmuxExists = await tmux.hasSession(name: TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: name, tabSlug: firstTabSlug))
+        return !branchExists && !tmuxExists
+    }
+
+    // MARK: - Agent Trust
+
+    func trustDirectoryIfNeeded(_ path: String, agentType: AgentType?) {
+        switch agentType {
+        case .claude:
+            ClaudeTrustHelper.trustDirectory(path)
+        case .codex:
+            CodexTrustHelper.trustDirectory(path)
+        case .custom, .none:
+            break
+        }
+    }
+
+    func resolveAgentType(
+        for projectId: UUID,
+        requestedAgentType: AgentType?,
+        settings: AppSettings
+    ) -> AgentType? {
+        let activeAgents = settings.availableActiveAgents
+        guard !activeAgents.isEmpty else { return nil }
+        if activeAgents.count == 1 {
+            return activeAgents[0]
+        }
+        if let requestedAgentType, activeAgents.contains(requestedAgentType) {
+            return requestedAgentType
+        }
+
+        let project = settings.projects.first(where: { $0.id == projectId })
+        if let projectDefault = project?.agentType, activeAgents.contains(projectDefault) {
+            return projectDefault
+        }
+        if let globalDefault = settings.effectiveGlobalDefaultAgentType, activeAgents.contains(globalDefault) {
+            return globalDefault
+        }
+        return activeAgents[0]
+    }
+
+    func isTabNameTaken(_ name: String, existingNames: [String]) async -> Bool {
+        if existingNames.contains(name) { return true }
+        return await tmux.hasSession(name: name)
+    }
+}
