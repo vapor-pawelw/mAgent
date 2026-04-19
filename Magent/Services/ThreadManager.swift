@@ -144,6 +144,9 @@ final class ThreadManager {
             guard let self else { return }
             self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
         }
+        svc.resolveBaseBranchForThread = { [weak self] thread in
+            self?.gitStateService.resolveBaseBranch(for: thread) ?? thread.baseBranch ?? ""
+        }
         return svc
     }()
 
