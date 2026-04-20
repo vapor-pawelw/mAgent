@@ -101,6 +101,8 @@ final class UpdateService {
     private var preparedAppURL: URL?
     /// The version string of the prepared update (used to match against detectedUpdate).
     private var preparedVersion: String?
+    /// Which install strategy produced the prepared update; drives how `installPreparedUpdate` relaunches.
+    private var preparedStrategy: InstallStrategy?
     private var bundleUpdatePhase: BundleUpdatePhase = .idle
 
     private enum BundleUpdatePhase: Equatable {
@@ -173,13 +175,17 @@ final class UpdateService {
     /// True when the update has been downloaded and extracted, ready for install,
     /// and the prepared version still matches the currently detected update.
     var isUpdateReadyToInstall: Bool {
-        guard let preparedVersion, let preparedAppURL else { return false }
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: preparedAppURL.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
-            return false
+        guard let preparedVersion, let preparedStrategy,
+              preparedVersion == detectedUpdate?.version.displayString else { return false }
+        switch preparedStrategy {
+        case .homebrewCask:
+            return true
+        case .bundleReplacement:
+            guard let preparedAppURL else { return false }
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(atPath: preparedAppURL.path, isDirectory: &isDirectory)
+                && isDirectory.boolValue
         }
-        return preparedVersion == detectedUpdate?.version.displayString
     }
 
     var isUpdateDownloadInProgress: Bool {
@@ -227,7 +233,7 @@ final class UpdateService {
             )
             return
         }
-        guard let preparedAppURL, let preparedVersion else {
+        guard let preparedVersion, let preparedStrategy else {
             setBundleUpdatePhase(.idle)
             BannerManager.shared.show(
                 message: "The downloaded update is no longer available. Please download it again.",
@@ -245,18 +251,33 @@ final class UpdateService {
             )
             return
         }
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: preparedAppURL.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
-            invalidatePreparedUpdate()
-            BannerManager.shared.show(
-                message: "The prepared update bundle could not be found. Please download it again.",
-                style: .warning,
-                duration: 6
-            )
-            return
+
+        switch preparedStrategy {
+        case .homebrewCask:
+            await performHomebrewRelaunch(update: detectedUpdate)
+        case .bundleReplacement:
+            guard let preparedAppURL else {
+                invalidatePreparedUpdate()
+                BannerManager.shared.show(
+                    message: "The prepared update bundle could not be found. Please download it again.",
+                    style: .warning,
+                    duration: 6
+                )
+                return
+            }
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: preparedAppURL.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                invalidatePreparedUpdate()
+                BannerManager.shared.show(
+                    message: "The prepared update bundle could not be found. Please download it again.",
+                    style: .warning,
+                    duration: 6
+                )
+                return
+            }
+            await performSwapAndRelaunch(update: detectedUpdate, preparedAppURL: preparedAppURL)
         }
-        await performSwapAndRelaunch(update: detectedUpdate, preparedAppURL: preparedAppURL)
     }
 
     private func checkForUpdates(trigger: CheckTrigger) async {
@@ -392,6 +413,7 @@ final class UpdateService {
         try? FileManager.default.removeItem(at: preparedUpdateRootURL)
         preparedAppURL = nil
         preparedVersion = nil
+        preparedStrategy = nil
         if case .readyToInstall = bundleUpdatePhase {
             setBundleUpdatePhase(.idle)
         }
@@ -414,16 +436,22 @@ final class UpdateService {
 
     @discardableResult
     private func restorePreparedUpdateIfAvailable(forVersion version: String) -> Bool {
+        // Homebrew-prepared state is in-memory only; don't clobber it when re-checking.
+        if preparedStrategy == .homebrewCask && preparedVersion == version {
+            return true
+        }
         let candidate = preparedUpdateAppURL(forVersion: version)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
               isDirectory.boolValue else {
             preparedAppURL = nil
             preparedVersion = nil
+            preparedStrategy = nil
             return false
         }
         preparedAppURL = candidate
         preparedVersion = version
+        preparedStrategy = .bundleReplacement
         return true
     }
 
@@ -518,21 +546,20 @@ final class UpdateService {
 
             switch strategy {
             case .homebrewCask:
-                // Homebrew manages its own download; start it detached and close.
-                setBundleUpdatePhase(.installing)
-                let updaterScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
-                try writeHomebrewUpdaterScript(at: updaterScriptPath)
-                let q = ShellExecutor.shellQuote
-                let command = "/usr/bin/nohup /bin/zsh \(q(updaterScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(updaterLogPath)) >/dev/null 2>&1 &"
-                let result = await ShellExecutor.execute(command)
-                guard result.exitCode == 0 else {
-                    let msg = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                    throw UpdateError.failedToStartUpdater(msg.isEmpty ? "unknown error" : msg)
-                }
-                clearSkippedVersion(matching: update.version.displayString)
-                showUpdateProgressBanner("Updating to \(update.version.displayString) via Homebrew. Magent will restart shortly...")
-                try? await Task.sleep(nanoseconds: 900_000_000)
-                NSApp.terminate(nil)
+                // Phase 1: refresh the tap and pre-fetch the new cask artifact while the app
+                // stays alive, so the user sees progress instead of a blank dock.
+                setBundleUpdatePhase(.downloading(progressPercent: nil))
+                showUpdateProgressBanner(
+                    String(localized: .UpdateStrings.updateDownloading(update.version.displayString)),
+                    showsSpinner: true
+                )
+                try await runHomebrewPrefetch()
+
+                // Phase 2: stash prepared state and show "Install and relaunch" banner.
+                preparedAppURL = nil
+                preparedVersion = update.version.displayString
+                preparedStrategy = .homebrewCask
+                showReadyToInstallBanner(version: update.version.displayString)
 
             case .bundleReplacement:
                 let installDirectory = URL(fileURLWithPath: appBundlePath).deletingLastPathComponent().path
@@ -850,6 +877,51 @@ final class UpdateService {
         brew list --cask magent >/dev/null 2>&1
         """)
         return result.exitCode == 0 ? .homebrewCask : .bundleReplacement
+    }
+
+    // Runs `brew update` + `brew fetch --cask magent` so the new artifact lands in the
+    // Homebrew cache before we quit. The subsequent `brew upgrade --cask magent` during
+    // relaunch reuses the cached download and runs fast, shortening the blind restart gap.
+    private func runHomebrewPrefetch() async throws {
+        let brewEnvPrefix = "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\n"
+        _ = await ShellExecutor.execute(brewEnvPrefix + "brew update --quiet || true")
+        let fetchResult = await ShellExecutor.execute(brewEnvPrefix + "brew fetch --cask magent")
+        guard fetchResult.exitCode == 0 else {
+            let stderr = fetchResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let message = stderr.isEmpty ? "Homebrew fetch failed (exit \(fetchResult.exitCode))" : stderr
+            throw UpdateError.extractionFailed(message)
+        }
+    }
+
+    private func performHomebrewRelaunch(update: AvailableUpdate) async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        setBundleUpdatePhase(.installing)
+        do {
+            let updaterScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
+            try writeHomebrewUpdaterScript(at: updaterScriptPath)
+            let q = ShellExecutor.shellQuote
+            let command = "/usr/bin/nohup /bin/zsh \(q(updaterScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(updaterLogPath)) >/dev/null 2>&1 &"
+            let result = await ShellExecutor.execute(command)
+            guard result.exitCode == 0 else {
+                let msg = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                throw UpdateError.failedToStartUpdater(msg.isEmpty ? "unknown error" : msg)
+            }
+            clearSkippedVersion(matching: update.version.displayString)
+            preparedVersion = nil
+            preparedStrategy = nil
+            showUpdateProgressBanner(String(localized: .UpdateStrings.updateInstalling))
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            NSApp.terminate(nil)
+        } catch {
+            isUpdating = false
+            setBundleUpdatePhase(.readyToInstall)
+            BannerManager.shared.show(
+                message: error.localizedDescription,
+                style: .error,
+                duration: 6
+            )
+        }
     }
 
     private func writeHomebrewUpdaterScript(at path: String) throws {

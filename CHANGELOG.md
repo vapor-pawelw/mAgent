@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Updates
 
+#### Features
+- Homebrew updates now download the new version in the background with a visible progress banner while the app stays open, and only quit to install when you click **Install & Relaunch**. Previously the app closed immediately after confirming an update, leaving the dock empty for the full duration of the Homebrew download.
+
 #### Bug Fixes
 - Fixed the Homebrew update flow leaving the app on the old version after restart. The updater now refreshes the Homebrew tap before running `brew upgrade`, so a stale local tap cache no longer turns the upgrade into a no-op.
 
