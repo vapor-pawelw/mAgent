@@ -2,7 +2,7 @@
 
 ## Thread Creation (Pending Thread Pattern)
 
-`ThreadManager.createThread` registers the thread in the sidebar immediately (phase 1: name generation only), then runs git worktree + tmux setup in the background (phase 2). The thread is tracked in `pendingThreadIds: Set<UUID>` while phase 2 runs.
+`ThreadLifecycleService.createThread` (forwarded via `ThreadManager.createThread`) registers the thread in the sidebar immediately (phase 1: name generation only), then runs git worktree + tmux setup in the background (phase 2). The thread is tracked in `ThreadStore.pendingThreadIds: Set<UUID>` while phase 2 runs.
 
 - `SplitViewController.showThread` skips the worktree-existence check for pending threads.
 - `ThreadDetailViewController.setupTabs` detects pending via `pendingThreadIds`, shows overlay, waits for `.magentThreadCreationFinished`.
@@ -16,7 +16,7 @@ Automatic — when a user selects a thread whose worktree directory is missing, 
 
 ## Session Lifecycle
 
-- **Stale tmux cleanup** is centralized in `ThreadManager.cleanupStaleMagentSessions()`, scoped to `ma-` sessions only. Used for lifecycle hooks + session-monitor poller (5-minute cadence) instead of ad hoc `tmux kill-session` sweeps.
+- **Stale tmux cleanup** is centralized in `SessionLifecycleService.cleanupStaleMagentSessions()` (forwarded via `ThreadManager`), scoped to `ma-` sessions only. Used for lifecycle hooks + session-monitor poller (5-minute cadence) instead of ad hoc `tmux kill-session` sweeps.
 - **Dead session recreation is lazy**: `checkForDeadSessions` updates `thread.deadSessions` but only auto-recreates the currently visible session. Others stay dead until the user selects the tab → `ensureSessionPrepared` → `recreateSessionIfNeeded`. Never post `.magentTabWillClose` to clean up sessions that should be preserved — use `evictedIdleSessions` + `ReusableTerminalViewCache.evictSessions()` instead.
 - **Recent-session fast path spans VC rebuilds**: `ensureSessionPrepared` consults `ThreadManager.isSessionPreparedFastPath(...)` (backed by `knownGoodSessionContexts`) before any tmux probe, so switching away and back to a recently validated thread can skip `tmux has-session` and avoid startup-overlay churn.
 - **Slow non-agent tab switches must still show progress**: `startLoadingOverlayTracking(...)` should not immediately dismiss for plain terminal tabs. Keep the same debounced loading overlay active during `ensureSessionPrepared`/tmux validation so users get visible feedback when a switch takes longer than the fast path.
@@ -24,7 +24,7 @@ Automatic — when a user selects a thread whose worktree directory is missing, 
 - **Prepared-tab attach failures must degrade to visible recovery, never blank UI**: if `selectPreparedTab(...)` cannot attach/select the terminal view during startup or tab selection, keep the loading overlay visible with explicit diagnostic text and immediately retry through the full `selectTab(...)` path (`ensureSessionPrepared` / tmux validation) instead of returning silently.
 - **Thread-switch startup overlay is primed in `viewDidLoad`**: `ThreadDetailViewController.viewDidLoad` calls `ensureLoadingOverlay()` and reveals a debounced (`0.25s`) "Loading thread..." overlay before the async `setupTabs(...)` task fires, so the view never renders as a blank page during the main-actor task hop. `setupTabs(...)` must dismiss or overwrite the label along every exit path — `showCreationOverlay` / `startLoadingOverlayTracking` overwrite the label, the non-terminal-only branch calls `dismissLoadingOverlay()`, and the terminal-path-with-non-terminal-restore branch must also dismiss after `selectTab(at: slotIndex)` because `startLoadingOverlayTracking` is skipped for that case. The debounce means warm fast-path switches never flash the overlay.
 - **Tab hover status hints must be refreshed from the same notification paths as tab indicators**: tooltip text is derived from live thread/session state (busy, waiting, rate-limit, dead, keep-alive, unread markers). Any code path that updates tab badges/indicator dots must also refresh tab tooltips to avoid stale hover details.
-- **Manual session cleanup** (`ThreadManager+SessionCleanup.swift`) must use the same eviction model as idle eviction: mark in `evictedIdleSessions`, evict from cache before killing, never touch tab metadata. Protected sessions (busy, waiting, rate-limited, magent-busy, visible) must never be killed.
+- **Manual session cleanup** (`SessionLifecycleService`) must use the same eviction model as idle eviction: mark in `SessionTracker.evictedIdleSessions`, evict from cache before killing, never touch tab metadata. Protected sessions (busy, waiting, rate-limited, magent-busy, visible) must never be killed.
 - **Resume metadata boundaries**: Claude/Codex resume lookup is keyed by worktree path, so when an archived auto-generated worktree name is reused, only conversations newer than the current thread's `createdAt` may be adopted.
 - **tmux zombie overload recovery** is banner-driven: `ThreadManager.checkTmuxZombieHealth()` monitors zombie-heavy tmux parents and offers a one-click `restartTmuxAndRecoverSessions()` action.
 

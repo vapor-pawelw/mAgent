@@ -38,10 +38,23 @@ magent/
 │   │   ├── AppDelegate.swift
 │   │   └── AppCoordinator.swift
 │   ├── Services/
-│   │   ├── ThreadManager.swift      # Thread lifecycle (create, archive, restore)
-│   │   ├── IPCSocketServer.swift    # App-owned IPC socket server
-│   │   ├── AgentModelsService.swift # Agent model/reasoning manifest (load, cache, remote refresh)
-│   │   └── UpdateService.swift      # App update flow + UI banners
+│   │   ├── ThreadManager.swift          # Coordinator facade; owns service lazy vars + forwarding
+│   │   ├── ThreadManager+*.swift        # Thin forwarding layers + remaining coupled logic
+│   │   ├── ThreadStore.swift            # threads[], activeThreadId, pendingThreadIds
+│   │   ├── SessionTracker.swift         # Per-session transient state (visited, evicted, busy)
+│   │   ├── RateLimitService.swift       # Rate-limit detection, fingerprints, global limits
+│   │   ├── PullRequestService.swift     # PR cache and sync
+│   │   ├── JiraIntegrationService.swift # Jira sync, ticket cache, section detection
+│   │   ├── SidebarOrderingService.swift # Section ordering, pinning, dock badge
+│   │   ├── GitStateService.swift        # Dirty/delivered/branch state refresh
+│   │   ├── WorktreeService.swift        # Worktree sync, move, local file sync
+│   │   ├── SessionLifecycleService.swift# Busy/dead/completion/idle/stale session logic
+│   │   ├── AgentSetupService.swift      # Env vars, prompt injection, agent type resolution
+│   │   ├── RenameService.swift          # Slug gen, AI rename, tmux/branch/tab rename
+│   │   ├── ThreadLifecycleService.swift # Thread CRUD (create, archive, delete, restore)
+│   │   ├── IPCSocketServer.swift        # App-owned IPC socket server
+│   │   ├── AgentModelsService.swift     # Agent model/reasoning manifest (load, cache, remote refresh)
+│   │   └── UpdateService.swift          # App update flow + UI banners
 │   ├── Views/
 │   │   ├── ThreadList/
 │   │   ├── Terminal/
@@ -128,7 +141,7 @@ The 2-8 word limit is a preference, not a hard cap: longer descriptions are pers
 
 **Rename-in-progress visual feedback:** `renameThreadFromPrompt` adds the thread to `autoRenameInProgress` before the AI call and removes it (via `defer`) on exit. This drives the sidebar pulse animation so users can see a rename is in flight, matching the visual feedback from the auto-rename path. Without this, explicit "Rename from this prompt" context menu actions showed no progress indicator for up to 30 seconds.
 
-**Rename payload cache (`promptRenameResultCache`):** Every non-failed AI rename result (slug+description) is cached in `ThreadManager.promptRenameResultCache` keyed by `(threadId, normalizedPrompt)`. Both the TOC-triggered path and the sheet-triggered path check this cache before calling the agent. This means repeated renames or a right-click rename on a previously used prompt resolve instantly without a second agent call. The cache is cleared on thread archive and delete.
+**Rename payload cache (`promptRenameResultCache`):** Every non-failed AI rename result (slug+description) is cached in `RenameService.promptRenameResultCache` keyed by `(threadId, normalizedPrompt)`. Both the TOC-triggered path and the sheet-triggered path check this cache before calling the agent. This means repeated renames or a right-click rename on a previously used prompt resolve instantly without a second agent call. The cache is cleared on thread archive and delete.
 
 **Early auto-rename from launch sheet:** `createThread` fires `autoRenameThreadAfterFirstPromptIfNeeded` in an unstructured `Task` immediately after the tmux session is created, using the prompt captured from the launch sheet. This means the thread typically gets a meaningful name before the agent has finished loading. `didAutoRenameFromFirstPrompt` is the deduplication guard — when the early trigger runs first and sets this flag, the TOC-based trigger skips the same prompt later. If the early trigger loses the `autoRenameInProgress` race (another rename is already in flight), it exits gracefully; the TOC path will pick it up instead.
 
@@ -232,7 +245,7 @@ Some features need to stay in the codebase before they are ready to ship. Those 
 - `FEATURE_JIRA_SYNC` is the current example: Debug builds expose Jira sync settings/actions (board config, section sync, auto-thread creation, section alignment on Jira status change, `jiraUnassigned` tracking), while Release builds hide them. Basic Jira ticket detection from branch names, "Open in Jira" actions, and the per-thread "Sync description and priority from Jira" toggle all work in all builds without the flag — they run on top of the non-gated detection pipeline in `ThreadManager+JiraDetection.swift`, not the `FEATURE_JIRA_SYNC`-gated project sync in `ThreadManager+Jira.swift`.
 - All Jira features (detection, status badges, toolbar button, context menu) are gated at runtime by `AppSettings.jiraIntegrationEnabled`, a master toggle in Jira settings. The toggle is auto-disabled when acli is not installed or authenticated.
 - Jira branch-ticket detection can be narrowed with `AppSettings.jiraTicketDetectionPrefixes`, a comma/semicolon-separated prefix allowlist normalized case-insensitively (for example: `IP, APPL, UT`). The filter applies only to branch-derived ticket detection; explicit synced `jiraTicketKey` values bypass it. Future Jira UI/cache code should resolve branch-based tickets through `MagentThread.effectiveJiraTicketKey(settings:)` so the allowlist is respected consistently.
-- The Jira context menu submenu includes a "Change Status" flyout listing all project statuses (discovered via `JiraService.discoverProjectStatuses` and cached per-project in `ThreadManager._jiraProjectStatusesCache`, persisted to `jira-project-statuses-cache.json`). Status transitions use `acli jira workitem transition`. The cache is pre-populated during ticket verification, persisted to disk so status lists survive restarts, and invalidated on force-refresh.
+- The Jira context menu submenu includes a "Change Status" flyout listing all project statuses (discovered via `JiraService.discoverProjectStatuses` and cached per-project in `JiraIntegrationService._jiraProjectStatusesCache`, persisted to `jira-project-statuses-cache.json`). Status transitions use `acli jira workitem transition`. The cache is pre-populated during ticket verification, persisted to disk so status lists survive restarts, and invalidated on force-refresh.
 
 ### 4.8 Shell Startup and Reattach CWD Contract
 
@@ -413,8 +426,8 @@ User Action (+ button)
 - For already-live sessions, loading UI should prefer runtime process detection (`pane_current_command` + child args) over persisted configuration. If the pane is back at a shell, dismiss/skip the startup overlay rather than waiting for agent-ready markers that will never appear.
 - **Two-phase new-tab creation**: `addTab()` immediately adds the tab item to the bar and shows a "Creating tab…" overlay before any async work starts. The `TerminalSurfaceView` is only created and appended to `terminalViews` after the tmux session is fully set up. The placeholder `TabSlot.terminal(sessionName: "")` is replaced with the real session name once the tmux session is ready. Once the session is ready, `selectTab(at:)` takes over and transitions the overlay to "Starting agent…" via the normal `startLoadingOverlayTracking` path.
 - Terminal-view caching is wrapper reuse, not live Ghostty-surface preservation: removing a `TerminalSurfaceView` from the window still destroys its Ghostty surface, and reattaching it recreates that surface. Treat the cache as a way to avoid some controller/view churn around thread switches, not as proof that Ghostty startup was bypassed.
-- **Idle session eviction**: `ThreadManager+IdleEviction.swift` runs on the slow tick (~1 min) and kills tmux sessions when the number of idle sessions exceeds `AppSettings.maxIdleSessions` (defaults to 30). A session is idle if it hasn't been visited in 1+ hour and hasn't been busy in 10+ minutes. Sessions undergoing Magent setup/injection (`magentBusySessions`) and sessions with active rate limits (`rateLimitedSessions`) are also exempt from eviction. Evicted session names are tracked in `evictedIdleSessions` so `checkForDeadSessions` doesn't auto-recreate them. Evicted sessions are also marked in `deadSessions` and the delegate is notified so sidebar/tabs gray out immediately. State is only updated after a successful `tmux kill-session` — failed kills leave the session live and retryable. When the user selects an evicted tab, `selectTerminalTab` clears the eviction marker and removes it from `preparedSessions`, forcing the slow path through `ensureSessionPrepared` → recreation.
-- **Manual session cleanup**: `ThreadManager+SessionCleanup.swift` provides bulk cleanup via the status bar session count popover and per-thread kill via context menus. Bulk cleanup shows a confirmation alert listing affected threads/tabs and kills all idle live sessions (not busy/waiting/rate-limited/visible/shielded/pinned/recently busy within 5 min). Context menus expose `Kill All Sessions` on both thread rows (sidebar) and tab rows (inside the tab `Session` submenu). All paths use the same eviction model: evict Ghostty surfaces from `ReusableTerminalViewCache`, mark sessions in `evictedIdleSessions`, kill tmux, mark dead. Tab metadata is fully preserved — killed sessions are recreated on demand when the user selects the tab.
+- **Idle session eviction**: `SessionLifecycleService.evictIdleSessionsIfNeeded()` runs on the slow tick (~1 min) and kills tmux sessions when the number of idle sessions exceeds `AppSettings.maxIdleSessions` (defaults to 30). A session is idle if it hasn't been visited in 1+ hour and hasn't been busy in 10+ minutes. Sessions undergoing Magent setup/injection (`magentBusySessions`) and sessions with active rate limits (`rateLimitedSessions`) are also exempt from eviction. Evicted session names are tracked in `SessionTracker.evictedIdleSessions` so `checkForDeadSessions` doesn't auto-recreate them. Evicted sessions are also marked in `deadSessions` and the delegate is notified so sidebar/tabs gray out immediately. State is only updated after a successful `tmux kill-session` — failed kills leave the session live and retryable. When the user selects an evicted tab, `selectTerminalTab` clears the eviction marker and removes it from `preparedSessions`, forcing the slow path through `ensureSessionPrepared` → recreation.
+- **Manual session cleanup**: `SessionLifecycleService` provides bulk cleanup via the status bar session count popover and per-thread kill via context menus. Bulk cleanup shows a confirmation alert listing affected threads/tabs and kills all idle live sessions (not busy/waiting/rate-limited/visible/shielded/pinned/recently busy within 5 min). Context menus expose `Kill All Sessions` on both thread rows (sidebar) and tab rows (inside the tab `Session` submenu). All paths use the same eviction model: evict Ghostty surfaces from `ReusableTerminalViewCache`, mark sessions in `evictedIdleSessions`, kill tmux, mark dead. Tab metadata is fully preserved — killed sessions are recreated on demand when the user selects the tab.
 - **tmux health in the session popover**: the bottom-left session count control also surfaces the latest detected tmux zombie count and offers a manual `Restart tmux + Recover` action. That action must continue to route through `ThreadManager.restartTmuxAndRecoverSessions()` so it shares the same resume/recovery behavior as the warning banner path.
 - **No per-click `run-shell` / `run-shell -b` tmux bindings**: Historically the `MouseDown1Pane` binding used `run-shell -b` to run a mouse-URL-capture script on every click, which was the dominant source of the tmux zombie buildup that the health recovery banner was designed to mop up (tmux's libevent SIGCHLD reaper can lag under a rapid-click SIGCHLD burst, leaving `<defunct>` `/bin/sh` children attached to the tmux server). `configureMouseOpenableURLTracking` now stores per-click mouse state directly in a tmux server option via `set-option -gqF @magent_last_mouse "..."` — no fork, no child, no zombie. Do not reintroduce `run-shell` (sync or `-b`) on any high-frequency tmux hook; prefer in-process tmux commands (`set-option`, `set-environment`) and read the stored value from Magent via `ShellExecutor` (which always `waitpid`s its children).
 - **Dead session tracking**: `checkForDeadSessions` no longer eagerly recreates all dead sessions. It updates `thread.deadSessions` (transient set) and only auto-recreates the currently visible session — but not if it was intentionally evicted. Background dead sessions stay suspended until the user selects the tab. Sidebar thread rows dim when all sessions are dead; individual tabs dim via `TabItemView.isSessionDead`.
@@ -446,20 +459,68 @@ Key invariants:
 ## tmux Session Ownership
 
 Each tmux session created by Magent is tagged with `MAGENT_THREAD_ID` (the owning thread's UUID) via `tmux set-environment`. This tag is set in:
-- `ThreadManager+ThreadLifecycle.swift` — initial thread creation (both regular and main threads)
+- `ThreadLifecycleService` — initial thread creation (both regular and main threads)
 - `ThreadManager+TabManagement.swift` — new tab creation
 - `ThreadManager+SessionRecreation.swift` — session recreation/recovery
 
 **Why this matters**: Worktree names are reused when a thread is archived and a new thread is opened on the same branch/worktree name. Without ownership tracking, the old stale tmux session would be adopted by the new thread, restoring the previous agent session. The fix in `isValidExistingSession(...)` checks `MAGENT_THREAD_ID` first; if absent (old sessions), it falls back to comparing `session_created` timestamp against `thread.createdAt` — sessions older than the thread are rejected.
 
 Agent resume metadata needs the same freshness guard. Claude and Codex both key resumable conversations by worktree path/cwd, so a newly created thread that reuses an archived worktree name must not adopt a conversation whose last activity predates that thread's `createdAt`. Resume-ID refresh should therefore ignore historical conversations for the same path unless their timestamp is at or after the current thread creation window.
+## Services Architecture
+
+`ThreadManager` is a thin coordinator that owns service instances and wires callbacks between them. Business logic lives in focused, independently testable service classes.
+
+### Service hierarchy
+
+```
+ThreadManager (coordinator facade, ~900 lines)
+  ├── ThreadStore              — threads[], activeThreadId, pendingThreadIds
+  ├── SessionTracker           — per-session transient state (visited/evicted/busy timestamps,
+  │                              knownGoodSessionContexts, lastRuntimeDetectedAgentBySession)
+  ├── RateLimitService         — detection, fingerprint cache, global per-agent limits
+  ├── PullRequestService       — PR/MR cache and background sync
+  ├── JiraIntegrationService   — Jira ticket detection, sync, section matching
+  ├── SidebarOrderingService   — section ordering, pinning, dock badge
+  ├── GitStateService          — dirty/delivered/branch state, baseBranchResets
+  ├── WorktreeService          — worktree sync/move, local file sync
+  ├── SessionLifecycleService  — busy/dead/completion detection, idle eviction, stale cleanup,
+  │                              keep-alive, waiting-for-input, bell events
+  ├── AgentSetupService        — env vars, zdotdir, prompt injection, agent type resolution,
+  │                              conversation IDs, agent start commands, trust helpers
+  ├── RenameService            — slug/description generation, AI rename, tmux/branch/tab rename
+  └── ThreadLifecycleService   — thread CRUD (create/archive/delete/restore/recover)
+```
+
+### Communication pattern
+
+- Services receive dependencies at init: `store`, `sessionTracker`, `persistence`, `tmux`, `git`
+- Services do **not** reference each other directly — cross-service calls go through ThreadManager via injected closures (`onThreadsChanged`, `recreateSession`, `hasActiveRateLimit`, etc.)
+- Services mutate thread state through `store.threads`; ThreadManager calls `delegate?.threadManager(self, didUpdateThreads:)` via the `onThreadsChanged` callback
+- External callers keep calling `ThreadManager.shared.foo()` — ThreadManager forwards to services via computed properties and forwarding methods
+- `ThreadManager+*.swift` extension files are thin forwarding layers or contain legitimately coupled logic (`+TabManagement`, `+SessionRecreation`, `+Helpers`)
+
+### State ownership
+
+| State | Owner |
+|---|---|
+| `threads[]`, `activeThreadId` | `ThreadStore` |
+| `sessionLastVisitedAt`, `evictedIdleSessions`, `knownGoodSessionContexts` | `SessionTracker` |
+| `globalAgentRateLimits`, `rateLimitFingerprintCache` | `RateLimitService` |
+| `prCache`, `isPRSyncRunning` | `PullRequestService` |
+| `jiraTicketCache`, `_jiraProjectStatusesCache` | `JiraIntegrationService` |
+| `baseBranchResets` | `GitStateService` |
+| `recentBellBySession`, `staleMagentSessionsFirstSeenAt`, `notifiedWaitingSessions` | `SessionLifecycleService` |
+| `initialPromptInjectionFailuresBySession`, `pendingPromptInjectionTasks` | `AgentSetupService` |
+| `autoRenameInProgress`, `promptRenameResultCache` | `RenameService` |
+| Session monitor tick counters, `_cachedRemoteByProjectId` | `ThreadManager` (coordinator) |
+
 ## ThreadManager Concurrency Contract
 
 `ThreadManager` is a plain `final class` (not an actor). Its mutable `threads: [MagentThread]` array must only be mutated on the **MainActor** to avoid data races.
 
 **The trap**: async methods that mutate `threads` are typically called from `@MainActor` tasks. As long as the mutation happens synchronously (before any `await`), it runs on MainActor and is safe. But once the method crosses an `await` (e.g. a shell command via `ShellExecutor`), the continuation may resume on the cooperative thread pool — **off** MainActor. If two callers both reach the mutation point concurrently, the `[MagentThread]` array is accessed from two threads simultaneously → crash.
 
-**Rule**: any private helper that mutates `threads` after an `await` must be annotated `@MainActor`. Example: `removeTabBySessionName` in `ThreadManager+TabManagement.swift` — after `await tmux.killSession(...)`, all mutations are protected by `@MainActor`, which ensures the continuation is re-scheduled on the MainActor rather than running on the thread pool.
+**Rule**: any private helper that mutates `threads` (now via `store.threads`) after an `await` must be annotated `@MainActor`. Example: `removeTabBySessionName` in `ThreadManager+TabManagement.swift` — after `await tmux.killSession(...)`, all mutations are protected by `@MainActor`, which ensures the continuation is re-scheduled on the MainActor rather than running on the thread pool. All extracted services follow the same rule: they are plain `final class` types with an implicit `@MainActor` (via `SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor`) and access `store.threads` only synchronously or from `@MainActor`-isolated continuations.
 
 **Secondary guard**: after an `@MainActor` method resumes from an `await`, other MainActor work (from a different concurrent task) may have run. Always re-validate index bounds against the live `threads` array after an `await` before accessing `threads[index]`.
 
