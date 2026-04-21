@@ -316,7 +316,43 @@ final class SessionRecreationService {
         isAgentSession: Bool
     ) async -> Bool {
         let snapshot = await tmux.sessionContextSnapshot(sessionName: sessionName)
+        let expectedAgentType = isAgentSession ? agentType?(thread, sessionName) : nil
 
+        // Pre-resolve the running-agent detection so the decision function stays pure.
+        // Only bother when the env-var fallback path would actually be taken.
+        let detectedAgentType: AgentType?
+        if isAgentSession,
+           expectedAgentType != nil,
+           (snapshot?.agentType?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            detectedAgentType = await detectedAgentTypeInSession?(sessionName)
+        } else {
+            detectedAgentType = nil
+        }
+
+        return Self.decideSessionMatch(
+            snapshot: snapshot,
+            thread: thread,
+            projectPath: projectPath,
+            isAgentSession: isAgentSession,
+            expectedAgentType: expectedAgentType,
+            detectedAgentType: detectedAgentType
+        )
+    }
+
+    /// Pure decision function: given a snapshot plus already-resolved agent types,
+    /// decide whether the live tmux session is still a valid match for the thread.
+    /// Pulled out of `sessionMatchesThreadContext` so the branchy rules — session
+    /// ownership by UUID vs. `createdAt` staleness (worktree-name reuse guard),
+    /// worktree-path containment with a shell-command exception, agent-type
+    /// mismatch — can be unit-tested without a running tmux.
+    static func decideSessionMatch(
+        snapshot: TmuxService.SessionContextSnapshot?,
+        thread: MagentThread,
+        projectPath: String,
+        isAgentSession: Bool,
+        expectedAgentType: AgentType?,
+        detectedAgentType: AgentType?
+    ) -> Bool {
         if let ownerThreadID = snapshot?.ownerThreadId,
            !ownerThreadID.isEmpty {
             guard ownerThreadID == thread.id.uuidString else { return false }
@@ -335,19 +371,16 @@ final class SessionRecreationService {
                 // Keep terminal sessions when users navigate away manually.
                 return true
             }
-            // Agent sessions or non-shell commands in the wrong directory should be recreated.
             return false
         }
 
-        if isAgentSession,
-           let expectedAgentType = agentType?(thread, sessionName) {
+        if isAgentSession, let expectedAgentType {
             if let envAgentType = snapshot?.agentType?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased(),
                !envAgentType.isEmpty {
                 guard AgentType(rawValue: envAgentType) == expectedAgentType else { return false }
-            } else if let runningAgentType = await detectedAgentTypeInSession?(sessionName),
-                      runningAgentType != expectedAgentType {
+            } else if let detectedAgentType, detectedAgentType != expectedAgentType {
                 return false
             }
         }
@@ -379,12 +412,15 @@ final class SessionRecreationService {
         return true
     }
 
-    private func isShellCommand(_ command: String) -> Bool {
+    static func isShellCommand(_ command: String) -> Bool {
         let shells: Set<String> = ["sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh"]
         return shells.contains(command)
     }
 
-    private func path(_ path: String, isWithin root: String) -> Bool {
+    /// True when `path` is equal to `root` or is a descendant of it. Trailing slash
+    /// on `root` is normalized away first. Subtle: we compare against `root + "/"`,
+    /// not just `hasPrefix(root)`, so `"/foo"` is NOT within `"/foobar"`.
+    static func path(_ path: String, isWithin root: String) -> Bool {
         let normalizedRoot = root.hasSuffix("/") ? String(root.dropLast()) : root
         return path == normalizedRoot || path.hasPrefix(normalizedRoot + "/")
     }
