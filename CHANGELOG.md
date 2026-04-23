@@ -45,6 +45,11 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Fixed thread row pulse animation displacing the row. The animation now scales uniformly from the center without shifting position.
 
+### Agents
+
+#### Bug Fixes
+- Codex sessions launched from Magent now use a shared Magent-managed `CODEX_HOME` that mirrors the user's `~/.codex` (skills, auth, config, docs, etc.) while keeping Magent IPC AGENTS hints scoped to Magent sessions only. Magent no longer writes its IPC block into the global `~/.codex/AGENTS.md`, and edits to global `~/.codex/AGENTS.md` or top-level `~/.codex` entries now resync into the managed home automatically (session monitor cadence).
+
 ### Terminal
 
 #### Bug Fixes

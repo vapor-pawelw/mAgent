@@ -411,6 +411,10 @@ extension ThreadManager {
         agentSetupService.installCodexIPCInstructions()
     }
 
+    func refreshManagedCodexHomeIfNeeded() {
+        agentSetupService.refreshManagedCodexHomeIfNeeded()
+    }
+
     // MARK: - Agent Start Command
 
     @discardableResult
