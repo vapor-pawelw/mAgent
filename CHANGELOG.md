@@ -40,6 +40,11 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Fixed thread row pulse animation displacing the row. The animation now scales uniformly from the center without shifting position.
 
+### Terminal
+
+#### Bug Fixes
+- Initial prompt-injection failure banners now include `Restart Tab`, matching the pending-injection banner so tab relaunch recovery is available in both states.
+
 ## 1.6.1 - 2026-04-18
 
 

@@ -1728,25 +1728,26 @@ final class ThreadDetailViewController: NSViewController {
         refreshInitialPromptFailureBanner()
     }
 
-    private func restartPendingPromptInjection(
+    private func restartPromptInjection(
         sessionName: String,
-        pending: ThreadManager.InitialPromptInjectionFailureInfo
+        promptInfo: ThreadManager.InitialPromptInjectionFailureInfo
     ) {
         let injection = threadManager.effectiveInjection(for: thread.projectId)
         let relaunched = threadManager.relaunchAgentInExistingSession(
             sessionName: sessionName,
-            initialPrompt: pending.prompt,
-            shouldSubmitInitialPrompt: pending.shouldSubmitInitialPrompt,
+            initialPrompt: promptInfo.prompt,
+            shouldSubmitInitialPrompt: promptInfo.shouldSubmitInitialPrompt,
             agentContext: injection.agentContext,
-            agentType: pending.agentType
+            agentType: promptInfo.agentType
         )
         guard relaunched else {
             BannerManager.shared.show(
-                message: "Could not restart this tab. Try Inject Now or open a new agent tab.",
+                message: "Could not restart this tab. Try manual prompt injection or open a new agent tab.",
                 style: .warning
             )
             return
         }
+        dismissInitialPromptFailureBanner()
         refreshPendingPromptBanner()
     }
 
@@ -1772,6 +1773,10 @@ final class ThreadDetailViewController: NSViewController {
                 BannerAction(title: failure.requiresAgentRelaunch ? "Relaunch Agent" : "Inject Prompt") { [weak self] in
                     guard let self else { return }
                     self.retryInitialPromptInjection(sessionName: sessionName, failure: failure)
+                },
+                BannerAction(title: "Restart Tab") { [weak self] in
+                    guard let self else { return }
+                    self.restartPromptInjection(sessionName: sessionName, promptInfo: failure)
                 },
                 BannerAction(title: "Copy Prompt") { [weak self] in
                     guard let self else { return }
@@ -1837,7 +1842,7 @@ final class ThreadDetailViewController: NSViewController {
                 BannerAction(title: "Restart Tab") { [weak self] in
                     guard let self else { return }
                     self.dismissPendingPromptBanner()
-                    self.restartPendingPromptInjection(sessionName: sessionName, pending: pending)
+                    self.restartPromptInjection(sessionName: sessionName, promptInfo: pending)
                 },
                 BannerAction(title: "Inject Now") { [weak self] in
                     guard let self else { return }

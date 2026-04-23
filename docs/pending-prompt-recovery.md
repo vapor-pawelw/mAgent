@@ -49,6 +49,7 @@ If the agent prompt marker never appears within the initial-prompt timeout, Mage
 
 - **Relaunch Agent** — shown when Magent detected that the agent is no longer running in the tab; starts the agent again in the same session and retries the retained prompt
 - **Inject Prompt** — shown for the ordinary timeout case; retries prompt injection for that same session/tab
+- **Restart Tab** — relaunches the configured agent in the same tmux session and retries startup injection with the retained prompt and original submit mode
 - **Copy Prompt** — copies the prompt text to the clipboard so the user can paste it manually, then dismisses the banner
 - **Already Injected** — clears the warning when the user has already entered the prompt manually
 
