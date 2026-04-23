@@ -56,6 +56,7 @@ extension ThreadManager {
             defer { self.isSessionMonitorTickRunning = false }
 
             // Fast checks — every tick (5s)
+            self.refreshManagedCodexHomeIfNeeded()
             await self.checkForAgentCompletions()
             await self.checkForWaitingForInput()
             await self.checkForRateLimitedSessions()

@@ -57,6 +57,18 @@ final class AgentSetupService {
     private static let agentPromptTimeoutLogLines = 8
     private static let recentPromptDetectionLines = 12
     private static let maxSubmittedPromptsPerSession = 250
+    private static let codexAgentsMetadataLock = NSLock()
+    private static var lastCodexAgentsMetadataSignature: CodexAgentsMetadataSignature?
+
+    private struct CodexAgentsMetadataSignature: Equatable {
+        let includeMagentIPC: Bool
+        let codexHomeExists: Bool
+        let codexHomeSize: UInt64?
+        let codexHomeModifiedAt: TimeInterval?
+        let fileExists: Bool
+        let fileSize: UInt64?
+        let fileModifiedAt: TimeInterval?
+    }
 
     // MARK: - Session Environment
 
@@ -1687,43 +1699,75 @@ final class AgentSetupService {
     // MARK: - Codex IPC Instructions
 
     func installCodexIPCInstructions() {
-        let codexDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex")
-        let filePath = codexDir.appendingPathComponent("AGENTS.md").path
+        cleanupGlobalCodexIPCInstructions()
+        let includeMagentIPC = persistence.loadSettings().ipcPromptInjectionEnabled
+        _ = ensureManagedCodexHome(includeMagentIPC: includeMagentIPC)
+        Self.codexAgentsMetadataLock.lock()
+        Self.lastCodexAgentsMetadataSignature = codexAgentsMetadataSignature(includeMagentIPC: includeMagentIPC)
+        Self.codexAgentsMetadataLock.unlock()
+    }
 
-        if let existing = try? String(contentsOfFile: filePath, encoding: .utf8) {
-            // Already up to date
-            if existing.contains(IPCAgentDocs.codexIPCVersion) { return }
+    /// Lightweight metadata-based sync used by the session monitor to keep the
+    /// managed Codex home up to date when the user edits ~/.codex/AGENTS.md.
+    func refreshManagedCodexHomeIfNeeded() {
+        let includeMagentIPC = persistence.loadSettings().ipcPromptInjectionEnabled
+        let signature = codexAgentsMetadataSignature(includeMagentIPC: includeMagentIPC)
 
-            // Replace outdated Magent section if present
-            if let startRange = existing.range(of: IPCAgentDocs.codexIPCMarkerStart),
-               let endRange = existing.range(of: IPCAgentDocs.codexIPCMarkerEnd),
-               startRange.lowerBound <= endRange.lowerBound {
-                var updated = existing
-                updated.replaceSubrange(
-                    startRange.lowerBound..<endRange.upperBound,
-                    with: IPCAgentDocs.codexAgentsMdBlock
-                )
-                try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
-            } else {
-                // Append to existing user content
-                var updated = existing
-                if !updated.hasSuffix("\n") { updated += "\n" }
-                updated += "\n" + IPCAgentDocs.codexAgentsMdBlock + "\n"
-                try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
-            }
-        } else {
-            // No file — create with just the IPC section
-            try? FileManager.default.createDirectory(
-                atPath: codexDir.path,
-                withIntermediateDirectories: true
-            )
-            try? IPCAgentDocs.codexAgentsMdBlock.write(toFile: filePath, atomically: true, encoding: .utf8)
-        }
+        Self.codexAgentsMetadataLock.lock()
+        let lastSignature = Self.lastCodexAgentsMetadataSignature
+        Self.codexAgentsMetadataLock.unlock()
+
+        let managedCodexHome = Self.managedCodexHomePath
+        var managedIsDirectory: ObjCBool = false
+        let managedHomeExists = FileManager.default.fileExists(
+            atPath: managedCodexHome,
+            isDirectory: &managedIsDirectory
+        ) && managedIsDirectory.boolValue
+
+        guard !managedHomeExists || lastSignature != signature else { return }
+        _ = ensureManagedCodexHome(includeMagentIPC: includeMagentIPC)
+
+        Self.codexAgentsMetadataLock.lock()
+        Self.lastCodexAgentsMetadataSignature = signature
+        Self.codexAgentsMetadataLock.unlock()
+    }
+
+    private func codexAgentsMetadataSignature(includeMagentIPC: Bool) -> CodexAgentsMetadataSignature {
+        let userCodexHomePath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex").path
+        let userAgentsPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/AGENTS.md").path
+        let codexHomeAttrs = try? FileManager.default.attributesOfItem(atPath: userCodexHomePath)
+        let attrs = try? FileManager.default.attributesOfItem(atPath: userAgentsPath)
+        let codexHomeExists = codexHomeAttrs != nil
+        let codexHomeSize = codexHomeAttrs?[.size] as? UInt64
+        let codexHomeModifiedAt = (codexHomeAttrs?[.modificationDate] as? Date)?.timeIntervalSince1970
+        let fileExists = attrs != nil
+        let fileSize = attrs?[.size] as? UInt64
+        let modifiedAt = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970
+        return CodexAgentsMetadataSignature(
+            includeMagentIPC: includeMagentIPC,
+            codexHomeExists: codexHomeExists,
+            codexHomeSize: codexHomeSize,
+            codexHomeModifiedAt: codexHomeModifiedAt,
+            fileExists: fileExists,
+            fileSize: fileSize,
+            fileModifiedAt: modifiedAt
+        )
     }
 
     // MARK: - Agent Start Command
 
+    private static let managedCodexHomeLock = NSLock()
+    private static let managedCodexHomePath: String = {
+        let rawUser = NSUserName()
+        let sanitizedUser = rawUser.replacingOccurrences(
+            of: "[^A-Za-z0-9._-]",
+            with: "-",
+            options: .regularExpression
+        )
+        return "/tmp/magent-codex-home-\(sanitizedUser)"
+    }()
     private static let managedZdotdirPath = "/tmp/magent-zdotdir"
     private static let managedZdotdirMarker = "# magent-zdotdir-v1"
     private static let managedZdotdirFiles = [".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout"]
@@ -1760,6 +1804,86 @@ final class AgentSetupService {
             """
         default:
             return "\(managedZdotdirMarker)\n"
+        }
+    }
+
+    @discardableResult
+    private func ensureManagedCodexHome(includeMagentIPC: Bool) -> String {
+        Self.managedCodexHomeLock.lock()
+        defer { Self.managedCodexHomeLock.unlock() }
+
+        let fm = FileManager.default
+        let userCodexHome = fm.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
+        let managedCodexHome = Self.managedCodexHomePath
+        let managedAgentsPath = (managedCodexHome as NSString).appendingPathComponent("AGENTS.md")
+        let userAgentsPath = (userCodexHome as NSString).appendingPathComponent("AGENTS.md")
+
+        var isDirectory: ObjCBool = false
+        if fm.fileExists(atPath: managedCodexHome, isDirectory: &isDirectory),
+           !isDirectory.boolValue {
+            try? fm.removeItem(atPath: managedCodexHome)
+        }
+        try? fm.createDirectory(atPath: managedCodexHome, withIntermediateDirectories: true)
+
+        let sourceEntries = (try? fm.contentsOfDirectory(atPath: userCodexHome)) ?? []
+        let desiredEntries = Set(sourceEntries.filter { $0 != "AGENTS.md" })
+
+        for entry in desiredEntries {
+            let sourcePath = (userCodexHome as NSString).appendingPathComponent(entry)
+            let managedPath = (managedCodexHome as NSString).appendingPathComponent(entry)
+            if let existingSymlinkTarget = try? fm.destinationOfSymbolicLink(atPath: managedPath),
+               existingSymlinkTarget == sourcePath {
+                continue
+            }
+            if fm.fileExists(atPath: managedPath) || (try? fm.destinationOfSymbolicLink(atPath: managedPath)) != nil {
+                try? fm.removeItem(atPath: managedPath)
+            }
+            try? fm.createSymbolicLink(atPath: managedPath, withDestinationPath: sourcePath)
+        }
+
+        // Remove stale symlinks that previously mirrored ~/.codex entries now gone.
+        let managedEntries = (try? fm.contentsOfDirectory(atPath: managedCodexHome)) ?? []
+        for entry in managedEntries where entry != "AGENTS.md" && !desiredEntries.contains(entry) {
+            let managedPath = (managedCodexHome as NSString).appendingPathComponent(entry)
+            guard let existingSymlinkTarget = try? fm.destinationOfSymbolicLink(atPath: managedPath) else { continue }
+            if existingSymlinkTarget.hasPrefix(userCodexHome + "/") {
+                try? fm.removeItem(atPath: managedPath)
+            }
+        }
+
+        let userAgentsContent = try? String(contentsOfFile: userAgentsPath, encoding: .utf8)
+        let mergedAgentsContent = IPCAgentDocs.codexMergedAgentsMd(
+            userContent: userAgentsContent,
+            includeMagentIPC: includeMagentIPC
+        )
+
+        if mergedAgentsContent.isEmpty {
+            try? fm.removeItem(atPath: managedAgentsPath)
+        } else if (try? String(contentsOfFile: managedAgentsPath, encoding: .utf8)) != mergedAgentsContent {
+            try? mergedAgentsContent.write(toFile: managedAgentsPath, atomically: true, encoding: .utf8)
+        }
+
+        return managedCodexHome
+    }
+
+    private func cleanupGlobalCodexIPCInstructions() {
+        let userAgentsPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/AGENTS.md").path
+        guard let existing = try? String(contentsOfFile: userAgentsPath, encoding: .utf8),
+              existing.contains(IPCAgentDocs.codexIPCMarkerStart) else {
+            return
+        }
+
+        let cleaned = IPCAgentDocs.codexMergedAgentsMd(
+            userContent: existing,
+            includeMagentIPC: false
+        )
+        if cleaned.isEmpty {
+            try? FileManager.default.removeItem(atPath: userAgentsPath)
+            return
+        }
+        if cleaned != existing {
+            try? cleaned.write(toFile: userAgentsPath, atomically: true, encoding: .utf8)
         }
     }
 
@@ -1899,7 +2023,12 @@ final class AgentSetupService {
             if let validReasoning {
                 command += " -c \(ShellExecutor.shellQuote("model_reasoning_effort=\"\(validReasoning)\""))"
             }
-            command = codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
+            command = codexSessionConfiguredCommand(
+                command,
+                appearanceMode: settings.appAppearanceMode,
+                preserveAgentColorTheme: settings.preserveAgentColorTheme,
+                includeMagentIPC: settings.ipcPromptInjectionEnabled
+            )
         case .custom:
             break
         }
@@ -1932,7 +2061,12 @@ final class AgentSetupService {
             } else if settings.agentSandboxEnabled {
                 command += " --full-auto"
             }
-            return codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
+            return codexSessionConfiguredCommand(
+                command,
+                appearanceMode: settings.appAppearanceMode,
+                preserveAgentColorTheme: settings.preserveAgentColorTheme,
+                includeMagentIPC: settings.ipcPromptInjectionEnabled
+            )
         case .custom:
             return nil
         }
@@ -1949,11 +2083,20 @@ final class AgentSetupService {
         return flags.joined(separator: " ")
     }
 
-    private func codexSessionEnvironmentWrappedCommand(_ command: String) -> String {
-        return "env -u NO_COLOR \(command)"
+    private func codexSessionEnvironmentWrappedCommand(
+        _ command: String,
+        includeMagentIPC: Bool
+    ) -> String {
+        let codexHomePath = ensureManagedCodexHome(includeMagentIPC: includeMagentIPC)
+        return "env CODEX_HOME=\(ShellExecutor.shellQuote(codexHomePath)) -u NO_COLOR \(command)"
     }
 
-    private func codexSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {
+    private func codexSessionConfiguredCommand(
+        _ command: String,
+        appearanceMode: AppAppearanceMode,
+        preserveAgentColorTheme: Bool = false,
+        includeMagentIPC: Bool
+    ) -> String {
         let prefix = "command codex"
         guard command.hasPrefix(prefix) else { return command }
 
@@ -1964,7 +2107,10 @@ final class AgentSetupService {
         } else {
             "\(prefix) \(launchFlags)\(suffix)"
         }
-        return codexSessionEnvironmentWrappedCommand(configuredCommand)
+        return codexSessionEnvironmentWrappedCommand(
+            configuredCommand,
+            includeMagentIPC: includeMagentIPC
+        )
     }
 
     private func claudeSessionConfiguredCommand(_ command: String, appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {

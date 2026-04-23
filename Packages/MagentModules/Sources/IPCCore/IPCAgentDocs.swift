@@ -97,6 +97,7 @@ public enum IPCAgentDocs {
     public static let claudeSystemPrompt: String = """
     Magent IPC is available via `/tmp/magent-cli` when needed.
     Use it only for thread/tab/section management tasks. In Magent, "threads" are managed worktrees with embedded terminals.
+    Treat mentions of "magent", "thread", or "tab" as possible Magent context; if it appears Magent-related, check `/tmp/magent-cli docs` before acting.
     For details on demand, run `/tmp/magent-cli docs` (full reference) or `/tmp/magent-cli help` (quick usage).
     """
 
@@ -104,7 +105,7 @@ public enum IPCAgentDocs {
 
     public static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     public static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    public static let codexIPCVersion = "<!-- magent-ipc-v20 -->"
+    public static let codexIPCVersion = "<!-- magent-ipc-v21 -->"
 
     /// Lightweight Codex `AGENTS.md` hint that points to on-demand docs.
     public static let codexAgentsMdBlock: String = """
@@ -115,6 +116,8 @@ public enum IPCAgentDocs {
     When the `MAGENT_SOCKET` environment variable is set, you are running inside
     a Magent-managed terminal. Magent IPC is available via `/tmp/magent-cli`.
     In Magent, "threads" are managed worktrees with embedded terminals.
+    Treat mentions of "magent", "thread", or "tab" as possible Magent context;
+    if the request seems Magent-related, check `/tmp/magent-cli docs` first.
 
     Use it only for Magent management tasks (threads, tabs, sections).
     Load details on demand with:
@@ -122,4 +125,28 @@ public enum IPCAgentDocs {
     - `/tmp/magent-cli help` (quick usage)
     \(codexIPCMarkerEnd)
     """
+
+    /// Returns user AGENTS.md content with any Magent IPC block removed.
+    public static func codexAgentsMdWithoutMagentBlock(_ content: String) -> String {
+        var updated = content
+        while let startRange = updated.range(of: codexIPCMarkerStart),
+              let endRange = updated.range(of: codexIPCMarkerEnd),
+              startRange.lowerBound <= endRange.lowerBound {
+            updated.replaceSubrange(startRange.lowerBound..<endRange.upperBound, with: "")
+        }
+        return updated.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Builds AGENTS.md content for Codex sessions, preserving user content and
+    /// optionally appending Magent IPC hints.
+    public static func codexMergedAgentsMd(userContent: String?, includeMagentIPC: Bool) -> String {
+        let strippedUserContent: String = {
+            guard let userContent else { return "" }
+            return codexAgentsMdWithoutMagentBlock(userContent)
+        }()
+
+        guard includeMagentIPC else { return strippedUserContent }
+        guard !strippedUserContent.isEmpty else { return codexAgentsMdBlock }
+        return "\(strippedUserContent)\n\n\(codexAgentsMdBlock)"
+    }
 }
