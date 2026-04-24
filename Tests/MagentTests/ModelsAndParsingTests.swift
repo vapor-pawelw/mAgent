@@ -216,6 +216,12 @@ struct TmuxSessionNamingTests {
         #expect(name == "Codex (5.3-codex)")
     }
 
+    @Test("Codex formats GPT 5.5 as compact version label")
+    func codex55Model() {
+        let name = TmuxSessionNaming.defaultTabDisplayName(for: .codex, modelLabel: "GPT 5.5")
+        #expect(name == "Codex (5.5)")
+    }
+
     @Test("Codex collapses multiple spaces and trims")
     func codexCollapse() {
         let name = TmuxSessionNaming.defaultTabDisplayName(for: .codex, modelLabel: "  gpt   5.4-mini  ")

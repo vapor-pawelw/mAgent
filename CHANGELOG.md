@@ -47,6 +47,9 @@ All notable changes to this project will be documented in this file.
 
 ### Agents
 
+#### Features
+- Added `GPT 5.5` as a selectable Codex model in model pickers and model validation, and made Review-mode Codex launches default to `GPT 5.5`.
+
 #### Bug Fixes
 - Fixed Codex tabs failing to launch on macOS with `env: -u: No such file or directory` — the managed-`CODEX_HOME` wrapper now places option flags before variable assignments so BSD `env` parses them correctly.
 - Codex sessions launched from Magent now use a shared Magent-managed `CODEX_HOME` that mirrors the user's `~/.codex` (skills, auth, config, docs, etc.) while keeping Magent IPC AGENTS hints scoped to Magent sessions only. Magent no longer writes its IPC block into the global `~/.codex/AGENTS.md`, and edits to global `~/.codex/AGENTS.md` or top-level `~/.codex` entries now resync into the managed home automatically (session monitor cadence).

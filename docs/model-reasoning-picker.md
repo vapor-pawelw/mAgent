@@ -30,8 +30,10 @@ A JSON file defines available models and reasoning levels per agent. The file li
     },
     "codex": {
       "models": [
+        { "id": "gpt-5.5", "label": "GPT 5.5" },
         { "id": "gpt-5.4", "label": "GPT 5.4" },
-        { "id": "gpt-5.4-mini", "label": "GPT 5.4 Mini" }
+        { "id": "gpt-5.4-mini", "label": "GPT 5.4 Mini" },
+        { "id": "gpt-5.3-codex", "label": "GPT 5.3 Codex" }
       ],
       "reasoningLevels": ["low", "medium", "high", "xhigh"]
     }

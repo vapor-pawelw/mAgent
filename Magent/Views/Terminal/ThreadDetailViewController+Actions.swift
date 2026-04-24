@@ -1483,8 +1483,8 @@ extension ThreadDetailViewController {
             )
         case .codex:
             return (
-                AgentModelsService.shared.validatedModelId("gpt-5.4", for: .codex) ?? "gpt-5.4",
-                AgentModelsService.shared.validatedReasoningLevel(usesMaxReasoning ? "xhigh" : "high", for: .codex, modelId: "gpt-5.4")
+                AgentModelsService.shared.validatedModelId("gpt-5.5", for: .codex) ?? "gpt-5.5",
+                AgentModelsService.shared.validatedReasoningLevel(usesMaxReasoning ? "xhigh" : "high", for: .codex, modelId: "gpt-5.5")
             )
         case .custom:
             return (nil, nil)
