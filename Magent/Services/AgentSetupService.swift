@@ -2088,10 +2088,7 @@ final class AgentSetupService {
         includeMagentIPC: Bool
     ) -> String {
         let codexHomePath = ensureManagedCodexHome(includeMagentIPC: includeMagentIPC)
-        // macOS BSD `env` requires option flags (e.g. `-u`) before any NAME=value
-        // assignments. If `-u NO_COLOR` comes after `CODEX_HOME=...`, env treats
-        // `-u` as the command and errors with "env: -u: No such file or directory".
-        return "env -u NO_COLOR CODEX_HOME=\(ShellExecutor.shellQuote(codexHomePath)) \(command)"
+        return "env CODEX_HOME=\(ShellExecutor.shellQuote(codexHomePath)) \(command)"
     }
 
     private func codexSessionConfiguredCommand(
