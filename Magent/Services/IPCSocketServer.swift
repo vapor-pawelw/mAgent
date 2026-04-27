@@ -6,7 +6,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v30"
+    private static let cliVersion = "magent-cli-v31"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -1003,17 +1003,30 @@ actor IPCSocketServer {
             attach_tmux_session "$attach_session"
             ;;
         send-prompt)
-            thread=""; prompt=""
+            thread=""; prompt=""; session=""; tab_index=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --thread) thread="$2"; shift 2 ;;
+                    --session) session="$2"; shift 2 ;;
+                    --index) tab_index="$2"; shift 2 ;;
                     --prompt) prompt="$2"; shift 2 ;;
                     --prompt-file) [ -f "$2" ] || die "Prompt file not found: $2"; prompt="$(cat "$2")"; shift 2 ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] && [ -n "$prompt" ] || die "Usage: magent-cli send-prompt --thread <name> --prompt <text|--prompt-file path>"
-            send_request "{$(json_kv command send-prompt),$(json_kv threadName "$thread"),$(json_kv prompt "$prompt")}"
+            [ -n "$thread" ] && [ -n "$prompt" ] || die "Usage: magent-cli send-prompt --thread <name> [--session <name> | --index <n>] --prompt <text|--prompt-file path>"
+            [ -z "$session" ] || [ -z "$tab_index" ] || die "Use either --session or --index, not both"
+            json="{$(json_kv command send-prompt),$(json_kv threadName "$thread"),$(json_kv prompt "$prompt")"
+            if [ -n "$session" ]; then
+                json="$json,$(json_kv sessionName "$session")"
+            elif [ -n "$tab_index" ]; then
+                case "$tab_index" in
+                    ''|*[!0-9]*) die "--index must be an integer" ;;
+                esac
+                json="$json,\"tabIndex\":$tab_index"
+            fi
+            json="$json}"
+            send_request "$json"
             ;;
         archive-thread)
             thread=""
@@ -1063,6 +1076,51 @@ actor IPCSocketServer {
                 send_request "{$(json_kv command list-tabs),$(json_kv threadId "$thread_id")}"
             else
                 send_request "{$(json_kv command list-tabs),$(json_kv threadName "$thread")}"
+            fi
+            ;;
+        read-tab)
+            thread=""; thread_id=""; tab_index=""; session=""; limit=""; output_json=0
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    --thread-id) thread_id="$2"; shift 2 ;;
+                    --index) tab_index="$2"; shift 2 ;;
+                    --session) session="$2"; shift 2 ;;
+                    --limit) limit="$2"; shift 2 ;;
+                    --json) output_json=1; shift ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -z "$thread" ] || [ -z "$thread_id" ] || die "Use either --thread or --thread-id, not both"
+            [ -n "$thread" ] || [ -n "$thread_id" ] || die "Usage: magent-cli read-tab (--thread <name> | --thread-id <id>) (--index <n> | --session <name>) [--limit <n>] [--json]"
+            [ -z "$session" ] || [ -z "$tab_index" ] || die "Use either --session or --index, not both"
+            [ -n "$session" ] || [ -n "$tab_index" ] || die "Specify --index <n> or --session <name>"
+            json="{$(json_kv command read-tab)"
+            if [ -n "$thread_id" ]; then
+                json="$json,$(json_kv threadId "$thread_id")"
+            else
+                json="$json,$(json_kv threadName "$thread")"
+            fi
+            if [ -n "$session" ]; then
+                json="$json,$(json_kv sessionName "$session")"
+            else
+                case "$tab_index" in
+                    ''|*[!0-9]*) die "--index must be an integer" ;;
+                esac
+                json="$json,\"tabIndex\":$tab_index"
+            fi
+            if [ -n "$limit" ]; then
+                case "$limit" in
+                    ''|*[!0-9]*) die "--limit must be a positive integer" ;;
+                esac
+                json="$json,\"limit\":$limit"
+            fi
+            json="$json}"
+            if [ "$output_json" = "1" ]; then
+                send_request "$json"
+            else
+                read_resp=$(send_checked_request "$json")
+                printf '%s' "$read_resp" | jq -r '.transcript.content // ""'
             fi
             ;;
         create-tab)
@@ -1503,10 +1561,11 @@ actor IPCSocketServer {
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
             echo "  list-archived        [--project <name>] [--limit <n>]  (most recently archived first)"
-            echo "  send-prompt          --thread <name> (--prompt <text> | --prompt-file <path>)"
+            echo "  send-prompt          --thread <name> [--session <name> | --index <n>] (--prompt <text> | --prompt-file <path>)"
             echo "  archive-thread       --thread <name> [--force] [--skip-local-sync]  (removes worktree, keeps branch; dirty worktrees are always refused; --force only continues after non-conflict local-sync failures)"
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
             echo "  list-tabs            (--thread <name> | --thread-id <id>)"
+            echo "  read-tab             (--thread <name> | --thread-id <id>) (--index <n> | --session <name>) [--limit <n>] [--json]"
             echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--name <text>|--title <text>] [--fresh|--no-resume] [--prompt <text>]"
             echo "  create-web-tab       --thread <name> --url <http(s)-url> [--name <text>|--title <text>]    (opens an in-app web tab at the given URL)"
             echo "  close-tab            --thread <name> (--index <n> | --session <name>)"

@@ -10,7 +10,9 @@ All notable changes to this project will be documented in this file.
 - Added `magent-cli create-web-tab --thread <name> --url <http(s)-url> [--name <text>|--title <text>]` for opening an in-app web tab at a predefined URL in an existing thread (docs, Jira, PR links, dashboards).
 - Added `magent-cli rename-tab --thread <name> (--index <n> | --session <name>) --name <text>` for renaming existing terminal/web tabs from CLI.
 - Added `--name` as the preferred tab-title option for `magent-cli create-tab` and `magent-cli create-web-tab` (`--title` remains supported as a legacy alias).
-- `magent-cli list-tabs` / `thread-info` now return the full tab set in GUI order (terminal, web, draft) with `tabType` and stable tab identifiers for non-terminal tabs.
+- Added `magent-cli read-tab` with unified transcript reading across tab types (tmux capture for terminal tabs, persisted transcripts for chat tabs), including `--json` for structured output.
+- `magent-cli list-tabs` / `thread-info` now return the full tab set in GUI order (terminal, web, draft, chat) with `tabType` and stable tab identifiers for non-terminal tabs.
+- `magent-cli send-prompt` now supports targeting tabs via `--session` / `--index`, including chat tabs (default fallback now prefers first agent terminal tab, then first chat tab when no terminal tab exists).
 
 #### Bug Fixes
 - Fixed CLI-created tabs not reliably opening in popped-out thread windows. `create-tab` and `create-web-tab` now target the popped-out thread view when present, select the created tab there, and keep main/pop-out tab bars synchronized for terminal, web, and draft tab types.

@@ -87,6 +87,7 @@ public nonisolated struct IPCResponse: Encodable, Sendable {
     public var projects: [IPCProjectInfo]?
     public var tabs: [IPCTabInfo]?
     public var tab: IPCTabInfo?
+    public var transcript: IPCTabTranscript?
     public var sections: [IPCSectionInfo]?
     public var section: IPCSectionInfo?
     public var activeAgents: [String]?
@@ -101,6 +102,7 @@ public nonisolated struct IPCResponse: Encodable, Sendable {
         projects: [IPCProjectInfo]? = nil,
         tabs: [IPCTabInfo]? = nil,
         tab: IPCTabInfo? = nil,
+        transcript: IPCTabTranscript? = nil,
         sections: [IPCSectionInfo]? = nil,
         section: IPCSectionInfo? = nil,
         activeAgents: [String]? = nil
@@ -114,6 +116,7 @@ public nonisolated struct IPCResponse: Encodable, Sendable {
         self.projects = projects
         self.tabs = tabs
         self.tab = tab
+        self.transcript = transcript
         self.sections = sections
         self.section = section
         self.activeAgents = activeAgents
@@ -257,7 +260,7 @@ public nonisolated struct IPCTabInfo: Encodable, Sendable {
     public let index: Int
     public let sessionName: String
     public var displayName: String?
-    /// `terminal`, `web`, or `draft` when available.
+    /// `terminal`, `web`, `draft`, or `chat` when available.
     public var tabType: String?
     public let isAgent: Bool
     public var agentType: String?
@@ -272,6 +275,48 @@ public nonisolated struct IPCTabInfo: Encodable, Sendable {
         self.displayName = nil
         self.tabType = tabType
         self.isAgent = isAgent
+    }
+}
+
+public nonisolated struct IPCChatTranscriptMessage: Encodable, Sendable {
+    public let role: String
+    public let text: String
+    public let createdAt: String
+
+    public init(role: String, text: String, createdAt: String) {
+        self.role = role
+        self.text = text
+        self.createdAt = createdAt
+    }
+}
+
+public nonisolated struct IPCTabTranscript: Encodable, Sendable {
+    public let tabType: String
+    public let sessionName: String
+    public var displayName: String?
+    /// Internal source used to read transcript content (`tmux` or `chat-persistence`).
+    public let source: String
+    /// ISO-8601 timestamp when this transcript payload was generated.
+    public let capturedAt: String
+    public let content: String
+    public var chatMessages: [IPCChatTranscriptMessage]?
+
+    public init(
+        tabType: String,
+        sessionName: String,
+        displayName: String?,
+        source: String,
+        capturedAt: String,
+        content: String,
+        chatMessages: [IPCChatTranscriptMessage]? = nil
+    ) {
+        self.tabType = tabType
+        self.sessionName = sessionName
+        self.displayName = displayName
+        self.source = source
+        self.capturedAt = capturedAt
+        self.content = content
+        self.chatMessages = chatMessages
     }
 }
 

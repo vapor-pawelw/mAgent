@@ -29,6 +29,8 @@ final class IPCCommandHandler {
             return await deleteThread(request)
         case "list-tabs":
             return listTabs(request)
+        case "read-tab":
+            return await readTab(request)
         case "create-tab":
             return await createTab(request)
         case "create-web-tab":
@@ -824,30 +826,99 @@ final class IPCCommandHandler {
         case .error(let err): return err
         }
 
-        guard let sessionName = thread.agentTmuxSessions.first ?? thread.tmuxSessionNames.first else {
-            return .failure("Thread has no tmux sessions", id: request.id)
+        let selectedKind: ResolvedTabKind
+        if request.sessionName != nil || request.tabIndex != nil {
+            switch resolveTabSelection(request, in: thread) {
+            case .resolved(let tab):
+                selectedKind = tab.kind
+            case .error(let err):
+                return err
+            }
+        } else if let sessionName = thread.agentTmuxSessions.first ?? thread.tmuxSessionNames.first {
+            selectedKind = .terminal(sessionName: sessionName, terminalDisplayIndex: 0)
+        } else if let chatIdentifier = thread.persistedChatTabs.first?.identifier {
+            selectedKind = .chat(identifier: chatIdentifier)
+        } else {
+            return .failure("Thread has no tabs that can accept prompts", id: request.id)
         }
 
-        do {
-            try await tmux.sendText(sessionName: sessionName, text: prompt)
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            try await tmux.sendEnter(sessionName: sessionName)
-        } catch {
-            return .failure("Failed to send prompt: \(error.localizedDescription)", id: request.id)
-        }
+        switch selectedKind {
+        case .terminal(let sessionName, _):
+            do {
+                try await tmux.sendText(sessionName: sessionName, text: prompt)
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                try await tmux.sendEnter(sessionName: sessionName)
+            } catch {
+                return .failure("Failed to send prompt: \(error.localizedDescription)", id: request.id)
+            }
 
-        if thread.agentTmuxSessions.contains(sessionName) {
-            threadManager.scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: sessionName)
-            // Record in submitted history so auto-rename fires immediately,
-            // without waiting for the user to open the thread or a bell event.
-            threadManager.appendToSubmittedPromptHistory(
-                threadId: thread.id,
-                sessionName: sessionName,
-                prompt: prompt
-            )
-        }
+            if thread.agentTmuxSessions.contains(sessionName) {
+                threadManager.scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: sessionName)
+                // Record in submitted history so auto-rename fires immediately,
+                // without waiting for the user to open the thread or a bell event.
+                threadManager.appendToSubmittedPromptHistory(
+                    threadId: thread.id,
+                    sessionName: sessionName,
+                    prompt: prompt
+                )
+            }
 
-        return .success(id: request.id)
+            return .success(id: request.id)
+        case .chat(let identifier):
+            guard let threadIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
+                return .failure("Thread not found: \(thread.name)", id: request.id)
+            }
+            var chatTabs = threadManager.threads[threadIndex].persistedChatTabs
+            guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else {
+                return .failure("Tab not found: \(identifier)", id: request.id)
+            }
+
+            let user = PersistedChatMessage(role: .user, text: prompt)
+            let pendingAssistant = PersistedChatMessage(role: .assistant, text: "Thinking…")
+            chatTabs[chatIndex].messages.append(user)
+            chatTabs[chatIndex].messages.append(pendingAssistant)
+            let contextMessages = chatTabs[chatIndex].messages
+
+            threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
+            await MainActor.run {
+                threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
+            }
+
+            let piPrompt = buildPiPrompt(from: contextMessages)
+            let command = "command pi --mode json --no-session \(ShellExecutor.shellQuote(piPrompt))"
+            let result = await ShellExecutor.execute(command, workingDirectory: thread.worktreePath)
+
+            let responseText: String
+            if result.exitCode == 0 {
+                let parsed = parsePiAssistantText(from: result.stdout)
+                responseText = parsed.isEmpty ? "No response from Pi." : parsed
+            } else {
+                let errorText = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                responseText = errorText.isEmpty
+                    ? "Pi chat failed (exit \(result.exitCode))."
+                    : "Pi chat failed: \(errorText)"
+            }
+
+            guard let latestIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
+                return .success(id: request.id)
+            }
+            chatTabs = threadManager.threads[latestIndex].persistedChatTabs
+            guard let latestChatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }),
+                  let messageIndex = chatTabs[latestChatIndex].messages.firstIndex(where: { $0.id == pendingAssistant.id }) else {
+                return .success(id: request.id)
+            }
+
+            chatTabs[latestChatIndex].messages[messageIndex].text = responseText
+            threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
+            await MainActor.run {
+                threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
+            }
+            return .success(id: request.id)
+        case .web:
+            return .failure("send-prompt is not supported for web tabs", id: request.id)
+        case .draft:
+            return .failure("send-prompt is not supported for draft tabs", id: request.id)
+        }
     }
 
     private func archiveThread(_ request: IPCRequest) async -> IPCResponse {
@@ -910,6 +981,7 @@ final class IPCCommandHandler {
         case terminal(sessionName: String, terminalDisplayIndex: Int)
         case web(identifier: String)
         case draft(identifier: String)
+        case chat(identifier: String)
     }
 
     private struct ResolvedTab {
@@ -931,7 +1003,7 @@ final class IPCCommandHandler {
 
     /// Builds tab ordering to match the GUI tab strip:
     /// terminal (pinned + unpinned), then pinned web inserts into pinned region,
-    /// then unpinned web, then draft tabs.
+    /// then unpinned web, then draft tabs, then chat tabs.
     private func resolveTabs(for thread: MagentThread) -> [ResolvedTab] {
         var slots: [ResolvedTabKind] = []
         let orderedSessions = orderedTerminalSessions(for: thread)
@@ -954,6 +1026,9 @@ final class IPCCommandHandler {
 
         for persisted in thread.persistedDraftTabs {
             slots.append(.draft(identifier: persisted.identifier))
+        }
+        for persisted in thread.persistedChatTabs {
+            slots.append(.chat(identifier: persisted.identifier))
         }
 
         return slots.enumerated().map { ResolvedTab(index: $0.offset, kind: $0.element) }
@@ -999,6 +1074,17 @@ final class IPCCommandHandler {
                 )
                 tab.displayName = "Draft"
                 return tab
+            case .chat(let identifier):
+                let persisted = thread.persistedChatTabs.first(where: { $0.identifier == identifier })
+                var tab = IPCTabInfo(
+                    index: entry.index,
+                    sessionName: identifier,
+                    isAgent: true,
+                    tabType: "chat"
+                )
+                tab.displayName = persisted?.title ?? "Chat"
+                tab.agentType = persisted?.agentType.rawValue
+                return tab
             }
         }
     }
@@ -1012,6 +1098,7 @@ final class IPCCommandHandler {
                 case .terminal(let s, _): return s == sessionName
                 case .web(let id): return id == sessionName
                 case .draft(let id): return id == sessionName
+                case .chat(let id): return id == sessionName
                 }
             }) {
                 return .resolved(resolved)
@@ -1034,6 +1121,7 @@ final class IPCCommandHandler {
         case .terminal(let sessionName, _): return sessionName
         case .web(let identifier): return identifier
         case .draft(let identifier): return identifier
+        case .chat(let identifier): return identifier
         }
     }
 
@@ -1046,6 +1134,136 @@ final class IPCCommandHandler {
 
         let tabs = buildIPCTabs(for: thread)
         return IPCResponse(ok: true, id: request.id, tabs: tabs)
+    }
+
+    private func readTab(_ request: IPCRequest) async -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        let selected: ResolvedTab
+        switch resolveTabSelection(request, in: thread) {
+        case .resolved(let tab):
+            selected = tab
+        case .error(let err):
+            return err
+        }
+
+        let latestThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let tabs = buildIPCTabs(for: latestThread)
+        let nowISO: String = {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime]
+            return formatter.string(from: Date())
+        }()
+
+        switch selected.kind {
+        case .terminal(let sessionName, _):
+            let output: String?
+            if let limit = request.limit, limit > 0 {
+                output = await tmux.capturePane(sessionName: sessionName, lastLines: max(1, limit))
+            } else {
+                output = await tmux.captureFullPane(sessionName: sessionName)
+                    ?? await tmux.capturePane(sessionName: sessionName, lastLines: 200)
+            }
+
+            let tabInfo = tabs.first(where: { $0.sessionName == sessionName })
+            let transcript = IPCTabTranscript(
+                tabType: "terminal",
+                sessionName: sessionName,
+                displayName: tabInfo?.displayName,
+                source: "tmux",
+                capturedAt: nowISO,
+                content: output ?? "",
+                chatMessages: nil
+            )
+            return IPCResponse(ok: true, id: request.id, transcript: transcript)
+        case .chat(let identifier):
+            guard let chatTab = latestThread.persistedChatTabs.first(where: { $0.identifier == identifier }) else {
+                return .failure("Tab not found: \(identifier)", id: request.id)
+            }
+
+            let messages: [PersistedChatMessage]
+            if let limit = request.limit, limit > 0 {
+                messages = Array(chatTab.messages.suffix(limit))
+            } else {
+                messages = chatTab.messages
+            }
+
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime]
+            let structured = messages.map { message in
+                IPCChatTranscriptMessage(
+                    role: message.role.rawValue,
+                    text: message.text,
+                    createdAt: formatter.string(from: message.createdAt)
+                )
+            }
+            let content = structured.map { message in
+                "[\(message.createdAt)] \(message.role):\n\(message.text)"
+            }.joined(separator: "\n\n")
+
+            let tabInfo = tabs.first(where: { $0.sessionName == identifier })
+            let transcript = IPCTabTranscript(
+                tabType: "chat",
+                sessionName: identifier,
+                displayName: tabInfo?.displayName ?? chatTab.title,
+                source: "chat-persistence",
+                capturedAt: nowISO,
+                content: content,
+                chatMessages: structured
+            )
+            return IPCResponse(ok: true, id: request.id, transcript: transcript)
+        case .web:
+            return .failure("Reading transcript is not supported for web tabs", id: request.id)
+        case .draft:
+            return .failure("Reading transcript is not supported for draft tabs", id: request.id)
+        }
+    }
+
+    private func buildPiPrompt(from messages: [PersistedChatMessage]) -> String {
+        let context = messages.suffix(20).map { message in
+            let role = message.role == .user ? "User" : "Assistant"
+            return "\(role): \(message.text)"
+        }.joined(separator: "\n\n")
+
+        return """
+        Continue this conversation. Be concise and accurate.
+
+        \(context)
+        """
+    }
+
+    private func parsePiAssistantText(from stdout: String) -> String {
+        var deltas: [String] = []
+
+        for line in stdout.split(separator: "\n", omittingEmptySubsequences: true) {
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data),
+                  let json = object as? [String: Any],
+                  let type = json["type"] as? String else {
+                continue
+            }
+
+            guard type == "message_update" else { continue }
+            guard let message = json["message"] as? [String: Any],
+                  let role = message["role"] as? String,
+                  role == "assistant" else {
+                continue
+            }
+
+            guard let assistantEvent = json["assistantMessageEvent"] as? [String: Any],
+                  let eventType = assistantEvent["type"] as? String,
+                  eventType == "text_delta",
+                  let delta = assistantEvent["delta"] as? String else {
+                continue
+            }
+            deltas.append(delta)
+        }
+
+        return deltas.joined().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func createTab(_ request: IPCRequest) async -> IPCResponse {
@@ -1565,7 +1783,7 @@ final class IPCCommandHandler {
         let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
         let sectionName = resolveSectionName(for: thread, settings: settings)
 
-        // Build tab list across terminal/web/draft in GUI display order.
+        // Build tab list across terminal/web/draft/chat in GUI display order.
         let tabs = buildIPCTabs(for: thread)
 
         let status = makeThreadStatus(for: thread)
@@ -1686,6 +1904,33 @@ final class IPCCommandHandler {
             return .success(id: request.id)
         case .draft:
             return .failure("Rename is not supported for draft tabs", id: request.id)
+        case .chat(let identifier):
+            guard let threadIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
+                return .failure("Thread not found: \(thread.name)", id: request.id)
+            }
+            guard let chatIndex = threadManager.threads[threadIndex].persistedChatTabs.firstIndex(where: {
+                $0.identifier == identifier
+            }) else {
+                return .failure("Tab not found: \(identifier)", id: request.id)
+            }
+            guard !trimmedName.isEmpty else {
+                return .failure("Tab name must not be empty", id: request.id)
+            }
+
+            var chatTabs = threadManager.threads[threadIndex].persistedChatTabs
+            chatTabs[chatIndex].title = trimmedName
+            threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
+            await MainActor.run {
+                threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
+            }
+
+            guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+                return .success(id: request.id)
+            }
+            if let tabInfo = buildIPCTabs(for: updated).first(where: { $0.sessionName == identifier }) {
+                return IPCResponse(ok: true, id: request.id, tab: tabInfo)
+            }
+            return .success(id: request.id)
         }
     }
 
@@ -1748,6 +1993,27 @@ final class IPCCommandHandler {
             }
             draftTabs.removeAll { $0.identifier == identifier }
             threadManager.updatePersistedDraftTabs(for: thread.id, draftTabs: draftTabs)
+
+            if threadManager.threads[threadIndex].lastSelectedTabIdentifier == identifier {
+                let updated = threadManager.threads[threadIndex]
+                let fallbackIdentifier = resolveTabs(for: updated).first.map { tabIdentifier(from: $0.kind) }
+                threadManager.updateLastSelectedTab(for: thread.id, identifier: fallbackIdentifier)
+            }
+
+            await MainActor.run {
+                threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
+            }
+            return .success(id: request.id)
+        case .chat(let identifier):
+            guard let threadIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
+                return .failure("Thread not found: \(thread.name)", id: request.id)
+            }
+            var chatTabs = threadManager.threads[threadIndex].persistedChatTabs
+            guard chatTabs.contains(where: { $0.identifier == identifier }) else {
+                return .failure("Tab not found: \(identifier)", id: request.id)
+            }
+            chatTabs.removeAll { $0.identifier == identifier }
+            threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
 
             if threadManager.threads[threadIndex].lastSelectedTabIdentifier == identifier {
                 let updated = threadManager.threads[threadIndex]
