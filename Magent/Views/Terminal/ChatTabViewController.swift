@@ -95,7 +95,7 @@ private final class ChatMessageBubbleView: NSView {
 }
 
 final class ChatTabViewController: NSViewController, NSTextViewDelegate {
-    let identifier: String
+    let chatIdentifier: String
     private(set) var agentType: AgentType
     private(set) var messages: [PersistedChatMessage]
 
@@ -108,7 +108,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate {
     private let scrollToBottomButton = NSButton()
 
     init(identifier: String, agentType: AgentType, messages: [PersistedChatMessage]) {
-        self.identifier = identifier
+        self.chatIdentifier = identifier
         self.agentType = agentType
         self.messages = messages
         super.init(nibName: nil, bundle: nil)

@@ -440,6 +440,10 @@ private enum PiRuntimeReadiness: Equatable {
 private enum PiRuntimeInstaller {
     private static let packageName = "@mariozechner/pi-coding-agent"
     private static let minimumNodeMajor = 20
+    enum InstallResult {
+        case success(version: String)
+        case failure(message: String)
+    }
 
     static func checkReadiness() async -> PiRuntimeReadiness {
         let nodeVersionResult = await ShellExecutor.execute("node --version")
@@ -464,15 +468,15 @@ private enum PiRuntimeInstaller {
         return .brokenPi(details: stderr)
     }
 
-    static func installOrRepair() async -> Result<String, String> {
+    static func installOrRepair() async -> InstallResult {
         let readiness = await checkReadiness()
         switch readiness {
         case .ready(let version):
-            return .success(version)
+            return .success(version: version)
         case .missingNode, .nodeTooOld, .missingNpm:
             let brewExists = await commandExists("brew")
             guard brewExists else {
-                return .failure("""
+                return .failure(message: """
                 Missing prerequisites for Chat mode.
 
                 Install Homebrew first, then install Node.js 20+:
@@ -484,7 +488,7 @@ private enum PiRuntimeInstaller {
             let nodeInstallResult = await ShellExecutor.execute("brew install node")
             guard nodeInstallResult.exitCode == 0 else {
                 let details = nodeInstallResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                return .failure(details.isEmpty ? "Failed to install Node.js via Homebrew." : details)
+                return .failure(message: details.isEmpty ? "Failed to install Node.js via Homebrew." : details)
             }
         case .missingPi, .brokenPi:
             break
@@ -493,14 +497,14 @@ private enum PiRuntimeInstaller {
         let installResult = await ShellExecutor.execute("npm install -g \(packageName)")
         guard installResult.exitCode == 0 else {
             let details = installResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            return .failure(details.isEmpty ? "Failed to install Pi." : details)
+            return .failure(message: details.isEmpty ? "Failed to install Pi." : details)
         }
 
         let finalReadiness = await checkReadiness()
         if case .ready(let version) = finalReadiness {
-            return .success(version)
+            return .success(version: version)
         }
-        return .failure(finalReadiness.shortDescription)
+        return .failure(message: finalReadiness.shortDescription)
     }
 
     private static func parseLeadingMajorVersion(_ raw: String) -> Int? {
