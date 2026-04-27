@@ -121,6 +121,7 @@ final class ThreadLifecycleService {
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
         initialDraftTab: PersistedDraftTab? = nil,
+        initialChatTab: PersistedChatTab? = nil,
         requestedName: String? = nil,
         requestedBaseBranch: String? = nil,
         pendingPromptFileURL: URL? = nil,
@@ -297,8 +298,8 @@ final class ThreadLifecycleService {
                 persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
             }
 
-            // Non-terminal thread: skip tmux session creation and persist the initial web/draft tab.
-            if initialWebURL != nil || initialDraftTab != nil {
+            // Non-terminal thread: skip tmux session creation and persist the initial web/draft/chat tab.
+            if initialWebURL != nil || initialDraftTab != nil || initialChatTab != nil {
                 let webTab: PersistedWebTab?
                 if let webURL = initialWebURL {
                     let identifier = "web:\(UUID().uuidString)"
@@ -326,6 +327,10 @@ final class ThreadLifecycleService {
                 if let initialDraftTab {
                     thread.persistedDraftTabs = [initialDraftTab]
                     thread.lastSelectedTabIdentifier = initialDraftTab.identifier
+                }
+                if let initialChatTab {
+                    thread.persistedChatTabs = [initialChatTab]
+                    thread.lastSelectedTabIdentifier = initialChatTab.identifier
                 }
 
                 store.pendingThreadIds.remove(threadID)

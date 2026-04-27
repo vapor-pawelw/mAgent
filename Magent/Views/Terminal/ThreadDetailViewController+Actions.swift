@@ -832,6 +832,14 @@ extension ThreadDetailViewController {
                     modelId: result.modelId,
                     reasoningLevel: result.reasoningLevel
                 )
+            } else if result.agentSurface == .chat, let agentType = result.agentType {
+                let title = result.tabTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+                self.openChatTab(
+                    identifier: "chat:\(UUID().uuidString)",
+                    agentType: agentType,
+                    title: title?.isEmpty == false ? title! : "\(agentType.displayName) Chat",
+                    initialPrompt: result.prompt
+                )
             } else if let webURL = result.initialWebURL {
                 let title = result.tabTitle ?? webURL.host ?? "Web"
                 self.openWebTab(url: webURL, identifier: "web:\(UUID().uuidString)", title: title, iconType: .web)
@@ -973,7 +981,7 @@ extension ThreadDetailViewController {
                     let displayTerminalSlots: [String?] = self.tabSlots.map { slot in
                         switch slot {
                         case .terminal(let sessionName): sessionName
-                        case .web, .draft: nil
+                        case .web, .draft, .chat: nil
                         }
                     }
                     let placement = CreatedTerminalTabReconciler.resolvePlacement(
@@ -1109,6 +1117,13 @@ extension ThreadDetailViewController {
                 prompt: draft.prompt,
                 modelId: draft.modelId,
                 reasoningLevel: draft.reasoningLevel
+            )
+        case .chat(let chat):
+            openChatTab(
+                identifier: chat.identifier,
+                agentType: chat.agentType,
+                title: chat.title,
+                messages: chat.messages
             )
         }
     }

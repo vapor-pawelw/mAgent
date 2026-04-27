@@ -5,7 +5,7 @@ import MagentModels
 /// the active `ThreadDetailViewController` instance (for example CLI tab creation).
 ///
 /// This intentionally ignores transient state (busy, waiting, unread markers) and
-/// tracks only tab identity/order/pinning across terminal, web, and draft tabs.
+/// tracks only tab identity/order/pinning across terminal, web, draft, and chat tabs.
 public struct ThreadTabStructureFingerprint: Equatable, Sendable {
     public struct WebTab: Equatable, Sendable {
         public let identifier: String
@@ -21,6 +21,7 @@ public struct ThreadTabStructureFingerprint: Equatable, Sendable {
     public let pinnedTerminalSessions: [String]
     public let webTabs: [WebTab]
     public let draftTabIdentifiers: [String]
+    public let chatTabIdentifiers: [String]
 
     public init(thread: MagentThread) {
         self.terminalSessionNames = thread.tmuxSessionNames
@@ -29,5 +30,6 @@ public struct ThreadTabStructureFingerprint: Equatable, Sendable {
             WebTab(identifier: persisted.identifier, isPinned: persisted.isPinned)
         }
         self.draftTabIdentifiers = thread.persistedDraftTabs.map(\.identifier)
+        self.chatTabIdentifiers = thread.persistedChatTabs.map(\.identifier)
     }
 }

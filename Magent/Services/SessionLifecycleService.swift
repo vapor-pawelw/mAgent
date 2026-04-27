@@ -792,6 +792,12 @@ final class SessionLifecycleService {
         try? persistence.saveActiveThreads(store.threads)
     }
 
+    func updatePersistedChatTabs(for threadId: UUID, chatTabs: [PersistedChatTab]) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        store.threads[index].persistedChatTabs = chatTabs
+        try? persistence.saveActiveThreads(store.threads)
+    }
+
     // MARK: - Waiting-for-Input Detection
 
     func checkForWaitingForInput() async {

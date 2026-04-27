@@ -335,6 +335,10 @@ extension ThreadManager {
         sessionLifecycleService.updatePersistedDraftTabs(for: threadId, draftTabs: draftTabs)
     }
 
+    func updatePersistedChatTabs(for threadId: UUID, chatTabs: [PersistedChatTab]) {
+        sessionLifecycleService.updatePersistedChatTabs(for: threadId, chatTabs: chatTabs)
+    }
+
     func updateLastSelectedTab(for threadId: UUID, identifier: String?) {
         sessionLifecycleService.updateLastSelectedTab(for: threadId, identifier: identifier)
     }

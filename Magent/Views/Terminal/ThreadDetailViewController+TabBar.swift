@@ -179,6 +179,8 @@ extension ThreadDetailViewController {
             selectWebTabByIdentifier(identifier, displayIndex: index)
         case .draft(let identifier):
             selectDraftTab(identifier: identifier, displayIndex: index)
+        case .chat(let identifier):
+            selectChatTab(identifier: identifier, displayIndex: index)
         }
     }
 
@@ -193,6 +195,7 @@ extension ThreadDetailViewController {
 
         hideActiveWebTab()
         hideActiveDraftTab()
+        hideActiveChatTab()
         hideEmptyState()
         for (_, placeholder) in detachedTabPlaceholders {
             placeholder.isHidden = true
@@ -226,6 +229,7 @@ extension ThreadDetailViewController {
                 for termView in self.terminalViews { termView.isHidden = true }
                 self.hideActiveWebTab()
                 self.hideActiveDraftTab()
+                self.hideActiveChatTab()
 
                 let sessionAgentType = await self.threadManager.loadingOverlayAgentType(
                     for: self.thread,
@@ -293,6 +297,7 @@ extension ThreadDetailViewController {
 
         hideActiveWebTab()
         hideActiveDraftTab()
+        hideActiveChatTab()
         hideEmptyState()
 
         // Hide all existing placeholders first
@@ -339,6 +344,7 @@ extension ThreadDetailViewController {
 
         hideActiveWebTab()
         hideActiveDraftTab()
+        hideActiveChatTab()
 
         // Hide detached tab placeholders when switching to a live terminal tab
         for (_, placeholder) in detachedTabPlaceholders {
@@ -602,6 +608,21 @@ extension ThreadDetailViewController {
                 item.tmuxSessionNameForMenu = nil
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
+            case .chat:
+                item.onRename = nil
+                item.allowsDoubleClickRename = false
+                item.onResumeAgentInNewTab = nil
+                item.onContinueIn = nil
+                item.onExportContext = nil
+                item.onRepairTerminal = nil
+                item.canRepairTerminal = false
+                item.onKeepAlive = nil
+                item.onKillSession = nil
+                item.onKillAllSessions = nil
+                item.onCopyTmuxSessionName = nil
+                item.tmuxSessionNameForMenu = nil
+                item.availableAgentsForContinue = []
+                item.showKeepAliveIcon = false
             }
         }
 
@@ -682,7 +703,7 @@ extension ThreadDetailViewController {
             ].joined(separator: "\n")
 
         case .draft(let identifier):
-            let draft = draftTabs.first(where: { $0.identifier == identifier })
+            let draft = thread.persistedDraftTabs.first(where: { $0.identifier == identifier })
             let agentText = draft?.agentType.displayName ?? "Unknown"
             let modelText = draft?.modelId ?? "Default"
             let reasoningText = draft?.reasoningLevel ?? "Default"
@@ -694,6 +715,18 @@ extension ThreadDetailViewController {
                 "Model: \(modelText)",
                 "Reasoning: \(reasoningText)",
                 "Status: saved draft",
+            ].joined(separator: "\n")
+        case .chat(let identifier):
+            let chat = thread.persistedChatTabs.first(where: { $0.identifier == identifier })
+            let agentText = chat?.agentType.displayName ?? "Unknown"
+            let messageCount = chat?.messages.count ?? 0
+
+            return [
+                "Type: Chat (\(agentText))",
+                "Identifier: \(identifier)",
+                "Pinned: \(pinned)",
+                "Messages: \(messageCount)",
+                "Status: GUI chat",
             ].joined(separator: "\n")
         }
     }

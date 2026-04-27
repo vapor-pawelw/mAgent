@@ -384,6 +384,8 @@ struct AgentLaunchSheetConfig {
 
 struct AgentLaunchSheetResult {
     let agentType: AgentType?
+    /// Selected surface for agent modes (terminal/chat), nil for terminal/web.
+    let agentSurface: AgentSurface?
     let useAgentCommand: Bool
     let prompt: String?
     let description: String?
@@ -1902,9 +1904,15 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     private func updateDraftCheckboxVisibility() {
         guard config.showDraftCheckbox else { return }
-        let isAgent = currentMode == "agent"
-        draftCheckboxRow?.isHidden = !isAgent
-        if !isAgent {
+        let isDraftEligible: Bool = {
+            guard let item = selectedPickerItem() else { return false }
+            if case .agent(_, let surface, _) = item {
+                return surface == .terminal
+            }
+            return false
+        }()
+        draftCheckboxRow?.isHidden = !isDraftEligible
+        if !isDraftEligible {
             draftCheckbox.state = .off
         }
     }
@@ -2139,17 +2147,25 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func performAccept(item: PickerItem, rawPrompt: String, rawDesc: String, rawBranch: String, rawBaseBranch: String, rawTitle: String) {
-        if case .agent(_, let surface, _) = item, surface == .chat {
+        if case .agent(_, let surface, _) = item,
+           surface == .chat,
+           case .newThread = config.draftScope {
             let alert = NSAlert()
             alert.alertStyle = .informational
-            alert.messageText = "Chat mode is not available yet"
-            alert.informativeText = "Chat runtime setup is supported, but creating Chat tabs/threads is still in progress in this build."
+            alert.messageText = "Chat mode for new threads is not available yet"
+            alert.informativeText = "Chat tabs are supported. Chat-first new-thread creation is still in progress in this build."
             alert.addButton(withTitle: "OK")
             alert.runModal()
             return
         }
 
-        let isDraft = config.showDraftCheckbox && draftCheckbox.state == .on
+        let isDraft: Bool = {
+            guard config.showDraftCheckbox, draftCheckbox.state == .on else { return false }
+            if case .agent(_, let surface, _) = item {
+                return surface == .terminal
+            }
+            return false
+        }()
 
         AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
 
@@ -2170,6 +2186,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }()
         let pendingPromptFileURL: URL?
         if case .web = item {
+            pendingPromptFileURL = nil
+        } else if case .agent(_, let surface, _) = item, surface == .chat {
+            // Chat tabs do not use tmux injection.
             pendingPromptFileURL = nil
         } else if isDraft {
             // Drafts are persisted in the thread model, not through tmux injection —
@@ -2215,6 +2234,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         case .terminal:
             finish(with: AgentLaunchSheetResult(
                 agentType: nil,
+                agentSurface: nil,
                 useAgentCommand: false,
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: nil,
@@ -2229,9 +2249,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 modelId: nil,
                 reasoningLevel: nil
             ))
-        case .agent(let type, _, _):
+        case .agent(let type, let surface, _):
             finish(with: AgentLaunchSheetResult(
                 agentType: type,
+                agentSurface: surface,
                 useAgentCommand: true,
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: rawDesc.isEmpty ? nil : rawDesc,
@@ -2250,6 +2271,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             let url = WebURLNormalizer.normalize(rawPrompt) ?? URL(string: "about:blank")!
             finish(with: AgentLaunchSheetResult(
                 agentType: nil,
+                agentSurface: nil,
                 useAgentCommand: false,
                 prompt: nil,
                 description: rawDesc.isEmpty ? nil : rawDesc,

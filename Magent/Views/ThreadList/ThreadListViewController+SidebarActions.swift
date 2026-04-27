@@ -332,11 +332,11 @@ extension ThreadListViewController {
             self.createThread(
                 for: targetProject,
                 requestedAgentType: result.agentType,
-                useAgentCommand: result.isDraft ? false : result.useAgentCommand,
+                useAgentCommand: (result.isDraft || result.agentSurface == .chat) ? false : result.useAgentCommand,
                 sourceThread: capturedSourceThread,
                 baseBranch: result.baseBranch,
-                initialPrompt: result.isDraft ? nil : result.prompt,
-                shouldSubmitInitialPrompt: !result.isDraft,
+                initialPrompt: (result.isDraft || result.agentSurface == .chat) ? nil : result.prompt,
+                shouldSubmitInitialPrompt: !result.isDraft && result.agentSurface != .chat,
                 taskDescription: result.description,
                 requestedBranchName: result.branchName,
                 pendingPromptFileURL: result.pendingPromptFileURL,
@@ -344,6 +344,16 @@ extension ThreadListViewController {
                 insertAfterThreadId: effectiveInsertAfter,
                 insertAtTopOfVisibleGroup: insertAtTop,
                 initialWebURL: result.initialWebURL,
+                initialChatTab: {
+                    guard result.agentSurface == .chat,
+                          let agentType = result.agentType else { return nil }
+                    return PersistedChatTab(
+                        identifier: "chat:\(UUID().uuidString)",
+                        agentType: agentType,
+                        title: "\(agentType.displayName) Chat",
+                        messages: []
+                    )
+                }(),
                 draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "", result.modelId, result.reasoningLevel) } : nil,
                 modelId: result.modelId,
                 reasoningLevel: result.reasoningLevel,
@@ -488,6 +498,7 @@ extension ThreadListViewController {
         insertAfterThreadId: UUID? = nil,
         insertAtTopOfVisibleGroup: Bool = false,
         initialWebURL: URL? = nil,
+        initialChatTab: PersistedChatTab? = nil,
         draftPrompt: (agentType: AgentType, prompt: String, modelId: String?, reasoningLevel: String?)? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
@@ -513,6 +524,7 @@ extension ThreadListViewController {
                             reasoningLevel: draftPrompt.reasoningLevel
                         )
                     },
+                    initialChatTab: initialChatTab,
                     requestedName: requestedBranchName,
                     requestedBaseBranch: baseBranch,
                     pendingPromptFileURL: pendingPromptFileURL,

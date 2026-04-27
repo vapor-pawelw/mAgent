@@ -103,6 +103,51 @@ public nonisolated struct PersistedDraftTab: Codable, Sendable, Equatable {
     }
 }
 
+// MARK: - Chat Tab Persistence
+
+public nonisolated enum ChatMessageRole: String, Codable, Sendable {
+    case user
+    case assistant
+}
+
+public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Identifiable {
+    public let id: UUID
+    public let role: ChatMessageRole
+    public var text: String
+    public let createdAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        role: ChatMessageRole,
+        text: String,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.role = role
+        self.text = text
+        self.createdAt = createdAt
+    }
+}
+
+public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
+    public let identifier: String
+    public var agentType: AgentType
+    public var title: String
+    public var messages: [PersistedChatMessage]
+
+    public init(
+        identifier: String,
+        agentType: AgentType,
+        title: String,
+        messages: [PersistedChatMessage] = []
+    ) {
+        self.identifier = identifier
+        self.agentType = agentType
+        self.title = title
+        self.messages = messages
+    }
+}
+
 // MARK: - Web Tab Persistence
 
 public nonisolated enum WebTabIconType: String, Codable, Sendable {
@@ -261,7 +306,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var sectionId: UUID?
     public var isMain: Bool
     /// Last-selected tab identifier — stores the slot key for any tab type
-    /// (session name for terminal, web/draft identifier for web/draft tabs).
+    /// (session name for terminal, web/draft/chat identifier for non-terminal tabs).
     public var lastSelectedTabIdentifier: String?
     public var agentHasRun: Bool
     public var isPinned: Bool
@@ -299,6 +344,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var persistedWebTabs: [PersistedWebTab]
     /// Persisted draft tabs — agent prompts saved for later execution.
     public var persistedDraftTabs: [PersistedDraftTab]
+    /// Persisted GUI chat tabs.
+    public var persistedChatTabs: [PersistedChatTab]
     /// Optional sign emoji displayed to the left of the thread icon (e.g. 🛑, ✅, ❓).
     public var signEmoji: String?
     /// Optional 1–5 priority. `nil` means no priority is set and nothing renders.
@@ -629,6 +676,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case hasEverDoneWork
         case persistedWebTabs
         case persistedDraftTabs
+        case persistedChatTabs
         case signEmoji
         case priority
         case syncWithJira
@@ -680,6 +728,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         hasEverDoneWork: Bool = false,
         persistedWebTabs: [PersistedWebTab] = [],
         persistedDraftTabs: [PersistedDraftTab] = [],
+        persistedChatTabs: [PersistedChatTab] = [],
         signEmoji: String? = nil,
         priority: Int? = nil,
         syncWithJira: Bool = false
@@ -728,6 +777,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.hasEverDoneWork = hasEverDoneWork
         self.persistedWebTabs = persistedWebTabs
         self.persistedDraftTabs = persistedDraftTabs
+        self.persistedChatTabs = persistedChatTabs
         self.signEmoji = signEmoji
         self.priority = priority.map { max(1, min(5, $0)) }
         self.syncWithJira = syncWithJira
@@ -752,6 +802,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         localFileSyncEntriesSnapshot = completed.localFileSyncEntriesSnapshot
         persistedWebTabs = completed.persistedWebTabs
         persistedDraftTabs = completed.persistedDraftTabs
+        persistedChatTabs = completed.persistedChatTabs
     }
 
     public func withProjectId(_ newProjectId: UUID) -> MagentThread {
@@ -799,6 +850,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             hasEverDoneWork: hasEverDoneWork,
             persistedWebTabs: persistedWebTabs,
             persistedDraftTabs: persistedDraftTabs,
+            persistedChatTabs: persistedChatTabs,
             signEmoji: signEmoji,
             priority: priority,
             syncWithJira: syncWithJira
@@ -878,6 +930,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         hasEverDoneWork = try container.decodeIfPresent(Bool.self, forKey: .hasEverDoneWork) ?? false
         persistedWebTabs = try container.decodeIfPresent([PersistedWebTab].self, forKey: .persistedWebTabs) ?? []
         persistedDraftTabs = try container.decodeIfPresent([PersistedDraftTab].self, forKey: .persistedDraftTabs) ?? []
+        persistedChatTabs = try container.decodeIfPresent([PersistedChatTab].self, forKey: .persistedChatTabs) ?? []
         signEmoji = try container.decodeIfPresent(String.self, forKey: .signEmoji)
         // Clamp any stray out-of-range values from older builds or manual edits.
         priority = try container.decodeIfPresent(Int.self, forKey: .priority).map { max(1, min(5, $0)) }
@@ -971,6 +1024,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         }
         if !persistedDraftTabs.isEmpty {
             try container.encode(persistedDraftTabs, forKey: .persistedDraftTabs)
+        }
+        if !persistedChatTabs.isEmpty {
+            try container.encode(persistedChatTabs, forKey: .persistedChatTabs)
         }
         try container.encodeIfPresent(signEmoji, forKey: .signEmoji)
         try container.encodeIfPresent(priority, forKey: .priority)

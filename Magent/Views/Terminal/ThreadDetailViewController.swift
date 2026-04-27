@@ -156,6 +156,7 @@ final class ThreadDetailViewController: NSViewController {
         case terminal(sessionName: String)
         case web(identifier: String)
         case draft(identifier: String)
+        case chat(identifier: String)
     }
     var tabItems: [TabItemView] = []
     var tabSlots: [TabSlot] = []
@@ -164,8 +165,10 @@ final class ThreadDetailViewController: NSViewController {
     /// Web tab entries in creation order (NOT display order).
     var webTabs: [WebTabEntry] = []
     var draftTabs: [DraftTabEntry] = []
+    var chatTabs: [ChatTabEntry] = []
     var activeDraftTabId: String?
     var activeWebTabId: String?
+    var activeChatTabId: String?
     var currentTabIndex = 0
     /// Index of the non-closable "primary" tab. -1 means all tabs are closable (main threads).
     var primaryTabIndex = 0
@@ -771,7 +774,7 @@ final class ThreadDetailViewController: NSViewController {
 
         var sessions: [String] = thread.tmuxSessionNames
         let hasNonTerminalTabsOnly = sessions.isEmpty
-            && (!thread.persistedWebTabs.isEmpty || !thread.persistedDraftTabs.isEmpty)
+            && (!thread.persistedWebTabs.isEmpty || !thread.persistedDraftTabs.isEmpty || !thread.persistedChatTabs.isEmpty)
 
         if sessions.isEmpty && !hasNonTerminalTabsOnly {
             // Thread has no tabs at all — create a fallback terminal session so the user
@@ -816,14 +819,16 @@ final class ThreadDetailViewController: NSViewController {
             terminalViews.removeAll()
             tabItems.removeAll()
 
-            // Clear any existing web/draft tabs from a previous setupTabs call
+            // Clear any existing web/draft/chat tabs from a previous setupTabs call
             for wt in webTabs { wt.view?.removeFromSuperview() }
             webTabs.removeAll()
             for dt in draftTabs { dt.viewController?.view.removeFromSuperview() }
             draftTabs.removeAll()
+            for ct in chatTabs { ct.viewController?.view.removeFromSuperview() }
             tabSlots.removeAll()
             activeWebTabId = nil
             activeDraftTabId = nil
+            activeChatTabId = nil
 
             for (i, sessionName) in orderedSessions.enumerated() {
                 let title = thread.displayName(for: sessionName, at: i)
@@ -842,13 +847,14 @@ final class ThreadDetailViewController: NSViewController {
 
             // Restore persisted draft tabs (view controllers created lazily on selection).
             restoreDraftTabItems()
+            restoreChatTabItems()
 
             rebuildTabBar()
             rebindAllTabActions()
         }
 
         // Non-terminal thread: skip terminal session setup entirely, just restore the
-        // selected draft/web tab instead of inventing a fallback tmux session name.
+        // selected draft/web/chat tab instead of inventing a fallback tmux session name.
         if hasNonTerminalTabsOnly {
             await MainActor.run {
                 dismissLoadingOverlay()
@@ -861,14 +867,14 @@ final class ThreadDetailViewController: NSViewController {
             return
         }
 
-        // Resolve whether the last-selected tab was a non-terminal tab (web/draft).
+        // Resolve whether the last-selected tab was a non-terminal tab (web/draft/chat).
         // If so, we still prepare terminal sessions in the background but select the
         // non-terminal tab at the end.
         let nonTerminalSlotIndex: Int? = await MainActor.run {
             resolveLastSelectedSlotIndex().flatMap { idx in
                 guard idx < tabSlots.count else { return nil }
                 switch tabSlots[idx] {
-                case .web, .draft: return idx
+                case .web, .draft, .chat: return idx
                 case .terminal: return nil
                 }
             }
@@ -985,7 +991,7 @@ final class ThreadDetailViewController: NSViewController {
         return terminalViews[idx]
     }
 
-    /// The terminal view for the currently selected tab, or nil if it's a web tab.
+    /// The terminal view for the currently selected tab, or nil for non-terminal tabs.
     func currentTerminalView() -> TerminalSurfaceView? {
         guard let name = currentSessionName() else { return nil }
         return terminalView(forSession: name)
@@ -1002,7 +1008,7 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     /// Display index for any persisted tab identifier (terminal session name,
-    /// web identifier, or draft identifier), or nil.
+    /// web/draft/chat identifier), or nil.
     func displayIndex(forIdentifier id: String) -> Int? {
         slotIndex(forIdentifier: id)
     }
@@ -1029,13 +1035,14 @@ final class ThreadDetailViewController: NSViewController {
         return nil
     }
 
-    /// Find the tab slot index for a given identifier (session name, web id, or draft id).
+    /// Find the tab slot index for a given identifier (session name or non-terminal id).
     private func slotIndex(forIdentifier id: String) -> Int? {
         tabSlots.firstIndex { slot in
             switch slot {
             case .terminal(let name): return name == id
             case .web(let identifier): return identifier == id
             case .draft(let identifier): return identifier == id
+            case .chat(let identifier): return identifier == id
             }
         }
     }
