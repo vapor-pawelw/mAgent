@@ -124,7 +124,7 @@ final class RateLimitService {
         lastSubmittedPrompt: String?,
         now: Date
     ) -> Date {
-        guard let cached = rateLimitFingerprintCache[detection.fingerprint],
+        guard let cached = activeCachedRateLimitEntry(for: detection)?.entry,
               cached.resetAt > now else {
             return detection.info.resetAt
         }
@@ -164,8 +164,62 @@ final class RateLimitService {
     private struct RateLimitDetection {
         var info: AgentRateLimitInfo
         var fingerprint: String
+        var legacyFingerprint: String?
         var hasRelativeReset: Bool
         var hasExplicitDateAnchor: Bool
+    }
+
+    private enum RateLimitCacheStaleReason {
+        static let promptChanged = "prompt_changed"
+        static let promptBecameAvailable = "prompt_became_available"
+        static let expiredResetAt = "expired_reset_at"
+        static let ignoredByUser = "ignored_by_user"
+        static let supersededByNewFingerprint = "superseded_by_new_fingerprint"
+    }
+
+    private func allFingerprintKeys(for detection: RateLimitDetection) -> [String] {
+        var keys = [detection.fingerprint]
+        if let legacy = detection.legacyFingerprint,
+           !legacy.isEmpty,
+           legacy != detection.fingerprint {
+            keys.append(legacy)
+        }
+        return keys
+    }
+
+    private func cachedRateLimitEntry(for detection: RateLimitDetection) -> (key: String, entry: RateLimitCacheEntry)? {
+        for key in allFingerprintKeys(for: detection) {
+            if let entry = rateLimitFingerprintCache[key] {
+                return (key, entry)
+            }
+        }
+        return nil
+    }
+
+    private func activeCachedRateLimitEntry(for detection: RateLimitDetection) -> (key: String, entry: RateLimitCacheEntry)? {
+        for key in allFingerprintKeys(for: detection) {
+            if let entry = rateLimitFingerprintCache[key], entry.staleAt == nil {
+                return (key, entry)
+            }
+        }
+        return nil
+    }
+
+    private func markRateLimitFingerprintStale(key: String, reason: String, now: Date) {
+        guard var entry = rateLimitFingerprintCache[key] else { return }
+        var changed = false
+        if entry.staleAt == nil {
+            entry.staleAt = now
+            changed = true
+        }
+        if entry.staleReason != reason {
+            entry.staleReason = reason
+            changed = true
+        }
+        if changed {
+            rateLimitFingerprintCache[key] = entry
+            rateLimitCacheDirty = true
+        }
     }
 
     /// Called when the rate-limit detection setting is toggled in Settings.
@@ -268,6 +322,13 @@ final class RateLimitService {
                     now: now
                 )
                 if isIgnoredRateLimitResetAt(ignoredResetAt, for: sessionAgent) {
+                    if let cached = activeCachedRateLimitEntry(for: detection) {
+                        markRateLimitFingerprintStale(
+                            key: cached.key,
+                            reason: RateLimitCacheStaleReason.ignoredByUser,
+                            now: now
+                        )
+                    }
                     if detectionEnabled {
                         if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
                             // keep prompt-based marker
@@ -280,7 +341,9 @@ final class RateLimitService {
 
                 // Check persisted fingerprint cache: if we've seen this exact text before,
                 // use the concrete resetAt from first detection instead of re-parsing.
-                if let cached = rateLimitFingerprintCache[detection.fingerprint] {
+                if let matchedCached = activeCachedRateLimitEntry(for: detection) {
+                    let cacheKey = matchedCached.key
+                    let cached = matchedCached.entry
                     // Session-anchored entries (time-only resets like "resets 11am"):
                     // only match against the same session where first detected.
                     // Different session → treat as cache miss (allow fresh detection).
@@ -291,9 +354,12 @@ final class RateLimitService {
                             // Same session. Check if the prompt changed (user moved on).
                             let currentPrompt = thread.submittedPromptsBySession[sessionName]?.last
                             if cached.anchorPrompt != nil && currentPrompt != cached.anchorPrompt {
-                                // Prompt changed — prune stale entry and skip.
-                                rateLimitFingerprintCache.removeValue(forKey: detection.fingerprint)
-                                rateLimitCacheDirty = true
+                                // Prompt changed — tombstone stale entry and skip.
+                                markRateLimitFingerprintStale(
+                                    key: cacheKey,
+                                    reason: RateLimitCacheStaleReason.promptChanged,
+                                    now: now
+                                )
                                 if detectionEnabled {
                                     if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
                                         // keep prompt-based marker
@@ -306,8 +372,11 @@ final class RateLimitService {
                             // Prompt-anchored with nil anchorPrompt (empty TOC at detection):
                             // if TOC now has prompts, the user interacted — prune.
                             if cached.anchorPrompt == nil && currentPrompt != nil {
-                                rateLimitFingerprintCache.removeValue(forKey: detection.fingerprint)
-                                rateLimitCacheDirty = true
+                                markRateLimitFingerprintStale(
+                                    key: cacheKey,
+                                    reason: RateLimitCacheStaleReason.promptBecameAvailable,
+                                    now: now
+                                )
                                 if detectionEnabled {
                                     if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
                                         // keep prompt-based marker
@@ -320,6 +389,11 @@ final class RateLimitService {
 
                             if cached.resetAt <= now {
                                 // Expired — suppress re-detection for this session.
+                                markRateLimitFingerprintStale(
+                                    key: cacheKey,
+                                    reason: RateLimitCacheStaleReason.expiredResetAt,
+                                    now: now
+                                )
                                 if detectionEnabled {
                                     if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
                                         // keep prompt-based marker
@@ -331,6 +405,21 @@ final class RateLimitService {
                             }
                             // Still active — use cached resetAt.
                             guard detectionEnabled else { continue }
+                            if cacheKey != detection.fingerprint {
+                                markRateLimitFingerprintStale(
+                                    key: cacheKey,
+                                    reason: RateLimitCacheStaleReason.supersededByNewFingerprint,
+                                    now: now
+                                )
+                                rateLimitFingerprintCache[detection.fingerprint] = RateLimitCacheEntry.preservingFirstDetectedAt(
+                                    resetAt: cached.resetAt,
+                                    anchorSession: cached.anchorSession,
+                                    anchorPrompt: cached.anchorPrompt,
+                                    now: now,
+                                    existingEntry: cached
+                                )
+                                rateLimitCacheDirty = true
+                            }
                             var info = detection.info
                             info.resetAt = cached.resetAt
                             if updatedRateLimits[sessionName] != info {
@@ -347,6 +436,11 @@ final class RateLimitService {
                     } else {
                         // Non-anchored (date-anchored) entry — standard path.
                         if cached.resetAt <= now {
+                            markRateLimitFingerprintStale(
+                                key: cacheKey,
+                                reason: RateLimitCacheStaleReason.expiredResetAt,
+                                now: now
+                            )
                             if detectionEnabled {
                                 if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
                                     // keep prompt-based marker
@@ -357,6 +451,21 @@ final class RateLimitService {
                             continue
                         }
                         guard detectionEnabled else { continue }
+                        if cacheKey != detection.fingerprint {
+                            markRateLimitFingerprintStale(
+                                key: cacheKey,
+                                reason: RateLimitCacheStaleReason.supersededByNewFingerprint,
+                                now: now
+                            )
+                            rateLimitFingerprintCache[detection.fingerprint] = RateLimitCacheEntry.preservingFirstDetectedAt(
+                                resetAt: cached.resetAt,
+                                anchorSession: cached.anchorSession,
+                                anchorPrompt: cached.anchorPrompt,
+                                now: now,
+                                existingEntry: cached
+                            )
+                            rateLimitCacheDirty = true
+                        }
                         var info = detection.info
                         info.resetAt = cached.resetAt
                         if updatedRateLimits[sessionName] != info {
@@ -376,10 +485,21 @@ final class RateLimitService {
                 // Always cache, even when detection is disabled, so re-enabling works correctly.
                 // Store session + prompt so stale pane text (relative durations, bare times,
                 // day-relative phrases) doesn't get re-anchored on subsequent scans/days.
-                rateLimitFingerprintCache[detection.fingerprint] = RateLimitCacheEntry(
+                let existingFingerprintEntry = cachedRateLimitEntry(for: detection)
+                if let existingFingerprintEntry,
+                   existingFingerprintEntry.key != detection.fingerprint {
+                    markRateLimitFingerprintStale(
+                        key: existingFingerprintEntry.key,
+                        reason: RateLimitCacheStaleReason.supersededByNewFingerprint,
+                        now: now
+                    )
+                }
+                rateLimitFingerprintCache[detection.fingerprint] = RateLimitCacheEntry.preservingFirstDetectedAt(
                     resetAt: detection.info.resetAt,
                     anchorSession: sessionName,
-                    anchorPrompt: thread.submittedPromptsBySession[sessionName]?.last
+                    anchorPrompt: thread.submittedPromptsBySession[sessionName]?.last,
+                    now: now,
+                    existingEntry: existingFingerprintEntry?.entry
                 )
                 rateLimitCacheDirty = true
 
@@ -933,7 +1053,7 @@ final class RateLimitService {
             return false
         }
 
-        if let cached = rateLimitFingerprintCache[detection.fingerprint] {
+        if let cached = activeCachedRateLimitEntry(for: detection)?.entry {
             return cached.resetAt > now
         }
         return detection.info.resetAt > now
@@ -997,6 +1117,7 @@ final class RateLimitService {
     private static let rateLimitFocusContextAfterLines = 8
     private static let claudePromptDeadlineLookbackLines = 14
     private static let maxRateLimitFingerprintLength = 512
+    private static let rateLimitFingerprintVersion = "v2"
 
     private func rateLimitDetection(
         from paneContent: String,
@@ -1024,16 +1145,31 @@ final class RateLimitService {
             return nil
         }
 
-        guard let indicatorAnchor = latestRateLimitIndicatorAnchor(in: tail) else { return nil }
+        let sanitizedTail = tail.filter { line in
+            !isLikelyNarrativeRateLimitLine(
+                line
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+            )
+        }
+        guard let indicatorAnchor = latestRateLimitIndicatorAnchor(in: sanitizedTail) else { return nil }
 
-        let focusText = rateLimitFocusText(from: tail, anchorIndex: indicatorAnchor)
+        let focusText = rateLimitFocusText(from: sanitizedTail, anchorIndex: indicatorAnchor)
+        guard hasActiveRateLimitBlocker(in: focusText) else { return nil }
         guard let parsed = parseResetDate(from: focusText, now: now) else { return nil }
 
         let resetDescription = extractRateLimitResetDescription(from: focusText)
-        let fingerprint = rateLimitFingerprint(from: focusText, fallback: resetDescription)
+        let legacyFingerprint = rateLimitFingerprint(from: focusText, fallback: resetDescription)
+        let fingerprint = rateLimitFingerprintV2(
+            resetAt: parsed.resetAt,
+            agent: agent,
+            detectorMode: "pane_generic",
+            focusText: focusText
+        )
         return RateLimitDetection(
             info: AgentRateLimitInfo(resetAt: parsed.resetAt, resetDescription: resetDescription, detectedAt: now, agentType: agent),
             fingerprint: fingerprint,
+            legacyFingerprint: legacyFingerprint == fingerprint ? nil : legacyFingerprint,
             hasRelativeReset: parsed.hasRelativeReset,
             hasExplicitDateAnchor: parsed.hasExplicitDateAnchor
         )
@@ -1092,7 +1228,12 @@ final class RateLimitService {
         }
 
         let relevantLines = tail.filter { line in
-            let normalized = line.lowercased()
+            let normalized = line
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            guard !isLikelyNarrativeRateLimitLine(normalized) else {
+                return false
+            }
             return normalized.contains("reset")
                 || normalized.contains("available")
                 || normalized.contains("until")
@@ -1179,13 +1320,20 @@ final class RateLimitService {
             guard let parsed = parseResetDate(from: focusText, now: now) else { continue }
 
             let resetDescription = extractRateLimitResetDescription(from: focusText)
-            let fingerprint = rateLimitFingerprint(
+            let legacyFingerprint = rateLimitFingerprint(
                 from: focusText,
                 fallback: resetDescription
+            )
+            let fingerprint = rateLimitFingerprintV2(
+                resetAt: parsed.resetAt,
+                agent: .claude,
+                detectorMode: "claude_prompt_menu",
+                focusText: focusText
             )
             return RateLimitDetection(
                 info: AgentRateLimitInfo(resetAt: parsed.resetAt, resetDescription: resetDescription, detectedAt: now, agentType: .claude),
                 fingerprint: fingerprint,
+                legacyFingerprint: legacyFingerprint == fingerprint ? nil : legacyFingerprint,
                 hasRelativeReset: parsed.hasRelativeReset,
                 hasExplicitDateAnchor: parsed.hasExplicitDateAnchor
             )
@@ -1270,7 +1418,8 @@ final class RateLimitService {
             let normalized = line
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased()
-            guard !normalized.isEmpty else { return nil }
+            guard !normalized.isEmpty,
+                  !isLikelyNarrativeRateLimitLine(normalized) else { return nil }
             return (index, normalized)
         }
         guard !indexedRecentLines.isEmpty else { return nil }
@@ -1314,6 +1463,47 @@ final class RateLimitService {
         return hasWeakKeyword && hasBlockingContext
     }
 
+    private func hasActiveRateLimitBlocker(in focusText: String) -> Bool {
+        let normalized = focusText
+            .lowercased()
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return false }
+        if isStrongRateLimitIndicator(normalized) {
+            return true
+        }
+        guard hasWeakRateLimitSignal(in: normalized) else {
+            return false
+        }
+        return normalized.contains("reset")
+            || normalized.contains("retry")
+            || normalized.contains("try again")
+            || normalized.contains("available")
+            || normalized.contains("until")
+    }
+
+    /// Filters out quoted/narrative lines that can legitimately mention
+    /// rate-limit text but are not active blocking prompts.
+    private func isLikelyNarrativeRateLimitLine(_ normalizedText: String) -> Bool {
+        guard !normalizedText.isEmpty else { return false }
+        if normalizedText.first == "\u{276F}" || normalizedText.first == "\u{203A}" {
+            return true // user prompt lines
+        }
+        if normalizedText.hasPrefix("- ")
+            || normalizedText.hasPrefix("* ")
+            || normalizedText.hasPrefix("• ")
+            || normalizedText.hasPrefix("> ")
+            || normalizedText.hasPrefix("│ ")
+            || normalizedText.hasPrefix("⏺ ") {
+            return true
+        }
+        return normalizedText.contains("fingerprint:")
+            || normalizedText.contains("fingerprint=")
+            || normalizedText.contains("anchorprompt")
+            || normalizedText.contains("anchorsession")
+            || normalizedText.contains("resetat:")
+    }
+
     private func rateLimitFocusText(from tail: [String], anchorIndex: Int) -> String {
         guard !tail.isEmpty else { return "" }
 
@@ -1322,7 +1512,12 @@ final class RateLimitService {
         let context = Array(tail[start...end])
 
         let focusLines = context.filter { line in
-            let normalized = line.lowercased()
+            let normalized = line
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            guard !isLikelyNarrativeRateLimitLine(normalized) else {
+                return false
+            }
             return normalized.contains("rate")
                 || normalized.contains("limit")
                 || normalized.contains("quota")
@@ -1352,6 +1547,49 @@ final class RateLimitService {
             return String(normalizedFallback.prefix(Self.maxRateLimitFingerprintLength))
         }
         return "__empty_rate_limit_fingerprint__"
+    }
+
+    private func rateLimitFingerprintV2(
+        resetAt: Date,
+        agent: AgentType,
+        detectorMode: String,
+        focusText: String
+    ) -> String {
+        let resetMinuteBucket = Int(resetAt.timeIntervalSince1970) / 60
+        let indicatorClass = rateLimitIndicatorClass(from: focusText)
+        return [
+            Self.rateLimitFingerprintVersion,
+            agent.rawValue,
+            detectorMode,
+            indicatorClass,
+            String(resetMinuteBucket),
+        ].joined(separator: "|")
+    }
+
+    private func rateLimitIndicatorClass(from focusText: String) -> String {
+        let normalized = focusText
+            .lowercased()
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.contains("you've hit your limit") || normalized.contains("hit your limit") {
+            return "hit_limit"
+        }
+        if normalized.contains("hit your usage limit") || normalized.contains("usage limit") {
+            return "usage_limit"
+        }
+        if normalized.contains("too many requests") {
+            return "too_many_requests"
+        }
+        if normalized.contains("quota exceeded") {
+            return "quota_exceeded"
+        }
+        if normalized.contains("retry after") || normalized.contains("try again") {
+            return "retry_after"
+        }
+        if normalized.contains("rate limit") || normalized.contains("rate limited") {
+            return "rate_limit"
+        }
+        return "generic_limit"
     }
 
     private func parseRelativeResetDate(from text: String, now: Date) -> Date? {

@@ -60,6 +60,7 @@ All notable changes to this project will be documented in this file.
 - Added `GPT 5.5` as a selectable Codex model in model pickers and model validation, and made Review-mode Codex launches default to `GPT 5.5`.
 
 #### Bug Fixes
+- Hardened agent rate-limit detection so quoted/logged rate-limit text no longer spawns false active limits, fingerprints now use structured stable keys, and stale entries are tombstoned with traceable reasons instead of being hard-deleted.
 - Fixed Codex tabs failing to launch on macOS with `env: -u: No such file or directory` — the managed-`CODEX_HOME` wrapper now places option flags before variable assignments so BSD `env` parses them correctly.
 - Codex sessions launched from Magent now use a shared Magent-managed `CODEX_HOME` that mirrors the user's `~/.codex` (skills, auth, config, docs, etc.) while keeping Magent IPC AGENTS hints scoped to Magent sessions only. Magent no longer writes its IPC block into the global `~/.codex/AGENTS.md`, and edits to global `~/.codex/AGENTS.md` or top-level `~/.codex` entries now resync into the managed home automatically (session monitor cadence).
 - Codex launch now respects user environment defaults for color handling. Magent no longer clears inherited `NO_COLOR`, so users who set `NO_COLOR=1` keep no-color output while default environments retain full color.

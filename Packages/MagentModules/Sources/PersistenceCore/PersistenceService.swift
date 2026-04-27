@@ -16,13 +16,52 @@ public struct RateLimitCacheEntry: Codable, Equatable {
     public var anchorSession: String?
     /// The latest user prompt (from TOC) when this time-only rate limit was first
     /// detected. Nil for date-anchored entries or when TOC was empty at detection.
-    /// When the prompt changes, the entry is pruned (user moved on).
+    /// When the prompt changes, the entry is marked stale (user moved on).
     public var anchorPrompt: String?
+    /// Timestamp when this fingerprint key was first observed.
+    /// This is intentionally stable per fingerprint key and should not be updated
+    /// on subsequent detections for the same key.
+    public var detectedAt: Date?
+    /// Tombstone timestamp when this fingerprint was marked stale.
+    /// Stale entries are kept temporarily for traceability and to avoid immediate
+    /// re-anchoring from lingering pane text.
+    public var staleAt: Date?
+    /// Machine-readable reason why this fingerprint was marked stale.
+    public var staleReason: String?
 
-    public init(resetAt: Date, anchorSession: String? = nil, anchorPrompt: String? = nil) {
+    public init(
+        resetAt: Date,
+        anchorSession: String? = nil,
+        anchorPrompt: String? = nil,
+        detectedAt: Date? = nil,
+        staleAt: Date? = nil,
+        staleReason: String? = nil
+    ) {
         self.resetAt = resetAt
         self.anchorSession = anchorSession
         self.anchorPrompt = anchorPrompt
+        self.detectedAt = detectedAt
+        self.staleAt = staleAt
+        self.staleReason = staleReason
+    }
+
+    /// Builds a cache entry while preserving the original `detectedAt` value for
+    /// existing fingerprint keys. New keys get `detectedAt = now`.
+    public static func preservingFirstDetectedAt(
+        resetAt: Date,
+        anchorSession: String? = nil,
+        anchorPrompt: String? = nil,
+        now: Date,
+        existingEntry: RateLimitCacheEntry? = nil
+    ) -> RateLimitCacheEntry {
+        RateLimitCacheEntry(
+            resetAt: resetAt,
+            anchorSession: anchorSession,
+            anchorPrompt: anchorPrompt,
+            detectedAt: existingEntry?.detectedAt ?? now,
+            staleAt: nil,
+            staleReason: nil
+        )
     }
 }
 
@@ -685,10 +724,19 @@ public final class PersistenceService {
         // so the prompt comparison at scan time can suppress stale pane text. After 7
         // days the tmux pane will have long since scrolled past the message.
         let promptAnchorTTL: TimeInterval = 7 * 86_400
+        // Stale tombstones are kept for 7 days for debugging/traceability and to
+        // reduce immediate re-anchoring churn from lingering pane text.
+        let staleTombstoneTTL: TimeInterval = 7 * 86_400
         let pruned = cache.reduce(into: [String: RateLimitCacheEntry]()) { result, entry in
             let normalizedKey = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !normalizedKey.isEmpty,
                   normalizedKey.count <= maxFingerprintLength else {
+                return
+            }
+            if let staleAt = entry.value.staleAt {
+                if now.timeIntervalSince(staleAt) < staleTombstoneTTL {
+                    result[normalizedKey] = entry.value
+                }
                 return
             }
             if entry.value.resetAt > now {
