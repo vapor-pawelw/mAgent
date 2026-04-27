@@ -2,7 +2,7 @@
 
 ## Overview
 
-When the user submits the New Thread or New Tab sheet, their prompt is written to a crash-recovery temp file in `/tmp` before the draft is cleared. If the app crashes between submission and tmux injection, the file survives and surfaces as a recovery banner on the next launch. The temp file also stores the original picker mode (`agent` / `terminal`) plus model/reasoning metadata so the recovery sheet can reopen in the same configuration.
+When the user submits the New Thread or New Tab sheet, their prompt is written to a crash-recovery temp file in `/tmp` before the draft is cleared. If the app crashes between submission and tmux injection, the file survives and surfaces as a recovery banner on the next launch. The temp file also stores the original picker selection raw value (`agentRaw[:surface]`, `terminal`, or `web`) plus model/reasoning metadata so the recovery sheet can reopen in the same configuration.
 
 ## Non-tmux Tab Exemption
 

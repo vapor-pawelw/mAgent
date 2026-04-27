@@ -68,7 +68,7 @@ struct PendingInitialPrompt: Codable {
     let modelId: String?
     /// Selected reasoning level at submission time (e.g. "high", "max"). Nil = agent default.
     let reasoningLevel: String?
-    /// Original picker selection (`agent rawValue`, `terminal`, or `web`) for exact recovery.
+    /// Original picker selection (`agentRaw[:surface]`, `terminal`, or `web`) for exact recovery.
     let selectionRaw: String?
 
     init(
@@ -409,6 +409,112 @@ struct AgentLaunchSheetResult {
     let reasoningLevel: String?
 }
 
+private enum PiRuntimeReadiness: Equatable {
+    case ready(version: String)
+    case missingNode
+    case nodeTooOld(currentVersion: String)
+    case missingNpm
+    case missingPi
+    case brokenPi(details: String)
+
+    var shortDescription: String {
+        switch self {
+        case .ready(let version):
+            return "Ready (\(version))"
+        case .missingNode:
+            return "Node.js 20+ is required."
+        case .nodeTooOld(let currentVersion):
+            return "Node.js 20+ is required (found \(currentVersion))."
+        case .missingNpm:
+            return "npm is required."
+        case .missingPi:
+            return "Pi is not installed."
+        case .brokenPi(let details):
+            return details.isEmpty ? "Pi is installed but not usable." : details
+        }
+    }
+}
+
+private enum PiRuntimeInstaller {
+    private static let packageName = "@mariozechner/pi-coding-agent"
+    private static let minimumNodeMajor = 20
+
+    static func checkReadiness() async -> PiRuntimeReadiness {
+        let nodeVersionResult = await ShellExecutor.execute("node --version")
+        guard nodeVersionResult.exitCode == 0 else { return .missingNode }
+        let nodeVersion = nodeVersionResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let nodeMajor = parseLeadingMajorVersion(nodeVersion), nodeMajor >= minimumNodeMajor else {
+            return .nodeTooOld(currentVersion: nodeVersion.isEmpty ? "unknown" : nodeVersion)
+        }
+
+        let npmVersionResult = await ShellExecutor.execute("npm --version")
+        guard npmVersionResult.exitCode == 0 else { return .missingNpm }
+
+        let piVersionResult = await ShellExecutor.execute("pi --version")
+        if piVersionResult.exitCode == 0 {
+            let version = piVersionResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .ready(version: version.isEmpty ? "unknown" : version)
+        }
+        let stderr = piVersionResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        if stderr.lowercased().contains("not found") || stderr.isEmpty {
+            return .missingPi
+        }
+        return .brokenPi(details: stderr)
+    }
+
+    static func installOrRepair() async -> Result<String, String> {
+        let readiness = await checkReadiness()
+        switch readiness {
+        case .ready(let version):
+            return .success(version)
+        case .missingNode, .nodeTooOld, .missingNpm:
+            let brewExists = await commandExists("brew")
+            guard brewExists else {
+                return .failure("""
+                Missing prerequisites for Chat mode.
+
+                Install Homebrew first, then install Node.js 20+:
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+                brew install node
+                """)
+            }
+
+            let nodeInstallResult = await ShellExecutor.execute("brew install node")
+            guard nodeInstallResult.exitCode == 0 else {
+                let details = nodeInstallResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                return .failure(details.isEmpty ? "Failed to install Node.js via Homebrew." : details)
+            }
+        case .missingPi, .brokenPi:
+            break
+        }
+
+        let installResult = await ShellExecutor.execute("npm install -g \(packageName)")
+        guard installResult.exitCode == 0 else {
+            let details = installResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .failure(details.isEmpty ? "Failed to install Pi." : details)
+        }
+
+        let finalReadiness = await checkReadiness()
+        if case .ready(let version) = finalReadiness {
+            return .success(version)
+        }
+        return .failure(finalReadiness.shortDescription)
+    }
+
+    private static func parseLeadingMajorVersion(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let noPrefix = trimmed.hasPrefix("v") ? String(trimmed.dropFirst()) : trimmed
+        let majorRaw = noPrefix.split(separator: ".", maxSplits: 1).first.map(String.init) ?? noPrefix
+        return Int(majorRaw)
+    }
+
+    private static func commandExists(_ command: String) async -> Bool {
+        let result = await ShellExecutor.execute("command -v \(ShellExecutor.shellQuote(command)) >/dev/null 2>&1")
+        return result.exitCode == 0
+    }
+}
+
 /// A rounded chip view that shows accent-tinted background, adapting correctly to light/dark mode.
 private final class ContextChipView: NSView {
     override var wantsUpdateLayer: Bool { true }
@@ -456,6 +562,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private var pickerItems: [PickerItem] = []
     /// Tracks the mode we were in before the last picker change, so we save to the right draft on switch.
     private var previousMode: String = "agent"
+    /// Last validated picker tag. Used to restore selection when Chat runtime setup fails.
+    private var previousPickerTag: Int = 0
+    private var isProgrammaticPickerChange = false
+    private var chatSelectionValidationTask: Task<Void, Never>?
+    private var isChatInstallInProgress = false
 
     // Project picker — present when config.availableProjects has more than one entry.
     private var projectPickerItems: [Project] = []
@@ -472,16 +583,52 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let projectSwitchPreviewLimit = 120
 
     private enum PickerItem {
-        case agent(AgentType, isDefault: Bool)
+        case agent(AgentType, surface: AgentSurface, isDefault: Bool)
         case terminal
         case web
 
         var storageRaw: String {
             switch self {
-            case .agent(let type, _): return type.rawValue
+            case .agent(let type, let surface, _):
+                // Keep the legacy raw value when an agent has exactly one surface,
+                // so older persisted selections keep matching across upgrades.
+                if surface == .terminal, type.supportedSurfaces.count == 1 {
+                    return type.rawValue
+                }
+                return "\(type.rawValue):\(surface.rawValue)"
             case .terminal: return "terminal"
             case .web: return "web"
             }
+        }
+
+        func matchesStoredRaw(_ raw: String) -> Bool {
+            if storageRaw == raw {
+                return true
+            }
+            switch self {
+            case .agent(let type, let surface, _):
+                // Legacy fallback: pre-surface selections persisted only `agentRaw`.
+                if surface == .terminal, raw == type.rawValue {
+                    return true
+                }
+                // Forward-compat fallback: accept explicit terminal form even when
+                // the current agent has a single supported surface.
+                if surface == .terminal, raw == "\(type.rawValue):\(AgentSurface.terminal.rawValue)" {
+                    return true
+                }
+                return false
+            case .terminal:
+                return raw == "terminal"
+            case .web:
+                return raw == "web"
+            }
+        }
+
+        var requiresPiRuntime: Bool {
+            if case .agent(_, let surface, _) = self {
+                return surface == .chat
+            }
+            return false
         }
     }
 
@@ -522,6 +669,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
         updatePromptAreaEnabled()
         resizeWindowToFitContent()
+        previousPickerTag = agentPicker.selectedItem?.tag ?? 0
+        validateInitialChatSelectionAvailability()
     }
 
     required init?(coder: NSCoder) {
@@ -554,6 +703,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     func windowWillClose(_ notification: Notification) {
+        chatSelectionValidationTask?.cancel()
         if !didFinish {
             finish(with: nil)
         }
@@ -569,7 +719,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
 
         for agent in agents {
-            pickerItems.append(.agent(agent, isDefault: agent == config.defaultAgentType))
+            for surface in agent.supportedSurfaces {
+                let isDefault = agent == config.defaultAgentType && surface == agent.defaultSurface
+                pickerItems.append(.agent(agent, surface: surface, isDefault: isDefault))
+            }
         }
         if !config.isAgentOnly {
             pickerItems.append(.terminal)
@@ -578,8 +731,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         for (i, item) in pickerItems.enumerated() {
             switch item {
-            case .agent(let type, let isDefault):
-                let title = isDefault ? "\(type.displayName) (Default)" : type.displayName
+            case .agent(let type, let surface, let isDefault):
+                let baseTitle = type.displayName(for: surface)
+                let title = isDefault ? "\(baseTitle) (Default)" : baseTitle
                 agentPicker.addItem(withTitle: title)
                 agentPicker.lastItem?.tag = i
             case .terminal:
@@ -600,7 +754,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private func applyLastSelection() {
         guard PersistenceService.shared.loadSettings().rememberLastTypeSelection else { return }
         guard let raw = AgentLastSelectionStore.lastSelection(for: config.draftScope),
-              let index = pickerItems.firstIndex(where: { $0.storageRaw == raw }) else {
+              let index = pickerIndex(forStoredRaw: raw) else {
             return
         }
         agentPicker.selectItem(withTag: index)
@@ -608,17 +762,23 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     private func applyRecoverySelection(_ prefill: AgentLaunchSheetPrefill) {
         if let selectionRaw = prefill.selectionRaw,
-           let index = pickerItems.firstIndex(where: { $0.storageRaw == selectionRaw }) {
+           let index = pickerIndex(forStoredRaw: selectionRaw) {
             agentPicker.selectItem(withTag: index)
             return
         }
 
         guard let agentType = prefill.agentType,
               let index = pickerItems.firstIndex(where: {
-                  if case .agent(let t, _) = $0 { return t == agentType }
+                  if case .agent(let t, let surface, _) = $0 {
+                      return t == agentType && surface == agentType.defaultSurface
+                  }
                   return false
               }) else { return }
         agentPicker.selectItem(withTag: index)
+    }
+
+    private func pickerIndex(forStoredRaw raw: String) -> Int? {
+        pickerItems.firstIndex(where: { $0.matchesStoredRaw(raw) })
     }
 
     private func applyRecoveryModelReasoningSelection(_ prefill: AgentLaunchSheetPrefill) {
@@ -1507,6 +1667,37 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     // MARK: - Agent picker
 
     @objc private func agentPickerChanged() {
+        guard !isProgrammaticPickerChange else {
+            applyPickerSelectionChange(rememberPickerTag: false)
+            return
+        }
+        guard let selectedTag = agentPicker.selectedItem?.tag,
+              let item = selectedPickerItem() else {
+            return
+        }
+
+        chatSelectionValidationTask?.cancel()
+
+        guard item.requiresPiRuntime else {
+            applyPickerSelectionChange()
+            return
+        }
+
+        chatSelectionValidationTask = Task { [weak self] in
+            guard let self else { return }
+            let canUseChat = await self.ensureChatRuntimeReadyForSelection()
+            guard !Task.isCancelled else { return }
+            guard self.agentPicker.selectedItem?.tag == selectedTag else { return }
+
+            if canUseChat {
+                self.applyPickerSelectionChange()
+            } else {
+                self.revertPickerSelectionToPreviousTag()
+            }
+        }
+    }
+
+    private func applyPickerSelectionChange(rememberPickerTag: Bool = true) {
         let newMode = currentMode
         populateModelReasoningPickers()
         applyLastModelReasoningSelection()
@@ -1514,6 +1705,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         guard newMode != previousMode else {
             updatePromptAreaEnabled()
             resizeWindowToFitContent()
+            if rememberPickerTag {
+                previousPickerTag = agentPicker.selectedItem?.tag ?? previousPickerTag
+            }
             return
         }
         // Save current text to the mode we're leaving, then load the new mode's draft
@@ -1523,6 +1717,126 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         applyPrefillIfNeeded()
         updatePromptAreaEnabled()
         resizeWindowToFitContent()
+        if rememberPickerTag {
+            previousPickerTag = agentPicker.selectedItem?.tag ?? previousPickerTag
+        }
+    }
+
+    private func revertPickerSelectionToPreviousTag() {
+        isProgrammaticPickerChange = true
+        agentPicker.selectItem(withTag: previousPickerTag)
+        isProgrammaticPickerChange = false
+        applyPickerSelectionChange(rememberPickerTag: false)
+        NSSound.beep()
+    }
+
+    private func validateInitialChatSelectionAvailability() {
+        guard let selectedTag = agentPicker.selectedItem?.tag,
+              let item = selectedPickerItem(),
+              item.requiresPiRuntime else {
+            return
+        }
+
+        chatSelectionValidationTask?.cancel()
+        chatSelectionValidationTask = Task { [weak self] in
+            guard let self else { return }
+            let readiness = await PiRuntimeInstaller.checkReadiness()
+            guard !Task.isCancelled else { return }
+            guard self.agentPicker.selectedItem?.tag == selectedTag else { return }
+
+            if case .ready = readiness {
+                return
+            }
+            guard let fallbackTag = self.fallbackPickerTagForUnavailableChat(from: item) else { return }
+
+            self.isProgrammaticPickerChange = true
+            self.agentPicker.selectItem(withTag: fallbackTag)
+            self.isProgrammaticPickerChange = false
+            self.applyPickerSelectionChange()
+        }
+    }
+
+    private func fallbackPickerTagForUnavailableChat(from item: PickerItem) -> Int? {
+        if case .agent(let type, _, _) = item,
+           let tag = pickerItems.firstIndex(where: {
+               if case .agent(let candidateType, let candidateSurface, _) = $0 {
+                   return candidateType == type && candidateSurface == .terminal
+               }
+               return false
+           }) {
+            return tag
+        }
+        return pickerItems.firstIndex(where: { !$0.requiresPiRuntime })
+    }
+
+    private func ensureChatRuntimeReadyForSelection() async -> Bool {
+        guard !isChatInstallInProgress else { return false }
+
+        let readiness = await PiRuntimeInstaller.checkReadiness()
+        if case .ready = readiness {
+            return true
+        }
+
+        guard shouldStartPiInstall(readiness: readiness) else { return false }
+        isChatInstallInProgress = true
+        setChatInstallControlsEnabled(false)
+        let previousAcceptTitle = acceptButton.title
+        acceptButton.title = "Installing Pi..."
+        defer {
+            acceptButton.title = previousAcceptTitle
+            setChatInstallControlsEnabled(true)
+            isChatInstallInProgress = false
+            updatePromptAreaEnabled()
+        }
+
+        let install = await PiRuntimeInstaller.installOrRepair()
+        switch install {
+        case .success:
+            return true
+        case .failure(let message):
+            showPiInstallFailure(message: message)
+            return false
+        }
+    }
+
+    private func setChatInstallControlsEnabled(_ enabled: Bool) {
+        agentPicker.isEnabled = enabled
+        modelPicker.isEnabled = enabled
+        reasoningPicker.isEnabled = enabled
+        acceptButton.isEnabled = enabled
+        cancelButton.isEnabled = enabled
+        projectPicker?.isEnabled = enabled
+        sectionPicker.isEnabled = enabled
+        titleField.isEnabled = enabled
+        descriptionField.isEnabled = enabled
+        branchField.isEnabled = enabled
+        baseBranchField.isEnabled = enabled
+        promptTextView.isEditable = enabled
+    }
+
+    private func shouldStartPiInstall(readiness: PiRuntimeReadiness) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Install Chat Runtime"
+        alert.informativeText = """
+        Chat mode requires Pi and its prerequisites.
+
+        Magent can install or repair this now.
+
+        Status: \(readiness.shortDescription)
+        """
+        alert.addButton(withTitle: "Install")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func showPiInstallFailure(message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Pi installation failed"
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     private func selectedPickerItem() -> PickerItem? {
@@ -1600,7 +1914,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     /// Returns the currently selected agent type (non-custom), or nil for terminal/web/custom.
     private var selectedAgentTypeForModelPicker: AgentType? {
         guard let item = selectedPickerItem() else { return nil }
-        if case .agent(let type, _) = item, type != .custom { return type }
+        if case .agent(let type, _, _) = item, type != .custom { return type }
         return nil
     }
 
@@ -1825,6 +2139,16 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func performAccept(item: PickerItem, rawPrompt: String, rawDesc: String, rawBranch: String, rawBaseBranch: String, rawTitle: String) {
+        if case .agent(_, let surface, _) = item, surface == .chat {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "Chat mode is not available yet"
+            alert.informativeText = "Chat runtime setup is supported, but creating Chat tabs/threads is still in progress in this build."
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+
         let isDraft = config.showDraftCheckbox && draftCheckbox.state == .on
 
         AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
@@ -1841,7 +2165,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         // content is safe even if the app crashes during thread/tab creation.
         // Web tabs don't go through tmux injection, so skip crash-recovery for them.
         let agentType: AgentType? = {
-            if case .agent(let t, _) = item { return t }
+            if case .agent(let t, _, _) = item { return t }
             return nil
         }()
         let pendingPromptFileURL: URL?
@@ -1905,7 +2229,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 modelId: nil,
                 reasoningLevel: nil
             ))
-        case .agent(let type, _):
+        case .agent(let type, _, _):
             finish(with: AgentLaunchSheetResult(
                 agentType: type,
                 useAgentCommand: true,

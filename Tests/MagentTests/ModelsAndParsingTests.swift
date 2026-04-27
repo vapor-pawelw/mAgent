@@ -647,6 +647,14 @@ struct AgentTypeCapabilitiesTests {
         #expect(AgentType.custom.defaultSurface == .terminal)
         #expect(!AgentType.custom.supportsResume)
     }
+
+    @Test("Surface display names add suffix only for multi-surface agents")
+    func surfaceDisplayNames() {
+        #expect(AgentType.claude.displayName(for: .terminal) == "Claude (Terminal)")
+        #expect(AgentType.claude.displayName(for: .chat) == "Claude (Chat)")
+        #expect(AgentType.codex.displayName(for: .terminal) == "Codex (Terminal)")
+        #expect(AgentType.custom.displayName(for: .terminal) == "Custom")
+    }
 }
 
 // MARK: - ThreadSection decoding & color

@@ -115,6 +115,7 @@ Type [picker]  Model [picker]  Reasoning [picker]
 
 The launch sheet uses a wider default content width so the three pickers have enough room to stay readable on one line without crowding the prompt field below.
 
+- **Type picker**: built from `AgentType.capabilities` in `Packages/MagentModules/Sources/MagentModels/AgentType.swift` (single source of truth for agent/surface support). Agents with multiple surfaces render as separate rows (for example `Claude (Terminal)`, `Claude (Chat)`).
 - **Model picker**: "Auto" + models from JSON for the selected agent.
 - **Reasoning picker**: "Auto" + reasoning levels. Items update when:
   - Agent changes (load that agent's reasoning levels).
@@ -123,6 +124,13 @@ The launch sheet uses a wider default content width so the three pickers have en
 Model and Reasoning pickers are **hidden** (individually, not the whole row) when agent is `.custom` or Terminal or Web.
 
 "Auto" means no flags are passed — the agent uses its own configured default.
+
+### Chat Surface Runtime Gate
+
+- Selecting a Chat surface runs a runtime readiness check for `pi`, Node.js (20+), and `npm`.
+- If prerequisites are missing, the sheet offers in-app install/repair (`brew install node`, then `npm install -g @mariozechner/pi-coding-agent`).
+- If setup is cancelled or fails, picker selection reverts to the previously valid option so the sheet never stays on an unusable Chat choice.
+- Current implementation stage: Chat runtime setup is wired, but creating Chat tabs/threads is still blocked with an explicit "Chat mode is not available yet" alert.
 
 ### Fast Path (Option+click / Context Menu)
 
