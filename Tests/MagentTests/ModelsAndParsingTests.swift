@@ -923,3 +923,89 @@ struct CreatedTerminalTabReconcilerTests {
         #expect(placement == .append)
     }
 }
+
+// MARK: - RateLimitCacheEntry
+
+@Suite("RateLimitCacheEntry")
+struct RateLimitCacheEntryTests {
+
+    @Test("Sets detectedAt for a newly created fingerprint")
+    func setsDetectedAtForNewFingerprint() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let entry = RateLimitCacheEntry.preservingFirstDetectedAt(
+            resetAt: now.addingTimeInterval(3_600),
+            anchorSession: "ma-thread-a",
+            anchorPrompt: "prompt a",
+            now: now
+        )
+
+        #expect(entry.detectedAt == now)
+    }
+
+    @Test("Preserves detectedAt across subsequent detections for the same fingerprint")
+    func preservesDetectedAtForExistingFingerprint() {
+        let firstSeen = Date(timeIntervalSince1970: 1_700_000_000)
+        let laterSeen = firstSeen.addingTimeInterval(600)
+
+        let initial = RateLimitCacheEntry.preservingFirstDetectedAt(
+            resetAt: firstSeen.addingTimeInterval(1_800),
+            anchorSession: "ma-thread-a",
+            anchorPrompt: "prompt a",
+            now: firstSeen
+        )
+
+        let updated = RateLimitCacheEntry.preservingFirstDetectedAt(
+            resetAt: laterSeen.addingTimeInterval(3_600),
+            anchorSession: "ma-thread-b",
+            anchorPrompt: "prompt b",
+            now: laterSeen,
+            existingEntry: initial
+        )
+
+        #expect(updated.detectedAt == firstSeen)
+    }
+
+    @Test("Reactivation clears stale tombstone metadata")
+    func reactivationClearsStaleMetadata() {
+        let firstSeen = Date(timeIntervalSince1970: 1_700_000_000)
+        let staleAt = firstSeen.addingTimeInterval(1_200)
+        let laterSeen = firstSeen.addingTimeInterval(2_400)
+
+        let staleEntry = RateLimitCacheEntry(
+            resetAt: firstSeen.addingTimeInterval(1_800),
+            anchorSession: "ma-thread-a",
+            anchorPrompt: "prompt a",
+            detectedAt: firstSeen,
+            staleAt: staleAt,
+            staleReason: "prompt_changed"
+        )
+
+        let reactivated = RateLimitCacheEntry.preservingFirstDetectedAt(
+            resetAt: laterSeen.addingTimeInterval(3_600),
+            anchorSession: "ma-thread-a",
+            anchorPrompt: "prompt b",
+            now: laterSeen,
+            existingEntry: staleEntry
+        )
+
+        #expect(reactivated.detectedAt == firstSeen)
+        #expect(reactivated.staleAt == nil)
+        #expect(reactivated.staleReason == nil)
+    }
+
+    @Test("Decodes legacy cache entries without detectedAt")
+    func decodesLegacyEntriesWithoutDetectedAt() throws {
+        let data = Data(
+            #"{"fp":{"resetAt":"2026-04-27T12:00:00Z","anchorSession":"ma-thread-a","anchorPrompt":"prompt a"}}"#
+                .utf8
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let decoded = try decoder.decode([String: RateLimitCacheEntry].self, from: data)
+        let entry = try #require(decoded["fp"])
+        #expect(entry.detectedAt == nil)
+        #expect(entry.staleAt == nil)
+        #expect(entry.staleReason == nil)
+    }
+}

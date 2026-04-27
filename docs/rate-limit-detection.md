@@ -24,7 +24,14 @@ Detection only triggers when a **concrete reset time** can be parsed from the te
 
 ### Fingerprint Cache (Persistence)
 
-When Magent first sees a rate-limit message, it computes a **fingerprint** (normalized text of the rate-limit lines) and stores the fingerprint along with the **concrete reset time** to disk (`rate-limit-cache.json`).
+When Magent first sees a rate-limit message, it computes a **fingerprint** (normalized text of the rate-limit lines) and stores the fingerprint along with:
+- the **concrete reset time** (`resetAt`)
+- the **first-detection timestamp** (`detectedAt`)
+- optional stale tombstone metadata (`staleAt`, `staleReason`) when an entry is deactivated
+
+These are written to disk in `rate-limit-cache.json`.
+
+Fingerprint keys are versioned and structured (for example: `v2|claude|pane_generic|hit_limit|<reset-minute-bucket>`). This avoids storing large free-form pane text as cache keys while still preserving a legacy-text fallback path during migration.
 
 Magent also stores a per-agent ignore list for exact reset timestamps you manually dismiss (`ignored-rate-limit-fingerprints.json`).
 
@@ -32,13 +39,15 @@ Magent also stores a per-agent ignore list for exact reset timestamps you manual
 
 Rate-limit fingerprints are anchored to:
 - **The session where first detected** — for time-only resets (e.g., "resets 4pm"), the cached limit only matches that same session. A different session's pane may contain identical wording but refers to a different event; only the first session's context is trusted.
-- **The last submitted prompt** — if the user submits new prompts or code, the old cached fingerprint is pruned so it doesn't resurface as a stale marker once the pane scrolls or clears.
+- **The last submitted prompt** — if the user submits new prompts or code, the old cached fingerprint is marked stale so it doesn't resurface as an active marker once the pane scrolls or clears.
 - **Ignored limits are reset-date scoped** — when you use `Lift + Ignore Current Messages`, Magent stores the exact resolved `resetAt` timestamp(s) for the currently visible limit window(s). That means only the specific detected occurrence is ignored; a later rate limit with the same visible text but a different resolved reset date still detects normally.
 
 On subsequent checks:
 - **Same fingerprint, same session, prompt unchanged** — uses the stored time (no re-parsing, no drift)
+- **Same fingerprint detected again later** — keeps the original `detectedAt` (first-seen time is immutable per fingerprint key)
 - **Same fingerprint, different session** — re-parses fresh (time-only anchoring doesn't transfer across sessions)
-- **Same fingerprint, prompt changed** — cache is pruned; the old limit doesn't resurface
+- **Same fingerprint, prompt changed** — entry is tombstoned as stale; the old limit doesn't resurface as active
+- **Stale entries** — instead of immediate hard-delete, Magent marks entries with `staleAt` + `staleReason` and keeps them for a short TTL to aid debugging and reduce re-anchoring churn
 - **Reset time in the past** — rate limit expired, skips detection
 - **New fingerprint** — parses fresh, stores the new mapping with session/prompt anchors
 - **Legacy pre-anchor cache file** — old `[fingerprint: resetAt]` entries from before session/prompt anchoring are dropped on migration rather than imported, because they lack enough context to safely suppress or reuse later detections
