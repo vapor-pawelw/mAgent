@@ -1165,8 +1165,12 @@ final class IPCCommandHandler {
             if let limit = request.limit, limit > 0 {
                 output = await tmux.capturePane(sessionName: sessionName, lastLines: max(1, limit))
             } else {
-                output = await tmux.captureFullPane(sessionName: sessionName)
-                    ?? await tmux.capturePane(sessionName: sessionName, lastLines: 200)
+                let fullCapture = await tmux.captureFullPane(sessionName: sessionName)
+                if let fullCapture {
+                    output = fullCapture
+                } else {
+                    output = await tmux.capturePane(sessionName: sessionName, lastLines: 200)
+                }
             }
 
             let tabInfo = tabs.first(where: { $0.sessionName == sessionName })
