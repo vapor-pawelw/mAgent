@@ -762,20 +762,67 @@ struct PersistedChatTabTests {
         """.data(using: .utf8)!
         let tab = try JSONDecoder().decode(PersistedChatTab.self, from: json)
         #expect(tab.draftInput == "")
+        #expect(tab.conversationSessionID == nil)
     }
 
-    @Test("Round-trip preserves non-empty draftInput")
+    @Test("Round-trip preserves non-empty draftInput and conversation session id")
     func roundTripDraftInput() throws {
         let original = PersistedChatTab(
             identifier: "chat:2",
             agentType: .codex,
             title: "Chat",
             messages: [],
-            draftInput: "hello draft"
+            draftInput: "hello draft",
+            conversationSessionID: "session-123"
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(PersistedChatTab.self, from: data)
         #expect(decoded.draftInput == "hello draft")
+        #expect(decoded.conversationSessionID == "session-123")
+    }
+}
+
+// MARK: - AgentChatRuntime parsing
+
+@Suite("AgentChatRuntime parsing")
+struct AgentChatRuntimeParsingTests {
+
+    @Test("Claude stream JSON prefers result text and captures session id")
+    func claudeResultAndSessionID() {
+        let stdout = """
+        {"type":"system","subtype":"init","session_id":"claude-session-1"}
+        {"type":"assistant","session_id":"claude-session-1","message":{"content":[{"type":"text","text":"draft"}]}}
+        {"type":"result","session_id":"claude-session-1","result":"final answer"}
+        """
+
+        let parsed = AgentChatRuntime.parseClaudeStreamJSON(stdout)
+        #expect(parsed.conversationSessionID == "claude-session-1")
+        #expect(parsed.assistantText == "final answer")
+    }
+
+    @Test("Claude stream JSON falls back to assistant message blocks")
+    func claudeAssistantMessageFallback() {
+        let stdout = """
+        {"type":"assistant","session_id":"claude-session-2","message":{"content":[{"type":"text","text":"hello from assistant"}]}}
+        """
+
+        let parsed = AgentChatRuntime.parseClaudeStreamJSON(stdout)
+        #expect(parsed.conversationSessionID == "claude-session-2")
+        #expect(parsed.assistantText == "hello from assistant")
+    }
+
+    @Test("Codex JSONL extracts thread id and assistant text")
+    func codexThreadAndAssistantMessage() {
+        let stdout = """
+        {"type":"thread.started","thread_id":"codex-thread-1"}
+        {"type":"turn.started"}
+        {"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"codex reply"}}
+        {"type":"turn.completed"}
+        """
+
+        let parsed = AgentChatRuntime.parseCodexJSONL(stdout)
+        #expect(parsed.conversationSessionID == "codex-thread-1")
+        #expect(parsed.assistantText == "codex reply")
     }
 }
 

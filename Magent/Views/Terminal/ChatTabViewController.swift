@@ -7,6 +7,7 @@ struct ChatTabEntry {
     var title: String
     var messages: [PersistedChatMessage]
     var draftInput: String
+    var conversationSessionID: String?
     var viewController: ChatTabViewController?
 }
 

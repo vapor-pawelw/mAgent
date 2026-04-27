@@ -135,6 +135,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
     public var title: String
     public var messages: [PersistedChatMessage]
     public var draftInput: String
+    public var conversationSessionID: String?
 
     private enum CodingKeys: String, CodingKey {
         case identifier
@@ -142,6 +143,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         case title
         case messages
         case draftInput
+        case conversationSessionID
     }
 
     public init(
@@ -149,13 +151,15 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         agentType: AgentType,
         title: String,
         messages: [PersistedChatMessage] = [],
-        draftInput: String = ""
+        draftInput: String = "",
+        conversationSessionID: String? = nil
     ) {
         self.identifier = identifier
         self.agentType = agentType
         self.title = title
         self.messages = messages
         self.draftInput = draftInput
+        self.conversationSessionID = conversationSessionID
     }
 
     public init(from decoder: Decoder) throws {
@@ -165,6 +169,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         title = try container.decode(String.self, forKey: .title)
         messages = try container.decodeIfPresent([PersistedChatMessage].self, forKey: .messages) ?? []
         draftInput = try container.decodeIfPresent(String.self, forKey: .draftInput) ?? ""
+        conversationSessionID = try container.decodeIfPresent(String.self, forKey: .conversationSessionID)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -175,6 +180,9 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         try container.encode(messages, forKey: .messages)
         if !draftInput.isEmpty {
             try container.encode(draftInput, forKey: .draftInput)
+        }
+        if let conversationSessionID, !conversationSessionID.isEmpty {
+            try container.encode(conversationSessionID, forKey: .conversationSessionID)
         }
     }
 }

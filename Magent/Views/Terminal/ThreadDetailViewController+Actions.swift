@@ -1124,7 +1124,8 @@ extension ThreadDetailViewController {
                 agentType: chat.agentType,
                 title: chat.title,
                 messages: chat.messages,
-                draftInput: chat.draftInput
+                draftInput: chat.draftInput,
+                conversationSessionID: chat.conversationSessionID
             )
         }
     }

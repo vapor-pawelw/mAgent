@@ -877,27 +877,21 @@ final class IPCCommandHandler {
             let pendingAssistant = PersistedChatMessage(role: .assistant, text: "Thinking…")
             chatTabs[chatIndex].messages.append(user)
             chatTabs[chatIndex].messages.append(pendingAssistant)
-            let contextMessages = chatTabs[chatIndex].messages
+            let agentType = chatTabs[chatIndex].agentType
+            let conversationSessionID = chatTabs[chatIndex].conversationSessionID
 
             threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
             await MainActor.run {
                 threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
             }
 
-            let piPrompt = buildPiPrompt(from: contextMessages)
-            let command = "command pi --mode json --no-session \(ShellExecutor.shellQuote(piPrompt))"
-            let result = await ShellExecutor.execute(command, workingDirectory: thread.worktreePath)
-
-            let responseText: String
-            if result.exitCode == 0 {
-                let parsed = parsePiAssistantText(from: result.stdout)
-                responseText = parsed.isEmpty ? "No response from Pi." : parsed
-            } else {
-                let errorText = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                responseText = errorText.isEmpty
-                    ? "Pi chat failed (exit \(result.exitCode))."
-                    : "Pi chat failed: \(errorText)"
-            }
+            let response = await AgentChatRuntime.execute(
+                agentType: agentType,
+                prompt: prompt,
+                workingDirectory: thread.worktreePath,
+                conversationSessionID: conversationSessionID,
+                claudeSystemPrompt: IPCAgentDocs.claudeSystemPrompt
+            )
 
             guard let latestIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
                 return .success(id: request.id)
@@ -908,7 +902,8 @@ final class IPCCommandHandler {
                 return .success(id: request.id)
             }
 
-            chatTabs[latestChatIndex].messages[messageIndex].text = responseText
+            chatTabs[latestChatIndex].messages[messageIndex].text = response.assistantText
+            chatTabs[latestChatIndex].conversationSessionID = response.conversationSessionID
             threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
             await MainActor.run {
                 threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
@@ -1225,49 +1220,6 @@ final class IPCCommandHandler {
         case .draft:
             return .failure("Reading transcript is not supported for draft tabs", id: request.id)
         }
-    }
-
-    private func buildPiPrompt(from messages: [PersistedChatMessage]) -> String {
-        let context = messages.suffix(20).map { message in
-            let role = message.role == .user ? "User" : "Assistant"
-            return "\(role): \(message.text)"
-        }.joined(separator: "\n\n")
-
-        return """
-        Continue this conversation. Be concise and accurate.
-
-        \(context)
-        """
-    }
-
-    private func parsePiAssistantText(from stdout: String) -> String {
-        var deltas: [String] = []
-
-        for line in stdout.split(separator: "\n", omittingEmptySubsequences: true) {
-            guard let data = line.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data),
-                  let json = object as? [String: Any],
-                  let type = json["type"] as? String else {
-                continue
-            }
-
-            guard type == "message_update" else { continue }
-            guard let message = json["message"] as? [String: Any],
-                  let role = message["role"] as? String,
-                  role == "assistant" else {
-                continue
-            }
-
-            guard let assistantEvent = json["assistantMessageEvent"] as? [String: Any],
-                  let eventType = assistantEvent["type"] as? String,
-                  eventType == "text_delta",
-                  let delta = assistantEvent["delta"] as? String else {
-                continue
-            }
-            deltas.append(delta)
-        }
-
-        return deltas.joined().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func createTab(_ request: IPCRequest) async -> IPCResponse {

@@ -13,6 +13,7 @@ extension ThreadDetailViewController {
                 title: persisted.title,
                 messages: persisted.messages,
                 draftInput: persisted.draftInput,
+                conversationSessionID: persisted.conversationSessionID,
                 viewController: nil
             )
         }
@@ -42,6 +43,7 @@ extension ThreadDetailViewController {
         title: String = "Chat",
         messages: [PersistedChatMessage] = [],
         draftInput: String = "",
+        conversationSessionID: String? = nil,
         initialPrompt: String? = nil
     ) {
         if let existingIndex = tabSlots.firstIndex(of: .chat(identifier: identifier)) {
@@ -60,6 +62,7 @@ extension ThreadDetailViewController {
             title: title,
             messages: messages,
             draftInput: draftInput,
+            conversationSessionID: conversationSessionID,
             viewController: nil
         )
         chatTabs.append(entry)
@@ -220,30 +223,24 @@ extension ThreadDetailViewController {
             draftInput: chatTabs[entryIndex].draftInput
         )
 
-        let contextMessages = chatTabs[entryIndex].messages
         let worktreePath = thread.worktreePath
         let agentType = chatTabs[entryIndex].agentType
+        let conversationSessionID = chatTabs[entryIndex].conversationSessionID
 
         Task {
-            let prompt = buildPiPrompt(from: contextMessages)
-            let command = "command pi --mode json --no-session \(ShellExecutor.shellQuote(prompt))"
-            let result = await ShellExecutor.execute(command, workingDirectory: worktreePath)
-
-            let responseText: String
-            if result.exitCode == 0 {
-                let parsed = parsePiAssistantText(from: result.stdout)
-                responseText = parsed.isEmpty ? "No response from Pi." : parsed
-            } else {
-                let errorText = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                responseText = errorText.isEmpty
-                    ? "Pi chat failed (exit \(result.exitCode))."
-                    : "Pi chat failed: \(errorText)"
-            }
+            let response = await AgentChatRuntime.execute(
+                agentType: agentType,
+                prompt: text,
+                workingDirectory: worktreePath,
+                conversationSessionID: conversationSessionID,
+                claudeSystemPrompt: IPCAgentDocs.claudeSystemPrompt
+            )
 
             await MainActor.run {
                 guard let currentIndex = self.chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
                 guard let messageIndex = self.chatTabs[currentIndex].messages.firstIndex(where: { $0.id == pendingAssistant.id }) else { return }
-                self.chatTabs[currentIndex].messages[messageIndex].text = responseText
+                self.chatTabs[currentIndex].messages[messageIndex].text = response.assistantText
+                self.chatTabs[currentIndex].conversationSessionID = response.conversationSessionID
                 self.persistChatTabs()
                 self.chatTabs[currentIndex].viewController?.update(
                     agentType: agentType,
@@ -254,49 +251,6 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func buildPiPrompt(from messages: [PersistedChatMessage]) -> String {
-        let context = messages.suffix(20).map { message in
-            let role = message.role == .user ? "User" : "Assistant"
-            return "\(role): \(message.text)"
-        }.joined(separator: "\n\n")
-
-        return """
-        Continue this conversation. Be concise and accurate.
-
-        \(context)
-        """
-    }
-
-    private func parsePiAssistantText(from stdout: String) -> String {
-        var deltas: [String] = []
-
-        for line in stdout.split(separator: "\n", omittingEmptySubsequences: true) {
-            guard let data = line.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data),
-                  let json = object as? [String: Any],
-                  let type = json["type"] as? String else {
-                continue
-            }
-
-            guard type == "message_update" else { continue }
-            guard let message = json["message"] as? [String: Any],
-                  let role = message["role"] as? String,
-                  role == "assistant" else {
-                continue
-            }
-
-            guard let assistantEvent = json["assistantMessageEvent"] as? [String: Any],
-                  let eventType = assistantEvent["type"] as? String,
-                  eventType == "text_delta",
-                  let delta = assistantEvent["delta"] as? String else {
-                continue
-            }
-            deltas.append(delta)
-        }
-
-        return deltas.joined().trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     private func persistChatTabs() {
         thread.persistedChatTabs = chatTabs.map { entry in
             PersistedChatTab(
@@ -304,7 +258,8 @@ extension ThreadDetailViewController {
                 agentType: entry.agentType,
                 title: entry.title,
                 messages: entry.messages,
-                draftInput: entry.draftInput
+                draftInput: entry.draftInput,
+                conversationSessionID: entry.conversationSessionID
             )
         }
         threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)

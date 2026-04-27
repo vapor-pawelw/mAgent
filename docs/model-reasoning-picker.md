@@ -127,11 +127,12 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 
 ### Chat Surface Runtime Gate
 
-- Selecting a Chat surface runs a runtime readiness check for `pi`, Node.js (20+), and `npm`.
-- If prerequisites are missing, the sheet offers in-app install/repair (`brew install node`, then `npm install -g @mariozechner/pi-coding-agent`).
-- If setup is cancelled or fails, picker selection reverts to the previously valid option so the sheet never stays on an unusable Chat choice.
-- During in-app install/repair, the sheet shows an explicit installing status row with spinner and disables launch controls until setup completes or fails.
-- Chat mode now creates real Chat tabs/threads after runtime readiness passes.
+- Chat surfaces are selectable directly for supported agents (currently Claude and Codex).
+- No separate Pi runtime install gate is used in the launch sheet.
+- Chat message execution uses each agent's native non-interactive JSON stream path:
+  - Claude: `claude -p --output-format stream-json` (resume via `--resume <session_id>`)
+  - Codex: `codex exec --json` (resume via `codex exec resume <thread_id> --json`)
+- Each chat tab persists the latest agent conversation/session id so subsequent messages continue in the same native agent context.
 
 ### Fast Path (Option+click / Context Menu)
 

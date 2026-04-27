@@ -62,8 +62,8 @@ All notable changes to this project will be documented in this file.
 
 #### Features
 - Added `GPT 5.5` as a selectable Codex model in model pickers and model validation, and made Review-mode Codex launches default to `GPT 5.5`.
-- Agent type picker entries now support surface-specific labels (`<Agent> (Terminal)` / `<Agent> (Chat)`) driven by `AgentType.capabilities`, and Chat selection now runs a Pi runtime readiness gate with in-app install/repair flow.
-- Chat runtime install/repair in the launch sheet now shows an explicit in-progress status row with spinner while controls are temporarily disabled.
+- Agent type picker entries now support surface-specific labels (`<Agent> (Terminal)` / `<Agent> (Chat)`) driven by `AgentType.capabilities`.
+- Removed the Pi runtime dependency from Chat tabs: chat execution now uses native Claude/Codex JSON streams with persisted per-tab conversation session ids for agent-managed context (`claude --resume`, `codex exec resume`).
 
 #### Bug Fixes
 - Fixed Codex tabs failing to launch on macOS with `env: -u: No such file or directory` — the managed-`CODEX_HOME` wrapper now places option flags before variable assignments so BSD `env` parses them correctly.
