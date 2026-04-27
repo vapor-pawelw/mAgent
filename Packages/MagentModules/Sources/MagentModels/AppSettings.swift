@@ -133,6 +133,10 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var showScrollToBottomIndicator: Bool
     public var showTerminalScrollOverlay: Bool
     public var showPromptTOCOverlay: Bool
+    public var chatUserBubbleColorHex: String?
+    public var chatUserTextColorHex: String?
+    public var chatAssistantBubbleColorHex: String?
+    public var chatAssistantTextColorHex: String?
     public var preserveAgentColorTheme: Bool
     public var rememberLastTypeSelection: Bool
     public var switchToNewlyCreatedThread: Bool
@@ -194,6 +198,10 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showScrollToBottomIndicator: Bool = true,
         showTerminalScrollOverlay: Bool = true,
         showPromptTOCOverlay: Bool = true,
+        chatUserBubbleColorHex: String? = nil,
+        chatUserTextColorHex: String? = nil,
+        chatAssistantBubbleColorHex: String? = nil,
+        chatAssistantTextColorHex: String? = nil,
         preserveAgentColorTheme: Bool = false,
         rememberLastTypeSelection: Bool = true,
         switchToNewlyCreatedThread: Bool = true,
@@ -254,6 +262,10 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.showScrollToBottomIndicator = showScrollToBottomIndicator
         self.showTerminalScrollOverlay = showTerminalScrollOverlay
         self.showPromptTOCOverlay = showPromptTOCOverlay
+        self.chatUserBubbleColorHex = chatUserBubbleColorHex
+        self.chatUserTextColorHex = chatUserTextColorHex
+        self.chatAssistantBubbleColorHex = chatAssistantBubbleColorHex
+        self.chatAssistantTextColorHex = chatAssistantTextColorHex
         self.preserveAgentColorTheme = preserveAgentColorTheme
         self.rememberLastTypeSelection = rememberLastTypeSelection
         self.switchToNewlyCreatedThread = switchToNewlyCreatedThread
@@ -320,6 +332,10 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showScrollToBottomIndicator = try container.decodeIfPresent(Bool.self, forKey: .showScrollToBottomIndicator) ?? true
         showTerminalScrollOverlay = try container.decodeIfPresent(Bool.self, forKey: .showTerminalScrollOverlay) ?? true
         showPromptTOCOverlay = try container.decodeIfPresent(Bool.self, forKey: .showPromptTOCOverlay) ?? true
+        chatUserBubbleColorHex = try container.decodeIfPresent(String.self, forKey: .chatUserBubbleColorHex)
+        chatUserTextColorHex = try container.decodeIfPresent(String.self, forKey: .chatUserTextColorHex)
+        chatAssistantBubbleColorHex = try container.decodeIfPresent(String.self, forKey: .chatAssistantBubbleColorHex)
+        chatAssistantTextColorHex = try container.decodeIfPresent(String.self, forKey: .chatAssistantTextColorHex)
         preserveAgentColorTheme = try container.decodeIfPresent(Bool.self, forKey: .preserveAgentColorTheme) ?? false
         rememberLastTypeSelection = try container.decodeIfPresent(Bool.self, forKey: .rememberLastTypeSelection) ?? true
         switchToNewlyCreatedThread = try container.decodeIfPresent(Bool.self, forKey: .switchToNewlyCreatedThread) ?? true
@@ -384,6 +400,10 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(showScrollToBottomIndicator, forKey: .showScrollToBottomIndicator)
         try container.encode(showTerminalScrollOverlay, forKey: .showTerminalScrollOverlay)
         try container.encode(showPromptTOCOverlay, forKey: .showPromptTOCOverlay)
+        try container.encodeIfPresent(chatUserBubbleColorHex, forKey: .chatUserBubbleColorHex)
+        try container.encodeIfPresent(chatUserTextColorHex, forKey: .chatUserTextColorHex)
+        try container.encodeIfPresent(chatAssistantBubbleColorHex, forKey: .chatAssistantBubbleColorHex)
+        try container.encodeIfPresent(chatAssistantTextColorHex, forKey: .chatAssistantTextColorHex)
         try container.encode(preserveAgentColorTheme, forKey: .preserveAgentColorTheme)
         try container.encode(rememberLastTypeSelection, forKey: .rememberLastTypeSelection)
         try container.encode(switchToNewlyCreatedThread, forKey: .switchToNewlyCreatedThread)
@@ -567,6 +587,10 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case showScrollToBottomIndicator
         case showTerminalScrollOverlay
         case showPromptTOCOverlay
+        case chatUserBubbleColorHex
+        case chatUserTextColorHex
+        case chatAssistantBubbleColorHex
+        case chatAssistantTextColorHex
         case preserveAgentColorTheme
         case rememberLastTypeSelection
         case switchToNewlyCreatedThread

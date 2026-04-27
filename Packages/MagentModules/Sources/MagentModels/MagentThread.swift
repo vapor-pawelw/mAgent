@@ -134,17 +134,48 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
     public var agentType: AgentType
     public var title: String
     public var messages: [PersistedChatMessage]
+    public var draftInput: String
+
+    private enum CodingKeys: String, CodingKey {
+        case identifier
+        case agentType
+        case title
+        case messages
+        case draftInput
+    }
 
     public init(
         identifier: String,
         agentType: AgentType,
         title: String,
-        messages: [PersistedChatMessage] = []
+        messages: [PersistedChatMessage] = [],
+        draftInput: String = ""
     ) {
         self.identifier = identifier
         self.agentType = agentType
         self.title = title
         self.messages = messages
+        self.draftInput = draftInput
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        identifier = try container.decode(String.self, forKey: .identifier)
+        agentType = try container.decode(AgentType.self, forKey: .agentType)
+        title = try container.decode(String.self, forKey: .title)
+        messages = try container.decodeIfPresent([PersistedChatMessage].self, forKey: .messages) ?? []
+        draftInput = try container.decodeIfPresent(String.self, forKey: .draftInput) ?? ""
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(identifier, forKey: .identifier)
+        try container.encode(agentType, forKey: .agentType)
+        try container.encode(title, forKey: .title)
+        try container.encode(messages, forKey: .messages)
+        if !draftInput.isEmpty {
+            try container.encode(draftInput, forKey: .draftInput)
+        }
     }
 }
 

@@ -298,6 +298,17 @@
         }
       }
     },
+    "settingsCategoryChat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat"
+          }
+        }
+      }
+    },
     "settingsCategoryDebug": {
       "extractionState": "manual",
       "localizations": {

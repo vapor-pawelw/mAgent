@@ -12,6 +12,7 @@ extension ThreadDetailViewController {
                 agentType: persisted.agentType,
                 title: persisted.title,
                 messages: persisted.messages,
+                draftInput: persisted.draftInput,
                 viewController: nil
             )
         }
@@ -40,6 +41,7 @@ extension ThreadDetailViewController {
         agentType: AgentType,
         title: String = "Chat",
         messages: [PersistedChatMessage] = [],
+        draftInput: String = "",
         initialPrompt: String? = nil
     ) {
         if let existingIndex = tabSlots.firstIndex(of: .chat(identifier: identifier)) {
@@ -57,6 +59,7 @@ extension ThreadDetailViewController {
             agentType: agentType,
             title: title,
             messages: messages,
+            draftInput: draftInput,
             viewController: nil
         )
         chatTabs.append(entry)
@@ -102,9 +105,17 @@ extension ThreadDetailViewController {
 
         if chatTabs[entryIndex].viewController == nil {
             let entry = chatTabs[entryIndex]
-            let vc = ChatTabViewController(identifier: identifier, agentType: entry.agentType, messages: entry.messages)
+            let vc = ChatTabViewController(
+                identifier: identifier,
+                agentType: entry.agentType,
+                messages: entry.messages,
+                draftInput: entry.draftInput
+            )
             vc.onSubmit = { [weak self] text in
                 self?.submitChatPrompt(identifier: identifier, text: text)
+            }
+            vc.onDraftChanged = { [weak self] draftInput in
+                self?.updateChatDraftInput(identifier: identifier, draftInput: draftInput)
             }
             chatTabs[entryIndex].viewController = vc
         }
@@ -203,7 +214,11 @@ extension ThreadDetailViewController {
         chatTabs[entryIndex].messages.append(user)
         chatTabs[entryIndex].messages.append(pendingAssistant)
         persistChatTabs()
-        chatTabs[entryIndex].viewController?.update(agentType: chatTabs[entryIndex].agentType, messages: chatTabs[entryIndex].messages)
+        chatTabs[entryIndex].viewController?.update(
+            agentType: chatTabs[entryIndex].agentType,
+            messages: chatTabs[entryIndex].messages,
+            draftInput: chatTabs[entryIndex].draftInput
+        )
 
         let contextMessages = chatTabs[entryIndex].messages
         let worktreePath = thread.worktreePath
@@ -230,7 +245,11 @@ extension ThreadDetailViewController {
                 guard let messageIndex = self.chatTabs[currentIndex].messages.firstIndex(where: { $0.id == pendingAssistant.id }) else { return }
                 self.chatTabs[currentIndex].messages[messageIndex].text = responseText
                 self.persistChatTabs()
-                self.chatTabs[currentIndex].viewController?.update(agentType: agentType, messages: self.chatTabs[currentIndex].messages)
+                self.chatTabs[currentIndex].viewController?.update(
+                    agentType: agentType,
+                    messages: self.chatTabs[currentIndex].messages,
+                    draftInput: self.chatTabs[currentIndex].draftInput
+                )
             }
         }
     }
@@ -284,9 +303,17 @@ extension ThreadDetailViewController {
                 identifier: entry.identifier,
                 agentType: entry.agentType,
                 title: entry.title,
-                messages: entry.messages
+                messages: entry.messages,
+                draftInput: entry.draftInput
             )
         }
         threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)
+    }
+
+    private func updateChatDraftInput(identifier: String, draftInput: String) {
+        guard let index = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+        guard chatTabs[index].draftInput != draftInput else { return }
+        chatTabs[index].draftInput = draftInput
+        persistChatTabs()
     }
 }

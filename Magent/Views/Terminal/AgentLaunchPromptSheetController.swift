@@ -573,6 +573,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private var isProgrammaticPickerChange = false
     private var chatSelectionValidationTask: Task<Void, Never>?
     private var isChatInstallInProgress = false
+    private let chatInstallProgressIndicator = NSProgressIndicator()
+    private let chatInstallStatusLabel = NSTextField(labelWithString: "Installing Chat runtime…")
+    private var chatInstallStatusRow: NSStackView?
 
     // Project picker — present when config.availableProjects has more than one entry.
     private var projectPickerItems: [Project] = []
@@ -904,6 +907,25 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         modelReasoningViews = [modelLabel, modelPicker, reasoningLabel, reasoningPicker]
 
         stack.addArrangedSubview(agentRow)
+        let installStatusRow = NSStackView()
+        installStatusRow.orientation = .horizontal
+        installStatusRow.alignment = .centerY
+        installStatusRow.spacing = 6
+        installStatusRow.isHidden = true
+
+        chatInstallProgressIndicator.style = .spinning
+        chatInstallProgressIndicator.controlSize = .small
+        chatInstallProgressIndicator.isDisplayedWhenStopped = false
+        chatInstallProgressIndicator.translatesAutoresizingMaskIntoConstraints = false
+        installStatusRow.addArrangedSubview(chatInstallProgressIndicator)
+
+        chatInstallStatusLabel.font = .systemFont(ofSize: 11)
+        chatInstallStatusLabel.textColor = NSColor(resource: .textSecondary)
+        chatInstallStatusLabel.lineBreakMode = .byTruncatingTail
+        chatInstallStatusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        installStatusRow.addArrangedSubview(chatInstallStatusLabel)
+        chatInstallStatusRow = installStatusRow
+        stack.addArrangedSubview(installStatusRow)
         populateModelReasoningPickers()
         applyLastModelReasoningSelection()
         updateModelReasoningVisibility()
@@ -1144,6 +1166,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
             titleLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             agentRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            installStatusRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             rememberCheckbox.widthAnchor.constraint(equalTo: stack.widthAnchor),
             agentPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 100),
             optionalNotice.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -1785,12 +1808,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         guard shouldStartPiInstall(readiness: readiness) else { return false }
         isChatInstallInProgress = true
+        setChatInstallStatusVisible(true, text: "Installing Chat runtime…")
         setChatInstallControlsEnabled(false)
         let previousAcceptTitle = acceptButton.title
         acceptButton.title = "Installing Pi..."
         defer {
             acceptButton.title = previousAcceptTitle
             setChatInstallControlsEnabled(true)
+            setChatInstallStatusVisible(false)
             isChatInstallInProgress = false
             updatePromptAreaEnabled()
         }
@@ -1818,6 +1843,19 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         branchField.isEnabled = enabled
         baseBranchField.isEnabled = enabled
         promptTextView.isEditable = enabled
+    }
+
+    private func setChatInstallStatusVisible(_ visible: Bool, text: String? = nil) {
+        if let text, !text.isEmpty {
+            chatInstallStatusLabel.stringValue = text
+        }
+        chatInstallStatusRow?.isHidden = !visible
+        if visible {
+            chatInstallProgressIndicator.startAnimation(nil)
+        } else {
+            chatInstallProgressIndicator.stopAnimation(nil)
+        }
+        resizeWindowToFitContent()
     }
 
     private func shouldStartPiInstall(readiness: PiRuntimeReadiness) -> Bool {

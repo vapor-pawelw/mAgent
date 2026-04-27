@@ -453,16 +453,18 @@ Display order is decoupled from content arrays via `tabSlots: [TabSlot]`, an enu
 - `.terminal(sessionName:)` — content is in `terminalViews`, indexed by `thread.tmuxSessionNames`
 - `.web(identifier:)` — content is in `webTabs`, keyed by identifier
 - `.draft(identifier:)` — content is in `draftTabs`, keyed by identifier; persisted in `thread.persistedDraftTabs` including agent type, prompt, and optional model/reasoning overrides used by later `Start Agent`
+- `.chat(identifier:)` — content is in `chatTabs`, keyed by identifier; persisted in `thread.persistedChatTabs` including full message history and per-tab unsent composer draft text
 
 Key invariants:
 - `tabItems.count == tabSlots.count` always
 - `terminalViews` stays parallel to `thread.tmuxSessionNames`; both are reordered together by `persistTabOrder()` during drag/pin operations
 - `webTabs` stays in creation order; never reordered by drag
 - `draftTabs` stays in creation order; view controllers are created lazily on first selection
+- `chatTabs` stays in creation order; view controllers are created lazily on first selection
 - `tabSlots` + `tabItems` change order during drag/pin operations; `persistTabOrder()` syncs `terminalViews` and `thread.tmuxSessionNames` to match
 - Single unified `pinnedCount` covers all tab types
 - Content lookup uses session name / identifier keys, not positional indices (via `terminalView(forSession:)`, `currentTerminalView()`, etc.)
-- External tab-structure mutations (for example CLI `create-tab`) must be reconciled in existing thread views. `ThreadDetailViewController.handleThreadsDidChange` compares a tab-structure fingerprint (terminal sessions + pinning + persisted web/draft identifiers) and reruns `setupTabs()` when structure changes are detected.
+- External tab-structure mutations (for example CLI `create-tab`) must be reconciled in existing thread views. `ThreadDetailViewController.handleThreadsDidChange` compares a tab-structure fingerprint (terminal sessions + pinning + persisted web/draft/chat identifiers) and reruns `setupTabs()` when structure changes are detected.
 - `setupTabs()` is a destructive rebuild path: clear existing `tabItems`, `tabSlots`, `terminalViews`, and non-terminal tab view arrays before recreating display state from model state. Rebuild paths must never append on top of previous UI state.
 - **Web-tab scheme gating**: in-app web tabs are restricted to `http`/`https` destinations. `WKNavigationDelegate`/`WKUIDelegate` paths must cancel unsupported schemes and route them through `NSWorkspace.shared.open(...)` from the app process. Persist/restore must also ignore non-HTTP(S) web-tab URLs so stale saved deep links cannot repeatedly re-trigger WebContent launchservices sandbox crashes.
 - **Non-terminal threads**: Threads created with an initial web tab or an initial draft tab have a worktree and branch but zero tmux sessions (`tmuxSessionNames` is empty). `setupTabs` treats these as intentional non-terminal threads (`sessions.isEmpty && (!persistedWebTabs.isEmpty || !persistedDraftTabs.isEmpty)`) and skips fallback session creation, restoring the saved web/draft tab directly instead of inventing a terminal session name that could collide with stale tmux state.

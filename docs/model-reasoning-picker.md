@@ -130,7 +130,8 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 - Selecting a Chat surface runs a runtime readiness check for `pi`, Node.js (20+), and `npm`.
 - If prerequisites are missing, the sheet offers in-app install/repair (`brew install node`, then `npm install -g @mariozechner/pi-coding-agent`).
 - If setup is cancelled or fails, picker selection reverts to the previously valid option so the sheet never stays on an unusable Chat choice.
-- Current implementation stage: Chat runtime setup is wired, but creating Chat tabs/threads is still blocked with an explicit "Chat mode is not available yet" alert.
+- During in-app install/repair, the sheet shows an explicit installing status row with spinner and disables launch controls until setup completes or fails.
+- Chat mode now creates real Chat tabs/threads after runtime readiness passes.
 
 ### Fast Path (Option+click / Context Menu)
 

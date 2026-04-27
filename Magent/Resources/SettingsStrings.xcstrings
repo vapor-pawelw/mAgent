@@ -187,6 +187,94 @@
           }
         }
       }
+    },
+    "settingsChatAgentBubbleColor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent bubble color"
+          }
+        }
+      }
+    },
+    "settingsChatAgentTextColor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent text color"
+          }
+        }
+      }
+    },
+    "settingsChatColorsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Customize chat bubble background and text colors for both sides. Defaults stay the same until you set custom colors."
+          }
+        }
+      }
+    },
+    "settingsChatColorsTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bubble Colors"
+          }
+        }
+      }
+    },
+    "settingsChatResetColors": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset to defaults"
+          }
+        }
+      }
+    },
+    "settingsChatResetColorsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clears custom chat colors and restores the built-in appearance."
+          }
+        }
+      }
+    },
+    "settingsChatUserBubbleColor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "User bubble color"
+          }
+        }
+      }
+    },
+    "settingsChatUserTextColor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "User text color"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

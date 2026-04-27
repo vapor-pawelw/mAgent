@@ -1134,6 +1134,226 @@
         }
       }
     },
+    "chatSlashCommandLoginDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in with a provider account."
+          }
+        }
+      }
+    },
+    "chatSlashCommandLogoutDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign out from the current provider account."
+          }
+        }
+      }
+    },
+    "chatSlashCommandModelDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch the active model."
+          }
+        }
+      }
+    },
+    "chatSlashCommandScopedModelsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose which models Ctrl+P cycles through."
+          }
+        }
+      }
+    },
+    "chatSlashCommandSettingsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open thinking level, theme, and delivery settings."
+          }
+        }
+      }
+    },
+    "chatSlashCommandResumeDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick and resume a previous session."
+          }
+        }
+      }
+    },
+    "chatSlashCommandNewDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start a new session."
+          }
+        }
+      }
+    },
+    "chatSlashCommandNameDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the session display name. Usage: /name <name>"
+          }
+        }
+      }
+    },
+    "chatSlashCommandSessionDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show session file, ID, token usage, and cost."
+          }
+        }
+      }
+    },
+    "chatSlashCommandTreeDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jump to a point in the session tree and continue there."
+          }
+        }
+      }
+    },
+    "chatSlashCommandForkDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a new session from an earlier user message."
+          }
+        }
+      }
+    },
+    "chatSlashCommandCloneDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate the current branch into a new session."
+          }
+        }
+      }
+    },
+    "chatSlashCommandCompactDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manually compact context. Usage: /compact [prompt]"
+          }
+        }
+      }
+    },
+    "chatSlashCommandCopyDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy the last assistant message to the clipboard."
+          }
+        }
+      }
+    },
+    "chatSlashCommandExportDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export the session to HTML. Usage: /export [file]"
+          }
+        }
+      }
+    },
+    "chatSlashCommandShareDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share as a private GitHub gist link."
+          }
+        }
+      }
+    },
+    "chatSlashCommandReloadDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload keybindings, extensions, skills, prompts, and context files."
+          }
+        }
+      }
+    },
+    "chatSlashCommandHotkeysDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show keyboard shortcuts."
+          }
+        }
+      }
+    },
+    "chatSlashCommandChangelogDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show version history."
+          }
+        }
+      }
+    },
+    "chatSlashCommandQuitDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quit Pi."
+          }
+        }
+      }
+    },
     "threadWorktree": {
       "extractionState": "manual",
       "localizations": {

@@ -603,6 +603,38 @@ struct AppSettingsDefaultAgentTests {
     }
 }
 
+// MARK: - AppSettings chat appearance fields
+
+@Suite("AppSettings chat appearance fields")
+struct AppSettingsChatAppearanceTests {
+
+    @Test("Defaults stay nil when custom chat colors are not set")
+    func defaultsNil() throws {
+        let data = try JSONEncoder().encode(AppSettings())
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        #expect(decoded.chatUserBubbleColorHex == nil)
+        #expect(decoded.chatUserTextColorHex == nil)
+        #expect(decoded.chatAssistantBubbleColorHex == nil)
+        #expect(decoded.chatAssistantTextColorHex == nil)
+    }
+
+    @Test("Round-trip preserves custom chat color hex values")
+    func roundTripCustomValues() throws {
+        let original = AppSettings(
+            chatUserBubbleColorHex: "#112233",
+            chatUserTextColorHex: "#445566",
+            chatAssistantBubbleColorHex: "#778899",
+            chatAssistantTextColorHex: "#AABBCC"
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        #expect(decoded.chatUserBubbleColorHex == "#112233")
+        #expect(decoded.chatUserTextColorHex == "#445566")
+        #expect(decoded.chatAssistantBubbleColorHex == "#778899")
+        #expect(decoded.chatAssistantTextColorHex == "#AABBCC")
+    }
+}
+
 // MARK: - AgentType.capabilities
 
 @Suite("AgentType.capabilities")
@@ -650,8 +682,8 @@ struct AgentTypeCapabilitiesTests {
 
     @Test("Surface display names add suffix only for multi-surface agents")
     func surfaceDisplayNames() {
-        #expect(AgentType.claude.displayName(for: .terminal) == "Claude (Terminal)")
-        #expect(AgentType.claude.displayName(for: .chat) == "Claude (Chat)")
+        #expect(AgentType.claude.displayName(for: .terminal) == "Claude Code (Terminal)")
+        #expect(AgentType.claude.displayName(for: .chat) == "Claude Code (Chat)")
         #expect(AgentType.codex.displayName(for: .terminal) == "Codex (Terminal)")
         #expect(AgentType.custom.displayName(for: .terminal) == "Custom")
     }
@@ -715,6 +747,35 @@ struct ThreadSectionTests {
         #expect(NSColor(hex: "#GGGGGG") == nil)
         #expect(NSColor(hex: "") == nil)
         #expect(NSColor(hex: "#1234567") == nil)
+    }
+}
+
+// MARK: - PersistedChatTab
+
+@Suite("PersistedChatTab")
+struct PersistedChatTabTests {
+
+    @Test("Legacy decode without draftInput defaults to empty string")
+    func legacyDecodeDefaultsDraftInput() throws {
+        let json = """
+        {"identifier":"chat:1","agentType":"claude","title":"Chat","messages":[]}
+        """.data(using: .utf8)!
+        let tab = try JSONDecoder().decode(PersistedChatTab.self, from: json)
+        #expect(tab.draftInput == "")
+    }
+
+    @Test("Round-trip preserves non-empty draftInput")
+    func roundTripDraftInput() throws {
+        let original = PersistedChatTab(
+            identifier: "chat:2",
+            agentType: .codex,
+            title: "Chat",
+            messages: [],
+            draftInput: "hello draft"
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(PersistedChatTab.self, from: data)
+        #expect(decoded.draftInput == "hello draft")
     }
 }
 
