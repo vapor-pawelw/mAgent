@@ -603,6 +603,52 @@ struct AppSettingsDefaultAgentTests {
     }
 }
 
+// MARK: - AgentType.capabilities
+
+@Suite("AgentType.capabilities")
+struct AgentTypeCapabilitiesTests {
+
+    @Test("Claude and Codex expose terminal and chat surfaces")
+    func claudeAndCodexPrimaryTier() {
+        for agent in [AgentType.claude, .codex] {
+            let capabilities = agent.capabilities
+            #expect(capabilities.supportedSurfaces == [.terminal, .chat])
+            #expect(capabilities.defaultSurface == .terminal)
+            #expect(capabilities.supportsResume)
+            #expect(capabilities.supportsModelSelection)
+            #expect(capabilities.supportsReasoningSelection)
+            #expect(capabilities.supportsInitialPromptInjection)
+            #expect(capabilities.supportsIPCSystemPromptInjection)
+            #expect(capabilities.supportsDirectoryTrustBootstrap)
+            #expect(capabilities.supportsOutputRateLimitDetection)
+            #expect(!capabilities.supportsStructuredRateLimitSignals)
+
+            #expect(agent.supportedSurfaces == [.terminal, .chat])
+            #expect(agent.defaultSurface == .terminal)
+            #expect(agent.supportsResume)
+        }
+    }
+
+    @Test("Custom stays intentionally partial")
+    func customPartialTier() {
+        let capabilities = AgentType.custom.capabilities
+        #expect(capabilities.supportedSurfaces == [.terminal])
+        #expect(capabilities.defaultSurface == .terminal)
+        #expect(!capabilities.supportsResume)
+        #expect(!capabilities.supportsModelSelection)
+        #expect(!capabilities.supportsReasoningSelection)
+        #expect(capabilities.supportsInitialPromptInjection)
+        #expect(!capabilities.supportsIPCSystemPromptInjection)
+        #expect(!capabilities.supportsDirectoryTrustBootstrap)
+        #expect(!capabilities.supportsOutputRateLimitDetection)
+        #expect(!capabilities.supportsStructuredRateLimitSignals)
+
+        #expect(AgentType.custom.supportedSurfaces == [.terminal])
+        #expect(AgentType.custom.defaultSurface == .terminal)
+        #expect(!AgentType.custom.supportsResume)
+    }
+}
+
 // MARK: - ThreadSection decoding & color
 
 @Suite("ThreadSection")
