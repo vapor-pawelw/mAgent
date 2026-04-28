@@ -19,8 +19,18 @@ public nonisolated enum AgentChatRuntime {
         prompt: String,
         workingDirectory: String,
         conversationSessionID: String? = nil,
-        claudeSystemPrompt: String? = nil
+        claudeSystemPrompt: String? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil,
+        cancellationHandle: ShellExecutor.CancellationHandle? = nil
     ) async -> AgentChatExecutionResult {
+        if Task.isCancelled {
+            return AgentChatExecutionResult(
+                assistantText: "Request cancelled.",
+                conversationSessionID: normalizedSessionID(conversationSessionID)
+            )
+        }
+
         let normalizedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedPrompt.isEmpty else {
             return AgentChatExecutionResult(assistantText: "Prompt is empty.", conversationSessionID: normalizedSessionID(conversationSessionID))
@@ -30,7 +40,9 @@ public nonisolated enum AgentChatRuntime {
             for: agentType,
             prompt: prompt,
             conversationSessionID: conversationSessionID,
-            claudeSystemPrompt: claudeSystemPrompt
+            claudeSystemPrompt: claudeSystemPrompt,
+            modelId: modelId,
+            reasoningLevel: reasoningLevel
         ) else {
             return AgentChatExecutionResult(
                 assistantText: "Chat is not supported for \(agentType.displayName).",
@@ -38,9 +50,20 @@ public nonisolated enum AgentChatRuntime {
             )
         }
 
-        let result = await ShellExecutor.execute(command, workingDirectory: workingDirectory)
+        let result = await ShellExecutor.executeCancellable(
+            command,
+            workingDirectory: workingDirectory,
+            cancellationHandle: cancellationHandle
+        )
         let parsed = parseOutput(for: agentType, stdout: result.stdout)
         let effectiveSessionID = parsed.conversationSessionID ?? normalizedSessionID(conversationSessionID)
+
+        if Task.isCancelled {
+            return AgentChatExecutionResult(
+                assistantText: "Request cancelled.",
+                conversationSessionID: effectiveSessionID
+            )
+        }
 
         if result.exitCode == 0 {
             let parsedText = parsed.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -174,10 +197,14 @@ public nonisolated enum AgentChatRuntime {
         for agentType: AgentType,
         prompt: String,
         conversationSessionID: String?,
-        claudeSystemPrompt: String?
+        claudeSystemPrompt: String?,
+        modelId: String?,
+        reasoningLevel: String?
     ) -> String? {
         let quotedPrompt = shellQuote(prompt)
         let normalizedConversationSessionID = normalizedSessionID(conversationSessionID)
+        let normalizedModelID = normalizedNonEmpty(modelId)
+        let normalizedReasoningLevel = normalizedNonEmpty(reasoningLevel)
 
         switch agentType {
         case .claude:
@@ -190,6 +217,12 @@ public nonisolated enum AgentChatRuntime {
                 "--include-partial-messages",
             ]
 
+            if let normalizedModelID {
+                components.append("--model \(shellQuote(normalizedModelID))")
+            }
+            if let normalizedReasoningLevel {
+                components.append("--effort \(shellQuote(normalizedReasoningLevel))")
+            }
             if let resumeID = normalizedConversationSessionID {
                 components.append("--resume \(shellQuote(resumeID))")
             }
@@ -201,13 +234,72 @@ public nonisolated enum AgentChatRuntime {
 
             return components.joined(separator: " ")
         case .codex:
-            if let resumeID = normalizedConversationSessionID {
-                return "command codex exec resume \(shellQuote(resumeID)) --json \(quotedPrompt)"
+            var components: [String] = ["command codex"]
+            if let normalizedModelID {
+                components.append("-m \(shellQuote(normalizedModelID))")
             }
-            return "command codex exec --json \(quotedPrompt)"
+            if let normalizedReasoningLevel {
+                components.append("-c \(shellQuote("model_reasoning_effort=\"\(normalizedReasoningLevel)\""))")
+            }
+            if let resumeID = normalizedConversationSessionID {
+                components.append("exec resume \(shellQuote(resumeID)) --json \(quotedPrompt)")
+            } else {
+                components.append("exec --json \(quotedPrompt)")
+            }
+            return components.joined(separator: " ")
         case .custom:
             return nil
         }
+    }
+
+    public nonisolated static func parseClaudeModelChange(from output: String) -> (modelLabel: String, effortLevel: String?)? {
+        let lines = output.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        return lines.reversed().lazy.compactMap { parseClaudeModelChangeLine(String($0)) }.first
+    }
+
+    public nonisolated static func parseCodexModelChange(from output: String) -> (modelId: String, effortLevel: String?)? {
+        let lines = output.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        return lines.reversed().lazy.compactMap { parseCodexModelChangeLine(String($0)) }.first
+    }
+
+    private nonisolated static func parseClaudeModelChangeLine(_ line: String) -> (modelLabel: String, effortLevel: String?)? {
+        let stripped = line
+            .trimmingCharacters(in: .whitespaces)
+            .drop(while: { $0 == "⎿" || $0 == " " })
+
+        guard stripped.hasPrefix("Set model to ") else { return nil }
+
+        let remainder = String(stripped.dropFirst("Set model to ".count)).trimmingCharacters(in: .whitespaces)
+        guard !remainder.isEmpty else { return nil }
+
+        if let withRange = remainder.range(of: #" with (\w+) effort$"#, options: .regularExpression) {
+            let modelLabel = String(remainder[remainder.startIndex..<withRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+            let withClause = String(remainder[withRange]).trimmingCharacters(in: .whitespaces)
+            let effortWord = withClause
+                .replacingOccurrences(of: "^with ", with: "", options: .regularExpression)
+                .replacingOccurrences(of: " effort$", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            guard !modelLabel.isEmpty, !effortWord.isEmpty else { return nil }
+            return (modelLabel, effortWord)
+        }
+
+        return (remainder, nil)
+    }
+
+    private nonisolated static func parseCodexModelChangeLine(_ line: String) -> (modelId: String, effortLevel: String?)? {
+        let stripped = line
+            .trimmingCharacters(in: .whitespaces)
+            .drop(while: { $0 == "•" || $0 == " " })
+
+        guard stripped.hasPrefix("Model changed to ") else { return nil }
+
+        let remainder = String(stripped.dropFirst("Model changed to ".count)).trimmingCharacters(in: .whitespaces)
+        guard !remainder.isEmpty else { return nil }
+
+        let tokens = remainder.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard let modelId = tokens.first, !modelId.isEmpty else { return nil }
+        let effortLevel = tokens.count >= 2 ? tokens[1] : nil
+        return (modelId, effortLevel)
     }
 
     private nonisolated static func parseJSONObject(_ line: Substring) -> [String: Any]? {

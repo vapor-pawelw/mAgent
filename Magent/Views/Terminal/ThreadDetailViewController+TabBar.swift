@@ -608,12 +608,17 @@ extension ThreadDetailViewController {
                 item.tmuxSessionNameForMenu = nil
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
-            case .chat:
-                item.onRename = nil
-                item.allowsDoubleClickRename = false
+            case .chat(let identifier):
+                let currentAgent = chatTabs.first(where: { $0.identifier == identifier })?.agentType
+                let availableAgents = settings.availableActiveAgents.filter { agent in
+                    guard let currentAgent else { return true }
+                    return agent != currentAgent
+                }
+                item.onRename = { [weak self] in self?.showChatTabRenameDialog(at: i) }
+                item.allowsDoubleClickRename = true
                 item.onResumeAgentInNewTab = nil
-                item.onContinueIn = nil
-                item.onExportContext = nil
+                item.onContinueIn = { [weak self] in self?.presentContinueChatTabSheet(for: i) }
+                item.onExportContext = { [weak self] in self?.exportChatTabConversation(at: i) }
                 item.onRepairTerminal = nil
                 item.canRepairTerminal = false
                 item.onKeepAlive = nil
@@ -621,7 +626,7 @@ extension ThreadDetailViewController {
                 item.onKillAllSessions = nil
                 item.onCopyTmuxSessionName = nil
                 item.tmuxSessionNameForMenu = nil
-                item.availableAgentsForContinue = []
+                item.availableAgentsForContinue = availableAgents
                 item.showKeepAliveIcon = false
             }
         }
@@ -631,7 +636,10 @@ extension ThreadDetailViewController {
 
     func refreshTabTooltips() {
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
-            tabItems[i].toolTip = tooltipText(for: slot, displayIndex: i)
+            let newTooltip = tooltipText(for: slot, displayIndex: i)
+            if tabItems[i].toolTip != newTooltip {
+                tabItems[i].toolTip = newTooltip
+            }
         }
     }
 

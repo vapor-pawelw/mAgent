@@ -134,6 +134,19 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
   - Codex: `codex exec --json` (resume via `codex exec resume <thread_id> --json`)
 - Each chat tab persists the latest agent conversation/session id so subsequent messages continue in the same native agent context.
 
+### Chat Slash Commands (GUI Chat Tabs)
+
+- Chat-tab slash commands are app-handled convenience commands, not a passthrough of each agent's full interactive TUI slash surface.
+- Codex chat autocomplete intentionally exposes only commands supported in this GUI surface: `/help`, `/clear`, `/model`, `/effort`.
+- `/model` and `/effort` update persisted per-tab chat selections and next request flags; `/clear` resets visible messages and conversation resume id.
+- Unsupported Codex slash commands should not be surfaced in chat autocomplete because `codex exec --json` does not guarantee parity with interactive terminal slash behavior.
+
+### Model/Reasoning Source of Truth (Reliability)
+
+- In chat tabs, the authoritative current model/reasoning is Magent's tab state (picker + slash-command updates), because requests are launched with explicit flags per turn.
+- Output-based detection (`Set model to ...`, `Model changed to ...`) remains best-effort sync only; it is useful for convergence but should not be treated as a guaranteed session-introspection API.
+- Terminal sessions still rely on output/process heuristics for passive detection and display updates.
+
 ### Fast Path (Option+click / Context Menu)
 
 Uses last-selected model + reasoning for the relevant agent. No sheet shown. Equivalent to accepting the sheet with last-used values.

@@ -12,6 +12,8 @@ final class SettingsChatViewController: NSViewController {
     private let userTextColorWell = NSColorWell()
     private let agentBubbleColorWell = NSColorWell()
     private let agentTextColorWell = NSColorWell()
+    private let chatFontSizeSlider = NSSlider(value: AppSettings.defaultChatFontSize, minValue: AppSettings.minChatFontSize, maxValue: AppSettings.maxChatFontSize, target: nil, action: nil)
+    private let chatFontSizeValueLabel = NSTextField(labelWithString: "")
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
@@ -39,6 +41,12 @@ final class SettingsChatViewController: NSViewController {
             description: String(localized: .SettingsStrings.settingsChatColorsDescription)
         )
         stackView.addArrangedSubview(colorsCard)
+
+        let (textSizeCard, textSizeSection) = createSectionCard(
+            title: String(localized: .SettingsStrings.settingsChatTextSizeTitle),
+            description: String(localized: .SettingsStrings.settingsChatTextSizeDescription)
+        )
+        stackView.addArrangedSubview(textSizeCard)
 
         configureColorWell(userBubbleColorWell, action: #selector(userBubbleColorChanged))
         configureColorWell(userTextColorWell, action: #selector(userTextColorChanged))
@@ -85,6 +93,14 @@ final class SettingsChatViewController: NSViewController {
         resetDescription.textColor = NSColor(resource: .textSecondary)
         colorsSection.addArrangedSubview(resetDescription)
 
+        configureChatFontSizeSlider()
+        let textSizeRow = labeledSliderRow(
+            label: String(localized: .SettingsStrings.settingsChatTextSizeLabel),
+            slider: chatFontSizeSlider,
+            valueLabel: chatFontSizeValueLabel
+        )
+        textSizeSection.addArrangedSubview(textSizeRow)
+
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stackView)
@@ -105,10 +121,11 @@ final class SettingsChatViewController: NSViewController {
 
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
             colorsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            textSizeCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             resetDescription.widthAnchor.constraint(equalTo: colorsSection.widthAnchor),
         ])
 
-        refreshColorControls()
+        refreshControls()
     }
 
     override func viewDidAppear() {
@@ -138,6 +155,17 @@ final class SettingsChatViewController: NSViewController {
         colorWell.action = action
     }
 
+    private func configureChatFontSizeSlider() {
+        chatFontSizeSlider.target = self
+        chatFontSizeSlider.action = #selector(chatFontSizeChanged)
+        chatFontSizeSlider.controlSize = .small
+        chatFontSizeSlider.numberOfTickMarks = Int((AppSettings.maxChatFontSize - AppSettings.minChatFontSize) + 1)
+        chatFontSizeSlider.allowsTickMarkValuesOnly = true
+
+        chatFontSizeValueLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        chatFontSizeValueLabel.textColor = NSColor(resource: .textSecondary)
+    }
+
     private func labeledColorRow(label: String, colorWell: NSColorWell) -> NSStackView {
         let row = NSStackView()
         row.orientation = .horizontal
@@ -154,6 +182,28 @@ final class SettingsChatViewController: NSViewController {
         row.addArrangedSubview(spacer)
 
         row.addArrangedSubview(colorWell)
+        return row
+    }
+
+    private func labeledSliderRow(label: String, slider: NSSlider, valueLabel: NSTextField) -> NSStackView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+
+        let titleLabel = NSTextField(labelWithString: label)
+        titleLabel.font = .systemFont(ofSize: 12)
+        row.addArrangedSubview(titleLabel)
+
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        row.addArrangedSubview(slider)
+        NSLayoutConstraint.activate([
+            slider.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+        ])
+
+        valueLabel.setContentHuggingPriority(.required, for: .horizontal)
+        valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        row.addArrangedSubview(valueLabel)
         return row
     }
 
@@ -197,16 +247,24 @@ final class SettingsChatViewController: NSViewController {
         mutate(&settings)
         try? persistence.saveSettings(settings)
         NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
-        refreshColorControls()
+        refreshControls()
     }
 
-    private func refreshColorControls() {
+    private func refreshControls() {
         settings = persistence.loadSettings()
         let appearance = ChatAppearance.resolve(from: settings)
         userBubbleColorWell.color = appearance.userBubbleColor
         userTextColorWell.color = appearance.userTextColor
         agentBubbleColorWell.color = appearance.agentBubbleColor
         agentTextColorWell.color = appearance.agentTextColor
+        chatFontSizeSlider.doubleValue = settings.chatFontSize
+        chatFontSizeValueLabel.stringValue = formattedChatFontSizeLabel(settings.chatFontSize)
+    }
+
+    private func formattedChatFontSizeLabel(_ size: Double) -> String {
+        let roundedSize = Int(size.rounded())
+        let value = NumberFormatter.localizedString(from: NSNumber(value: roundedSize), number: .none)
+        return String(localized: .SettingsStrings.settingsChatTextSizeValueFormat(value))
     }
 
     @objc private func userBubbleColorChanged() {
@@ -239,6 +297,17 @@ final class SettingsChatViewController: NSViewController {
             settings.chatUserTextColorHex = nil
             settings.chatAssistantBubbleColorHex = nil
             settings.chatAssistantTextColorHex = nil
+        }
+    }
+
+    @objc private func chatFontSizeChanged() {
+        let clamped = min(
+            max(chatFontSizeSlider.doubleValue, AppSettings.minChatFontSize),
+            AppSettings.maxChatFontSize
+        ).rounded()
+        chatFontSizeSlider.doubleValue = clamped
+        saveSettingsAndNotify { settings in
+            settings.chatFontSize = clamped
         }
     }
 }

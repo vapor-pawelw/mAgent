@@ -879,6 +879,8 @@ final class IPCCommandHandler {
             chatTabs[chatIndex].messages.append(pendingAssistant)
             let agentType = chatTabs[chatIndex].agentType
             let conversationSessionID = chatTabs[chatIndex].conversationSessionID
+            let modelId = chatTabs[chatIndex].modelId
+            let reasoningLevel = chatTabs[chatIndex].reasoningLevel
 
             threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
             await MainActor.run {
@@ -890,7 +892,9 @@ final class IPCCommandHandler {
                 prompt: prompt,
                 workingDirectory: thread.worktreePath,
                 conversationSessionID: conversationSessionID,
-                claudeSystemPrompt: IPCAgentDocs.claudeSystemPrompt
+                claudeSystemPrompt: IPCAgentDocs.claudeSystemPrompt,
+                modelId: modelId,
+                reasoningLevel: reasoningLevel
             )
 
             guard let latestIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {

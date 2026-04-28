@@ -16,6 +16,62 @@ public enum ShellError: LocalizedError {
 
 public enum ShellExecutor {
 
+    /// Thread-safe handle that allows canceling an in-flight spawned command.
+    ///
+    /// `cancel()` sends SIGINT first (Ctrl+C semantics), then escalates to SIGTERM and SIGKILL
+    /// if the process remains alive.
+    public final class CancellationHandle: @unchecked Sendable {
+        private let lock = NSLock()
+        private var pid: pid_t?
+        private var isCancelled = false
+
+        public init() {}
+
+        public func register(pid: pid_t) {
+            var shouldCancelNow = false
+            lock.lock()
+            self.pid = pid
+            shouldCancelNow = isCancelled
+            lock.unlock()
+
+            if shouldCancelNow {
+                interruptProcess(pid: pid)
+            }
+        }
+
+        public func clear() {
+            lock.lock()
+            pid = nil
+            lock.unlock()
+        }
+
+        public func cancel() {
+            var activePID: pid_t?
+            lock.lock()
+            isCancelled = true
+            activePID = pid
+            lock.unlock()
+
+            guard let activePID else { return }
+            interruptProcess(pid: activePID)
+        }
+
+        private func interruptProcess(pid: pid_t) {
+            guard pid > 0 else { return }
+            _ = kill(pid, SIGINT)
+
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.25) {
+                guard kill(pid, 0) == 0 else { return }
+                _ = kill(pid, SIGTERM)
+
+                DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.25) {
+                    guard kill(pid, 0) == 0 else { return }
+                    _ = kill(pid, SIGKILL)
+                }
+            }
+        }
+    }
+
     public struct Result: Sendable {
         public let stdout: String
         public let stderr: String
@@ -43,7 +99,7 @@ public enum ShellExecutor {
     public nonisolated static func execute(_ command: String, workingDirectory: String? = nil) async -> Result {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let bin = synchronousExecuteData(command, workingDirectory: workingDirectory)
+                let bin = synchronousExecuteData(command, workingDirectory: workingDirectory, cancellationHandle: nil)
                 let result = Result(
                     stdout: String(data: bin.stdoutData, encoding: .utf8) ?? "",
                     stderr: bin.stderr,
@@ -54,17 +110,54 @@ public enum ShellExecutor {
         }
     }
 
+    /// Runs a command and supports cancellation via either Task cancellation or
+    /// explicit `CancellationHandle.cancel()`.
+    public nonisolated static func executeCancellable(
+        _ command: String,
+        workingDirectory: String? = nil,
+        cancellationHandle: CancellationHandle? = nil
+    ) async -> Result {
+        let handle = cancellationHandle ?? CancellationHandle()
+        if Task.isCancelled {
+            handle.cancel()
+        }
+
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let bin = synchronousExecuteData(
+                        command,
+                        workingDirectory: workingDirectory,
+                        cancellationHandle: handle
+                    )
+                    let result = Result(
+                        stdout: String(data: bin.stdoutData, encoding: .utf8) ?? "",
+                        stderr: bin.stderr,
+                        exitCode: bin.exitCode
+                    )
+                    continuation.resume(returning: result)
+                }
+            }
+        } onCancel: {
+            handle.cancel()
+        }
+    }
+
     /// Runs a command and returns raw binary stdout data.
     public nonisolated static func executeData(_ command: String, workingDirectory: String? = nil) async -> BinaryResult {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let result = synchronousExecuteData(command, workingDirectory: workingDirectory)
+                let result = synchronousExecuteData(command, workingDirectory: workingDirectory, cancellationHandle: nil)
                 continuation.resume(returning: result)
             }
         }
     }
 
-    nonisolated private static func synchronousExecuteData(_ command: String, workingDirectory: String?) -> BinaryResult {
+    nonisolated private static func synchronousExecuteData(
+        _ command: String,
+        workingDirectory: String?,
+        cancellationHandle: CancellationHandle?
+    ) -> BinaryResult {
         // Create pipes for stdout and stderr
         var stdoutPipe: [Int32] = [0, 0]
         var stderrPipe: [Int32] = [0, 0]
@@ -134,6 +227,8 @@ public enum ShellExecutor {
             return BinaryResult(stdoutData: Data(), stderr: "posix_spawn failed: \(spawnResult)", exitCode: -1)
         }
 
+        cancellationHandle?.register(pid: pid)
+
         // Read stdout and stderr
         let stdoutData = readAll(fd: stdoutPipe[0])
         let stderrData = readAll(fd: stderrPipe[0])
@@ -143,6 +238,7 @@ public enum ShellExecutor {
         // Wait for child
         var status: Int32 = 0
         waitpid(pid, &status, 0)
+        cancellationHandle?.clear()
 
         // Extract exit code: WIFEXITED / WEXITSTATUS macros aren't available in Swift
         let exitCode: Int32

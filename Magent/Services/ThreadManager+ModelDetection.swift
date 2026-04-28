@@ -89,8 +89,7 @@ extension ThreadManager {
     ///
     /// Returns nil if no model-change line is found.
     func parseClaudeModelChange(from paneContent: String) -> (modelLabel: String, effortLevel: String?)? {
-        let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        return lines.reversed().lazy.compactMap { Self.parseModelChangeLine(String($0)) }.first
+        AgentChatRuntime.parseClaudeModelChange(from: paneContent)
     }
 
     /// Extracts the last "• Model changed to <modelId> <effort>" line from `paneContent` and
@@ -105,67 +104,6 @@ extension ThreadManager {
     ///
     /// Returns nil if no model-change line is found.
     func parseCodexModelChange(from paneContent: String) -> (modelId: String, effortLevel: String?)? {
-        let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        return lines.reversed().lazy.compactMap { Self.parseCodexModelChangeLine(String($0)) }.first
-    }
-
-    /// Parses a single line for the Claude model-change pattern:
-    ///   `Set model to <ModelName>`
-    ///   `Set model to <ModelName> with <effort> effort`
-    ///
-    /// The "⎿ " prefix that Claude Code prepends to tool-result lines is optional — we strip
-    /// leading whitespace and any leading "⎿" before matching, so the regex stays simple.
-    private static func parseModelChangeLine(_ line: String) -> (modelLabel: String, effortLevel: String?)? {
-        // Strip leading whitespace and the "⎿" result indicator Claude Code uses.
-        let stripped = line
-            .trimmingCharacters(in: .whitespaces)
-            .drop(while: { $0 == "⎿" || $0 == " " })
-
-        guard stripped.hasPrefix("Set model to ") else { return nil }
-
-        let remainder = String(stripped.dropFirst("Set model to ".count)).trimmingCharacters(in: .whitespaces)
-        guard !remainder.isEmpty else { return nil }
-
-        // Check for the optional "with <effort> effort" suffix.
-        // Pattern: "<ModelName> with <effort> effort"
-        if let withRange = remainder.range(of: #" with (\w+) effort$"#, options: .regularExpression) {
-            let modelLabel = String(remainder[remainder.startIndex..<withRange.lowerBound]).trimmingCharacters(in: .whitespaces)
-            // Extract the effort word between "with " and " effort".
-            let withClause = String(remainder[withRange]).trimmingCharacters(in: .whitespaces)
-            // "with high effort" → "high"
-            let effortWord = withClause
-                .replacingOccurrences(of: "^with ", with: "", options: .regularExpression)
-                .replacingOccurrences(of: " effort$", with: "", options: .regularExpression)
-                .trimmingCharacters(in: .whitespaces)
-            guard !modelLabel.isEmpty, !effortWord.isEmpty else { return nil }
-            return (modelLabel, effortWord)
-        }
-
-        // No effort suffix — model name only.
-        return (remainder, nil)
-    }
-
-    /// Parses a single line for the Codex model-change pattern:
-    ///   `• Model changed to <modelId> <effort>`
-    ///   `• Model changed to <modelId>`
-    ///
-    /// The leading "•" bullet is optional — we strip leading whitespace and any leading
-    /// bullets/spaces before matching. The first whitespace-delimited token after the
-    /// prefix is treated as the model id (Codex ids are hyphen-separated, never contain
-    /// spaces), and the second token (if present) is the reasoning level.
-    private static func parseCodexModelChangeLine(_ line: String) -> (modelId: String, effortLevel: String?)? {
-        let stripped = line
-            .trimmingCharacters(in: .whitespaces)
-            .drop(while: { $0 == "•" || $0 == " " })
-
-        guard stripped.hasPrefix("Model changed to ") else { return nil }
-
-        let remainder = String(stripped.dropFirst("Model changed to ".count)).trimmingCharacters(in: .whitespaces)
-        guard !remainder.isEmpty else { return nil }
-
-        let tokens = remainder.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
-        guard let modelId = tokens.first, !modelId.isEmpty else { return nil }
-        let effortLevel = tokens.count >= 2 ? tokens[1] : nil
-        return (modelId, effortLevel)
+        AgentChatRuntime.parseCodexModelChange(from: paneContent)
     }
 }

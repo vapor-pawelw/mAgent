@@ -633,6 +633,37 @@ struct AppSettingsChatAppearanceTests {
         #expect(decoded.chatAssistantBubbleColorHex == "#778899")
         #expect(decoded.chatAssistantTextColorHex == "#AABBCC")
     }
+
+    @Test("Chat font size defaults to AppSettings default value")
+    func defaultChatFontSize() throws {
+        let data = try JSONEncoder().encode(AppSettings())
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        #expect(decoded.chatFontSize == AppSettings.defaultChatFontSize)
+    }
+
+    @Test("Chat font size is clamped when decoding out-of-range values")
+    func clampedDecodedChatFontSize() throws {
+        let baselineData = try JSONEncoder().encode(AppSettings())
+        let baselineObject = try #require(JSONSerialization.jsonObject(with: baselineData) as? [String: Any])
+
+        var lowObject = baselineObject
+        lowObject["chatFontSize"] = 4
+        let lowData = try JSONSerialization.data(withJSONObject: lowObject)
+        let tooSmall = try JSONDecoder().decode(
+            AppSettings.self,
+            from: lowData
+        )
+        #expect(tooSmall.chatFontSize == AppSettings.minChatFontSize)
+
+        var highObject = baselineObject
+        highObject["chatFontSize"] = 100
+        let highData = try JSONSerialization.data(withJSONObject: highObject)
+        let tooLarge = try JSONDecoder().decode(
+            AppSettings.self,
+            from: highData
+        )
+        #expect(tooLarge.chatFontSize == AppSettings.maxChatFontSize)
+    }
 }
 
 // MARK: - AgentType.capabilities
@@ -823,6 +854,30 @@ struct AgentChatRuntimeParsingTests {
         let parsed = AgentChatRuntime.parseCodexJSONL(stdout)
         #expect(parsed.conversationSessionID == "codex-thread-1")
         #expect(parsed.assistantText == "codex reply")
+    }
+
+    @Test("Claude model-change text parsing returns model label and effort")
+    func claudeModelChangeParsing() {
+        let output = """
+        Some other text
+        ⎿ Set model to Opus 4.1 with high effort
+        """
+
+        let parsed = AgentChatRuntime.parseClaudeModelChange(from: output)
+        #expect(parsed?.modelLabel == "Opus 4.1")
+        #expect(parsed?.effortLevel == "high")
+    }
+
+    @Test("Codex model-change text parsing returns model id and effort")
+    func codexModelChangeParsing() {
+        let output = """
+        note
+        • Model changed to gpt-5.5 xhigh
+        """
+
+        let parsed = AgentChatRuntime.parseCodexModelChange(from: output)
+        #expect(parsed?.modelId == "gpt-5.5")
+        #expect(parsed?.effortLevel == "xhigh")
     }
 }
 

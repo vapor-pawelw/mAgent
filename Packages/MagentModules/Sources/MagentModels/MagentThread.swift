@@ -136,6 +136,8 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
     public var messages: [PersistedChatMessage]
     public var draftInput: String
     public var conversationSessionID: String?
+    public var modelId: String?
+    public var reasoningLevel: String?
 
     private enum CodingKeys: String, CodingKey {
         case identifier
@@ -144,6 +146,8 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         case messages
         case draftInput
         case conversationSessionID
+        case modelId
+        case reasoningLevel
     }
 
     public init(
@@ -152,7 +156,9 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         title: String,
         messages: [PersistedChatMessage] = [],
         draftInput: String = "",
-        conversationSessionID: String? = nil
+        conversationSessionID: String? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
     ) {
         self.identifier = identifier
         self.agentType = agentType
@@ -160,6 +166,8 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         self.messages = messages
         self.draftInput = draftInput
         self.conversationSessionID = conversationSessionID
+        self.modelId = modelId
+        self.reasoningLevel = reasoningLevel
     }
 
     public init(from decoder: Decoder) throws {
@@ -170,6 +178,8 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         messages = try container.decodeIfPresent([PersistedChatMessage].self, forKey: .messages) ?? []
         draftInput = try container.decodeIfPresent(String.self, forKey: .draftInput) ?? ""
         conversationSessionID = try container.decodeIfPresent(String.self, forKey: .conversationSessionID)
+        modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
+        reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -183,6 +193,12 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         }
         if let conversationSessionID, !conversationSessionID.isEmpty {
             try container.encode(conversationSessionID, forKey: .conversationSessionID)
+        }
+        if let modelId, !modelId.isEmpty {
+            try container.encode(modelId, forKey: .modelId)
+        }
+        if let reasoningLevel, !reasoningLevel.isEmpty {
+            try container.encode(reasoningLevel, forKey: .reasoningLevel)
         }
     }
 }

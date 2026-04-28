@@ -232,6 +232,50 @@
         }
       }
     },
+    "settingsChatTextSizeDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjust chat message and composer text size."
+          }
+        }
+      }
+    },
+    "settingsChatTextSizeLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message size"
+          }
+        }
+      }
+    },
+    "settingsChatTextSizeTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text Size"
+          }
+        }
+      }
+    },
+    "settingsChatTextSizeValueFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ pt"
+          }
+        }
+      }
+    },
     "settingsChatResetColors": {
       "extractionState": "manual",
       "localizations": {

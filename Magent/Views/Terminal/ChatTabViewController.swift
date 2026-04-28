@@ -8,6 +8,8 @@ struct ChatTabEntry {
     var messages: [PersistedChatMessage]
     var draftInput: String
     var conversationSessionID: String?
+    var modelId: String?
+    var reasoningLevel: String?
     var viewController: ChatTabViewController?
 }
 
@@ -63,52 +65,209 @@ private final class SlashCommandAutocompleteCellView: NSTableCellView {
     }
 }
 
-private final class ChatMessageBubbleView: NSView {
-    private let container = NSView()
-    private let textLabel = NSTextField(wrappingLabelWithString: "")
-    private let timestampLabel = NSTextField(labelWithString: "")
+private final class ChatInputTextView: NSTextView {
+    var onCommandC: (() -> Bool)?
 
-    init(message: PersistedChatMessage, appearance: ChatAppearance) {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.type == .keyDown,
+           event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "c",
+           onCommandC?() == true {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
+private final class ChatMessageTextView: NSTextView {
+    private var hoverTrackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseMoved, .cursorUpdate],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+    }
+
+    override func resetCursorRects() {
+        discardCursorRects()
+        addCursorRect(bounds, cursor: .iBeam)
+        addLinkCursorRects()
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        updateHoverCursor(for: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateHoverCursor(for: event)
+    }
+
+    private func updateHoverCursor(for event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if hasLink(at: point) {
+            NSCursor.pointingHand.set()
+        } else {
+            NSCursor.iBeam.set()
+        }
+    }
+
+    private func hasLink(at point: NSPoint) -> Bool {
+        guard let layoutManager, let textContainer, let textStorage else { return false }
+
+        var containerPoint = point
+        containerPoint.x -= textContainerInset.width
+        containerPoint.y -= textContainerInset.height
+
+        guard containerPoint.x >= 0, containerPoint.y >= 0 else { return false }
+
+        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+        let glyphRange = NSRange(location: glyphIndex, length: 1)
+        let glyphRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        guard glyphRect.contains(containerPoint) else { return false }
+
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard charIndex < textStorage.length else { return false }
+        return textStorage.attribute(.link, at: charIndex, effectiveRange: nil) != nil
+    }
+
+    private func addLinkCursorRects() {
+        guard let layoutManager, let textContainer, let textStorage else { return }
+        layoutManager.ensureLayout(for: textContainer)
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+        textStorage.enumerateAttribute(.link, in: fullRange) { value, range, _ in
+            guard value != nil else { return }
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            layoutManager.enumerateEnclosingRects(
+                forGlyphRange: glyphRange,
+                withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                in: textContainer
+            ) { [weak self] rect, _ in
+                guard let self else { return }
+                var adjusted = rect
+                adjusted.origin.x += self.textContainerInset.width
+                adjusted.origin.y += self.textContainerInset.height
+                self.addCursorRect(adjusted, cursor: .pointingHand)
+            }
+        }
+    }
+}
+
+private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
+    private let container = NSView()
+    private let messageTextView = ChatMessageTextView()
+    private let timestampLabel = NSTextField(labelWithString: "")
+    private let onOpenLink: ((String) -> Void)?
+    private var bubbleHeightConstraint: NSLayoutConstraint?
+    private let isLoadingIndicatorBubble: Bool
+    private let loadingBubbleSide: CGFloat = 36
+    private let loadingBubbleCornerRadius: CGFloat = 10
+
+    private enum MarkdownToken {
+        case text(String)
+        case code(String)
+        case link(label: String, target: String)
+    }
+
+    init(
+        message: PersistedChatMessage,
+        appearance: ChatAppearance,
+        fontSize: CGFloat,
+        onOpenLink: ((String) -> Void)? = nil
+    ) {
+        self.onOpenLink = onOpenLink
+        self.isLoadingIndicatorBubble = message.role == .assistant && Self.isThinkingPlaceholderText(message.text)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
         container.translatesAutoresizingMaskIntoConstraints = false
         container.wantsLayer = true
-        container.layer?.cornerRadius = 14
+        container.layer?.cornerRadius = isLoadingIndicatorBubble ? loadingBubbleCornerRadius : 14
         container.layer?.masksToBounds = true
         addSubview(container)
 
-        textLabel.stringValue = message.text
-        textLabel.font = .systemFont(ofSize: 13)
-        textLabel.maximumNumberOfLines = 0
-        textLabel.lineBreakMode = .byWordWrapping
-
-        timestampLabel.stringValue = Self.timestampFormatter.string(from: message.createdAt)
-        timestampLabel.font = .monospacedSystemFont(ofSize: 9, weight: .regular)
+        timestampLabel.stringValue = Self.formattedTimestamp(message.createdAt)
+        timestampLabel.font = .monospacedSystemFont(ofSize: max(9, fontSize - 4), weight: .regular)
         timestampLabel.textColor = .secondaryLabelColor
+        timestampLabel.isSelectable = true
+        timestampLabel.allowsEditingTextAttributes = false
+        let exactTimestampTooltip = Self.exactTimestampTooltip(message.createdAt)
+        toolTip = exactTimestampTooltip
+        container.toolTip = exactTimestampTooltip
+        messageTextView.toolTip = exactTimestampTooltip
+        timestampLabel.toolTip = exactTimestampTooltip
 
+        let baseTextColor: NSColor
+        let codeColor: NSColor
         switch message.role {
         case .user:
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 container.layer?.backgroundColor = appearance.userBubbleColor.cgColor
             }
-            textLabel.textColor = appearance.userTextColor
+            baseTextColor = appearance.userTextColor
+            codeColor = appearance.userTextColor.withAlphaComponent(0.75)
             timestampLabel.alignment = .right
         case .assistant:
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 container.layer?.backgroundColor = appearance.agentBubbleColor.cgColor
             }
-            textLabel.textColor = appearance.agentTextColor
+            baseTextColor = appearance.agentTextColor
+            codeColor = NSColor(resource: .textSecondary)
             timestampLabel.alignment = .left
         }
 
-        let textStack = NSStackView()
-        textStack.translatesAutoresizingMaskIntoConstraints = false
-        textStack.orientation = .vertical
-        textStack.alignment = .leading
-        textStack.spacing = 0
-        textStack.addArrangedSubview(textLabel)
-        container.addSubview(textStack)
+        if isLoadingIndicatorBubble {
+            let spinner = NSProgressIndicator()
+            spinner.translatesAutoresizingMaskIntoConstraints = false
+            spinner.style = .spinning
+            spinner.controlSize = .small
+            spinner.isDisplayedWhenStopped = false
+            spinner.startAnimation(nil)
+            container.addSubview(spinner)
+            NSLayoutConstraint.activate([
+                spinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+                spinner.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            ])
+            configureLoadingBubbleBorderAnimation()
+        } else {
+            messageTextView.drawsBackground = false
+            messageTextView.isEditable = false
+            messageTextView.isSelectable = true
+            messageTextView.isRichText = false
+            messageTextView.importsGraphics = false
+            messageTextView.usesFindPanel = false
+            messageTextView.textContainerInset = .zero
+            messageTextView.textContainer?.lineFragmentPadding = 0
+            messageTextView.isHorizontallyResizable = false
+            messageTextView.isVerticallyResizable = true
+            messageTextView.textContainer?.widthTracksTextView = false
+            messageTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+            messageTextView.delegate = self
+            messageTextView.linkTextAttributes = [
+                .foregroundColor: NSColor(resource: .primaryBrand),
+                .font: NSFont.systemFont(ofSize: fontSize, weight: .regular),
+            ]
+            messageTextView.textStorage?.setAttributedString(
+                Self.styledMarkdownText(
+                    message.text,
+                    baseColor: baseTextColor,
+                    codeColor: codeColor,
+                    linkColor: NSColor(resource: .primaryBrand),
+                    baseFontSize: fontSize
+                )
+            )
+
+            messageTextView.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(messageTextView)
+        }
 
         let timestampRow = NSStackView()
         timestampRow.translatesAutoresizingMaskIntoConstraints = false
@@ -160,16 +319,28 @@ private final class ChatMessageBubbleView: NSView {
 
         NSLayoutConstraint.activate([
             container.widthAnchor.constraint(lessThanOrEqualToConstant: 560),
-            textStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            textStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            textStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
-            textStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
 
             outer.topAnchor.constraint(equalTo: topAnchor),
             outer.leadingAnchor.constraint(equalTo: leadingAnchor),
             outer.trailingAnchor.constraint(equalTo: trailingAnchor),
             outer.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+
+        if isLoadingIndicatorBubble {
+            NSLayoutConstraint.activate([
+                container.widthAnchor.constraint(equalToConstant: loadingBubbleSide),
+                container.heightAnchor.constraint(equalToConstant: loadingBubbleSide),
+            ])
+        } else {
+            bubbleHeightConstraint = container.heightAnchor.constraint(equalToConstant: 20)
+            bubbleHeightConstraint?.isActive = true
+            NSLayoutConstraint.activate([
+                messageTextView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+                messageTextView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+                messageTextView.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
+                messageTextView.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
+            ])
+        }
     }
 
     @available(*, unavailable)
@@ -177,46 +348,257 @@ private final class ChatMessageBubbleView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private static let timestampFormatter: DateFormatter = {
+    override func layout() {
+        super.layout()
+        guard !isLoadingIndicatorBubble else { return }
+        updateBubbleHeight()
+    }
+
+    func clearSelection() {
+        guard !isLoadingIndicatorBubble else { return }
+        messageTextView.setSelectedRange(NSRange(location: 0, length: 0))
+    }
+
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        if let target = link as? String {
+            onOpenLink?(target)
+            return true
+        }
+        if let url = link as? URL {
+            onOpenLink?(url.absoluteString)
+            return true
+        }
+        return false
+    }
+
+    private func updateBubbleHeight() {
+        guard let textContainer = messageTextView.textContainer,
+              let layoutManager = messageTextView.layoutManager else { return }
+
+        let availableWidth = max(1, messageTextView.bounds.width - (textContainer.lineFragmentPadding * 2))
+        if abs(textContainer.containerSize.width - availableWidth) > 0.5 {
+            textContainer.containerSize = NSSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude)
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let textHeight = ceil(layoutManager.usedRect(for: textContainer).height)
+        // 10pt top + 10pt bottom padding around text.
+        bubbleHeightConstraint?.constant = max(20, textHeight + 20)
+    }
+
+    private func configureLoadingBubbleBorderAnimation() {
+        guard let layer = container.layer else { return }
+        layer.borderWidth = 1
+        var baseBorderColor = NSColor.tertiaryLabelColor.withAlphaComponent(0.35)
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            baseBorderColor = NSColor.tertiaryLabelColor.withAlphaComponent(0.35)
+        }
+        layer.borderColor = baseBorderColor.cgColor
+
+        if layer.animation(forKey: "chatLoadingBorderPulse") == nil {
+            let pulse = CABasicAnimation(keyPath: "borderColor")
+            pulse.fromValue = baseBorderColor.cgColor
+            pulse.toValue = NSColor(resource: .primaryBrand).withAlphaComponent(0.9).cgColor
+            pulse.duration = 0.9
+            pulse.autoreverses = true
+            pulse.repeatCount = .infinity
+            pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(pulse, forKey: "chatLoadingBorderPulse")
+        }
+    }
+
+    private static func styledMarkdownText(
+        _ source: String,
+        baseColor: NSColor,
+        codeColor: NSColor,
+        linkColor: NSColor,
+        baseFontSize: CGFloat
+    ) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let baseFont = NSFont.systemFont(ofSize: baseFontSize)
+        let codeFont = NSFont.monospacedSystemFont(ofSize: max(11, baseFontSize - 1), weight: .regular)
+        let linkFont = NSFont.systemFont(ofSize: baseFontSize, weight: .regular)
+
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: baseFont,
+            .foregroundColor: baseColor,
+        ]
+        let codeAttributes: [NSAttributedString.Key: Any] = [
+            .font: codeFont,
+            .foregroundColor: codeColor,
+        ]
+        let linkAttributes: [NSAttributedString.Key: Any] = [
+            .font: linkFont,
+            .foregroundColor: linkColor,
+        ]
+
+        for token in tokenizeMarkdown(source) {
+            switch token {
+            case .text(let text):
+                result.append(NSAttributedString(string: text, attributes: baseAttributes))
+            case .code(let text):
+                result.append(NSAttributedString(string: text, attributes: codeAttributes))
+            case .link(let label, let target):
+                let display = label.isEmpty ? target : label
+                let attrs = linkAttributes.merging([.link: target]) { current, _ in current }
+                result.append(NSAttributedString(string: display, attributes: attrs))
+            }
+        }
+
+        return result
+    }
+
+    private static func tokenizeMarkdown(_ source: String) -> [MarkdownToken] {
+        guard !source.isEmpty else { return [.text("")] }
+
+        var tokens: [MarkdownToken] = []
+        var buffer = ""
+
+        func flushText() {
+            guard !buffer.isEmpty else { return }
+            tokens.append(.text(buffer))
+            buffer.removeAll(keepingCapacity: true)
+        }
+
+        var index = source.startIndex
+        while index < source.endIndex {
+            let character = source[index]
+
+            if character == "`" {
+                var delimiterCount = 0
+                var delimiterIndex = index
+                while delimiterIndex < source.endIndex, source[delimiterIndex] == "`" {
+                    delimiterCount += 1
+                    delimiterIndex = source.index(after: delimiterIndex)
+                }
+
+                let delimiter = String(repeating: "`", count: delimiterCount)
+                if let closeRange = source[delimiterIndex...].range(of: delimiter) {
+                    flushText()
+                    let codeText = String(source[delimiterIndex..<closeRange.lowerBound])
+                    tokens.append(.code(codeText))
+                    index = closeRange.upperBound
+                    continue
+                }
+
+                buffer.append(delimiter)
+                index = delimiterIndex
+                continue
+            }
+
+            if character == "[" {
+                if let closeBracket = source[index...].firstIndex(of: "]") {
+                    let afterBracket = source.index(after: closeBracket)
+                    if afterBracket < source.endIndex, source[afterBracket] == "(",
+                       let closeParen = source[source.index(after: afterBracket)...].firstIndex(of: ")") {
+                        let labelStart = source.index(after: index)
+                        let targetStart = source.index(after: afterBracket)
+                        let label = String(source[labelStart..<closeBracket])
+                        let target = String(source[targetStart..<closeParen])
+                        flushText()
+                        tokens.append(.link(label: label, target: target))
+                        index = source.index(after: closeParen)
+                        continue
+                    }
+                }
+            }
+
+            buffer.append(character)
+            index = source.index(after: index)
+        }
+
+        flushText()
+        return tokens
+    }
+
+    private static func formattedTimestamp(_ date: Date, now: Date = Date()) -> String {
+        relativeTimestampFormatter.localizedString(for: date, relativeTo: now)
+    }
+
+    private static func exactTimestampTooltip(_ date: Date) -> String {
+        exactTimestampFormatter.string(from: date)
+    }
+
+    private static let exactTimestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss Z"
+        formatter.locale = .autoupdatingCurrent
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateStyle = .full
+        formatter.timeStyle = .long
         return formatter
     }()
+
+    private static let relativeTimestampFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.dateTimeStyle = .named
+        formatter.unitsStyle = .full
+        return formatter
+    }()
+
+    private static func isThinkingPlaceholderText(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "Thinking."
+            || trimmed == "Thinking.."
+            || trimmed == "Thinking..."
+            || trimmed == "Thinking…"
+    }
 }
 
 final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTableViewDataSource, NSTableViewDelegate {
     let chatIdentifier: String
     private(set) var agentType: AgentType
     private(set) var messages: [PersistedChatMessage]
+    private(set) var modelId: String?
+    private(set) var reasoningLevel: String?
 
     var onSubmit: ((String) -> Void)?
     var onDraftChanged: ((String) -> Void)?
+    var onCancelRunningCommand: (() -> Void)?
+    var onOpenMarkdownLink: ((String) -> Void)?
+    var onModelReasoningChanged: ((String?, String?) -> Void)?
+    var isCommandRunning: (() -> Bool)?
 
     private let scrollView = NSScrollView()
     private let messagesStack = NSStackView()
-    private let inputTextView = NSTextView()
+    private let inputTextView = ChatInputTextView()
     private let sendButton = NSButton()
     private let scrollToBottomButton = NSButton()
     private let slashAutocompleteContainer = NSView()
     private let slashAutocompleteScrollView = NSScrollView()
     private let slashAutocompleteTableView = NSTableView()
+    private let modelPicker = NSPopUpButton()
+    private let reasoningPicker = NSPopUpButton()
+    private let modelReasoningRow = NSStackView()
     private var inputScrollView: NSScrollView?
+    private let backgroundClickGesture = NSClickGestureRecognizer()
     private var inputHeightConstraint: NSLayoutConstraint?
     private var slashAutocompleteHeightConstraint: NSLayoutConstraint?
     private var filteredSlashCommands: [SlashCommandAutocompleteItem] = []
     private var chatAppearance: ChatAppearance
+    private var chatFontSize: CGFloat
     private let initialDraftInput: String
 
     private let slashAutocompleteRowHeight: CGFloat = 46
-    private let slashAutocompleteMaxVisibleRows = 7
+    private let slashAutocompleteVisibleRowsLimit = 5
+    private let slashAutocompleteVerticalPadding: CGFloat = 6
     private static let slashAutocompleteCellIdentifier = NSUserInterfaceItemIdentifier("slash-autocomplete-cell")
 
-    init(identifier: String, agentType: AgentType, messages: [PersistedChatMessage], draftInput: String) {
+    init(
+        identifier: String,
+        agentType: AgentType,
+        messages: [PersistedChatMessage],
+        draftInput: String,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
+    ) {
+        let settings = PersistenceService.shared.loadSettings()
         self.chatIdentifier = identifier
         self.agentType = agentType
         self.messages = messages
-        self.chatAppearance = ChatAppearance.resolve(from: PersistenceService.shared.loadSettings())
+        self.modelId = modelId
+        self.reasoningLevel = reasoningLevel
+        self.chatAppearance = ChatAppearance.resolve(from: settings)
+        self.chatFontSize = Self.resolvedChatFontSize(from: settings)
         self.initialDraftInput = draftInput
         super.init(nibName: nil, bundle: nil)
     }
@@ -235,10 +617,13 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
+        installBackgroundClickGesture()
+        configureModelReasoningPickers()
         reloadMessages()
         updateComposerHeight()
         updateScrollToBottomButtonVisibility()
         updateSlashAutocompleteAppearance()
+        updateScrollToBottomButtonAppearance()
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(settingsDidChange),
@@ -247,14 +632,29 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         )
     }
 
-    func update(agentType: AgentType, messages: [PersistedChatMessage], draftInput: String? = nil) {
+    func update(
+        agentType: AgentType,
+        messages: [PersistedChatMessage],
+        draftInput: String? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
+    ) {
+        let previousAgentType = self.agentType
         self.agentType = agentType
         self.messages = messages
+        self.modelId = modelId
+        self.reasoningLevel = reasoningLevel
         if let draftInput, inputTextView.string != draftInput {
             inputTextView.string = draftInput
             updateComposerHeight()
         }
+        if previousAgentType != agentType {
+            configureModelReasoningPickers()
+        } else {
+            syncModelReasoningSelection()
+        }
         reloadMessages()
+        updateSlashAutocompleteForCurrentInput()
     }
 
     func focusComposer() {
@@ -274,11 +674,6 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             rootStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -14),
             rootStack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -14),
         ])
-
-        let headerLabel = NSTextField(labelWithString: "\(agentType.displayName) Chat")
-        headerLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        headerLabel.textColor = .secondaryLabelColor
-        rootStack.addArrangedSubview(headerLabel)
 
         let messagesContainer = NSView()
         messagesContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -346,7 +741,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         inputScroll.scrollerStyle = .legacy
 
         inputTextView.isRichText = false
-        inputTextView.font = .systemFont(ofSize: 13)
+        inputTextView.font = .systemFont(ofSize: chatFontSize)
         inputTextView.isAutomaticDashSubstitutionEnabled = false
         inputTextView.isAutomaticQuoteSubstitutionEnabled = false
         inputTextView.isAutomaticTextReplacementEnabled = false
@@ -357,6 +752,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         inputTextView.string = initialDraftInput
         inputTextView.textContainer?.widthTracksTextView = true
         inputTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        inputTextView.onCommandC = { [weak self] in
+            self?.handleComposerCommandC() ?? false
+        }
         inputScroll.documentView = inputTextView
 
         inputScrollView = inputScroll
@@ -371,7 +769,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         sendButton.contentTintColor = .controlAccentColor
         sendButton.target = self
         sendButton.action = #selector(sendTapped)
-        sendButton.toolTip = "Return sends. Command+Return inserts newline."
+        sendButton.toolTip = "Return sends. Shift+Return inserts newline."
         composerStack.addArrangedSubview(sendButton)
 
         NSLayoutConstraint.activate([
@@ -385,15 +783,22 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         ])
 
         scrollToBottomButton.translatesAutoresizingMaskIntoConstraints = false
-        scrollToBottomButton.title = "Scroll to bottom"
-        scrollToBottomButton.bezelStyle = .rounded
+        scrollToBottomButton.title = ""
+        let scrollIconConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+        scrollToBottomButton.image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Scroll to bottom")?
+            .withSymbolConfiguration(scrollIconConfig)
+        scrollToBottomButton.imagePosition = .imageOnly
+        scrollToBottomButton.isBordered = false
+        scrollToBottomButton.toolTip = "Scroll to bottom"
         scrollToBottomButton.target = self
         scrollToBottomButton.action = #selector(scrollToBottomTapped)
         view.addSubview(scrollToBottomButton)
 
         NSLayoutConstraint.activate([
-            scrollToBottomButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            scrollToBottomButton.bottomAnchor.constraint(equalTo: composerContainer.topAnchor, constant: -8),
+            scrollToBottomButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            scrollToBottomButton.bottomAnchor.constraint(equalTo: composerContainer.topAnchor, constant: -10),
+            scrollToBottomButton.widthAnchor.constraint(equalToConstant: 30),
+            scrollToBottomButton.heightAnchor.constraint(equalToConstant: 30),
         ])
 
         NotificationCenter.default.addObserver(
@@ -402,6 +807,43 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             name: NSView.boundsDidChangeNotification,
             object: scrollView.contentView
         )
+
+        setupModelReasoningRow(rootStack: rootStack)
+    }
+
+    private func setupModelReasoningRow(rootStack: NSStackView) {
+        modelReasoningRow.translatesAutoresizingMaskIntoConstraints = false
+        modelReasoningRow.orientation = .horizontal
+        modelReasoningRow.alignment = .centerY
+        modelReasoningRow.spacing = 8
+        rootStack.addArrangedSubview(modelReasoningRow)
+
+        modelPicker.translatesAutoresizingMaskIntoConstraints = false
+        modelPicker.controlSize = .small
+        modelPicker.target = self
+        modelPicker.action = #selector(modelPickerChanged)
+        modelPicker.toolTip = String(localized: .ThreadStrings.chatSlashCommandModelDescription)
+
+        reasoningPicker.translatesAutoresizingMaskIntoConstraints = false
+        reasoningPicker.controlSize = .small
+        reasoningPicker.target = self
+        reasoningPicker.action = #selector(reasoningPickerChanged)
+        reasoningPicker.toolTip = String(localized: .ThreadStrings.chatSlashCommandEffortDescription)
+
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        modelReasoningRow.addArrangedSubview(modelPicker)
+        modelReasoningRow.addArrangedSubview(reasoningPicker)
+        modelReasoningRow.addArrangedSubview(spacer)
+
+        NSLayoutConstraint.activate([
+            modelReasoningRow.widthAnchor.constraint(equalTo: rootStack.widthAnchor),
+            modelPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            reasoningPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 116),
+        ])
     }
 
     private func setupSlashAutocompleteUI(composerContainer: NSView) {
@@ -443,15 +885,25 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         slashAutocompleteHeightConstraint = slashAutocompleteContainer.heightAnchor.constraint(equalToConstant: 0)
         slashAutocompleteHeightConstraint?.isActive = true
 
+        let preferredAutocompleteWidth = slashAutocompleteContainer.widthAnchor.constraint(equalToConstant: 360)
+        preferredAutocompleteWidth.priority = .defaultHigh
+
         NSLayoutConstraint.activate([
             slashAutocompleteScrollView.leadingAnchor.constraint(equalTo: slashAutocompleteContainer.leadingAnchor),
             slashAutocompleteScrollView.trailingAnchor.constraint(equalTo: slashAutocompleteContainer.trailingAnchor),
-            slashAutocompleteScrollView.topAnchor.constraint(equalTo: slashAutocompleteContainer.topAnchor),
-            slashAutocompleteScrollView.bottomAnchor.constraint(equalTo: slashAutocompleteContainer.bottomAnchor),
+            slashAutocompleteScrollView.topAnchor.constraint(
+                equalTo: slashAutocompleteContainer.topAnchor,
+                constant: slashAutocompleteVerticalPadding
+            ),
+            slashAutocompleteScrollView.bottomAnchor.constraint(
+                equalTo: slashAutocompleteContainer.bottomAnchor,
+                constant: -slashAutocompleteVerticalPadding
+            ),
 
             slashAutocompleteContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
-            slashAutocompleteContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -86),
+            slashAutocompleteContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -14),
             slashAutocompleteContainer.bottomAnchor.constraint(equalTo: composerContainer.topAnchor, constant: -8),
+            preferredAutocompleteWidth,
         ])
     }
 
@@ -462,19 +914,193 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         }
     }
 
+    private func updateScrollToBottomButtonAppearance() {
+        scrollToBottomButton.wantsLayer = true
+        scrollToBottomButton.layer?.cornerRadius = 15
+        scrollToBottomButton.layer?.borderWidth = 0
+        scrollToBottomButton.layer?.masksToBounds = true
+        scrollToBottomButton.alphaValue = TerminalScrollToBottomPillButton.restingAlpha
+
+        let appearance = view.effectiveAppearance
+        appearance.performAsCurrentDrawingAppearance {
+            scrollToBottomButton.layer?.backgroundColor = TerminalOverlayStyle.backgroundColor(for: appearance).cgColor
+            scrollToBottomButton.contentTintColor = TerminalOverlayStyle.contentTintColor(for: appearance)
+        }
+    }
+
+    private var selectedModelIdFromPicker: String? {
+        modelPicker.selectedItem?.representedObject as? String
+    }
+
+    private var selectedReasoningLevelFromPicker: String? {
+        reasoningPicker.selectedItem?.representedObject as? String
+    }
+
+    private func configureModelReasoningPickers() {
+        modelPicker.removeAllItems()
+        reasoningPicker.removeAllItems()
+
+        guard agentType != .custom,
+              let agentConfig = AgentModelsService.shared.config(for: agentType),
+              !agentConfig.models.isEmpty else {
+            modelReasoningRow.isHidden = true
+            modelId = nil
+            reasoningLevel = nil
+            return
+        }
+
+        modelReasoningRow.isHidden = false
+        for model in agentConfig.models {
+            modelPicker.addItem(withTitle: model.label)
+            modelPicker.lastItem?.representedObject = model.id as NSString
+        }
+        syncModelReasoningSelection(using: agentConfig)
+    }
+
+    private func syncModelReasoningSelection(using agentConfig: AgentModelConfig? = nil) {
+        guard let agentConfig = agentConfig ?? AgentModelsService.shared.config(for: agentType) else { return }
+        guard modelPicker.numberOfItems > 0 else { return }
+
+        let preferredModelId = AgentModelsService.shared.validatedModelId(modelId, for: agentType)
+            ?? AgentModelsService.shared.validatedModelId(AgentLastSelectionStore.lastModel(for: agentType), for: agentType)
+            ?? (modelPicker.itemArray.first?.representedObject as? String)
+
+        if let preferredModelId,
+           let modelIndex = modelPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == preferredModelId }) {
+            modelPicker.selectItem(at: modelIndex)
+        } else {
+            modelPicker.selectItem(at: 0)
+        }
+
+        repopulateReasoningPicker(agentConfig: agentConfig, preferredLevel: reasoningLevel)
+        commitModelReasoningSelection(notify: false)
+    }
+
+    private func repopulateReasoningPicker(agentConfig: AgentModelConfig, preferredLevel: String? = nil) {
+        let selectedModelId = selectedModelIdFromPicker
+        reasoningPicker.removeAllItems()
+        for level in agentConfig.effectiveReasoningLevels(for: selectedModelId) {
+            reasoningPicker.addItem(withTitle: level.capitalized)
+            reasoningPicker.lastItem?.representedObject = level as NSString
+        }
+
+        let fallbackLevel = AgentModelsService.shared.validatedReasoningLevel(
+            AgentLastSelectionStore.lastReasoning(for: agentType, modelId: selectedModelId),
+            for: agentType,
+            modelId: selectedModelId
+        )
+        let resolvedPreferred = AgentModelsService.shared.validatedReasoningLevel(
+            preferredLevel,
+            for: agentType,
+            modelId: selectedModelId
+        ) ?? fallbackLevel
+
+        if let resolvedPreferred,
+           let reasoningIndex = reasoningPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == resolvedPreferred }) {
+            reasoningPicker.selectItem(at: reasoningIndex)
+        } else if reasoningPicker.numberOfItems > 0 {
+            reasoningPicker.selectItem(at: 0)
+        }
+    }
+
+    private func commitModelReasoningSelection(notify: Bool) {
+        modelId = selectedModelIdFromPicker
+        reasoningLevel = selectedReasoningLevelFromPicker
+
+        if let modelId {
+            AgentLastSelectionStore.saveModel(modelId, for: agentType)
+        }
+        if let reasoningLevel {
+            AgentLastSelectionStore.saveReasoning(reasoningLevel, for: agentType, modelId: modelId)
+        }
+        if notify {
+            onModelReasoningChanged?(modelId, reasoningLevel)
+        }
+    }
+
+    @objc private func modelPickerChanged() {
+        guard let agentConfig = AgentModelsService.shared.config(for: agentType) else { return }
+        repopulateReasoningPicker(agentConfig: agentConfig)
+        commitModelReasoningSelection(notify: true)
+    }
+
+    @objc private func reasoningPickerChanged() {
+        commitModelReasoningSelection(notify: true)
+    }
+
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
 
+    private func installBackgroundClickGesture() {
+        backgroundClickGesture.target = self
+        backgroundClickGesture.action = #selector(handleBackgroundClick(_:))
+        backgroundClickGesture.buttonMask = 0x1
+        backgroundClickGesture.delaysPrimaryMouseButtonEvents = false
+        view.addGestureRecognizer(backgroundClickGesture)
+    }
+
+    @objc private func handleBackgroundClick(_ gesture: NSClickGestureRecognizer) {
+        let locationInView = gesture.location(in: view)
+        guard let clickedView = view.hitTest(locationInView) else { return }
+        guard shouldClearSelection(for: clickedView) else { return }
+        clearSelectionState()
+    }
+
+    private func shouldClearSelection(for clickedView: NSView) -> Bool {
+        if clickedView.isDescendant(of: inputTextView) {
+            return false
+        }
+        if let inputScrollView, clickedView.isDescendant(of: inputScrollView) {
+            return false
+        }
+        if clickedView.isDescendant(of: slashAutocompleteContainer) {
+            return false
+        }
+        if clickedView is NSButton || clickedView.isDescendant(of: sendButton) || clickedView.isDescendant(of: scrollToBottomButton) {
+            return false
+        }
+        return true
+    }
+
+    private func clearSelectionState() {
+        if !slashAutocompleteContainer.isHidden {
+            hideSlashAutocomplete()
+        } else {
+            slashAutocompleteTableView.deselectAll(nil)
+        }
+
+        let currentSelection = inputTextView.selectedRange()
+        if currentSelection.location != NSNotFound && currentSelection.length > 0 {
+            let caretLocation = min(currentSelection.location, (inputTextView.string as NSString).length)
+            inputTextView.setSelectedRange(NSRange(location: caretLocation, length: 0))
+        }
+
+        for case let bubble as ChatMessageBubbleView in messagesStack.arrangedSubviews {
+            bubble.clearSelection()
+        }
+
+        _ = view.window?.makeFirstResponder(nil)
+    }
+
     private func reloadMessages(shouldScrollToBottom: Bool = true) {
-        chatAppearance = ChatAppearance.resolve(from: PersistenceService.shared.loadSettings())
+        let settings = PersistenceService.shared.loadSettings()
+        chatAppearance = ChatAppearance.resolve(from: settings)
+        chatFontSize = Self.resolvedChatFontSize(from: settings)
+        inputTextView.font = .systemFont(ofSize: chatFontSize)
+        updateComposerHeight()
         for subview in messagesStack.arrangedSubviews {
             messagesStack.removeArrangedSubview(subview)
             subview.removeFromSuperview()
         }
 
         for message in messages {
-            let bubble = ChatMessageBubbleView(message: message, appearance: chatAppearance)
+            let bubble = ChatMessageBubbleView(
+                message: message,
+                appearance: chatAppearance,
+                fontSize: chatFontSize,
+                onOpenLink: onOpenMarkdownLink
+            )
             messagesStack.addArrangedSubview(bubble)
             bubble.widthAnchor.constraint(equalTo: messagesStack.widthAnchor).isActive = true
         }
@@ -509,9 +1135,13 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     }
 
     private func scrollToBottom(animated: Bool) {
+        // Ensure Auto Layout has finalized message bubble heights before we compute maxY.
+        view.layoutSubtreeIfNeeded()
+        scrollView.layoutSubtreeIfNeeded()
+        scrollView.documentView?.layoutSubtreeIfNeeded()
+
         let clip = scrollView.contentView
-        let maxY = max(0, scrollView.documentView?.bounds.height ?? 0 - clip.bounds.height)
-        let target = NSPoint(x: 0, y: maxY)
+        let target = NSPoint(x: 0, y: bottomContentOffsetY(for: clip))
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.2
@@ -523,37 +1153,128 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             clip.setBoundsOrigin(target)
             scrollView.reflectScrolledClipView(clip)
         }
+
+        // A follow-up pass on the next run-loop keeps us pinned to the real bottom
+        // when constraints settle after the initial scroll calculation.
+        DispatchQueue.main.async { [weak self] in
+            self?.snapToBottomIfNeeded()
+        }
+    }
+
+    private func snapToBottomIfNeeded() {
+        view.layoutSubtreeIfNeeded()
+        scrollView.layoutSubtreeIfNeeded()
+        scrollView.documentView?.layoutSubtreeIfNeeded()
+
+        let clip = scrollView.contentView
+        let epsilon: CGFloat = 1
+        guard distanceFromBottom(for: clip) > epsilon else { return }
+        clip.setBoundsOrigin(NSPoint(x: 0, y: bottomContentOffsetY(for: clip)))
+        scrollView.reflectScrolledClipView(clip)
     }
 
     private func updateScrollToBottomButtonVisibility() {
         let clip = scrollView.contentView
+        scrollToBottomButton.isHidden = distanceFromBottom(for: clip) < 24
+    }
+
+    private func bottomContentOffsetY(for clip: NSClipView) -> CGFloat {
         let maxY = max(0, (scrollView.documentView?.bounds.height ?? 0) - clip.bounds.height)
-        scrollToBottomButton.isHidden = maxY - clip.bounds.origin.y < 24
+        let isFlipped = scrollView.documentView?.isFlipped ?? false
+        return isFlipped ? maxY : 0
+    }
+
+    private func distanceFromBottom(for clip: NSClipView) -> CGFloat {
+        let maxY = max(0, (scrollView.documentView?.bounds.height ?? 0) - clip.bounds.height)
+        let isFlipped = scrollView.documentView?.isFlipped ?? false
+        return isFlipped ? abs(maxY - clip.bounds.origin.y) : abs(clip.bounds.origin.y)
     }
 
     private var slashCommands: [SlashCommandAutocompleteItem] {
+        switch agentType {
+        case .codex:
+            return codexSlashCommands
+        case .claude:
+            return claudeSlashCommands
+        case .custom:
+            return []
+        }
+    }
+
+    private var codexSlashCommands: [SlashCommandAutocompleteItem] {
         [
-            SlashCommandAutocompleteItem(command: "/login", detail: String(localized: .ThreadStrings.chatSlashCommandLoginDescription), insertionText: "/login "),
-            SlashCommandAutocompleteItem(command: "/logout", detail: String(localized: .ThreadStrings.chatSlashCommandLogoutDescription), insertionText: "/logout "),
-            SlashCommandAutocompleteItem(command: "/model", detail: String(localized: .ThreadStrings.chatSlashCommandModelDescription), insertionText: "/model "),
-            SlashCommandAutocompleteItem(command: "/scoped-models", detail: String(localized: .ThreadStrings.chatSlashCommandScopedModelsDescription), insertionText: "/scoped-models "),
-            SlashCommandAutocompleteItem(command: "/settings", detail: String(localized: .ThreadStrings.chatSlashCommandSettingsDescription), insertionText: "/settings "),
-            SlashCommandAutocompleteItem(command: "/resume", detail: String(localized: .ThreadStrings.chatSlashCommandResumeDescription), insertionText: "/resume "),
-            SlashCommandAutocompleteItem(command: "/new", detail: String(localized: .ThreadStrings.chatSlashCommandNewDescription), insertionText: "/new "),
-            SlashCommandAutocompleteItem(command: "/name", detail: String(localized: .ThreadStrings.chatSlashCommandNameDescription), insertionText: "/name "),
-            SlashCommandAutocompleteItem(command: "/session", detail: String(localized: .ThreadStrings.chatSlashCommandSessionDescription), insertionText: "/session "),
-            SlashCommandAutocompleteItem(command: "/tree", detail: String(localized: .ThreadStrings.chatSlashCommandTreeDescription), insertionText: "/tree "),
-            SlashCommandAutocompleteItem(command: "/fork", detail: String(localized: .ThreadStrings.chatSlashCommandForkDescription), insertionText: "/fork "),
-            SlashCommandAutocompleteItem(command: "/clone", detail: String(localized: .ThreadStrings.chatSlashCommandCloneDescription), insertionText: "/clone "),
-            SlashCommandAutocompleteItem(command: "/compact", detail: String(localized: .ThreadStrings.chatSlashCommandCompactDescription), insertionText: "/compact "),
-            SlashCommandAutocompleteItem(command: "/copy", detail: String(localized: .ThreadStrings.chatSlashCommandCopyDescription), insertionText: "/copy "),
-            SlashCommandAutocompleteItem(command: "/export", detail: String(localized: .ThreadStrings.chatSlashCommandExportDescription), insertionText: "/export "),
-            SlashCommandAutocompleteItem(command: "/share", detail: String(localized: .ThreadStrings.chatSlashCommandShareDescription), insertionText: "/share "),
-            SlashCommandAutocompleteItem(command: "/reload", detail: String(localized: .ThreadStrings.chatSlashCommandReloadDescription), insertionText: "/reload "),
-            SlashCommandAutocompleteItem(command: "/hotkeys", detail: String(localized: .ThreadStrings.chatSlashCommandHotkeysDescription), insertionText: "/hotkeys "),
-            SlashCommandAutocompleteItem(command: "/changelog", detail: String(localized: .ThreadStrings.chatSlashCommandChangelogDescription), insertionText: "/changelog "),
-            SlashCommandAutocompleteItem(command: "/quit", detail: String(localized: .ThreadStrings.chatSlashCommandQuitDescription), insertionText: "/quit "),
+            slashCommand("/help", detail: String(localized: .ThreadStrings.chatSlashCommandHelpDescription)),
+            slashCommand("/clear", detail: String(localized: .ThreadStrings.chatSlashCommandClearDescription)),
+            slashCommand("/model", detail: String(localized: .ThreadStrings.chatSlashCommandModelDescription)),
+            slashCommand("/effort", detail: String(localized: .ThreadStrings.chatSlashCommandEffortDescription)),
         ]
+    }
+
+    private var claudeSlashCommands: [SlashCommandAutocompleteItem] {
+        [
+            slashCommand("/add-dir", detail: String(localized: .ThreadStrings.chatSlashCommandAddDirDescription)),
+            slashCommand("/agents", detail: String(localized: .ThreadStrings.chatSlashCommandAgentsDescription)),
+            slashCommand("/branch", detail: String(localized: .ThreadStrings.chatSlashCommandBranchDescription)),
+            slashCommand("/clear", detail: String(localized: .ThreadStrings.chatSlashCommandClearDescription)),
+            slashCommand("/compact", detail: String(localized: .ThreadStrings.chatSlashCommandCompactDescription)),
+            slashCommand("/config", detail: String(localized: .ThreadStrings.chatSlashCommandConfigDescription)),
+            slashCommand("/context", detail: String(localized: .ThreadStrings.chatSlashCommandContextDescription)),
+            slashCommand("/continue", detail: String(localized: .ThreadStrings.chatSlashCommandContinueDescription)),
+            slashCommand("/copy", detail: String(localized: .ThreadStrings.chatSlashCommandCopyDescription)),
+            slashCommand("/cost", detail: String(localized: .ThreadStrings.chatSlashCommandCostDescription)),
+            slashCommand("/diff", detail: String(localized: .ThreadStrings.chatSlashCommandDiffDescription)),
+            slashCommand("/doctor", detail: String(localized: .ThreadStrings.chatSlashCommandDoctorDescription)),
+            slashCommand("/effort", detail: String(localized: .ThreadStrings.chatSlashCommandEffortDescription)),
+            slashCommand("/exit", detail: String(localized: .ThreadStrings.chatSlashCommandExitDescription)),
+            slashCommand("/export", detail: String(localized: .ThreadStrings.chatSlashCommandExportDescription)),
+            slashCommand("/fast", detail: String(localized: .ThreadStrings.chatSlashCommandFastDescription)),
+            slashCommand("/feedback", detail: String(localized: .ThreadStrings.chatSlashCommandFeedbackDescription)),
+            slashCommand("/fork", detail: String(localized: .ThreadStrings.chatSlashCommandForkDescription)),
+            slashCommand("/help", detail: String(localized: .ThreadStrings.chatSlashCommandHelpDescription)),
+            slashCommand("/hooks", detail: String(localized: .ThreadStrings.chatSlashCommandHooksDescription)),
+            slashCommand("/ide", detail: String(localized: .ThreadStrings.chatSlashCommandIdeDescription)),
+            slashCommand("/init", detail: String(localized: .ThreadStrings.chatSlashCommandInitDescription)),
+            slashCommand("/login", detail: String(localized: .ThreadStrings.chatSlashCommandLoginDescription)),
+            slashCommand("/logout", detail: String(localized: .ThreadStrings.chatSlashCommandLogoutDescription)),
+            slashCommand("/mcp", detail: String(localized: .ThreadStrings.chatSlashCommandMcpDescription)),
+            slashCommand("/memory", detail: String(localized: .ThreadStrings.chatSlashCommandMemoryDescription)),
+            slashCommand("/model", detail: String(localized: .ThreadStrings.chatSlashCommandModelDescription)),
+            slashCommand("/new", detail: String(localized: .ThreadStrings.chatSlashCommandNewDescription)),
+            slashCommand("/permissions", detail: String(localized: .ThreadStrings.chatSlashCommandPermissionsDescription)),
+            slashCommand("/plan", detail: String(localized: .ThreadStrings.chatSlashCommandPlanDescription)),
+            slashCommand("/plugin", detail: String(localized: .ThreadStrings.chatSlashCommandPluginDescription)),
+            slashCommand("/quit", detail: String(localized: .ThreadStrings.chatSlashCommandQuitDescription)),
+            slashCommand("/rename", detail: String(localized: .ThreadStrings.chatSlashCommandRenameDescription)),
+            slashCommand("/resume", detail: String(localized: .ThreadStrings.chatSlashCommandResumeDescription)),
+            slashCommand("/review", detail: String(localized: .ThreadStrings.chatSlashCommandReviewDescription)),
+            slashCommand("/rewind", detail: String(localized: .ThreadStrings.chatSlashCommandRewindDescription)),
+            slashCommand("/sandbox", detail: String(localized: .ThreadStrings.chatSlashCommandSandboxDescription)),
+            slashCommand("/security-review", detail: String(localized: .ThreadStrings.chatSlashCommandSecurityReviewDescription)),
+            slashCommand("/settings", detail: String(localized: .ThreadStrings.chatSlashCommandSettingsDescription)),
+            slashCommand("/skills", detail: String(localized: .ThreadStrings.chatSlashCommandSkillsDescription)),
+            slashCommand("/status", detail: String(localized: .ThreadStrings.chatSlashCommandStatusDescription)),
+            slashCommand("/statusline", detail: String(localized: .ThreadStrings.chatSlashCommandStatuslineDescription)),
+            slashCommand("/tasks", detail: String(localized: .ThreadStrings.chatSlashCommandTasksDescription)),
+            slashCommand("/terminal-setup", detail: String(localized: .ThreadStrings.chatSlashCommandTerminalSetupDescription)),
+            slashCommand("/theme", detail: String(localized: .ThreadStrings.chatSlashCommandThemeDescription)),
+            slashCommand("/tui", detail: String(localized: .ThreadStrings.chatSlashCommandTuiDescription)),
+            slashCommand("/ultraplan", detail: String(localized: .ThreadStrings.chatSlashCommandUltraplanDescription)),
+            slashCommand("/ultrareview", detail: String(localized: .ThreadStrings.chatSlashCommandUltrareviewDescription)),
+            slashCommand("/usage", detail: String(localized: .ThreadStrings.chatSlashCommandUsageDescription)),
+        ]
+    }
+
+    private func slashCommand(
+        _ command: String,
+        detail: String,
+        insertionText: String? = nil
+    ) -> SlashCommandAutocompleteItem {
+        let insertion = insertionText ?? "\(command) "
+        return SlashCommandAutocompleteItem(
+            command: command,
+            detail: detail,
+            insertionText: insertion
+        )
     }
 
     private func updateSlashAutocompleteForCurrentInput() {
@@ -580,8 +1301,17 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
 
     private func showSlashAutocomplete() {
         slashAutocompleteTableView.reloadData()
-        let visibleRows = min(filteredSlashCommands.count, slashAutocompleteMaxVisibleRows)
-        slashAutocompleteHeightConstraint?.constant = CGFloat(visibleRows) * slashAutocompleteRowHeight
+        let shouldScroll = filteredSlashCommands.count > slashAutocompleteVisibleRowsLimit
+        let visibleRows = min(filteredSlashCommands.count, slashAutocompleteVisibleRowsLimit)
+        let tableContentHeight = slashAutocompleteTableContentHeight(forVisibleRows: visibleRows)
+        slashAutocompleteHeightConstraint?.constant = tableContentHeight + (slashAutocompleteVerticalPadding * 2)
+        slashAutocompleteScrollView.hasVerticalScroller = shouldScroll
+        slashAutocompleteScrollView.verticalScrollElasticity = shouldScroll ? .automatic : .none
+        if !shouldScroll {
+            let clip = slashAutocompleteScrollView.contentView
+            clip.setBoundsOrigin(.zero)
+            slashAutocompleteScrollView.reflectScrolledClipView(clip)
+        }
         slashAutocompleteContainer.isHidden = false
 
         let selectedRow = slashAutocompleteTableView.selectedRow
@@ -589,6 +1319,13 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             slashAutocompleteTableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
             slashAutocompleteTableView.scrollRowToVisible(0)
         }
+    }
+
+    private func slashAutocompleteTableContentHeight(forVisibleRows visibleRows: Int) -> CGFloat {
+        guard visibleRows > 0 else { return 0 }
+        let lastVisibleRow = visibleRows - 1
+        let rowMaxY = slashAutocompleteTableView.rect(ofRow: lastVisibleRow).maxY
+        return ceil(rowMaxY + 1)
     }
 
     private func hideSlashAutocomplete() {
@@ -663,6 +1400,12 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         hideSlashAutocomplete()
     }
 
+    private func handleComposerCommandC() -> Bool {
+        guard isCommandRunning?() == true else { return false }
+        onCancelRunningCommand?()
+        return true
+    }
+
     private var composerLineHeight: CGFloat {
         let font = inputTextView.font ?? .systemFont(ofSize: 13)
         return font.ascender + abs(font.descender) + font.leading
@@ -697,6 +1440,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     override func viewDidLayout() {
         super.viewDidLayout()
         updateComposerHeight()
+        updateScrollToBottomButtonAppearance()
     }
 
     func textDidChange(_ notification: Notification) {
@@ -733,7 +1477,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
                 confirmSlashAutocompleteSelection()
                 return true
             }
-            if NSApp.currentEvent?.modifierFlags.contains(.command) == true {
+            if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
                 textView.insertNewlineIgnoringFieldEditor(self)
             } else {
                 sendTapped()
@@ -765,5 +1509,12 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
 
     @objc private func settingsDidChange() {
         reloadMessages(shouldScrollToBottom: false)
+        updateSlashAutocompleteAppearance()
+        updateScrollToBottomButtonAppearance()
+        configureModelReasoningPickers()
+    }
+
+    private static func resolvedChatFontSize(from settings: AppSettings) -> CGFloat {
+        CGFloat(min(max(settings.chatFontSize, AppSettings.minChatFontSize), AppSettings.maxChatFontSize))
     }
 }

@@ -166,6 +166,9 @@ final class ThreadDetailViewController: NSViewController {
     var webTabs: [WebTabEntry] = []
     var draftTabs: [DraftTabEntry] = []
     var chatTabs: [ChatTabEntry] = []
+    var chatRequestTasksByIdentifier: [String: Task<Void, Never>] = [:]
+    var chatRequestTaskTokensByIdentifier: [String: UUID] = [:]
+    var chatPendingAssistantMessageIDsByIdentifier: [String: UUID] = [:]
     var activeDraftTabId: String?
     var activeWebTabId: String?
     var activeChatTabId: String?
@@ -488,6 +491,9 @@ final class ThreadDetailViewController: NSViewController {
         scrollFABRefreshTask?.cancel()
         backgroundSessionPreparationTask?.cancel()
         sessionPreparationTasks.values.forEach { $0.cancel() }
+        chatRequestTasksByIdentifier.values.forEach { $0.cancel() }
+        chatRequestTaskTokensByIdentifier.removeAll()
+        chatPendingAssistantMessageIDsByIdentifier.removeAll()
         dismissInitialPromptFailureBanner()
         dismissPendingPromptBanner()
         NotificationCenter.default.removeObserver(self)
@@ -825,6 +831,10 @@ final class ThreadDetailViewController: NSViewController {
             for dt in draftTabs { dt.viewController?.view.removeFromSuperview() }
             draftTabs.removeAll()
             for ct in chatTabs { ct.viewController?.view.removeFromSuperview() }
+            chatRequestTasksByIdentifier.values.forEach { $0.cancel() }
+            chatRequestTasksByIdentifier.removeAll()
+            chatRequestTaskTokensByIdentifier.removeAll()
+            chatPendingAssistantMessageIDsByIdentifier.removeAll()
             tabSlots.removeAll()
             activeWebTabId = nil
             activeDraftTabId = nil

@@ -84,6 +84,9 @@ public nonisolated struct AgentLaunchPromptDraft: Codable, Sendable, Equatable {
 public nonisolated struct AppSettings: Codable, Sendable {
     public static let defaultSlugPrompt = "Generate a short kebab-case slug (2-4 words) for a git branch name. Extract the core concept or feature — ignore filler words like 'I want', 'how do I', 'can you', etc. Bug reports, observations about broken behavior, and feature requests are all actionable — generate a slug for them."
     public static let defaultReviewPrompt = "Review the changes on this branch compared to {baseBranch}. Run `git diff $(git merge-base {baseBranch} HEAD)` to see all changes (committed and uncommitted) since this branch diverged. Also run `git log HEAD..{baseBranch} --oneline` to check if {baseBranch} has moved ahead, and flag any likely merge conflicts. Provide a thorough code review covering correctness, potential bugs, code style, and any suggestions for improvement."
+    public static let minChatFontSize: Double = 12
+    public static let maxChatFontSize: Double = 22
+    public static let defaultChatFontSize: Double = 14
 
     public var projects: [Project]
     public var activeAgents: [AgentType]
@@ -137,6 +140,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var chatUserTextColorHex: String?
     public var chatAssistantBubbleColorHex: String?
     public var chatAssistantTextColorHex: String?
+    public var chatFontSize: Double
     public var preserveAgentColorTheme: Bool
     public var rememberLastTypeSelection: Bool
     public var switchToNewlyCreatedThread: Bool
@@ -202,6 +206,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         chatUserTextColorHex: String? = nil,
         chatAssistantBubbleColorHex: String? = nil,
         chatAssistantTextColorHex: String? = nil,
+        chatFontSize: Double = AppSettings.defaultChatFontSize,
         preserveAgentColorTheme: Bool = false,
         rememberLastTypeSelection: Bool = true,
         switchToNewlyCreatedThread: Bool = true,
@@ -266,6 +271,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.chatUserTextColorHex = chatUserTextColorHex
         self.chatAssistantBubbleColorHex = chatAssistantBubbleColorHex
         self.chatAssistantTextColorHex = chatAssistantTextColorHex
+        self.chatFontSize = min(max(chatFontSize, Self.minChatFontSize), Self.maxChatFontSize)
         self.preserveAgentColorTheme = preserveAgentColorTheme
         self.rememberLastTypeSelection = rememberLastTypeSelection
         self.switchToNewlyCreatedThread = switchToNewlyCreatedThread
@@ -336,6 +342,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         chatUserTextColorHex = try container.decodeIfPresent(String.self, forKey: .chatUserTextColorHex)
         chatAssistantBubbleColorHex = try container.decodeIfPresent(String.self, forKey: .chatAssistantBubbleColorHex)
         chatAssistantTextColorHex = try container.decodeIfPresent(String.self, forKey: .chatAssistantTextColorHex)
+        let decodedChatFontSize = try container.decodeIfPresent(Double.self, forKey: .chatFontSize) ?? Self.defaultChatFontSize
+        chatFontSize = min(max(decodedChatFontSize, Self.minChatFontSize), Self.maxChatFontSize)
         preserveAgentColorTheme = try container.decodeIfPresent(Bool.self, forKey: .preserveAgentColorTheme) ?? false
         rememberLastTypeSelection = try container.decodeIfPresent(Bool.self, forKey: .rememberLastTypeSelection) ?? true
         switchToNewlyCreatedThread = try container.decodeIfPresent(Bool.self, forKey: .switchToNewlyCreatedThread) ?? true
@@ -404,6 +412,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encodeIfPresent(chatUserTextColorHex, forKey: .chatUserTextColorHex)
         try container.encodeIfPresent(chatAssistantBubbleColorHex, forKey: .chatAssistantBubbleColorHex)
         try container.encodeIfPresent(chatAssistantTextColorHex, forKey: .chatAssistantTextColorHex)
+        try container.encode(chatFontSize, forKey: .chatFontSize)
         try container.encode(preserveAgentColorTheme, forKey: .preserveAgentColorTheme)
         try container.encode(rememberLastTypeSelection, forKey: .rememberLastTypeSelection)
         try container.encode(switchToNewlyCreatedThread, forKey: .switchToNewlyCreatedThread)
@@ -591,6 +600,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case chatUserTextColorHex
         case chatAssistantBubbleColorHex
         case chatAssistantTextColorHex
+        case chatFontSize
         case preserveAgentColorTheme
         case rememberLastTypeSelection
         case switchToNewlyCreatedThread

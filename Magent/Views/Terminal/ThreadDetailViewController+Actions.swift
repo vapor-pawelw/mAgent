@@ -1330,7 +1330,8 @@ extension ThreadDetailViewController {
 
     func refreshTabStatusIndicators() {
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
-            if case .terminal(let sessionName) = slot {
+            switch slot {
+            case .terminal(let sessionName):
                 tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
                 tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
                 tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
@@ -1340,7 +1341,15 @@ extension ThreadDetailViewController {
                 tabItems[i].hasTerminalCorruption = threadManager.isTerminalCorrupted(sessionName: sessionName)
                 tabItems[i].showKeepAliveIcon = !thread.isKeepAlive
                     && thread.protectedTmuxSessions.contains(sessionName)
-            } else {
+            case .chat(let identifier):
+                tabItems[i].hasUnreadCompletion = false
+                tabItems[i].hasWaitingForInput = false
+                tabItems[i].hasBusy = isChatRequestRunning(identifier: identifier)
+                tabItems[i].hasRateLimit = false
+                tabItems[i].isRateLimitPropagated = false
+                tabItems[i].hasTerminalCorruption = false
+                tabItems[i].showKeepAliveIcon = false
+            case .web, .draft:
                 tabItems[i].hasUnreadCompletion = false
                 tabItems[i].hasWaitingForInput = false
                 tabItems[i].hasBusy = false
@@ -1530,7 +1539,14 @@ extension ThreadDetailViewController {
     // MARK: - Context Transfer
 
     @objc func exportContextButtonTapped() {
-        exportTabContext(at: currentTabIndex)
+        switch currentSlot() {
+        case .terminal:
+            exportTabContext(at: currentTabIndex)
+        case .chat:
+            exportChatTabConversation(at: currentTabIndex)
+        case .web, .draft, .none:
+            break
+        }
     }
 
     @objc func togglePromptTOCTapped() {
@@ -1538,7 +1554,14 @@ extension ThreadDetailViewController {
     }
 
     @objc func continueInButtonTapped(_ sender: NSButton) {
-        presentContinueTabSheet(for: currentTabIndex)
+        switch currentSlot() {
+        case .terminal:
+            presentContinueTabSheet(for: currentTabIndex)
+        case .chat:
+            presentContinueChatTabSheet(for: currentTabIndex)
+        case .web, .draft, .none:
+            break
+        }
     }
 
     func continueTabInAgent(

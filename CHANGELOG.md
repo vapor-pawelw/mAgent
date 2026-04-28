@@ -86,6 +86,8 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Refined tab context-menu grouping and availability rules: `Export as Markdown...` now sits directly under `Continue in...`, followed by a grouped session-actions block (`Resume Agent Session in New Tab`, `Restore Last Closed Tab`, `Session` submenu) separated from transfer actions. `Resume Agent Session in New Tab` is now shown only when the tab has a real resumable session ID, and `Restore Last Closed Tab` is shown only when restore history exists.
+- Fixed chat in-progress indicator bubble visuals: the loader now stays a stable rounded square with a non-resetting animated border instead of constantly re-rendering during placeholder updates.
+- Fixed Codex chat slash-command behavior in GUI chat tabs by limiting autocomplete to supported commands and handling `/help`, `/clear`, `/model`, and `/effort` locally.
 ## 1.6.1 - 2026-04-18
 
 
