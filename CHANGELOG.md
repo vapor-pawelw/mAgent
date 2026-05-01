@@ -21,6 +21,11 @@ All notable changes to this project will be documented in this file.
 - Fixed `magent-cli attach` and interactive tab picking misbehaving in mixed tab threads. Attach now targets terminal tabs only and resolves `--index` against terminal-tab order.
 - `magent-cli close-tab` now supports terminal, web, and draft tabs by index/session identifier; it still refuses to close the last remaining tab.
 
+### General
+
+#### Bug Fixes
+- Fixed `**bold**` markers rendering literally in in-app release notes. The Changelog / versioned "What’s New" window and the curated "What’s New" popup now render inline `**text**` as bold text.
+
 ### Thread
 
 #### Bug Fixes
@@ -64,6 +69,7 @@ All notable changes to this project will be documented in this file.
 - Added `GPT 5.5` as a selectable Codex model in model pickers and model validation, and made Review-mode Codex launches default to `GPT 5.5`.
 - Agent type picker entries now support surface-specific labels (`<Agent> (Terminal)` / `<Agent> (Chat)`) driven by `AgentType.capabilities`.
 - Removed the Pi runtime dependency from Chat tabs: chat execution now uses native Claude/Codex JSON streams with persisted per-tab conversation session ids for agent-managed context (`claude --resume`, `codex exec resume`).
+- Codex chat execution now prefers the native Codex app-server JSON-RPC stream (for per-item incremental updates) and automatically falls back to `codex exec --json` when app-server startup fails.
 
 #### Bug Fixes
 - Fixed Codex tabs failing to launch on macOS with `env: -u: No such file or directory` — the managed-`CODEX_HOME` wrapper now places option flags before variable assignments so BSD `env` parses them correctly.
@@ -81,13 +87,15 @@ All notable changes to this project will be documented in this file.
 - Added `Restore Last Closed Tab` for tab recovery across all tab types (terminal, web, draft, chat), backed by a per-thread in-memory history stack (max 10). Restore is available via `Cmd+Shift+T` and from the tab context menu when history is available.
 - Added first-class GUI chat tabs with persisted message history, right/left chat bubbles (user/agent), per-message timestamps, and a dedicated in-chat `Scroll to bottom` control independent from terminal overlays.
 - Chat composer now defaults to a single-line input, auto-expands up to five lines, and then becomes scrollable; `Return` sends and `Cmd+Return` inserts a newline.
-- Chat message timestamps now render outside bubbles (user: above/right, agent: below/left), and the send action uses an icon button.
+- Chat message timestamps now render outside bubbles below the message row (user: right, agent: left), and the send action uses an icon button.
 - Chat tabs now persist unsent composer draft text per tab so switching tabs and relaunching the app restores in-progress input.
 
 #### Bug Fixes
 - Refined tab context-menu grouping and availability rules: `Export as Markdown...` now sits directly under `Continue in...`, followed by a grouped session-actions block (`Resume Agent Session in New Tab`, `Restore Last Closed Tab`, `Session` submenu) separated from transfer actions. `Resume Agent Session in New Tab` is now shown only when the tab has a real resumable session ID, and `Restore Last Closed Tab` is shown only when restore history exists.
-- Fixed chat in-progress indicator bubble visuals: the loader now stays a stable rounded square with a non-resetting animated border instead of constantly re-rendering during placeholder updates.
+- Fixed chat in-progress indicator bubble visuals: the loader now stays a stable rounded square on the app background with a traveling border animation (instead of flashing) and dimmed `Working...` text for better contrast.
 - Fixed Codex chat slash-command behavior in GUI chat tabs by limiting autocomplete to supported commands and handling `/help`, `/clear`, `/model`, and `/effort` locally.
+- Fixed chat tab persistence reliability across backups/downgrades: chat tabs are now mirrored to a dedicated `chat-tabs.json` sidecar and recovered automatically when inline `threads.json` chat-tab payloads are missing.
+- Fixed chat tab request interruption ergonomics: `Esc` and `Ctrl+C` now cancel an in-flight chat request directly from the composer, and duplicate sends while a request is running are blocked.
 ## 1.6.1 - 2026-04-18
 
 

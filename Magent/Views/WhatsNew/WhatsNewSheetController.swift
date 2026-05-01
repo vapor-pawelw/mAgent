@@ -253,14 +253,42 @@ final class WhatsNewSheetController: NSWindowController {
         titleLabel.preferredMaxLayoutWidth = 480
         stack.addArrangedSubview(titleLabel)
 
-        let bodyLabel = NSTextField(wrappingLabelWithString: page.body)
+        let bodyLabel = NSTextField(labelWithAttributedString: attributedBodyText(page.body))
         bodyLabel.alignment = .center
-        bodyLabel.font = .systemFont(ofSize: 13)
-        bodyLabel.textColor = .secondaryLabelColor
+        bodyLabel.lineBreakMode = .byWordWrapping
+        bodyLabel.maximumNumberOfLines = 0
         bodyLabel.preferredMaxLayoutWidth = 480
         stack.addArrangedSubview(bodyLabel)
 
         return stack
+    }
+
+    private func attributedBodyText(_ text: String) -> NSAttributedString {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.lineBreakMode = .byWordWrapping
+
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .paragraphStyle: paragraph,
+        ]
+        let boldAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .bold),
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .paragraphStyle: paragraph,
+        ]
+
+        let result = NSMutableAttributedString()
+        for token in InlineMarkdownBoldTokenizer.tokenize(text) {
+            switch token {
+            case .text(let plainText):
+                result.append(NSAttributedString(string: plainText, attributes: baseAttributes))
+            case .bold(let boldText):
+                result.append(NSAttributedString(string: boldText, attributes: boldAttributes))
+            }
+        }
+        return result
     }
 
     private func updateDotAppearance() {

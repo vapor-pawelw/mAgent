@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 
 final class ChangelogWindowController: NSWindowController {
 
@@ -284,6 +285,21 @@ final class ChangelogWindowController: NSWindowController {
             result.append(NSAttributedString(string: text, attributes: attributes))
         }
 
+        func appendInlineBoldMarkdown(
+            _ text: String,
+            baseAttributes: [NSAttributedString.Key: Any],
+            boldAttributes: [NSAttributedString.Key: Any]
+        ) {
+            for token in InlineMarkdownBoldTokenizer.tokenize(text) {
+                switch token {
+                case .text(let plainText):
+                    append(plainText, attributes: baseAttributes)
+                case .bold(let boldText):
+                    append(boldText, attributes: boldAttributes)
+                }
+            }
+        }
+
         func appendSectionSeparator() {
             let attachment = NSTextAttachment()
             attachment.attachmentCell = HorizontalRuleAttachmentCell(color: separatorColor, height: 1)
@@ -297,6 +313,13 @@ final class ChangelogWindowController: NSWindowController {
         }
 
         let normalized = mergeDuplicateDomains(in: markdown)
+
+        let boldBulletAttributes = bulletAttributes.merging([
+            .font: NSFont.systemFont(ofSize: 13, weight: .bold),
+        ]) { _, new in new }
+        let boldBodyAttributes = bodyAttributes.merging([
+            .font: NSFont.systemFont(ofSize: 13, weight: .bold),
+        ]) { _, new in new }
 
         var previousLineWasEmpty = true
         for rawLine in normalized.components(separatedBy: .newlines) {
@@ -321,9 +344,20 @@ final class ChangelogWindowController: NSWindowController {
             } else if trimmed.hasPrefix("##### ") {
                 append("\(String(trimmed.dropFirst(6)).uppercased())\n", attributes: subSectionAttributes)
             } else if trimmed.hasPrefix("- ") {
-                append("•  \(String(trimmed.dropFirst(2)))\n", attributes: bulletAttributes)
+                append("•  ", attributes: bulletAttributes)
+                appendInlineBoldMarkdown(
+                    String(trimmed.dropFirst(2)),
+                    baseAttributes: bulletAttributes,
+                    boldAttributes: boldBulletAttributes
+                )
+                append("\n", attributes: bulletAttributes)
             } else {
-                append("\(trimmed)\n", attributes: bodyAttributes)
+                appendInlineBoldMarkdown(
+                    trimmed,
+                    baseAttributes: bodyAttributes,
+                    boldAttributes: boldBodyAttributes
+                )
+                append("\n", attributes: bodyAttributes)
             }
 
             previousLineWasEmpty = false
