@@ -142,6 +142,57 @@ struct ShellQuoteTests {
     }
 }
 
+// MARK: - Codex app-server recovery
+
+@Suite("Codex app-server stale-thread recovery heuristic")
+struct CodexAppServerRecoveryTests {
+
+    @Test("Requests fresh thread retry for stale resume failures")
+    func retriesForStaleResumeFailure() {
+        let shouldRetry = AgentChatRuntime.shouldRetryCodexWithFreshThread(
+            previousConversationSessionID: "thread_123",
+            appServerText: "Codex app-server failed: thread not found"
+        )
+        #expect(shouldRetry)
+    }
+
+    @Test("Requests fresh thread retry for closed/expired thread errors")
+    func retriesForClosedThreadFailure() {
+        let shouldRetry = AgentChatRuntime.shouldRetryCodexWithFreshThread(
+            previousConversationSessionID: "thread_123",
+            appServerText: "Codex app-server failed: cannot resume closed thread (404)"
+        )
+        #expect(shouldRetry)
+    }
+
+    @Test("Does not retry when no prior conversation session exists")
+    func noRetryWithoutPriorSession() {
+        let shouldRetry = AgentChatRuntime.shouldRetryCodexWithFreshThread(
+            previousConversationSessionID: nil,
+            appServerText: "Codex app-server failed: thread not found"
+        )
+        #expect(!shouldRetry)
+    }
+
+    @Test("Does not retry generic non-thread failures")
+    func noRetryForGenericFailure() {
+        let shouldRetry = AgentChatRuntime.shouldRetryCodexWithFreshThread(
+            previousConversationSessionID: "thread_123",
+            appServerText: "Codex app-server failed: context window exceeded"
+        )
+        #expect(!shouldRetry)
+    }
+
+    @Test("Does not retry approval-block failures")
+    func noRetryForApprovalBlock() {
+        let shouldRetry = AgentChatRuntime.shouldRetryCodexWithFreshThread(
+            previousConversationSessionID: "thread_123",
+            appServerText: "Codex app-server failed: Blocked: Codex requested approval for network access."
+        )
+        #expect(!shouldRetry)
+    }
+}
+
 // MARK: - TmuxSessionNaming
 
 @Suite("TmuxSessionNaming")
@@ -542,19 +593,28 @@ struct AppSettingsCommandTests {
         )
     }
 
-    @Test("Claude uses `command claude`, with skip-permissions flag when set")
+    @Test("Claude picks unrestricted bypass or sandbox auto mode")
     func claudeCommand() {
-        #expect(settings(skipPermissions: false).command(for: .claude) == "command claude")
+        #expect(settings(skipPermissions: false, sandboxEnabled: true).command(for: .claude) == "command claude --permission-mode auto")
         #expect(settings(skipPermissions: true).command(for: .claude) == "command claude --dangerously-skip-permissions")
+        #expect(settings(skipPermissions: false, sandboxEnabled: false).command(for: .claude) == "command claude --dangerously-skip-permissions")
     }
 
-    @Test("Codex picks --yolo / --full-auto / bare by mode")
+    @Test("Codex picks --yolo or --full-auto by permission mode")
     func codexCommand() {
         #expect(settings(skipPermissions: true, sandboxEnabled: false).command(for: .codex) == "command codex --yolo")
         #expect(settings(skipPermissions: false, sandboxEnabled: true).command(for: .codex) == "command codex --full-auto")
-        #expect(settings(skipPermissions: false, sandboxEnabled: false).command(for: .codex) == "command codex")
+        #expect(settings(skipPermissions: false, sandboxEnabled: false).command(for: .codex) == "command codex --yolo")
         // Skip-permissions dominates sandbox
         #expect(settings(skipPermissions: true, sandboxEnabled: true).command(for: .codex) == "command codex --yolo")
+    }
+
+    @Test("agentPermissionMode normalizes legacy boolean combinations")
+    func permissionModeCompatibilityMapping() {
+        #expect(settings(skipPermissions: false, sandboxEnabled: true).agentPermissionMode == .sandboxAuto)
+        #expect(settings(skipPermissions: true, sandboxEnabled: false).agentPermissionMode == .unrestricted)
+        #expect(settings(skipPermissions: false, sandboxEnabled: false).agentPermissionMode == .unrestricted)
+        #expect(settings(skipPermissions: true, sandboxEnabled: true).agentPermissionMode == .unrestricted)
     }
 
     @Test("Custom uses configured command, fallback when blank")
@@ -781,6 +841,44 @@ struct ThreadSectionTests {
     }
 }
 
+// MARK: - PersistedChatMessage
+
+@Suite("PersistedChatMessage")
+struct PersistedChatMessageTests {
+
+    @Test("Legacy decode without model metadata defaults to nil")
+    func legacyDecodeWithoutModelMetadata() throws {
+        let json = """
+        {"id":"11111111-1111-1111-1111-111111111111","role":"user","text":"hello","createdAt":"2026-01-01T10:00:00Z"}
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let message = try decoder.decode(PersistedChatMessage.self, from: json)
+        #expect(message.modelId == nil)
+        #expect(message.reasoningLevel == nil)
+    }
+
+    @Test("Round-trip preserves model metadata")
+    func roundTripPreservesModelMetadata() throws {
+        let original = PersistedChatMessage(
+            role: .assistant,
+            text: "done",
+            createdAt: Date(timeIntervalSince1970: 1_750_000_000),
+            modelId: "gpt-5.5",
+            reasoningLevel: "high"
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(original)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(PersistedChatMessage.self, from: data)
+        #expect(decoded.modelId == "gpt-5.5")
+        #expect(decoded.reasoningLevel == "high")
+    }
+}
+
 // MARK: - PersistedChatTab
 
 @Suite("PersistedChatTab")
@@ -793,6 +891,7 @@ struct PersistedChatTabTests {
         """.data(using: .utf8)!
         let tab = try JSONDecoder().decode(PersistedChatTab.self, from: json)
         #expect(tab.draftInput == "")
+        #expect(tab.draftAttachments.isEmpty)
         #expect(tab.conversationSessionID == nil)
     }
 
@@ -811,12 +910,41 @@ struct PersistedChatTabTests {
         #expect(decoded.draftInput == "hello draft")
         #expect(decoded.conversationSessionID == "session-123")
     }
+
+    @Test("Round-trip preserves draft attachments")
+    func roundTripDraftAttachments() throws {
+        let original = PersistedChatTab(
+            identifier: "chat:attachments",
+            agentType: .codex,
+            title: "Chat",
+            messages: [],
+            draftInput: "",
+            draftAttachments: [
+                PersistedChatAttachment(filePath: "/tmp/example.png", kind: .image),
+                PersistedChatAttachment(filePath: "/tmp/demo.mov", kind: .video),
+            ],
+            conversationSessionID: nil
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(PersistedChatTab.self, from: data)
+        #expect(decoded.draftAttachments.count == 2)
+        #expect(decoded.draftAttachments[0].kind == .image)
+        #expect(decoded.draftAttachments[1].kind == .video)
+    }
 }
 
 // MARK: - AgentChatRuntime parsing
 
 @Suite("AgentChatRuntime parsing")
 struct AgentChatRuntimeParsingTests {
+
+    @Test("Codex permission flags treat sandbox-off chat mode as YOLO")
+    func codexPermissionFlagsSelection() {
+        #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: true, sandboxEnabled: false) == ["--yolo"])
+        #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: false, sandboxEnabled: true) == ["--full-auto"])
+        #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: false, sandboxEnabled: false) == ["--yolo"])
+        #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: true, sandboxEnabled: true) == ["--yolo"])
+    }
 
     @Test("Claude stream JSON prefers result text and captures session id")
     func claudeResultAndSessionID() {
@@ -1076,7 +1204,8 @@ struct ThreadTabStructureFingerprintTests {
         tmuxSessions: [String] = [],
         pinnedSessions: [String] = [],
         webTabs: [PersistedWebTab] = [],
-        draftTabs: [PersistedDraftTab] = []
+        draftTabs: [PersistedDraftTab] = [],
+        chatTabs: [PersistedChatTab] = []
     ) -> MagentThread {
         MagentThread(
             projectId: UUID(),
@@ -1086,8 +1215,53 @@ struct ThreadTabStructureFingerprintTests {
             tmuxSessionNames: tmuxSessions,
             pinnedTmuxSessions: pinnedSessions,
             persistedWebTabs: webTabs,
-            persistedDraftTabs: draftTabs
+            persistedDraftTabs: draftTabs,
+            persistedChatTabs: chatTabs
         )
+    }
+}
+
+@Suite("MagentThread completion identifiers")
+struct MagentThreadCompletionIdentifierTests {
+
+    @Test("Includes terminal sessions and chat tabs")
+    func includesTerminalAndChatIdentifiers() {
+        let thread = MagentThread(
+            projectId: UUID(),
+            name: "thread",
+            worktreePath: "/tmp/thread",
+            branchName: "thread",
+            tmuxSessionNames: ["ma-repo-thread-claude"],
+            persistedChatTabs: [
+                PersistedChatTab(identifier: "chat:1", agentType: .codex, title: "Chat"),
+                PersistedChatTab(identifier: "chat:2", agentType: .claude, title: "Chat 2"),
+            ]
+        )
+
+        #expect(thread.completionTrackedTabIdentifiers == Set(["ma-repo-thread-claude", "chat:1", "chat:2"]))
+    }
+
+    @Test("Excludes web and draft identifiers")
+    func excludesWebAndDraftIdentifiers() throws {
+        let url = try #require(URL(string: "https://example.com"))
+        let thread = MagentThread(
+            projectId: UUID(),
+            name: "thread",
+            worktreePath: "/tmp/thread",
+            branchName: "thread",
+            tmuxSessionNames: [],
+            persistedWebTabs: [
+                PersistedWebTab(identifier: "web:1", url: url, title: "Example", iconType: .web),
+            ],
+            persistedDraftTabs: [
+                PersistedDraftTab(identifier: "draft:1", agentType: .codex, prompt: "Prompt"),
+            ],
+            persistedChatTabs: [
+                PersistedChatTab(identifier: "chat:1", agentType: .codex, title: "Chat"),
+            ]
+        )
+
+        #expect(thread.completionTrackedTabIdentifiers == Set(["chat:1"]))
     }
 }
 

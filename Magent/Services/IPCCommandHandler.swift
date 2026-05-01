@@ -1,6 +1,59 @@
 import Foundation
 import MagentCore
 
+private actor IPCChatPromptCoordinator {
+    enum SubmissionAction {
+        case start(steerStream: AsyncStream<String>?)
+        case steered
+        case busy
+    }
+
+    private enum InFlightRequest {
+        case codex(continuation: AsyncStream<String>.Continuation)
+        case nonSteerable
+    }
+
+    private var requestsByKey: [String: InFlightRequest] = [:]
+
+    func prepareSubmission(key: String, agentType: AgentType, prompt: String) -> SubmissionAction {
+        if let existing = requestsByKey[key] {
+            switch existing {
+            case .codex(let continuation):
+                if prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return .busy
+                }
+                continuation.yield(prompt)
+                return .steered
+            case .nonSteerable:
+                return .busy
+            }
+        }
+
+        guard agentType == .codex else {
+            requestsByKey[key] = .nonSteerable
+            return .start(steerStream: nil)
+        }
+
+        var capturedContinuation: AsyncStream<String>.Continuation?
+        let steerStream = AsyncStream<String> { continuation in
+            capturedContinuation = continuation
+        }
+        guard let continuation = capturedContinuation else {
+            requestsByKey[key] = .nonSteerable
+            return .start(steerStream: nil)
+        }
+        requestsByKey[key] = .codex(continuation: continuation)
+        return .start(steerStream: steerStream)
+    }
+
+    func finishRequest(key: String) {
+        guard let request = requestsByKey.removeValue(forKey: key) else { return }
+        if case .codex(let continuation) = request {
+            continuation.finish()
+        }
+    }
+}
+
 final class IPCCommandHandler {
 
     static let shared = IPCCommandHandler()
@@ -8,6 +61,7 @@ final class IPCCommandHandler {
     let persistence = PersistenceService.shared
     let threadManager = ThreadManager.shared
     let tmux = TmuxService.shared
+    private let chatPromptCoordinator = IPCChatPromptCoordinator()
 
     func handle(_ request: IPCRequest) async -> IPCResponse {
         switch request.command {
@@ -873,18 +927,67 @@ final class IPCCommandHandler {
                 return .failure("Tab not found: \(identifier)", id: request.id)
             }
 
-            let user = PersistedChatMessage(role: .user, text: prompt)
-            let pendingAssistant = PersistedChatMessage(role: .assistant, text: "Thinking…")
-            chatTabs[chatIndex].messages.append(user)
-            chatTabs[chatIndex].messages.append(pendingAssistant)
             let agentType = chatTabs[chatIndex].agentType
             let conversationSessionID = chatTabs[chatIndex].conversationSessionID
             let modelId = chatTabs[chatIndex].modelId
             let reasoningLevel = chatTabs[chatIndex].reasoningLevel
+            let requestStateKey = chatRequestStateKey(threadID: thread.id, chatIdentifier: identifier)
+            let submissionAction = await chatPromptCoordinator.prepareSubmission(
+                key: requestStateKey,
+                agentType: agentType,
+                prompt: prompt
+            )
+
+            switch submissionAction {
+            case .steered:
+                let steeringUser = PersistedChatMessage(
+                    role: .user,
+                    text: prompt,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel
+                )
+                chatTabs[chatIndex].messages.append(steeringUser)
+                threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
+                await MainActor.run {
+                    threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
+                }
+                return .success(id: request.id)
+            case .busy:
+                return .failure(
+                    "Chat request is already in progress for this tab. Wait for it to complete, or use a Codex chat tab for in-flight steering.",
+                    id: request.id
+                )
+            case .start:
+                break
+            }
+
+            let user = PersistedChatMessage(
+                role: .user,
+                text: prompt,
+                modelId: modelId,
+                reasoningLevel: reasoningLevel
+            )
+            let pendingAssistant = PersistedChatMessage(
+                role: .assistant,
+                text: "Thinking…",
+                modelId: modelId,
+                reasoningLevel: reasoningLevel
+            )
+            chatTabs[chatIndex].messages.append(user)
+            chatTabs[chatIndex].messages.append(pendingAssistant)
+            let settings = persistence.loadSettings()
 
             threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
             await MainActor.run {
                 threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
+            }
+
+            let codexSteerStream: AsyncStream<String>?
+            switch submissionAction {
+            case .start(let steerStream):
+                codexSteerStream = steerStream
+            case .steered, .busy:
+                codexSteerStream = nil
             }
 
             let response = await AgentChatRuntime.execute(
@@ -892,10 +995,15 @@ final class IPCCommandHandler {
                 prompt: prompt,
                 workingDirectory: thread.worktreePath,
                 conversationSessionID: conversationSessionID,
-                claudeSystemPrompt: IPCAgentDocs.claudeSystemPrompt,
+                claudeSystemPrompt: settings.ipcPromptInjectionEnabled ? IPCAgentDocs.claudeSystemPrompt : nil,
+                codexDeveloperInstructions: settings.ipcPromptInjectionEnabled ? IPCAgentDocs.codexDeveloperInstructions : nil,
                 modelId: modelId,
-                reasoningLevel: reasoningLevel
+                reasoningLevel: reasoningLevel,
+                codexSkipPermissions: settings.agentPermissionMode == .unrestricted,
+                codexSandboxEnabled: settings.agentPermissionMode == .sandboxAuto,
+                codexSteerStream: codexSteerStream
             )
+            await chatPromptCoordinator.finishRequest(key: requestStateKey)
 
             guard let latestIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
                 return .success(id: request.id)
@@ -910,6 +1018,13 @@ final class IPCCommandHandler {
             chatTabs[latestChatIndex].conversationSessionID = response.conversationSessionID
             threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
             await MainActor.run {
+                let isActiveTab = threadManager.activeThreadId == thread.id
+                    && threadManager.threads.first(where: { $0.id == thread.id })?.lastSelectedTabIdentifier == identifier
+                threadManager.markSessionCompletionDetected(
+                    threadId: thread.id,
+                    sessionName: identifier,
+                    isActiveTab: isActiveTab
+                )
                 threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
             }
             return .success(id: request.id)
@@ -918,6 +1033,10 @@ final class IPCCommandHandler {
         case .draft:
             return .failure("send-prompt is not supported for draft tabs", id: request.id)
         }
+    }
+
+    private func chatRequestStateKey(threadID: UUID, chatIdentifier: String) -> String {
+        "\(threadID.uuidString.lowercased())::\(chatIdentifier)"
     }
 
     private func archiveThread(_ request: IPCRequest) async -> IPCResponse {

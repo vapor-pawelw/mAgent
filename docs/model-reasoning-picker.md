@@ -131,7 +131,7 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 - No separate Pi runtime install gate is used in the launch sheet.
 - Chat message execution uses each agent's native non-interactive JSON stream path:
   - Claude: `claude -p --output-format stream-json` (resume via `--resume <session_id>`)
-  - Codex: `codex exec --json` (resume via `codex exec resume <thread_id> --json`)
+  - Codex: `codex app-server --listen stdio://` JSON-RPC stream (fallback: `codex exec --json`; resume fallback path: `codex exec resume <thread_id> --json`)
 - Each chat tab persists the latest agent conversation/session id so subsequent messages continue in the same native agent context.
 
 ### Chat Slash Commands (GUI Chat Tabs)
@@ -139,7 +139,7 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 - Chat-tab slash commands are app-handled convenience commands, not a passthrough of each agent's full interactive TUI slash surface.
 - Codex chat autocomplete intentionally exposes only commands supported in this GUI surface: `/help`, `/clear`, `/model`, `/effort`.
 - `/model` and `/effort` update persisted per-tab chat selections and next request flags; `/clear` resets visible messages and conversation resume id.
-- Unsupported Codex slash commands should not be surfaced in chat autocomplete because `codex exec --json` does not guarantee parity with interactive terminal slash behavior.
+- Unsupported Codex slash commands should not be surfaced in chat autocomplete because Magent chat does not mirror the full interactive terminal slash-command surface.
 
 ### Model/Reasoning Source of Truth (Reliability)
 

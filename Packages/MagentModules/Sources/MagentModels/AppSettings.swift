@@ -40,6 +40,12 @@ public enum ExternalLinkOpenPreference: String, Codable, Sendable, CaseIterable 
     }
 }
 
+public enum AgentPermissionMode: String, Codable, Sendable, CaseIterable {
+    case sandboxAuto
+    case askEveryTime
+    case unrestricted
+}
+
 public nonisolated struct AgentLaunchPromptDraft: Codable, Sendable, Equatable {
     public var prompt: String
     public var description: String
@@ -496,6 +502,31 @@ public nonisolated struct AppSettings: Codable, Sendable {
         return activeAgents.filter { seen.insert($0).inserted }
     }
 
+    public var agentPermissionMode: AgentPermissionMode {
+        get {
+            if agentSkipPermissions {
+                return .unrestricted
+            }
+            if agentSandboxEnabled {
+                return .sandboxAuto
+            }
+            return .askEveryTime
+        }
+        set {
+            switch newValue {
+            case .sandboxAuto:
+                agentSandboxEnabled = true
+                agentSkipPermissions = false
+            case .askEveryTime:
+                agentSandboxEnabled = false
+                agentSkipPermissions = false
+            case .unrestricted:
+                agentSandboxEnabled = false
+                agentSkipPermissions = true
+            }
+        }
+    }
+
     public var effectiveGlobalDefaultAgentType: AgentType? {
         let agents = availableActiveAgents
         guard !agents.isEmpty else { return nil }
@@ -512,16 +543,24 @@ public nonisolated struct AppSettings: Codable, Sendable {
         switch agentType {
         case .claude:
             // Use `command claude` to bypass any shell function wrappers (same as codex).
-            return agentSkipPermissions ? "command claude --dangerously-skip-permissions" : "command claude"
+            switch agentPermissionMode {
+            case .unrestricted:
+                return "command claude --dangerously-skip-permissions"
+            case .sandboxAuto:
+                return "command claude --permission-mode auto"
+            case .askEveryTime:
+                return "command claude"
+            }
         case .codex:
             // Use `command codex` to bypass any shell function wrappers (e.g. ones that
             // inject --dangerously-bypass-approvals-and-sandbox) which would conflict with
             // our explicit flags like --yolo (an alias for the same flag in newer codex).
-            if agentSkipPermissions {
+            switch agentPermissionMode {
+            case .unrestricted:
                 return "command codex --yolo"
-            } else if agentSandboxEnabled {
+            case .sandboxAuto:
                 return "command codex --full-auto"
-            } else {
+            case .askEveryTime:
                 return "command codex"
             }
         case .custom:

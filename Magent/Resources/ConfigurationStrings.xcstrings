@@ -249,7 +249,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Control how agents handle permissions and sandboxing. Only applies to Claude and Codex."
+            "value": "Choose one permission mode for Claude and Codex."
           }
         }
       }
@@ -271,7 +271,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Restrict agent filesystem access to the workspace. Codex uses --full-auto."
+            "value": "Sandboxed auto mode. Codex uses --full-auto and Claude uses --permission-mode auto."
           }
         }
       }
@@ -282,7 +282,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Restrict agent filesystem access to the workspace. Codex uses --full-auto. Only applies to Codex (Claude sandboxes by default when permissions are not skipped)."
+            "value": "Sandboxed auto mode. Codex uses --full-auto and Claude uses --permission-mode auto."
           }
         }
       }
@@ -359,7 +359,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agents run without asking for approval. Claude uses --dangerously-skip-permissions, Codex uses --yolo."
+            "value": "Unrestricted mode. Claude uses --dangerously-skip-permissions and Codex uses --yolo."
           }
         }
       }

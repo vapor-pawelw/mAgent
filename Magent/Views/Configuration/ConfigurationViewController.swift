@@ -158,8 +158,7 @@ final class ConfigurationViewController: NSViewController {
         settings.customAgentCommand = agentSelectionView.customCommand
 
         // Permissions
-        settings.agentSkipPermissions = permissionsView.skipPermissions
-        settings.agentSandboxEnabled = permissionsView.sandboxEnabled
+        settings.agentPermissionMode = permissionsView.permissionMode
 
         // Notifications
         settings.showSystemBanners = notificationsView.showSystemBanners

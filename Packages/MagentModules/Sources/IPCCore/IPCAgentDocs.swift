@@ -57,6 +57,7 @@ public enum IPCAgentDocs {
     list-tabs returns all tab types in GUI order (`terminal`, `web`, `draft`, `chat`) with a `tabType` field. For non-terminal tabs, use `sessionName` as the tab identifier in close-tab / rename-tab. Draft tabs cannot be renamed.
     read-tab returns tab transcript content through one command: terminal tabs use tmux capture, chat tabs use persisted chat messages. Use --json when you need structured fields (`source`, `chatMessages`, etc.).
     send-prompt can target either terminal or chat tabs via --session / --index. Without explicit tab targeting, it uses the first terminal agent tab; if none exists, it falls back to the first chat tab.
+    For Codex chat tabs, if a turn is already running, another send-prompt to the same tab is treated as in-flight steering (turn/steer) for that active turn.
     Section names are case-insensitive throughout — "TODO" and "todo" resolve to the same section.
     Use auto-rename-thread (or its rename-thread alias) by default; it generates a branch name and description from one prompt. The thread/worktree name is never changed.
     Use rename-branch ONLY when the user gives a literal branch name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about, use auto-rename-thread instead. Only the git branch is renamed; the thread/worktree name stays the same.
@@ -100,6 +101,14 @@ public enum IPCAgentDocs {
 
     /// Lightweight prompt hint used for Claude's `--append-system-prompt`.
     public static let claudeSystemPrompt: String = """
+    Magent IPC is available via `/tmp/magent-cli` when needed.
+    Use it only for thread/tab/section management tasks. In Magent, "threads" are managed worktrees with embedded terminals.
+    Treat mentions of "magent", "thread", or "tab" as possible Magent context; if it appears Magent-related, check `/tmp/magent-cli docs` before acting.
+    For details on demand, run `/tmp/magent-cli docs` (full reference) or `/tmp/magent-cli help` (quick usage).
+    """
+
+    /// Equivalent lightweight steering used for Codex app-server `developerInstructions`.
+    public static let codexDeveloperInstructions: String = """
     Magent IPC is available via `/tmp/magent-cli` when needed.
     Use it only for thread/tab/section management tasks. In Magent, "threads" are managed worktrees with embedded terminals.
     Treat mentions of "magent", "thread", or "tab" as possible Magent context; if it appears Magent-related, check `/tmp/magent-cli docs` before acting.

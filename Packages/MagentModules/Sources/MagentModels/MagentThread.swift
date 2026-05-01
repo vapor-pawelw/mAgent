@@ -110,22 +110,79 @@ public nonisolated enum ChatMessageRole: String, Codable, Sendable {
     case assistant
 }
 
+public nonisolated enum PersistedChatAttachmentKind: String, Codable, Sendable {
+    case file
+    case image
+    case video
+}
+
+public nonisolated struct PersistedChatAttachment: Codable, Sendable, Equatable, Identifiable {
+    public let id: UUID
+    public var filePath: String
+    public var kind: PersistedChatAttachmentKind
+
+    public init(
+        id: UUID = UUID(),
+        filePath: String,
+        kind: PersistedChatAttachmentKind
+    ) {
+        self.id = id
+        self.filePath = filePath
+        self.kind = kind
+    }
+}
+
 public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public let role: ChatMessageRole
     public var text: String
     public let createdAt: Date
+    public var modelId: String?
+    public var reasoningLevel: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case role
+        case text
+        case createdAt
+        case modelId
+        case reasoningLevel
+    }
 
     public init(
         id: UUID = UUID(),
         role: ChatMessageRole,
         text: String,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
     ) {
         self.id = id
         self.role = role
         self.text = text
         self.createdAt = createdAt
+        self.modelId = modelId
+        self.reasoningLevel = reasoningLevel
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        role = try container.decode(ChatMessageRole.self, forKey: .role)
+        text = try container.decode(String.self, forKey: .text)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
+        reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(role, forKey: .role)
+        try container.encode(text, forKey: .text)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(modelId, forKey: .modelId)
+        try container.encodeIfPresent(reasoningLevel, forKey: .reasoningLevel)
     }
 }
 
@@ -135,6 +192,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
     public var title: String
     public var messages: [PersistedChatMessage]
     public var draftInput: String
+    public var draftAttachments: [PersistedChatAttachment]
     public var conversationSessionID: String?
     public var modelId: String?
     public var reasoningLevel: String?
@@ -145,6 +203,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         case title
         case messages
         case draftInput
+        case draftAttachments
         case conversationSessionID
         case modelId
         case reasoningLevel
@@ -156,6 +215,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         title: String,
         messages: [PersistedChatMessage] = [],
         draftInput: String = "",
+        draftAttachments: [PersistedChatAttachment] = [],
         conversationSessionID: String? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil
@@ -165,6 +225,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         self.title = title
         self.messages = messages
         self.draftInput = draftInput
+        self.draftAttachments = draftAttachments
         self.conversationSessionID = conversationSessionID
         self.modelId = modelId
         self.reasoningLevel = reasoningLevel
@@ -177,6 +238,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         title = try container.decode(String.self, forKey: .title)
         messages = try container.decodeIfPresent([PersistedChatMessage].self, forKey: .messages) ?? []
         draftInput = try container.decodeIfPresent(String.self, forKey: .draftInput) ?? ""
+        draftAttachments = try container.decodeIfPresent([PersistedChatAttachment].self, forKey: .draftAttachments) ?? []
         conversationSessionID = try container.decodeIfPresent(String.self, forKey: .conversationSessionID)
         modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
         reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
@@ -190,6 +252,9 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         try container.encode(messages, forKey: .messages)
         if !draftInput.isEmpty {
             try container.encode(draftInput, forKey: .draftInput)
+        }
+        if !draftAttachments.isEmpty {
+            try container.encode(draftAttachments, forKey: .draftAttachments)
         }
         if let conversationSessionID, !conversationSessionID.isEmpty {
             try container.encode(conversationSessionID, forKey: .conversationSessionID)
@@ -534,6 +599,12 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         // which is contradictory and confusing. The raw `unreadCompletionSessions`
         // set is preserved so the indicator reappears as soon as busy clears.
         !unreadCompletionSessions.isEmpty && !isAnyBusy
+    }
+
+    /// Tab identifiers that can legally carry unread-completion markers.
+    /// Includes terminal sessions and GUI chat tabs.
+    public var completionTrackedTabIdentifiers: Set<String> {
+        Set(tmuxSessionNames).union(persistedChatTabs.map(\.identifier))
     }
 
     /// True when newly detected rate limits haven't been acknowledged by the user yet.

@@ -728,13 +728,16 @@ extension ThreadDetailViewController {
             let chat = thread.persistedChatTabs.first(where: { $0.identifier == identifier })
             let agentText = chat?.agentType.displayName ?? "Unknown"
             let messageCount = chat?.messages.count ?? 0
+            var statusBits: [String] = ["GUI chat"]
+            if isChatRequestRunning(identifier: identifier) { statusBits.append("busy") }
+            if thread.unreadCompletionSessions.contains(identifier) { statusBits.append("unread completion") }
 
             return [
                 "Type: Chat (\(agentText))",
                 "Identifier: \(identifier)",
                 "Pinned: \(pinned)",
                 "Messages: \(messageCount)",
-                "Status: GUI chat",
+                "Status: \(statusBits.joined(separator: ", "))",
             ].joined(separator: "\n")
         }
     }

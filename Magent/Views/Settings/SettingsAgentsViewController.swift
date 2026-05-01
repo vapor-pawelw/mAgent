@@ -13,8 +13,10 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     private var customAgentCard: NSView!
     private var customAgentSection: NSStackView!
     private var customAgentCommandTextView: NSTextView!
-    private var skipPermissionsCheckbox: NSButton!
-    private var sandboxCheckbox: NSButton!
+    private var unrestrictedPermissionsRadioButton: NSButton!
+    private var sandboxPermissionsRadioButton: NSButton!
+    private var askEveryTimePermissionsRadioButton: NSButton!
+    private var permissionsModeDescriptionLabel: NSTextField!
     private var ipcInjectionCheckbox: NSButton!
     private var rememberLastTypeCheckbox: NSButton!
     private var rateLimitDetectionCheckbox: NSButton!
@@ -125,33 +127,37 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         )
         stackView.addArrangedSubview(permissionsCard)
 
-        skipPermissionsCheckbox = NSButton(
-            checkboxWithTitle: String(localized: .ConfigurationStrings.permissionsSkipPrompts),
+        sandboxPermissionsRadioButton = NSButton(
+            radioButtonWithTitle: String(localized: .ConfigurationStrings.permissionsEnableSandbox),
             target: self,
             action: #selector(permissionsSettingChanged)
         )
-        skipPermissionsCheckbox.state = settings.agentSkipPermissions ? .on : .off
-        let skipDesc = NSTextField(
-            wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsSkipPromptsDescription)
+        unrestrictedPermissionsRadioButton = NSButton(
+            radioButtonWithTitle: String(localized: .ConfigurationStrings.permissionsSkipPrompts),
+            target: self,
+            action: #selector(permissionsSettingChanged)
         )
-        skipDesc.font = .systemFont(ofSize: 11)
-        skipDesc.textColor = NSColor(resource: .textSecondary)
-        permissionsSection.addArrangedSubview(skipPermissionsCheckbox)
-        permissionsSection.addArrangedSubview(skipDesc)
+        askEveryTimePermissionsRadioButton = NSButton(
+            radioButtonWithTitle: String(localized: .ConfigurationStrings.permissionsAskEveryTime),
+            target: self,
+            action: #selector(permissionsSettingChanged)
+        )
+        let permissionMode = settings.agentPermissionMode
+        sandboxPermissionsRadioButton.state = permissionMode == .sandboxAuto ? .on : .off
+        askEveryTimePermissionsRadioButton.state = permissionMode == .askEveryTime ? .on : .off
+        unrestrictedPermissionsRadioButton.state = permissionMode == .unrestricted ? .on : .off
 
-        sandboxCheckbox = NSButton(
-            checkboxWithTitle: String(localized: .ConfigurationStrings.permissionsEnableSandbox),
-            target: self,
-            action: #selector(permissionsSettingChanged)
-        )
-        sandboxCheckbox.state = settings.agentSandboxEnabled ? .on : .off
-        let sandboxDesc = NSTextField(
+        permissionsModeDescriptionLabel = NSTextField(
             wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsEnableSandboxDescriptionSettings)
         )
-        sandboxDesc.font = .systemFont(ofSize: 11)
-        sandboxDesc.textColor = NSColor(resource: .textSecondary)
-        permissionsSection.addArrangedSubview(sandboxCheckbox)
-        permissionsSection.addArrangedSubview(sandboxDesc)
+        permissionsModeDescriptionLabel.font = .systemFont(ofSize: 11)
+        permissionsModeDescriptionLabel.textColor = NSColor(resource: .textSecondary)
+        permissionsModeDescriptionLabel.maximumNumberOfLines = 0
+
+        permissionsSection.addArrangedSubview(sandboxPermissionsRadioButton)
+        permissionsSection.addArrangedSubview(askEveryTimePermissionsRadioButton)
+        permissionsSection.addArrangedSubview(unrestrictedPermissionsRadioButton)
+        permissionsSection.addArrangedSubview(permissionsModeDescriptionLabel)
 
         let (behaviorCard, behaviorSection) = createSectionCard(
             title: String(localized: .SettingsStrings.settingsAgentsBehaviorTitle),
@@ -212,12 +218,12 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
 
         NSLayoutConstraint.activate([
             defaultDesc.widthAnchor.constraint(equalTo: defaultAgentSection.widthAnchor),
-            skipDesc.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
-            sandboxDesc.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
+            permissionsModeDescriptionLabel.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
             ipcDesc.widthAnchor.constraint(equalTo: behaviorSection.widthAnchor),
             rateLimitDesc.widthAnchor.constraint(equalTo: behaviorSection.widthAnchor),
         ])
 
+        refreshPermissionsModeDescription()
         refreshFDAStatus()
 
         NotificationCenter.default.addObserver(
@@ -444,10 +450,42 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         SystemAccessChecker.isFullDiskAccessGranted()
     }
 
-    @objc private func permissionsSettingChanged() {
+    @objc private func permissionsSettingChanged(_ sender: NSButton) {
+        if sender === sandboxPermissionsRadioButton {
+            sandboxPermissionsRadioButton.state = .on
+            askEveryTimePermissionsRadioButton.state = .off
+            unrestrictedPermissionsRadioButton.state = .off
+        } else if sender === unrestrictedPermissionsRadioButton {
+            sandboxPermissionsRadioButton.state = .off
+            askEveryTimePermissionsRadioButton.state = .off
+            unrestrictedPermissionsRadioButton.state = .on
+        } else {
+            sandboxPermissionsRadioButton.state = .off
+            askEveryTimePermissionsRadioButton.state = .on
+            unrestrictedPermissionsRadioButton.state = .off
+        }
+        let selectedMode: AgentPermissionMode
+        if sandboxPermissionsRadioButton.state == .on {
+            selectedMode = .sandboxAuto
+        } else if unrestrictedPermissionsRadioButton.state == .on {
+            selectedMode = .unrestricted
+        } else {
+            selectedMode = .askEveryTime
+        }
+        refreshPermissionsModeDescription()
         persistSettings { settings in
-            settings.agentSkipPermissions = skipPermissionsCheckbox.state == .on
-            settings.agentSandboxEnabled = sandboxCheckbox.state == .on
+            settings.agentPermissionMode = selectedMode
+        }
+    }
+
+    private func refreshPermissionsModeDescription() {
+        guard let permissionsModeDescriptionLabel else { return }
+        if sandboxPermissionsRadioButton?.state == .on {
+            permissionsModeDescriptionLabel.stringValue = String(localized: .ConfigurationStrings.permissionsEnableSandboxDescriptionSettings)
+        } else if askEveryTimePermissionsRadioButton?.state == .on {
+            permissionsModeDescriptionLabel.stringValue = String(localized: .ConfigurationStrings.permissionsAskEveryTimeDescription)
+        } else {
+            permissionsModeDescriptionLabel.stringValue = String(localized: .ConfigurationStrings.permissionsSkipPromptsDescription)
         }
     }
 

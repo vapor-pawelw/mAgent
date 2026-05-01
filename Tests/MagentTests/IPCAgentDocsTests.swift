@@ -63,4 +63,12 @@ struct IPCAgentDocsTests {
         let occurrences = merged.components(separatedBy: IPCAgentDocs.codexIPCMarkerStart).count - 1
         #expect(occurrences == 1)
     }
+
+    @Test("Codex developer instructions include Magent IPC guidance")
+    func codexDeveloperInstructionsGuidance() {
+        #expect(IPCAgentDocs.codexDeveloperInstructions.contains("/tmp/magent-cli"))
+        #expect(IPCAgentDocs.codexDeveloperInstructions.contains("/tmp/magent-cli docs"))
+        #expect(IPCAgentDocs.codexDeveloperInstructions.contains("thread"))
+        #expect(IPCAgentDocs.codexDeveloperInstructions.contains("tab"))
+    }
 }

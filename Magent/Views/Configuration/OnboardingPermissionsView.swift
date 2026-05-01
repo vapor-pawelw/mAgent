@@ -3,24 +3,39 @@ import MagentCore
 
 final class OnboardingPermissionsView: NSView {
 
-    var skipPermissions: Bool {
-        skipPermissionsCheckbox.state == .on
+    var permissionMode: AgentPermissionMode {
+        if sandboxRadioButton.state == .on {
+            return .sandboxAuto
+        }
+        if unrestrictedRadioButton.state == .on {
+            return .unrestricted
+        }
+        return .askEveryTime
     }
 
-    var sandboxEnabled: Bool {
-        sandboxCheckbox.state == .on
-    }
-
-    private let skipPermissionsCheckbox = NSButton(
-        checkboxWithTitle: String(localized: .ConfigurationStrings.permissionsSkipPrompts),
+    private let unrestrictedRadioButton = NSButton(
+        radioButtonWithTitle: String(localized: .ConfigurationStrings.permissionsSkipPrompts),
         target: nil,
         action: nil
     )
-    private let sandboxCheckbox = NSButton(
-        checkboxWithTitle: String(localized: .ConfigurationStrings.permissionsEnableSandbox),
+    private let sandboxRadioButton = NSButton(
+        radioButtonWithTitle: String(localized: .ConfigurationStrings.permissionsEnableSandbox),
         target: nil,
         action: nil
     )
+    private let askEveryTimeRadioButton = NSButton(
+        radioButtonWithTitle: String(localized: .ConfigurationStrings.permissionsAskEveryTime),
+        target: nil,
+        action: nil
+    )
+    private let permissionModeLabel = NSTextField(labelWithString: String(localized: .ConfigurationStrings.permissionsDescription))
+    private let permissionModeExplanationLabel = NSTextField(
+        wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsEnableSandboxDescriptionOnboarding)
+    )
+    private let unrestrictedDescription = String(localized: .ConfigurationStrings.permissionsSkipPromptsDescription)
+    private let sandboxDescription = String(localized: .ConfigurationStrings.permissionsEnableSandboxDescriptionOnboarding)
+    private let askEveryTimeDescription = String(localized: .ConfigurationStrings.permissionsAskEveryTimeDescription)
+
     private let fdaStatusLabel = NSTextField(labelWithString: "")
     private var appActiveObserver: NSObjectProtocol?
 
@@ -41,25 +56,22 @@ final class OnboardingPermissionsView: NSView {
         let titleLabel = NSTextField(labelWithString: String(localized: .ConfigurationStrings.permissionsTitle))
         titleLabel.font = .preferredFont(forTextStyle: .headline)
 
-        let descLabel = NSTextField(
-            wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsDescription)
-        )
-        descLabel.font = .systemFont(ofSize: 11)
-        descLabel.textColor = NSColor(resource: .textSecondary)
+        permissionModeLabel.font = .systemFont(ofSize: 11)
+        permissionModeLabel.textColor = NSColor(resource: .textSecondary)
 
-        skipPermissionsCheckbox.state = .on
-        let skipDesc = NSTextField(
-            wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsSkipPromptsDescription)
-        )
-        skipDesc.font = .systemFont(ofSize: 11)
-        skipDesc.textColor = NSColor(resource: .textSecondary)
+        unrestrictedRadioButton.target = self
+        unrestrictedRadioButton.action = #selector(permissionModeChanged)
+        sandboxRadioButton.target = self
+        sandboxRadioButton.action = #selector(permissionModeChanged)
+        askEveryTimeRadioButton.target = self
+        askEveryTimeRadioButton.action = #selector(permissionModeChanged)
+        askEveryTimeRadioButton.state = .on
+        unrestrictedRadioButton.state = .off
+        sandboxRadioButton.state = .off
 
-        sandboxCheckbox.state = .off
-        let sandboxDesc = NSTextField(
-            wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsEnableSandboxDescriptionOnboarding)
-        )
-        sandboxDesc.font = .systemFont(ofSize: 11)
-        sandboxDesc.textColor = NSColor(resource: .textSecondary)
+        permissionModeExplanationLabel.font = .systemFont(ofSize: 11)
+        permissionModeExplanationLabel.textColor = NSColor(resource: .textSecondary)
+        permissionModeExplanationLabel.maximumNumberOfLines = 0
 
         // FDA section
         let fdaLabel = NSTextField(labelWithString: String(localized: .ConfigurationStrings.permissionsFullDiskAccessTitle))
@@ -85,9 +97,11 @@ final class OnboardingPermissionsView: NSView {
         fdaStatusRow.addArrangedSubview(fdaButton)
 
         let stack = NSStackView(views: [
-            titleLabel, descLabel,
-            skipPermissionsCheckbox, skipDesc,
-            sandboxCheckbox, sandboxDesc,
+            titleLabel, permissionModeLabel,
+            sandboxRadioButton,
+            askEveryTimeRadioButton,
+            unrestrictedRadioButton,
+            permissionModeExplanationLabel,
             fdaLabel, fdaDesc, fdaStatusRow,
         ])
         stack.orientation = .vertical
@@ -95,7 +109,7 @@ final class OnboardingPermissionsView: NSView {
         stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        stack.setCustomSpacing(16, after: sandboxDesc)
+        stack.setCustomSpacing(16, after: permissionModeExplanationLabel)
 
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -106,6 +120,7 @@ final class OnboardingPermissionsView: NSView {
         ])
 
         refreshFDAStatus()
+        refreshPermissionModeDescription()
     }
 
     override func viewDidMoveToWindow() {
@@ -141,6 +156,34 @@ final class OnboardingPermissionsView: NSView {
     @objc private func openFDASettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles") {
             NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc private func permissionModeChanged(_ sender: NSButton) {
+        if sender === sandboxRadioButton {
+            sandboxRadioButton.state = .on
+            askEveryTimeRadioButton.state = .off
+            unrestrictedRadioButton.state = .off
+        } else if sender === unrestrictedRadioButton {
+            sandboxRadioButton.state = .off
+            askEveryTimeRadioButton.state = .off
+            unrestrictedRadioButton.state = .on
+        } else {
+            sandboxRadioButton.state = .off
+            askEveryTimeRadioButton.state = .on
+            unrestrictedRadioButton.state = .off
+        }
+        refreshPermissionModeDescription()
+    }
+
+    private func refreshPermissionModeDescription() {
+        switch permissionMode {
+        case .sandboxAuto:
+            permissionModeExplanationLabel.stringValue = sandboxDescription
+        case .unrestricted:
+            permissionModeExplanationLabel.stringValue = unrestrictedDescription
+        case .askEveryTime:
+            permissionModeExplanationLabel.stringValue = askEveryTimeDescription
         }
     }
 }

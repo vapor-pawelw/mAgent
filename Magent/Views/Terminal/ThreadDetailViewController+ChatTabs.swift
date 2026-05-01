@@ -7,26 +7,19 @@ extension ThreadDetailViewController {
     // MARK: - Restore (In-memory)
 
     func restoreChatTabItems() {
-        let thinkingPlaceholders: Set<String> = ["Thinking.", "Thinking..", "Thinking...", "Thinking…"]
         var restoredTabsMutated = false
         chatTabs = thread.persistedChatTabs.map { persisted in
-            var messages = persisted.messages
-            for index in messages.indices {
-                guard messages[index].role == .assistant,
-                      thinkingPlaceholders.contains(messages[index].text) else {
-                    continue
-                }
-                // Any persisted "Thinking…" placeholder is stale after process relaunch.
-                // Convert it to a terminal state so later requests start from clean UI state.
-                messages[index].text = "Request cancelled."
+            let normalizedMessages = ChatBusyStateRecovery.normalizedMessagesForAppRelaunch(persisted.messages)
+            if normalizedMessages.didMutate {
                 restoredTabsMutated = true
             }
             return ChatTabEntry(
                 identifier: persisted.identifier,
                 agentType: persisted.agentType,
                 title: persisted.title,
-                messages: messages,
+                messages: normalizedMessages.messages,
                 draftInput: persisted.draftInput,
+                draftAttachments: persisted.draftAttachments,
                 conversationSessionID: persisted.conversationSessionID,
                 modelId: persisted.modelId,
                 reasoningLevel: persisted.reasoningLevel,
@@ -63,6 +56,7 @@ extension ThreadDetailViewController {
         title: String = "Chat",
         messages: [PersistedChatMessage] = [],
         draftInput: String = "",
+        draftAttachments: [PersistedChatAttachment] = [],
         conversationSessionID: String? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
@@ -84,6 +78,7 @@ extension ThreadDetailViewController {
             title: title,
             messages: messages,
             draftInput: draftInput,
+            draftAttachments: draftAttachments,
             conversationSessionID: conversationSessionID,
             modelId: modelId,
             reasoningLevel: reasoningLevel,
@@ -137,11 +132,13 @@ extension ThreadDetailViewController {
                 agentType: entry.agentType,
                 messages: entry.messages,
                 draftInput: entry.draftInput,
+                draftAttachments: entry.draftAttachments,
                 modelId: entry.modelId,
-                reasoningLevel: entry.reasoningLevel
+                reasoningLevel: entry.reasoningLevel,
+                pendingQueuedUserMessageIDs: queuedPendingUserMessageIDs(for: identifier)
             )
-            vc.onSubmit = { [weak self] text in
-                self?.submitChatPrompt(identifier: identifier, text: text)
+            vc.onSubmit = { [weak self] text, attachments in
+                self?.submitChatPrompt(identifier: identifier, text: text, attachments: attachments)
             }
             vc.isCommandRunning = { [weak self] in
                 self?.isChatRequestRunning(identifier: identifier) ?? false
@@ -155,6 +152,9 @@ extension ThreadDetailViewController {
             vc.onDraftChanged = { [weak self] draftInput in
                 self?.updateChatDraftInput(identifier: identifier, draftInput: draftInput)
             }
+            vc.onDraftAttachmentsChanged = { [weak self] draftAttachments in
+                self?.updateChatDraftAttachments(identifier: identifier, draftAttachments: draftAttachments)
+            }
             vc.onModelReasoningChanged = { [weak self] modelId, reasoningLevel in
                 self?.updateChatModelReasoning(identifier: identifier, modelId: modelId, reasoningLevel: reasoningLevel)
             }
@@ -162,6 +162,16 @@ extension ThreadDetailViewController {
         }
 
         guard let vc = chatTabs[entryIndex].viewController else { return }
+
+        vc.update(
+            agentType: chatTabs[entryIndex].agentType,
+            messages: chatTabs[entryIndex].messages,
+            draftInput: chatTabs[entryIndex].draftInput,
+            draftAttachments: chatTabs[entryIndex].draftAttachments,
+            modelId: chatTabs[entryIndex].modelId,
+            reasoningLevel: chatTabs[entryIndex].reasoningLevel,
+            pendingQueuedUserMessageIDs: queuedPendingUserMessageIDs(for: identifier)
+        )
 
         if vc.view.superview == nil {
             vc.view.translatesAutoresizingMaskIntoConstraints = false
@@ -175,6 +185,7 @@ extension ThreadDetailViewController {
         }
 
         vc.view.isHidden = false
+        vc.setRelativeTimeUpdatesEnabled(true)
         vc.focusComposer()
         activeChatTabId = identifier
         currentTabIndex = displayIndex
@@ -186,6 +197,9 @@ extension ThreadDetailViewController {
         }
         UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
         UserDefaults.standard.set(identifier, forKey: Self.lastOpenedTabDefaultsKey)
+        tabItems[displayIndex].hasUnreadCompletion = false
+        threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: identifier)
+        refreshTabTooltips()
 
         // Chat is a GUI tab type, not a terminal surface.
         scrollOverlay.isHidden = true
@@ -197,6 +211,7 @@ extension ThreadDetailViewController {
     func hideActiveChatTab() {
         guard let activeId = activeChatTabId,
               let entry = chatTabs.first(where: { $0.identifier == activeId }) else { return }
+        entry.viewController?.setRelativeTimeUpdatesEnabled(false)
         entry.viewController?.view.isHidden = true
         activeChatTabId = nil
     }
@@ -218,6 +233,12 @@ extension ThreadDetailViewController {
     func removeChatTab(identifier: String) {
         guard let slotIndex = tabSlots.firstIndex(of: .chat(identifier: identifier)) else { return }
         cancelInFlightChatRequest(identifier: identifier)
+        chatSteerInputContinuationsByIdentifier[identifier]?.finish()
+        chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
+        chatQueuedPromptsByIdentifier.removeValue(forKey: identifier)
+        chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
+        chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
+        threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: identifier)
 
         let persistedSnapshot = thread.persistedChatTabs.first(where: { $0.identifier == identifier })
         if let entryIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) {
@@ -474,66 +495,220 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func submitChatPrompt(identifier: String, text: String) {
+    private func queuedPendingUserMessageIDs(for identifier: String) -> Set<UUID> {
+        Set((chatQueuedPromptsByIdentifier[identifier] ?? []).map(\.messageID))
+    }
+
+    private func refreshChatTabView(chatIndex: Int) {
+        guard chatTabs.indices.contains(chatIndex) else { return }
+        let entry = chatTabs[chatIndex]
+        entry.viewController?.update(
+            agentType: entry.agentType,
+            messages: entry.messages,
+            draftInput: entry.draftInput,
+            draftAttachments: entry.draftAttachments,
+            modelId: entry.modelId,
+            reasoningLevel: entry.reasoningLevel,
+            pendingQueuedUserMessageIDs: queuedPendingUserMessageIDs(for: entry.identifier)
+        )
+    }
+
+    private func submitChatPrompt(identifier: String, text: String, attachments: [PersistedChatAttachment] = []) {
         guard let entryIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if handleChatSlashCommandIfNeeded(identifier: identifier, chatIndex: entryIndex, text: trimmedText) {
+        let normalizedAttachments = normalizeAttachmentsForSubmission(attachments)
+        guard !trimmedText.isEmpty || !normalizedAttachments.isEmpty else { return }
+        if normalizedAttachments.isEmpty,
+           handleChatSlashCommandIfNeeded(identifier: identifier, chatIndex: entryIndex, text: trimmedText) {
             return
         }
-        cancelInFlightChatRequest(identifier: identifier)
+        guard chatRequestTasksByIdentifier[identifier] == nil else {
+            if chatTabs[entryIndex].agentType == .codex,
+               normalizedAttachments.isEmpty,
+               !trimmedText.isEmpty,
+               let steerContinuation = chatSteerInputContinuationsByIdentifier[identifier] {
+                let metadata = chatMessageMetadata(for: entryIndex)
+                let steeringMessage = PersistedChatMessage(
+                    role: .user,
+                    text: trimmedText,
+                    modelId: metadata.modelId,
+                    reasoningLevel: metadata.reasoningLevel
+                )
+                chatTabs[entryIndex].messages.append(steeringMessage)
+                persistChatTabs()
+                refreshChatTabView(chatIndex: entryIndex)
+                steerContinuation.yield(trimmedText)
+                return
+            }
 
-        let user = PersistedChatMessage(role: .user, text: trimmedText)
-        let pendingAssistant = PersistedChatMessage(role: .assistant, text: Self.chatLoadingPlaceholder)
-        chatTabs[entryIndex].messages.append(user)
-        chatTabs[entryIndex].messages.append(pendingAssistant)
-        chatPendingAssistantMessageIDsByIdentifier[identifier] = pendingAssistant.id
-        persistChatTabs()
-        chatTabs[entryIndex].viewController?.update(
-            agentType: chatTabs[entryIndex].agentType,
-            messages: chatTabs[entryIndex].messages,
-            draftInput: chatTabs[entryIndex].draftInput,
-            modelId: chatTabs[entryIndex].modelId,
-            reasoningLevel: chatTabs[entryIndex].reasoningLevel
+            let metadata = chatMessageMetadata(for: entryIndex)
+            let displayText = messageTextForDisplay(promptText: trimmedText, attachments: normalizedAttachments)
+            let queuedUserMessage = PersistedChatMessage(
+                role: .user,
+                text: displayText,
+                modelId: metadata.modelId,
+                reasoningLevel: metadata.reasoningLevel
+            )
+            chatTabs[entryIndex].messages.append(queuedUserMessage)
+            enqueueChatPrompt(
+                identifier: identifier,
+                messageID: queuedUserMessage.id,
+                text: trimmedText,
+                attachments: normalizedAttachments
+            )
+            persistChatTabs()
+            refreshChatTabView(chatIndex: entryIndex)
+            return
+        }
+
+        startChatPromptRequest(
+            identifier: identifier,
+            promptText: trimmedText,
+            attachments: normalizedAttachments,
+            chatIndex: entryIndex
         )
+    }
+
+    private func startChatPromptRequest(
+        identifier: String,
+        promptText: String,
+        attachments: [PersistedChatAttachment],
+        chatIndex: Int,
+        existingQueuedUserMessageID: UUID? = nil
+    ) {
+        // Defensive cleanup: if a previous request died unexpectedly and left one or
+        // more loading placeholders behind, normalize them before starting a new turn.
+        let normalizedMessages = ChatBusyStateRecovery.normalizedMessagesForAppRelaunch(
+            chatTabs[chatIndex].messages
+        )
+        if normalizedMessages.didMutate {
+            chatTabs[chatIndex].messages = normalizedMessages.messages
+        }
+
+        let metadata = chatMessageMetadata(for: chatIndex)
+        let displayText = messageTextForDisplay(promptText: promptText, attachments: attachments)
+        if let existingQueuedUserMessageID,
+           !chatTabs[chatIndex].messages.contains(where: { $0.id == existingQueuedUserMessageID }) {
+            let reconstructedUser = PersistedChatMessage(
+                id: existingQueuedUserMessageID,
+                role: .user,
+                text: displayText,
+                modelId: metadata.modelId,
+                reasoningLevel: metadata.reasoningLevel
+            )
+            chatTabs[chatIndex].messages.append(reconstructedUser)
+        } else if let existingQueuedUserMessageID,
+                  let existingIndex = chatTabs[chatIndex].messages.firstIndex(where: { $0.id == existingQueuedUserMessageID }) {
+            chatTabs[chatIndex].messages[existingIndex].modelId = metadata.modelId
+            chatTabs[chatIndex].messages[existingIndex].reasoningLevel = metadata.reasoningLevel
+        }
+        if existingQueuedUserMessageID == nil {
+            let user = PersistedChatMessage(
+                role: .user,
+                text: displayText,
+                modelId: metadata.modelId,
+                reasoningLevel: metadata.reasoningLevel
+            )
+            chatTabs[chatIndex].messages.append(user)
+        }
+        let pendingAssistant = PersistedChatMessage(
+            role: .assistant,
+            text: Self.chatLoadingPlaceholder,
+            modelId: metadata.modelId,
+            reasoningLevel: metadata.reasoningLevel
+        )
+        chatTabs[chatIndex].messages.append(pendingAssistant)
+        chatPendingAssistantMessageIDsByIdentifier[identifier] = pendingAssistant.id
+        chatStreamingAssistantMessageIDsByIdentifier[identifier] = [:]
+        chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
+        chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
+        persistChatTabs()
+        refreshChatTabView(chatIndex: chatIndex)
 
         let worktreePath = thread.worktreePath
-        let agentType = chatTabs[entryIndex].agentType
-        let conversationSessionID = chatTabs[entryIndex].conversationSessionID
-        let selectedModelId = chatTabs[entryIndex].modelId
-        let selectedReasoningLevel = chatTabs[entryIndex].reasoningLevel
+        let settings = PersistenceService.shared.loadSettings()
+        let permissionMode = settings.agentPermissionMode
+        let codexSkipPermissions = permissionMode == .unrestricted
+        let codexSandboxEnabled = permissionMode == .sandboxAuto
+        let includeMagentIPC = settings.ipcPromptInjectionEnabled
+        let agentType = chatTabs[chatIndex].agentType
+        let conversationSessionID = chatTabs[chatIndex].conversationSessionID
+        let selectedModelId = chatTabs[chatIndex].modelId
+        let selectedReasoningLevel = chatTabs[chatIndex].reasoningLevel
         let taskToken = UUID()
+        let codexSteerStream = makeCodexSteerStreamIfNeeded(identifier: identifier, agentType: agentType)
 
         let task = Task { [weak self] in
             guard let self else { return }
             let response = await AgentChatRuntime.execute(
                 agentType: agentType,
-                prompt: text,
+                prompt: displayText,
                 workingDirectory: worktreePath,
                 conversationSessionID: conversationSessionID,
-                claudeSystemPrompt: IPCAgentDocs.claudeSystemPrompt,
+                claudeSystemPrompt: includeMagentIPC ? IPCAgentDocs.claudeSystemPrompt : nil,
+                codexDeveloperInstructions: includeMagentIPC ? IPCAgentDocs.codexDeveloperInstructions : nil,
                 modelId: selectedModelId,
-                reasoningLevel: selectedReasoningLevel
+                reasoningLevel: selectedReasoningLevel,
+                codexSkipPermissions: codexSkipPermissions,
+                codexSandboxEnabled: codexSandboxEnabled,
+                codexSteerStream: codexSteerStream,
+                onStreamingUpdate: { [weak self] update in
+                    guard let self else { return }
+                    guard self.chatRequestTaskTokensByIdentifier[identifier] == taskToken else { return }
+                    self.applyStreamingAssistantUpdate(
+                        identifier: identifier,
+                        pendingAssistantID: pendingAssistant.id,
+                        metadata: metadata,
+                        update: update
+                    )
+                }
             )
 
             await MainActor.run {
                 guard self.chatRequestTaskTokensByIdentifier[identifier] == taskToken else { return }
                 self.chatRequestTasksByIdentifier.removeValue(forKey: identifier)
                 self.chatRequestTaskTokensByIdentifier.removeValue(forKey: identifier)
-                self.chatPendingAssistantMessageIDsByIdentifier.removeValue(forKey: identifier)
+                self.chatSteerInputContinuationsByIdentifier[identifier]?.finish()
+                self.chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
+                self.chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
+                self.chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
                 guard let currentIndex = self.chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
-                guard let messageIndex = self.chatTabs[currentIndex].messages.firstIndex(where: { $0.id == pendingAssistant.id }) else { return }
-                self.chatTabs[currentIndex].messages[messageIndex].text = response.assistantText
+                let streamedMessageIDs = Set((self.chatStreamingAssistantMessageIDsByIdentifier[identifier] ?? [:]).values)
+                let hasRenderedStreamedMessages = self.chatTabs[currentIndex].messages.contains(where: {
+                    streamedMessageIDs.contains($0.id)
+                })
+
+                if let pendingMessageID = self.chatPendingAssistantMessageIDsByIdentifier.removeValue(forKey: identifier),
+                   let pendingIndex = self.chatTabs[currentIndex].messages.firstIndex(where: { $0.id == pendingMessageID }) {
+                    self.chatTabs[currentIndex].messages.remove(at: pendingIndex)
+                }
+
+                let finalText = self.normalizeFinalAssistantMessage(
+                    response.assistantText
+                )
+                if !finalText.isEmpty, !hasRenderedStreamedMessages {
+                    let assistant = PersistedChatMessage(
+                        role: .assistant,
+                        text: finalText,
+                        modelId: metadata.modelId,
+                        reasoningLevel: metadata.reasoningLevel
+                    )
+                    self.chatTabs[currentIndex].messages.append(assistant)
+                }
+
+                self.chatStreamingAssistantMessageIDsByIdentifier.removeValue(forKey: identifier)
                 self.chatTabs[currentIndex].conversationSessionID = response.conversationSessionID
                 self.syncChatModelReasoningFromAgentMessage(chatIndex: currentIndex, output: response.assistantText)
                 self.persistChatTabs()
-                self.chatTabs[currentIndex].viewController?.update(
-                    agentType: agentType,
-                    messages: self.chatTabs[currentIndex].messages,
-                    draftInput: self.chatTabs[currentIndex].draftInput,
-                    modelId: self.chatTabs[currentIndex].modelId,
-                    reasoningLevel: self.chatTabs[currentIndex].reasoningLevel
-                )
+                self.refreshChatTabView(chatIndex: currentIndex)
                 self.refreshTabStatusIndicators()
+                let isActiveChatTab = self.activeChatTabId == identifier
+                self.threadManager.markSessionCompletionDetected(
+                    threadId: self.thread.id,
+                    sessionName: identifier,
+                    isActiveTab: isActiveChatTab
+                )
+                self.dispatchQueuedChatPromptIfNeeded(identifier: identifier)
             }
         }
         chatRequestTasksByIdentifier[identifier] = task
@@ -550,22 +725,139 @@ extension ThreadDetailViewController {
         task.cancel()
         chatRequestTasksByIdentifier.removeValue(forKey: identifier)
         chatRequestTaskTokensByIdentifier.removeValue(forKey: identifier)
+        chatSteerInputContinuationsByIdentifier[identifier]?.finish()
+        chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
+        chatStreamingAssistantMessageIDsByIdentifier.removeValue(forKey: identifier)
+        chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
+        chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
 
         if let pendingMessageID = chatPendingAssistantMessageIDsByIdentifier.removeValue(forKey: identifier),
            let entryIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }),
            let messageIndex = chatTabs[entryIndex].messages.firstIndex(where: { $0.id == pendingMessageID }) {
             chatTabs[entryIndex].messages[messageIndex].text = "Request cancelled."
             persistChatTabs()
-            chatTabs[entryIndex].viewController?.update(
-                agentType: chatTabs[entryIndex].agentType,
-                messages: chatTabs[entryIndex].messages,
-                draftInput: chatTabs[entryIndex].draftInput,
-                modelId: chatTabs[entryIndex].modelId,
-                reasoningLevel: chatTabs[entryIndex].reasoningLevel
-            )
+            refreshChatTabView(chatIndex: entryIndex)
         }
 
         refreshTabStatusIndicators()
+        dispatchQueuedChatPromptIfNeeded(identifier: identifier)
+    }
+
+    private func enqueueChatPrompt(
+        identifier: String,
+        messageID: UUID,
+        text: String,
+        attachments: [PersistedChatAttachment]
+    ) {
+        var queue = chatQueuedPromptsByIdentifier[identifier] ?? []
+        queue.append((messageID: messageID, text: text, attachments: attachments))
+        chatQueuedPromptsByIdentifier[identifier] = queue
+    }
+
+    private func dispatchQueuedChatPromptIfNeeded(identifier: String) {
+        guard chatRequestTasksByIdentifier[identifier] == nil else { return }
+        guard var queue = chatQueuedPromptsByIdentifier[identifier], !queue.isEmpty else { return }
+        let nextPrompt = queue.removeFirst()
+        if queue.isEmpty {
+            chatQueuedPromptsByIdentifier.removeValue(forKey: identifier)
+        } else {
+            chatQueuedPromptsByIdentifier[identifier] = queue
+        }
+        guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+        startChatPromptRequest(
+            identifier: identifier,
+            promptText: nextPrompt.text,
+            attachments: nextPrompt.attachments,
+            chatIndex: chatIndex,
+            existingQueuedUserMessageID: nextPrompt.messageID
+        )
+    }
+
+    private func applyStreamingAssistantUpdate(
+        identifier: String,
+        pendingAssistantID: UUID,
+        metadata: (modelId: String?, reasoningLevel: String?),
+        update: AgentChatStreamingUpdate
+    ) {
+        guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+
+        var messageIDsByItem = chatStreamingAssistantMessageIDsByIdentifier[identifier] ?? [:]
+        let bubbleMessageID = messageIDsByItem[update.itemID]
+        let trimmedText = update.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+
+        if let bubbleMessageID,
+           let messageIndex = chatTabs[chatIndex].messages.firstIndex(where: { $0.id == bubbleMessageID }) {
+            chatTabs[chatIndex].messages[messageIndex].text = trimmedText
+            chatTabs[chatIndex].messages[messageIndex].modelId = metadata.modelId
+            chatTabs[chatIndex].messages[messageIndex].reasoningLevel = metadata.reasoningLevel
+        } else {
+            let assistantMessage = PersistedChatMessage(
+                role: .assistant,
+                text: trimmedText,
+                modelId: metadata.modelId,
+                reasoningLevel: metadata.reasoningLevel
+            )
+            if let pendingIndex = chatTabs[chatIndex].messages.firstIndex(where: { $0.id == pendingAssistantID }) {
+                chatTabs[chatIndex].messages.insert(assistantMessage, at: pendingIndex)
+            } else {
+                chatTabs[chatIndex].messages.append(assistantMessage)
+            }
+            messageIDsByItem[update.itemID] = assistantMessage.id
+            chatStreamingAssistantMessageIDsByIdentifier[identifier] = messageIDsByItem
+        }
+
+        if activeChatTabId != identifier {
+            // Background chat tabs still accumulate full streamed content in model state,
+            // but skip per-delta UI rendering work until the tab is visible again.
+            scheduleChatStreamingCheckpointPersist(identifier: identifier)
+            return
+        }
+        refreshChatTabView(chatIndex: chatIndex)
+    }
+
+    private func setPendingAssistantMessage(identifier: String, pendingAssistantID: UUID, text: String) {
+        guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }),
+              let messageIndex = chatTabs[chatIndex].messages.firstIndex(where: { $0.id == pendingAssistantID }) else {
+            return
+        }
+        guard chatTabs[chatIndex].messages[messageIndex].text != text else { return }
+        chatTabs[chatIndex].messages[messageIndex].text = text
+        persistChatTabs()
+        if activeChatTabId == identifier {
+            refreshChatTabView(chatIndex: chatIndex)
+        }
+    }
+
+    private func normalizeFinalAssistantMessage(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func makeCodexSteerStreamIfNeeded(
+        identifier: String,
+        agentType: AgentType
+    ) -> AsyncStream<String>? {
+        guard agentType == .codex else {
+            chatSteerInputContinuationsByIdentifier[identifier]?.finish()
+            chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
+            return nil
+        }
+        chatSteerInputContinuationsByIdentifier[identifier]?.finish()
+        chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
+
+        return AsyncStream<String> { [weak self] continuation in
+            guard let self else {
+                continuation.finish()
+                return
+            }
+            self.chatSteerInputContinuationsByIdentifier[identifier] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
+                }
+            }
+        }
     }
 
     private func handleChatSlashCommandIfNeeded(identifier: String, chatIndex: Int, text: String) -> Bool {
@@ -582,13 +874,7 @@ extension ThreadDetailViewController {
             chatTabs[chatIndex].messages.removeAll()
             chatTabs[chatIndex].conversationSessionID = nil
             persistChatTabs()
-            chatTabs[chatIndex].viewController?.update(
-                agentType: agentType,
-                messages: chatTabs[chatIndex].messages,
-                draftInput: chatTabs[chatIndex].draftInput,
-                modelId: chatTabs[chatIndex].modelId,
-                reasoningLevel: chatTabs[chatIndex].reasoningLevel
-            )
+            refreshChatTabView(chatIndex: chatIndex)
             return true
         case "/model":
             return applyChatSlashModelCommand(identifier: identifier, chatIndex: chatIndex, args: args)
@@ -622,16 +908,16 @@ extension ThreadDetailViewController {
         }
 
         let body = "Available slash commands:\n" + commands.map { "• \($0)" }.joined(separator: "\n")
-        let assistant = PersistedChatMessage(role: .assistant, text: body)
+        let metadata = chatMessageMetadata(for: chatIndex)
+        let assistant = PersistedChatMessage(
+            role: .assistant,
+            text: body,
+            modelId: metadata.modelId,
+            reasoningLevel: metadata.reasoningLevel
+        )
         chatTabs[chatIndex].messages.append(assistant)
         persistChatTabs()
-        chatTabs[chatIndex].viewController?.update(
-            agentType: agentType,
-            messages: chatTabs[chatIndex].messages,
-            draftInput: chatTabs[chatIndex].draftInput,
-            modelId: chatTabs[chatIndex].modelId,
-            reasoningLevel: chatTabs[chatIndex].reasoningLevel
-        )
+        refreshChatTabView(chatIndex: chatIndex)
     }
 
     private func applyChatSlashModelCommand(identifier: String, chatIndex: Int, args: [String]) -> Bool {
@@ -663,13 +949,7 @@ extension ThreadDetailViewController {
             AgentLastSelectionStore.saveReasoning(validatedEffort, for: agentType, modelId: validatedModelId)
         }
         persistChatTabs()
-        chatTabs[chatIndex].viewController?.update(
-            agentType: agentType,
-            messages: chatTabs[chatIndex].messages,
-            draftInput: chatTabs[chatIndex].draftInput,
-            modelId: chatTabs[chatIndex].modelId,
-            reasoningLevel: chatTabs[chatIndex].reasoningLevel
-        )
+        refreshChatTabView(chatIndex: chatIndex)
         appendChatAssistantMessage(identifier: identifier, text: "Model changed to \(validatedModelId).")
         return true
     }
@@ -702,30 +982,69 @@ extension ThreadDetailViewController {
             modelId: chatTabs[chatIndex].modelId
         )
         persistChatTabs()
-        chatTabs[chatIndex].viewController?.update(
-            agentType: agentType,
-            messages: chatTabs[chatIndex].messages,
-            draftInput: chatTabs[chatIndex].draftInput,
-            modelId: chatTabs[chatIndex].modelId,
-            reasoningLevel: chatTabs[chatIndex].reasoningLevel
-        )
+        refreshChatTabView(chatIndex: chatIndex)
         appendChatAssistantMessage(identifier: identifier, text: "Reasoning effort set to \(validatedEffort).")
         return true
     }
 
     private func appendChatAssistantMessage(identifier: String, text: String) {
         guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
-        let agentType = chatTabs[chatIndex].agentType
-        let assistant = PersistedChatMessage(role: .assistant, text: text)
+        let metadata = chatMessageMetadata(for: chatIndex)
+        let assistant = PersistedChatMessage(
+            role: .assistant,
+            text: text,
+            modelId: metadata.modelId,
+            reasoningLevel: metadata.reasoningLevel
+        )
         chatTabs[chatIndex].messages.append(assistant)
         persistChatTabs()
-        chatTabs[chatIndex].viewController?.update(
-            agentType: agentType,
-            messages: chatTabs[chatIndex].messages,
-            draftInput: chatTabs[chatIndex].draftInput,
-            modelId: chatTabs[chatIndex].modelId,
-            reasoningLevel: chatTabs[chatIndex].reasoningLevel
-        )
+        refreshChatTabView(chatIndex: chatIndex)
+    }
+
+    private func chatMessageMetadata(for chatIndex: Int) -> (modelId: String?, reasoningLevel: String?) {
+        guard chatTabs.indices.contains(chatIndex) else { return (nil, nil) }
+        let entry = chatTabs[chatIndex]
+        guard entry.agentType != .custom else {
+            return (entry.modelId, entry.reasoningLevel)
+        }
+
+        let normalizedModelId = AgentModelsService.shared.validatedModelId(entry.modelId, for: entry.agentType) ?? entry.modelId
+        let normalizedReasoning = AgentModelsService.shared.validatedReasoningLevel(
+            entry.reasoningLevel,
+            for: entry.agentType,
+            modelId: normalizedModelId
+        ) ?? entry.reasoningLevel
+        return (normalizedModelId, normalizedReasoning)
+    }
+
+    private func normalizeAttachmentsForSubmission(_ attachments: [PersistedChatAttachment]) -> [PersistedChatAttachment] {
+        var seen: Set<String> = []
+        var normalized: [PersistedChatAttachment] = []
+        for attachment in attachments {
+            let normalizedPath = URL(fileURLWithPath: attachment.filePath).standardizedFileURL.path
+            guard FileManager.default.fileExists(atPath: normalizedPath) else { continue }
+            guard !seen.contains(normalizedPath) else { continue }
+            seen.insert(normalizedPath)
+            normalized.append(
+                PersistedChatAttachment(
+                    id: attachment.id,
+                    filePath: normalizedPath,
+                    kind: attachment.kind
+                )
+            )
+        }
+        return normalized
+    }
+
+    private func messageTextForDisplay(promptText: String, attachments: [PersistedChatAttachment]) -> String {
+        guard !attachments.isEmpty else { return promptText }
+        let lines = attachments.map { attachment in
+            "• \((attachment.filePath as NSString).lastPathComponent)"
+        }
+        if promptText.isEmpty {
+            return lines.joined(separator: "\n")
+        }
+        return ([promptText, ""] + lines).joined(separator: "\n")
     }
 
     private func persistChatTabs() {
@@ -736,6 +1055,7 @@ extension ThreadDetailViewController {
                 title: entry.title,
                 messages: entry.messages,
                 draftInput: entry.draftInput,
+                draftAttachments: entry.draftAttachments,
                 conversationSessionID: entry.conversationSessionID,
                 modelId: entry.modelId,
                 reasoningLevel: entry.reasoningLevel
@@ -744,10 +1064,33 @@ extension ThreadDetailViewController {
         threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)
     }
 
+    private func scheduleChatStreamingCheckpointPersist(identifier: String) {
+        chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
+        chatStreamingCheckpointTasksByIdentifier[identifier] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000) // 0.4s trailing-edge throttle
+            await MainActor.run {
+                guard let self else { return }
+                guard self.chatRequestTasksByIdentifier[identifier] != nil else {
+                    self.chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
+                    return
+                }
+                self.persistChatTabs()
+                self.chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
+            }
+        }
+    }
+
     private func updateChatDraftInput(identifier: String, draftInput: String) {
         guard let index = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
         guard chatTabs[index].draftInput != draftInput else { return }
         chatTabs[index].draftInput = draftInput
+        persistChatTabs()
+    }
+
+    private func updateChatDraftAttachments(identifier: String, draftAttachments: [PersistedChatAttachment]) {
+        guard let index = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+        guard chatTabs[index].draftAttachments != draftAttachments else { return }
+        chatTabs[index].draftAttachments = draftAttachments
         persistChatTabs()
     }
 

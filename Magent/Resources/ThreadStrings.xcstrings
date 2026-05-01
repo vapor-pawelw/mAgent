@@ -1167,6 +1167,28 @@
         }
       }
     },
+    "chatRelativeTimeLessThanMinuteAgo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "less than a minute ago"
+          }
+        }
+      }
+    },
+    "chatTimestampCopyFullTimeAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy full time"
+          }
+        }
+      }
+    },
     "chatSlashCommandScopedModelsDescription": {
       "extractionState": "manual",
       "localizations": {

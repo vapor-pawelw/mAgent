@@ -37,6 +37,7 @@ public final class PersistenceService {
     }()
     public static let restorableCriticalFileNames = [
         "threads.json",
+        "chat-tabs.json",
         "settings.json",
         "agent-launch-prompt-drafts.json",
     ]
@@ -129,6 +130,10 @@ public final class PersistenceService {
 
     private var threadsURL: URL {
         appSupportURL.appendingPathComponent("threads.json")
+    }
+
+    private var chatTabsURL: URL {
+        appSupportURL.appendingPathComponent("chat-tabs.json")
     }
 
     private var settingsURL: URL {
@@ -377,7 +382,8 @@ public final class PersistenceService {
 
     public func loadThreads() -> [MagentThread] {
         switch tryLoadThreads() {
-        case .loaded(let threads):
+        case .loaded(let loadedThreads):
+            let threads = recoverChatTabsIfNeeded(in: loadedThreads)
             // Upgrade legacy (v0) files to versioned envelope on first load
             if isLegacyFormat(threadsURL) {
                 try? saveThreads(threads)
@@ -397,6 +403,7 @@ public final class PersistenceService {
         let envelope = VersionedEnvelope(schemaVersion: SchemaVersion.threads, data: threads)
         let data = try encoder.encode(envelope)
         try data.write(to: threadsURL, options: .atomic)
+        persistChatTabsSidecar(from: threads)
     }
 
     /// Saves the active (non-archived) threads while preserving any archived threads
@@ -405,6 +412,69 @@ public final class PersistenceService {
     public func saveActiveThreads(_ activeThreads: [MagentThread]) throws {
         let existingArchived = loadThreads().filter { $0.isArchived }
         try saveThreads(activeThreads + existingArchived)
+    }
+
+    /// Applies sidecar chat-tab recovery for threads whose inline `persistedChatTabs`
+    /// are missing. This is used to survive downgrades to app builds that did not
+    /// preserve unknown thread fields when rewriting `threads.json`.
+    ///
+    /// The sidecar map uses `thread.id.uuidString` keys and is intentionally simple
+    /// so it can be validated in tests without touching disk.
+    public static func applyChatTabsSidecarRecovery(
+        to threads: [MagentThread],
+        sidecar: [String: [PersistedChatTab]]
+    ) -> [MagentThread] {
+        guard !threads.isEmpty, !sidecar.isEmpty else { return threads }
+        var recovered = threads
+        for index in recovered.indices {
+            guard recovered[index].persistedChatTabs.isEmpty else { continue }
+            guard let sidecarTabs = sidecar[recovered[index].id.uuidString], !sidecarTabs.isEmpty else { continue }
+            recovered[index].persistedChatTabs = sidecarTabs
+        }
+        return recovered
+    }
+
+    private func recoverChatTabsIfNeeded(in threads: [MagentThread]) -> [MagentThread] {
+        let sidecar = loadChatTabsSidecar()
+        guard !sidecar.isEmpty else { return threads }
+
+        let recovered = Self.applyChatTabsSidecarRecovery(to: threads, sidecar: sidecar)
+        guard recovered != threads else { return threads }
+
+        let recoveredThreadCount = zip(threads, recovered).reduce(into: 0) { count, pair in
+            if pair.0.persistedChatTabs.isEmpty && !pair.1.persistedChatTabs.isEmpty {
+                count += 1
+            }
+        }
+        logger.info("Recovered chat tabs for \(recoveredThreadCount) thread(s) from chat-tabs.json sidecar")
+
+        // Repair the primary file eagerly so subsequent writes from this app version
+        // keep the recovered tabs even if sidecar recovery is not needed later.
+        try? saveThreads(recovered)
+        return recovered
+    }
+
+    private func loadChatTabsSidecar() -> [String: [PersistedChatTab]] {
+        guard let data = try? Data(contentsOf: chatTabsURL) else { return [:] }
+        guard let decoded = try? decoder.decode([String: [PersistedChatTab]].self, from: data) else {
+            logger.error("Failed to decode chat-tabs sidecar at \(self.chatTabsURL.path)")
+            return [:]
+        }
+        return decoded
+    }
+
+    private func persistChatTabsSidecar(from threads: [MagentThread]) {
+        var sidecar: [String: [PersistedChatTab]] = [:]
+        sidecar.reserveCapacity(threads.count)
+        for thread in threads {
+            sidecar[thread.id.uuidString] = thread.persistedChatTabs
+        }
+        do {
+            let data = try encoder.encode(sidecar)
+            try data.write(to: chatTabsURL, options: .atomic)
+        } catch {
+            logger.error("Failed to persist chat-tabs sidecar: \(error.localizedDescription)")
+        }
     }
 
     /// Debounced variant of `saveActiveThreads`. Coalesces rapid saves (e.g. multiple

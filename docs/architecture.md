@@ -308,7 +308,7 @@ Closed-tab restore behavior is thread-local and intentionally ephemeral:
 
 Magent keeps two layers of backup protection for critical app-state files in Application Support:
 
-- Rolling backups: before overwriting `threads.json`, `settings.json`, or `agent-launch-prompt-drafts.json`, keep the previous file as `<name>.bak.json`.
+- Rolling backups: before overwriting `threads.json`, `chat-tabs.json`, `settings.json`, or `agent-launch-prompt-drafts.json`, keep the previous file as `<name>.bak.json`.
 - Periodic snapshots: every 30 minutes while the app is running, copy the currently present critical files into `Application Support/Magent/backups/<timestamp>/`.
 - Settings exposes a manual `Back Up Now` action that creates the same snapshot format on demand.
 
@@ -366,6 +366,7 @@ Non-critical caches (Jira, PR, rate-limit, etc.) keep silent fallback to empty â
 | File | Contents |
 |------|----------|
 | `threads.json` | Versioned envelope containing `[MagentThread]` (active + archived) |
+| `chat-tabs.json` | Sidecar map of `thread.id` â†’ `[PersistedChatTab]`, used to recover chat tabs when older builds rewrite `threads.json` without preserving inline chat-tab fields |
 | `settings.json` | Versioned envelope containing `AppSettings` (projects, sections, preferences) |
 | `agent-launch-prompt-drafts.json` | Draft prompts for agent launch sheets |
 | `agent-last-selections.json` | Last-used agent type, model, and reasoning effort per scope (managed by `AgentLastSelectionStore`) |

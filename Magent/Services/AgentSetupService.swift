@@ -2044,9 +2044,15 @@ final class AgentSetupService {
         switch agentType {
         case .claude:
             // Use `command claude` to bypass any shell function wrappers.
-            var command = settings.agentSkipPermissions
-                ? "command claude --dangerously-skip-permissions"
-                : "command claude"
+            let baseCommand: String = switch settings.agentPermissionMode {
+            case .unrestricted:
+                "command claude --dangerously-skip-permissions"
+            case .sandboxAuto:
+                "command claude --permission-mode auto"
+            case .askEveryTime:
+                "command claude"
+            }
+            var command = baseCommand
             command += " --resume \(quotedID)"
             command += " --settings \(Self.claudeHooksSettingsPath)"
             if settings.ipcPromptInjectionEnabled {
@@ -2056,10 +2062,13 @@ final class AgentSetupService {
         case .codex:
             // Use `command codex` to bypass shell function wrappers (same reason as in AppSettings.command(for:)).
             var command = "command codex resume \(quotedID)"
-            if settings.agentSkipPermissions {
+            switch settings.agentPermissionMode {
+            case .unrestricted:
                 command += " --yolo"
-            } else if settings.agentSandboxEnabled {
+            case .sandboxAuto:
                 command += " --full-auto"
+            case .askEveryTime:
+                break
             }
             return codexSessionConfiguredCommand(
                 command,

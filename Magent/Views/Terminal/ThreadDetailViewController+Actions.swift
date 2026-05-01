@@ -1342,7 +1342,7 @@ extension ThreadDetailViewController {
                 tabItems[i].showKeepAliveIcon = !thread.isKeepAlive
                     && thread.protectedTmuxSessions.contains(sessionName)
             case .chat(let identifier):
-                tabItems[i].hasUnreadCompletion = false
+                tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(identifier)
                 tabItems[i].hasWaitingForInput = false
                 tabItems[i].hasBusy = isChatRequestRunning(identifier: identifier)
                 tabItems[i].hasRateLimit = false

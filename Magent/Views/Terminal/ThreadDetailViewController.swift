@@ -169,6 +169,12 @@ final class ThreadDetailViewController: NSViewController {
     var chatRequestTasksByIdentifier: [String: Task<Void, Never>] = [:]
     var chatRequestTaskTokensByIdentifier: [String: UUID] = [:]
     var chatPendingAssistantMessageIDsByIdentifier: [String: UUID] = [:]
+    var chatStreamingAssistantMessageIDsByIdentifier: [String: [String: UUID]] = [:]
+    var chatStreamingCheckpointTasksByIdentifier: [String: Task<Void, Never>] = [:]
+    var chatStreamingUIRefreshTasksByIdentifier: [String: Task<Void, Never>] = [:]
+    var chatStreamingLastUIRefreshAtByIdentifier: [String: Date] = [:]
+    var chatSteerInputContinuationsByIdentifier: [String: AsyncStream<String>.Continuation] = [:]
+    var chatQueuedPromptsByIdentifier: [String: [(messageID: UUID, text: String, attachments: [PersistedChatAttachment])]] = [:]
     var activeDraftTabId: String?
     var activeWebTabId: String?
     var activeChatTabId: String?
@@ -492,8 +498,17 @@ final class ThreadDetailViewController: NSViewController {
         backgroundSessionPreparationTask?.cancel()
         sessionPreparationTasks.values.forEach { $0.cancel() }
         chatRequestTasksByIdentifier.values.forEach { $0.cancel() }
+        chatStreamingCheckpointTasksByIdentifier.values.forEach { $0.cancel() }
         chatRequestTaskTokensByIdentifier.removeAll()
         chatPendingAssistantMessageIDsByIdentifier.removeAll()
+        chatStreamingAssistantMessageIDsByIdentifier.removeAll()
+        chatStreamingCheckpointTasksByIdentifier.removeAll()
+        chatStreamingUIRefreshTasksByIdentifier.values.forEach { $0.cancel() }
+        chatStreamingUIRefreshTasksByIdentifier.removeAll()
+        chatStreamingLastUIRefreshAtByIdentifier.removeAll()
+        chatSteerInputContinuationsByIdentifier.values.forEach { $0.finish() }
+        chatSteerInputContinuationsByIdentifier.removeAll()
+        chatQueuedPromptsByIdentifier.removeAll()
         dismissInitialPromptFailureBanner()
         dismissPendingPromptBanner()
         NotificationCenter.default.removeObserver(self)
@@ -831,10 +846,6 @@ final class ThreadDetailViewController: NSViewController {
             for dt in draftTabs { dt.viewController?.view.removeFromSuperview() }
             draftTabs.removeAll()
             for ct in chatTabs { ct.viewController?.view.removeFromSuperview() }
-            chatRequestTasksByIdentifier.values.forEach { $0.cancel() }
-            chatRequestTasksByIdentifier.removeAll()
-            chatRequestTaskTokensByIdentifier.removeAll()
-            chatPendingAssistantMessageIDsByIdentifier.removeAll()
             tabSlots.removeAll()
             activeWebTabId = nil
             activeDraftTabId = nil
@@ -858,6 +869,26 @@ final class ThreadDetailViewController: NSViewController {
             // Restore persisted draft tabs (view controllers created lazily on selection).
             restoreDraftTabItems()
             restoreChatTabItems()
+
+            let validChatIdentifiers = Set(chatTabs.map(\.identifier))
+            let staleRunningChatIdentifiers = chatRequestTasksByIdentifier.keys.filter { !validChatIdentifiers.contains($0) }
+            for identifier in staleRunningChatIdentifiers {
+                chatRequestTasksByIdentifier[identifier]?.cancel()
+                chatRequestTasksByIdentifier.removeValue(forKey: identifier)
+            }
+            let staleCheckpointIdentifiers = chatStreamingCheckpointTasksByIdentifier.keys.filter { !validChatIdentifiers.contains($0) }
+            for identifier in staleCheckpointIdentifiers {
+                chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
+                chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
+            }
+            chatRequestTaskTokensByIdentifier = chatRequestTaskTokensByIdentifier.filter { validChatIdentifiers.contains($0.key) }
+            chatPendingAssistantMessageIDsByIdentifier = chatPendingAssistantMessageIDsByIdentifier.filter { validChatIdentifiers.contains($0.key) }
+            chatStreamingAssistantMessageIDsByIdentifier = chatStreamingAssistantMessageIDsByIdentifier.filter { validChatIdentifiers.contains($0.key) }
+            for staleID in chatSteerInputContinuationsByIdentifier.keys where !validChatIdentifiers.contains(staleID) {
+                chatSteerInputContinuationsByIdentifier[staleID]?.finish()
+                chatSteerInputContinuationsByIdentifier.removeValue(forKey: staleID)
+            }
+            chatQueuedPromptsByIdentifier = chatQueuedPromptsByIdentifier.filter { validChatIdentifiers.contains($0.key) }
 
             rebuildTabBar()
             rebindAllTabActions()
@@ -922,7 +953,8 @@ final class ThreadDetailViewController: NSViewController {
 
             // Initialize indicator dots from thread model
             for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
-                if case .terminal(let sessionName) = slot {
+                switch slot {
+                case .terminal(let sessionName):
                     tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
                     tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
                     tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
@@ -931,6 +963,10 @@ final class ThreadDetailViewController: NSViewController {
                     tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
                     tabItems[i].isSessionDead = thread.deadSessions.contains(sessionName)
                     tabItems[i].hasTerminalCorruption = threadManager.isTerminalCorrupted(sessionName: sessionName)
+                case .chat(let identifier):
+                    tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(identifier)
+                case .web, .draft:
+                    continue
                 }
             }
             refreshTabTooltips()
@@ -1389,11 +1425,7 @@ final class ThreadDetailViewController: NSViewController {
               let unreadSessions = userInfo["unreadSessions"] as? Set<String> else { return }
 
         thread.unreadCompletionSessions = unreadSessions
-        for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
-            if case .terminal(let sessionName) = slot {
-                tabItems[i].hasUnreadCompletion = unreadSessions.contains(sessionName)
-            }
-        }
+        refreshTabStatusIndicators()
         refreshTabTooltips()
         refreshDiffViewerIfVisible()
         syncTransientState()

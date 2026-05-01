@@ -582,7 +582,7 @@ final class AppCoordinator {
         thread.agentTmuxSessions = thread.tmuxSessionNames.filter { validAgentSessions.contains($0) }
         thread.pinnedTmuxSessions = thread.pinnedTmuxSessions.filter { validTerminalSessions.contains($0) }
         thread.protectedTmuxSessions = thread.protectedTmuxSessions.intersection(validTerminalSessions)
-        thread.unreadCompletionSessions = thread.unreadCompletionSessions.intersection(validTerminalSessions)
+        thread.unreadCompletionSessions = thread.unreadCompletionSessions.intersection(thread.completionTrackedTabIdentifiers)
         thread.sessionConversationIDs = thread.sessionConversationIDs.filter { validAgentSessions.contains($0.key) }
         thread.sessionAgentTypes = thread.sessionAgentTypes.filter { validAgentSessions.contains($0.key) }
         thread.submittedPromptsBySession = thread.submittedPromptsBySession.filter { validAgentSessions.contains($0.key) }
