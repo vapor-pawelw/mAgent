@@ -593,18 +593,18 @@ struct AppSettingsCommandTests {
         )
     }
 
-    @Test("Claude picks unrestricted bypass or sandbox auto mode")
+    @Test("Claude picks unrestricted bypass, sandbox auto, or no-flag ask mode")
     func claudeCommand() {
         #expect(settings(skipPermissions: false, sandboxEnabled: true).command(for: .claude) == "command claude --permission-mode auto")
         #expect(settings(skipPermissions: true).command(for: .claude) == "command claude --dangerously-skip-permissions")
-        #expect(settings(skipPermissions: false, sandboxEnabled: false).command(for: .claude) == "command claude --dangerously-skip-permissions")
+        #expect(settings(skipPermissions: false, sandboxEnabled: false).command(for: .claude) == "command claude")
     }
 
-    @Test("Codex picks --yolo or --full-auto by permission mode")
+    @Test("Codex picks --yolo, --full-auto, or no-flag ask mode")
     func codexCommand() {
         #expect(settings(skipPermissions: true, sandboxEnabled: false).command(for: .codex) == "command codex --yolo")
         #expect(settings(skipPermissions: false, sandboxEnabled: true).command(for: .codex) == "command codex --full-auto")
-        #expect(settings(skipPermissions: false, sandboxEnabled: false).command(for: .codex) == "command codex --yolo")
+        #expect(settings(skipPermissions: false, sandboxEnabled: false).command(for: .codex) == "command codex")
         // Skip-permissions dominates sandbox
         #expect(settings(skipPermissions: true, sandboxEnabled: true).command(for: .codex) == "command codex --yolo")
     }
@@ -613,7 +613,7 @@ struct AppSettingsCommandTests {
     func permissionModeCompatibilityMapping() {
         #expect(settings(skipPermissions: false, sandboxEnabled: true).agentPermissionMode == .sandboxAuto)
         #expect(settings(skipPermissions: true, sandboxEnabled: false).agentPermissionMode == .unrestricted)
-        #expect(settings(skipPermissions: false, sandboxEnabled: false).agentPermissionMode == .unrestricted)
+        #expect(settings(skipPermissions: false, sandboxEnabled: false).agentPermissionMode == .askEveryTime)
         #expect(settings(skipPermissions: true, sandboxEnabled: true).agentPermissionMode == .unrestricted)
     }
 
@@ -938,11 +938,11 @@ struct PersistedChatTabTests {
 @Suite("AgentChatRuntime parsing")
 struct AgentChatRuntimeParsingTests {
 
-    @Test("Codex permission flags treat sandbox-off chat mode as YOLO")
+    @Test("Codex permission flags support unrestricted, sandbox-auto, and ask modes")
     func codexPermissionFlagsSelection() {
         #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: true, sandboxEnabled: false) == ["--yolo"])
         #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: false, sandboxEnabled: true) == ["--full-auto"])
-        #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: false, sandboxEnabled: false) == ["--yolo"])
+        #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: false, sandboxEnabled: false).isEmpty)
         #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: true, sandboxEnabled: true) == ["--yolo"])
     }
 

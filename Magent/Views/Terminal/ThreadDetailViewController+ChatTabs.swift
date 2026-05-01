@@ -577,8 +577,8 @@ extension ThreadDetailViewController {
         existingQueuedUserMessageID: UUID? = nil
     ) {
         // Defensive cleanup: if a previous request died unexpectedly and left one or
-        // more loading placeholders behind, normalize them before starting a new turn.
-        let normalizedMessages = ChatBusyStateRecovery.normalizedMessagesForAppRelaunch(
+        // more loading placeholders behind, remove them before starting a new turn.
+        let normalizedMessages = ChatBusyStateRecovery.normalizedMessagesForNewRequest(
             chatTabs[chatIndex].messages
         )
         if normalizedMessages.didMutate {
@@ -637,6 +637,7 @@ extension ThreadDetailViewController {
         let selectedReasoningLevel = chatTabs[chatIndex].reasoningLevel
         let taskToken = UUID()
         let codexSteerStream = makeCodexSteerStreamIfNeeded(identifier: identifier, agentType: agentType)
+        chatRequestTaskTokensByIdentifier[identifier] = taskToken
 
         let task = Task { [weak self] in
             guard let self else { return }
@@ -711,8 +712,12 @@ extension ThreadDetailViewController {
                 self.dispatchQueuedChatPromptIfNeeded(identifier: identifier)
             }
         }
-        chatRequestTasksByIdentifier[identifier] = task
-        chatRequestTaskTokensByIdentifier[identifier] = taskToken
+        // A very fast failure can complete before this assignment line executes.
+        // Register the task only when its token is still current to avoid reviving
+        // a finished task as "running".
+        if chatRequestTaskTokensByIdentifier[identifier] == taskToken {
+            chatRequestTasksByIdentifier[identifier] = task
+        }
         refreshTabStatusIndicators()
     }
 

@@ -260,7 +260,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enable sandbox"
+            "value": "Auto"
           }
         }
       }
@@ -271,7 +271,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sandboxed auto mode. Codex uses --full-auto and Claude uses --permission-mode auto."
+            "value": "Automatically run with sandboxed permissions. Codex uses --full-auto and Claude uses --permission-mode auto."
           }
         }
       }
@@ -282,7 +282,29 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sandboxed auto mode. Codex uses --full-auto and Claude uses --permission-mode auto."
+            "value": "Automatically run with sandboxed permissions. Codex uses --full-auto and Claude uses --permission-mode auto."
+          }
+        }
+      }
+    },
+    "permissionsAskEveryTime": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask"
+          }
+        }
+      }
+    },
+    "permissionsAskEveryTimeDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No explicit permission/sandbox flags are passed. Claude and Codex decide prompts using their default behavior."
           }
         }
       }
@@ -348,7 +370,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Skip permission prompts"
+            "value": "Full Access"
           }
         }
       }
@@ -359,7 +381,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unrestricted mode. Claude uses --dangerously-skip-permissions and Codex uses --yolo."
+            "value": "Run with full access and no permission prompts. Claude uses --dangerously-skip-permissions and Codex uses --yolo."
           }
         }
       }

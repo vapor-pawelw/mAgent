@@ -82,8 +82,12 @@ Before the app is usable, the user must complete a configuration step:
 
 1. **Install dependencies** — tmux and any other required tools (check/install via Homebrew or guide user)
 2. **Select active agent** — choose which coding agent to auto-launch in new threads (e.g. Claude Code, Aider, custom command)
-3. **Add projects** — register git repositories that the user wants to work with
-4. **Worktrees path** — where worktrees are created; default suggestion: `<repo-parent-dir>/<repo-name>-worktrees/`
+3. **Select permission mode** — exactly one mode for Claude/Codex:
+   - **Full Access** (Codex `--yolo`, Claude `--dangerously-skip-permissions`)
+   - **Auto** (Codex `--full-auto`, Claude `--permission-mode auto`)
+   - **Ask** (no explicit permission/sandbox flags)
+4. **Add projects** — register git repositories that the user wants to work with
+5. **Worktrees path** — where worktrees are created; default suggestion: `<repo-parent-dir>/<repo-name>-worktrees/`
 
 ## Thread Lifecycle
 

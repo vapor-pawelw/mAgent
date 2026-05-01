@@ -154,9 +154,9 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         permissionsModeDescriptionLabel.textColor = NSColor(resource: .textSecondary)
         permissionsModeDescriptionLabel.maximumNumberOfLines = 0
 
+        permissionsSection.addArrangedSubview(unrestrictedPermissionsRadioButton)
         permissionsSection.addArrangedSubview(sandboxPermissionsRadioButton)
         permissionsSection.addArrangedSubview(askEveryTimePermissionsRadioButton)
-        permissionsSection.addArrangedSubview(unrestrictedPermissionsRadioButton)
         permissionsSection.addArrangedSubview(permissionsModeDescriptionLabel)
 
         let (behaviorCard, behaviorSection) = createSectionCard(

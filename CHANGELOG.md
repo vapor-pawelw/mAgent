@@ -79,6 +79,7 @@ All notable changes to this project will be documented in this file.
 ### Settings
 
 #### Features
+- Reworked agent permission controls into a single mutually exclusive mode picker (`Full Access`, `Auto`, `Ask`) shared by Claude and Codex, with per-mode descriptions and consistent launch behavior across terminal/chat/resume flows.
 - Added a dedicated `Chat` settings category with color pickers for user/agent bubble background and text colors, plus a one-click reset to defaults.
 
 ### Tab

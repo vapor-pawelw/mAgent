@@ -4,11 +4,11 @@ import MagentCore
 final class OnboardingPermissionsView: NSView {
 
     var permissionMode: AgentPermissionMode {
-        if sandboxRadioButton.state == .on {
-            return .sandboxAuto
-        }
         if unrestrictedRadioButton.state == .on {
             return .unrestricted
+        }
+        if sandboxRadioButton.state == .on {
+            return .sandboxAuto
         }
         return .askEveryTime
     }
@@ -65,8 +65,8 @@ final class OnboardingPermissionsView: NSView {
         sandboxRadioButton.action = #selector(permissionModeChanged)
         askEveryTimeRadioButton.target = self
         askEveryTimeRadioButton.action = #selector(permissionModeChanged)
-        askEveryTimeRadioButton.state = .on
-        unrestrictedRadioButton.state = .off
+        askEveryTimeRadioButton.state = .off
+        unrestrictedRadioButton.state = .on
         sandboxRadioButton.state = .off
 
         permissionModeExplanationLabel.font = .systemFont(ofSize: 11)
@@ -98,9 +98,9 @@ final class OnboardingPermissionsView: NSView {
 
         let stack = NSStackView(views: [
             titleLabel, permissionModeLabel,
+            unrestrictedRadioButton,
             sandboxRadioButton,
             askEveryTimeRadioButton,
-            unrestrictedRadioButton,
             permissionModeExplanationLabel,
             fdaLabel, fdaDesc, fdaStatusRow,
         ])
