@@ -80,6 +80,10 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
         applyStoredOrLastModelReasoningSelection()
     }
 
+    func focusPromptInput() {
+        view.window?.makeFirstResponder(promptTextView)
+    }
+
     override func viewDidLayout() {
         super.viewDidLayout()
         let viewSize = view.bounds.size

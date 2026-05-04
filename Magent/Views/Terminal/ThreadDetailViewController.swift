@@ -156,6 +156,18 @@ final class ThreadDetailViewController: NSViewController {
         case terminal(sessionName: String)
         case web(identifier: String)
         case draft(identifier: String)
+
+        var focusTarget: ThreadTabFocusTarget {
+            let contentKind: ThreadTabContentKind = switch self {
+            case .terminal:
+                .terminal
+            case .web:
+                .web
+            case .draft:
+                .draft
+            }
+            return ThreadTabFocusResolver.focusTarget(for: contentKind)
+        }
     }
     var tabItems: [TabItemView] = []
     var tabSlots: [TabSlot] = []
@@ -976,6 +988,24 @@ final class ThreadDetailViewController: NSViewController {
         guard !tabSlots.isEmpty else { return }
         let index = min(max(currentTabIndex, 0), tabSlots.count - 1)
         selectTab(at: index)
+    }
+
+    func focusCurrentTabContent() {
+        guard let currentSlot = currentSlot() else { return }
+        switch currentSlot.focusTarget {
+        case .terminalSurface:
+            if let tv = currentTerminalView(), tv.superview != nil, !tv.isHidden {
+                view.window?.makeFirstResponder(tv)
+            }
+        case .webContent:
+            guard let activeWebTabId,
+                  let webTab = webTabs.first(where: { $0.identifier == activeWebTabId }) else { return }
+            webTab.view?.focusWebContent()
+        case .draftPrompt:
+            guard let activeDraftTabId,
+                  let draftTab = draftTabs.first(where: { $0.identifier == activeDraftTabId }) else { return }
+            draftTab.viewController?.focusPromptInput()
+        }
     }
 
     /// Look up a terminal view by tmux session name (not display index).

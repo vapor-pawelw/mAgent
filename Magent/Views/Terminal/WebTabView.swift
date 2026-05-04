@@ -318,6 +318,10 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         return super.performKeyEquivalent(with: event)
     }
 
+    func focusWebContent() {
+        window?.makeFirstResponder(webView)
+    }
+
     // MARK: - Navigation Actions
 
     @objc private func goBack() {

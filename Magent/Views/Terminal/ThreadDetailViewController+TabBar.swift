@@ -381,10 +381,10 @@ extension ThreadDetailViewController {
         }
 
         CATransaction.commit()
-        view.window?.makeFirstResponder(tv)
         currentTabIndex = index
         updateTerminalScrollControlsState()
         postFocusedThreadContextChangedIfKeyWindow()
+        focusCurrentTabContent()
 
         let canShowTOC = thread.agentTmuxSessions.contains(sessionName)
         promptTOCCanShowForCurrentTab = canShowTOC
