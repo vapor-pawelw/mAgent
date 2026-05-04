@@ -373,6 +373,17 @@ public nonisolated enum AgentChatRuntime {
             return "unknown JSON-RPC error"
         }
 
+        func parseNotificationError(_ params: [String: Any]) -> String? {
+            guard let error = params["error"] as? [String: Any] else { return nil }
+            if let message = normalizedNonEmpty(error["message"] as? String) {
+                return message
+            }
+            if let code = error["code"] as? Int {
+                return "error code \(code)"
+            }
+            return "unknown error"
+        }
+
         func mergedAssistantText(_ state: State) -> String {
             state.assistantMessageOrder
                 .compactMap { state.assistantMessagesByID[$0] }
@@ -446,6 +457,17 @@ public nonisolated enum AgentChatRuntime {
             }
 
             switch method {
+            case "error":
+                let message = parseNotificationError(params) ?? "unknown error"
+                lock.lock()
+                if state.failure == nil {
+                    state.failure = message
+                }
+                state.turnCompleted = true
+                state.turnStatus = "failed"
+                lock.unlock()
+                threadReadySemaphore.signal()
+                turnCompletedSemaphore.signal()
             case "turn/started":
                 let turnID = ((params["turn"] as? [String: Any])?["id"] as? String)
                 lock.lock()
@@ -525,10 +547,25 @@ public nonisolated enum AgentChatRuntime {
                     }
                 }
             case "turn/completed":
-                let status = ((params["turn"] as? [String: Any])?["status"] as? String)
+                let turn = params["turn"] as? [String: Any]
+                let status = turn?["status"] as? String
+                let failureMessage: String? = {
+                    guard status == "failed",
+                          let error = turn?["error"] as? [String: Any] else { return nil }
+                    if let message = normalizedNonEmpty(error["message"] as? String) {
+                        return message
+                    }
+                    if let code = error["code"] as? Int {
+                        return "error code \(code)"
+                    }
+                    return "turn failed"
+                }()
                 lock.lock()
                 state.turnCompleted = true
                 state.turnStatus = status
+                if state.failure == nil, let failureMessage {
+                    state.failure = failureMessage
+                }
                 lock.unlock()
                 turnCompletedSemaphore.signal()
             default:

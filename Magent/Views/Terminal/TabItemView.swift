@@ -153,6 +153,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onKillAllSessions: (() -> Void)?
     var onCopyTmuxSessionName: (() -> Void)?
     var tmuxSessionNameForMenu: String?
+    var showsMinimalSessionMenu: Bool = false
     var onDetach: (() -> Void)?
     var onShowDetachedWindow: (() -> Void)?
     var onReturnDetachedTab: (() -> Void)?
@@ -519,7 +520,9 @@ final class TabItemView: NSView, NSMenuDelegate {
             menu.addItem(renameItem)
         }
 
-        let hasSessionMenu = onKeepAlive != nil || onKillAllSessions != nil || onCopyTmuxSessionName != nil
+        let hasSessionIdentity = (tmuxSessionNameForMenu?.isEmpty == false) || onCopyTmuxSessionName != nil
+        let hasSessionExtras = onKeepAlive != nil || onKillAllSessions != nil || onRepairTerminal != nil
+        let hasSessionMenu = hasSessionIdentity || hasSessionExtras
         let hasContinueItem = !availableAgentsForContinue.isEmpty
         let hasExportItem = onExportContext != nil
         let hasGroupedSessionActions = onResumeAgentInNewTab != nil || onRestoreLastClosedTab != nil || hasSessionMenu
@@ -598,7 +601,6 @@ final class TabItemView: NSView, NSMenuDelegate {
                     sessionSubmenu.addItem(copyItem)
                 }
 
-                sessionSubmenu.addItem(.separator())
             } else if onCopyTmuxSessionName != nil {
                 let copyItem = NSMenuItem(
                     title: "Copy Session Name",
@@ -607,27 +609,32 @@ final class TabItemView: NSView, NSMenuDelegate {
                 )
                 copyItem.target = self
                 sessionSubmenu.addItem(copyItem)
-                sessionSubmenu.addItem(.separator())
             }
 
-            if onKeepAlive != nil {
-                let keepAliveTitle = showKeepAliveIcon ? "Remove Keep Alive" : "Keep Alive"
-                let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(keepAliveTapped), keyEquivalent: "")
-                keepAliveItem.target = self
-                sessionSubmenu.addItem(keepAliveItem)
-            }
+            if !showsMinimalSessionMenu {
+                if hasSessionIdentity && hasSessionExtras {
+                    sessionSubmenu.addItem(.separator())
+                }
 
-            if onRepairTerminal != nil {
-                let repairItem = NSMenuItem(title: "Repair Terminal", action: #selector(repairTerminalTapped), keyEquivalent: "")
-                repairItem.target = self
-                repairItem.isEnabled = canRepairTerminal
-                sessionSubmenu.addItem(repairItem)
-            }
+                if onKeepAlive != nil {
+                    let keepAliveTitle = showKeepAliveIcon ? "Remove Keep Alive" : "Keep Alive"
+                    let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(keepAliveTapped), keyEquivalent: "")
+                    keepAliveItem.target = self
+                    sessionSubmenu.addItem(keepAliveItem)
+                }
 
-            if onKillAllSessions != nil {
-                let killAllItem = NSMenuItem(title: "Kill All Sessions", action: #selector(killAllSessionsTapped), keyEquivalent: "")
-                killAllItem.target = self
-                sessionSubmenu.addItem(killAllItem)
+                if onRepairTerminal != nil {
+                    let repairItem = NSMenuItem(title: "Repair Terminal", action: #selector(repairTerminalTapped), keyEquivalent: "")
+                    repairItem.target = self
+                    repairItem.isEnabled = canRepairTerminal
+                    sessionSubmenu.addItem(repairItem)
+                }
+
+                if onKillAllSessions != nil {
+                    let killAllItem = NSMenuItem(title: "Kill All Sessions", action: #selector(killAllSessionsTapped), keyEquivalent: "")
+                    killAllItem.target = self
+                    sessionSubmenu.addItem(killAllItem)
+                }
             }
 
             // Trim a trailing separator if the lower section ended up empty.

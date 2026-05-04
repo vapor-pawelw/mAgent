@@ -527,6 +527,7 @@ extension ThreadDetailViewController {
                     item.onKillAllSessions = nil
                     item.onCopyTmuxSessionName = nil
                     item.tmuxSessionNameForMenu = nil
+                    item.showsMinimalSessionMenu = false
                     item.availableAgentsForContinue = []
                     item.showKeepAliveIcon = false
                     item.typeIcon.isHidden = true
@@ -569,6 +570,7 @@ extension ThreadDetailViewController {
                         pasteboard.setString(sessionName, forType: .string)
                     }
                     item.tmuxSessionNameForMenu = sessionName
+                    item.showsMinimalSessionMenu = false
                     item.availableAgentsForContinue = settings.availableActiveAgents
                     item.showKeepAliveIcon = !thread.isKeepAlive
                         && thread.protectedTmuxSessions.contains(sessionName)
@@ -591,6 +593,7 @@ extension ThreadDetailViewController {
                 item.onKillAllSessions = nil
                 item.onCopyTmuxSessionName = nil
                 item.tmuxSessionNameForMenu = nil
+                item.showsMinimalSessionMenu = false
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
             case .draft:
@@ -606,10 +609,12 @@ extension ThreadDetailViewController {
                 item.onKillAllSessions = nil
                 item.onCopyTmuxSessionName = nil
                 item.tmuxSessionNameForMenu = nil
+                item.showsMinimalSessionMenu = false
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
             case .chat(let identifier):
                 let currentAgent = chatTabs.first(where: { $0.identifier == identifier })?.agentType
+                let sessionNameForMenu = chatSessionNameForMenu(identifier: identifier)
                 let availableAgents = settings.availableActiveAgents.filter { agent in
                     guard let currentAgent else { return true }
                     return agent != currentAgent
@@ -624,8 +629,11 @@ extension ThreadDetailViewController {
                 item.onKeepAlive = nil
                 item.onKillSession = nil
                 item.onKillAllSessions = nil
-                item.onCopyTmuxSessionName = nil
-                item.tmuxSessionNameForMenu = nil
+                item.onCopyTmuxSessionName = { [weak self] in
+                    self?.copySessionNameToPasteboard(sessionNameForMenu)
+                }
+                item.tmuxSessionNameForMenu = sessionNameForMenu
+                item.showsMinimalSessionMenu = true
                 item.availableAgentsForContinue = availableAgents
                 item.showKeepAliveIcon = false
             }
@@ -740,5 +748,24 @@ extension ThreadDetailViewController {
                 "Status: \(statusBits.joined(separator: ", "))",
             ].joined(separator: "\n")
         }
+    }
+
+    private func chatSessionNameForMenu(identifier: String) -> String {
+        guard let chat = chatTabs.first(where: { $0.identifier == identifier }) else {
+            return identifier
+        }
+
+        let conversationSessionID = chat.conversationSessionID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let conversationSessionID, !conversationSessionID.isEmpty {
+            return conversationSessionID
+        }
+        return identifier
+    }
+
+    private func copySessionNameToPasteboard(_ sessionName: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(sessionName, forType: .string)
     }
 }

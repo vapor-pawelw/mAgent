@@ -93,11 +93,14 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Refined tab context-menu grouping and availability rules: `Export as Markdown...` now sits directly under `Continue in...`, followed by a grouped session-actions block (`Resume Agent Session in New Tab`, `Restore Last Closed Tab`, `Session` submenu) separated from transfer actions. `Resume Agent Session in New Tab` is now shown only when the tab has a real resumable session ID, and `Restore Last Closed Tab` is shown only when restore history exists.
+- Fixed chat-tab `Session` context menu behavior: chat tabs now expose session identity + copy actions (without tmux-only actions like keep-alive/kill), matching terminal-tab affordances safely for non-tmux tabs.
 - Fixed chat in-progress indicator bubble visuals: the loader now stays a stable rounded square on the app background with a traveling border animation (instead of flashing) and dimmed `Working...` text for better contrast.
 - Fixed Codex chat slash-command behavior in GUI chat tabs by limiting autocomplete to supported commands and handling `/help`, `/clear`, `/model`, and `/effort` locally.
 - Fixed chat tab persistence reliability across backups/downgrades: chat tabs are now mirrored to a dedicated `chat-tabs.json` sidecar and recovered automatically when inline `threads.json` chat-tab payloads are missing.
 - Fixed chat tab request interruption ergonomics: `Esc` and `Ctrl+C` now cancel an in-flight chat request directly from the composer, and duplicate sends while a request is running are blocked.
 - Fixed drag-and-drop attachments in chat composer inserting filesystem paths into the input field. Dropped files/images now attach as draft thumbnails as expected.
+- Fixed chat composer focus loss that could block typing after tab interactions/background clicks.
+- Fixed Codex app-server chat stalls where protocol-level error/failed-turn notifications were not surfaced, leaving turns looking stuck after partial output.
 ## 1.6.1 - 2026-04-18
 
 

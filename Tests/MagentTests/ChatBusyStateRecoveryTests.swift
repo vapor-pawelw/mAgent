@@ -57,4 +57,20 @@ struct ChatBusyStateRecoveryTests {
         #expect(result.chatTabs[0].messages[1].text == ChatBusyStateRecovery.cancelledPlaceholderText)
         #expect(result.chatTabs[1].messages[0].text == "Done.")
     }
+
+    @Test("Removes stranded loading placeholders before starting a new request")
+    func removesLoadingPlaceholdersBeforeNewRequest() {
+        let userOne = PersistedChatMessage(role: .user, text: "first")
+        let loadingOne = PersistedChatMessage(role: .assistant, text: "Thinking...")
+        let assistantDone = PersistedChatMessage(role: .assistant, text: "done")
+        let loadingTwo = PersistedChatMessage(role: .assistant, text: "Working (9s • esc to interrupt)")
+        let cancelled = PersistedChatMessage(role: .assistant, text: ChatBusyStateRecovery.cancelledPlaceholderText)
+
+        let result = ChatBusyStateRecovery.normalizedMessagesForNewRequest(
+            [userOne, loadingOne, assistantDone, loadingTwo, cancelled]
+        )
+
+        #expect(result.didMutate)
+        #expect(result.messages == [userOne, assistantDone, cancelled])
+    }
 }

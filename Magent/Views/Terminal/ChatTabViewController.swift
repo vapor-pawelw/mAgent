@@ -1323,6 +1323,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         inputScroll.scrollerStyle = .legacy
 
         inputTextView.isRichText = false
+        inputTextView.isEditable = true
+        inputTextView.isSelectable = true
         inputTextView.font = .systemFont(ofSize: chatFontSize)
         inputTextView.isAutomaticDashSubstitutionEnabled = false
         inputTextView.isAutomaticQuoteSubstitutionEnabled = false
@@ -1690,11 +1692,23 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     @objc private func handleBackgroundClick(_ gesture: NSClickGestureRecognizer) {
         let locationInView = gesture.location(in: view)
         guard let clickedView = view.hitTest(locationInView) else { return }
+
+        // Keep typing reliable even when the root click recognizer fires first.
+        if clickedView.isDescendant(of: attachmentDropTargetView)
+            || clickedView.isDescendant(of: inputTextView)
+            || (inputScrollView.map { clickedView.isDescendant(of: $0) } ?? false) {
+            view.window?.makeFirstResponder(inputTextView)
+            return
+        }
+
         guard shouldClearSelection(for: clickedView) else { return }
         clearSelectionState()
     }
 
     private func shouldClearSelection(for clickedView: NSView) -> Bool {
+        if clickedView.isDescendant(of: attachmentDropTargetView) {
+            return false
+        }
         if clickedView.isDescendant(of: inputTextView) {
             return false
         }
@@ -1729,8 +1743,6 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         for case let bubble as ChatMessageBubbleView in messagesStack.arrangedSubviews {
             bubble.clearSelection()
         }
-
-        _ = view.window?.makeFirstResponder(nil)
     }
 
     private func makeMessageBubble(for message: PersistedChatMessage) -> ChatMessageBubbleView {

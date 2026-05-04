@@ -29,6 +29,27 @@ public enum ChatBusyStateRecovery {
         return (normalized, didMutate)
     }
 
+    /// Removes any loading placeholders before a brand-new turn begins.
+    /// This prevents stranded "Working/Thinking" bubbles from duplicating
+    /// when a previous turn ended unexpectedly.
+    public static func normalizedMessagesForNewRequest(
+        _ messages: [PersistedChatMessage]
+    ) -> (messages: [PersistedChatMessage], didMutate: Bool) {
+        var normalized: [PersistedChatMessage] = []
+        normalized.reserveCapacity(messages.count)
+        var didMutate = false
+
+        for message in messages {
+            if message.role == .assistant, isAssistantLoadingPlaceholder(message.text) {
+                didMutate = true
+                continue
+            }
+            normalized.append(message)
+        }
+
+        return (normalized, didMutate)
+    }
+
     public static func normalizedChatTabsForAppRelaunch(
         _ chatTabs: [PersistedChatTab]
     ) -> (chatTabs: [PersistedChatTab], didMutate: Bool) {
