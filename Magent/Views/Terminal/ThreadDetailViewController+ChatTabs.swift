@@ -185,6 +185,7 @@ extension ThreadDetailViewController {
         }
 
         vc.view.isHidden = false
+        terminalContainer.addSubview(vc.view, positioned: .above, relativeTo: nil)
         vc.setRelativeTimeUpdatesEnabled(true)
         vc.focusComposer()
         activeChatTabId = identifier

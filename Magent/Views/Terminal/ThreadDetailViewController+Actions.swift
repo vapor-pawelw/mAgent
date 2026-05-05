@@ -1706,6 +1706,7 @@ extension ThreadDetailViewController: NSMenuDelegate {
             menuTitle: "New Tab",
             defaultAgentType: threadManager.effectiveAgentType(for: thread.projectId),
             activeAgents: settings.availableActiveAgents,
+            includeChatOption: settings.isChatsFeatureEnabled,
             target: self,
             action: #selector(addTabContextMenuItemSelected(_:))
         )

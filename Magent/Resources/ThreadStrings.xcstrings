@@ -1178,6 +1178,17 @@
         }
       }
     },
+    "chatAttachmentDropOverlayTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drop files here"
+          }
+        }
+      }
+    },
     "chatTimestampCopyFullTimeAction": {
       "extractionState": "manual",
       "localizations": {

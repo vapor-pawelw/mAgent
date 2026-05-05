@@ -724,6 +724,27 @@ struct AppSettingsChatAppearanceTests {
         )
         #expect(tooLarge.chatFontSize == AppSettings.maxChatFontSize)
     }
+
+    @Test("Experimental chats default off and round-trip through settings")
+    func experimentalChatsDefaultAndRoundTrip() throws {
+        let defaultSettings = AppSettings()
+        #expect(!defaultSettings.experimentalEnableChats)
+
+        let original = AppSettings(experimentalEnableChats: true)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        #expect(decoded.experimentalEnableChats)
+    }
+
+    @Test("Chats feature gate follows debug-only experimental setting")
+    func chatsFeatureGate() {
+        #if DEBUG
+        #expect(!AppSettings().isChatsFeatureEnabled)
+        #expect(AppSettings(experimentalEnableChats: true).isChatsFeatureEnabled)
+        #else
+        #expect(!AppSettings(experimentalEnableChats: true).isChatsFeatureEnabled)
+        #endif
+    }
 }
 
 // MARK: - AgentType.capabilities

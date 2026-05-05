@@ -10,7 +10,7 @@
 - `Threads` owns thread naming defaults, thread sections, recently archived thread restore history, startup injection fields, the review prompt, sidebar display options (narrow threads, PR/Jira status badge toggles, busy/idle duration toggle), and session management (idle session eviction limit — defaults to 30 — plus "Protect pinned threads and tabs from eviction" toggle).
 - Section color editing now reuses a single system color picker per settings screen, so switching to another section keeps the earlier section's custom dot color intact instead of resetting it.
 - Debug-only features may still appear in Settings during local development, but they should be clearly annotated with `Debug builds only` and fully hidden from release builds.
-- A dedicated `Debug` sidebar category exists in debug builds only (`#if DEBUG`). It currently exposes "Reset Onboarding State" (clears `isConfigured` and offers to relaunch), "Relaunch App", and an `Experimental` card with `Enable tab detaching` (off by default). Add new developer utilities here rather than sprinkling ad-hoc debug actions into other panes.
+- A dedicated `Debug` sidebar category exists in debug builds only (`#if DEBUG`). It currently exposes "Reset Onboarding State" (clears `isConfigured` and offers to relaunch), "Relaunch App", and an `Experimental` card with `Chats` plus `Enable tab detaching` toggles (both off by default). Add new developer utilities here rather than sprinkling ad-hoc debug actions into other panes.
 
 ## What Changed In Recent Threads
 
@@ -47,6 +47,7 @@
 - `Magent/Views/Settings/SettingsTerminalViewController.swift` owns terminal-scoped preferences and posts `magentSettingsDidChange` so open windows update immediately.
 - `Magent/Views/Settings/SettingsThreadsViewController.swift` owns thread-scoped preferences, and `Magent/Views/Settings/SettingsThreadsViewController+Sections.swift` owns the thread-sections table behavior.
 - `AppSettings.isTabDetachFeatureEnabled` is the effective gate for tab detaching. It always returns `false` in release builds and mirrors the debug-only persisted flag (`experimentalEnableTabDetach`) only under `#if DEBUG`.
+- `AppSettings.experimentalEnableChats` gates chat-surface creation options in debug settings. Existing persisted chat tabs can still render; the toggle controls whether new chat entries are offered from agent menus while the feature is being held locally.
 - The recently archived list reads from persisted threads, sorts by `archivedAt`, and listens for a shared archive-state notification so it refreshes while Settings is open.
 - Project overrides use the parallel section editor in `Magent/Views/Settings/SettingsProjectsViewController.swift` and `Magent/Views/Settings/SettingsProjectsViewController+Sections.swift`.
 - Both section editors use `NSColorPanel.shared`, so they must set the active `sectionId` and temporarily detach target/action before assigning `panel.color`, then restore the callback after the programmatic update.

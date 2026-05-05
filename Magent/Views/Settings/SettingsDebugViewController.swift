@@ -6,6 +6,7 @@ final class SettingsDebugViewController: NSViewController {
 
     private let persistence = PersistenceService.shared
     private var enableTabDetachCheckbox: NSButton?
+    private var enableChatsCheckbox: NSButton?
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
@@ -68,6 +69,15 @@ final class SettingsDebugViewController: NSViewController {
         stackView.addArrangedSubview(experimentalCard)
 
         let settings = persistence.loadSettings()
+        let chatsCheckbox = NSButton(
+            checkboxWithTitle: String(localized: .SettingsStrings.settingsDebugExperimentalChats),
+            target: self,
+            action: #selector(enableChatsToggled)
+        )
+        chatsCheckbox.state = settings.experimentalEnableChats ? .on : .off
+        experimentalSection.addArrangedSubview(chatsCheckbox)
+        enableChatsCheckbox = chatsCheckbox
+
         let checkbox = NSButton(
             checkboxWithTitle: "Enable tab detaching",
             target: self,
@@ -146,6 +156,14 @@ final class SettingsDebugViewController: NSViewController {
         guard let enableTabDetachCheckbox else { return }
         var settings = persistence.loadSettings()
         settings.experimentalEnableTabDetach = enableTabDetachCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+    }
+
+    @objc private func enableChatsToggled() {
+        guard let enableChatsCheckbox else { return }
+        var settings = persistence.loadSettings()
+        settings.experimentalEnableChats = enableChatsCheckbox.state == .on
         try? persistence.saveSettings(settings)
         NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
     }

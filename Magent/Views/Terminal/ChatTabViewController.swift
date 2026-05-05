@@ -75,16 +75,6 @@ private final class ChatInputTextView: NSTextView {
     var canAcceptAttachmentDrop: ((NSPasteboard) -> Bool)?
     var onAttachmentDrop: ((NSPasteboard) -> Bool)?
 
-    override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
-        super.init(frame: frameRect, textContainer: container)
-        registerForDraggedTypes([.fileURL, .png, .tiff])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if event.type == .keyDown,
@@ -159,8 +149,65 @@ private final class ChatInputTextView: NSTextView {
     }
 }
 
-private final class ChatAttachmentDropTargetView: NSView {
-    var onHoverChanged: ((Bool) -> Void)?
+private final class ChatAttachmentDropOverlayView: NSView {
+    private let messageLabel = NSTextField(labelWithString: String(localized: .ThreadStrings.chatAttachmentDropOverlayTitle))
+    private let dashLayer = CAShapeLayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.addSublayer(dashLayer)
+        alphaValue = 0
+
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
+        messageLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        messageLabel.textColor = .controlAccentColor
+        addSubview(messageLabel)
+
+        NSLayoutConstraint.activate([
+            messageLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            messageLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    override func layout() {
+        super.layout()
+        dashLayer.frame = bounds
+        dashLayer.path = CGPath(
+            roundedRect: bounds.insetBy(dx: 5, dy: 5),
+            cornerWidth: 9,
+            cornerHeight: 9,
+            transform: nil
+        )
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    func updateAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            dashLayer.strokeColor = NSColor.controlAccentColor.withAlphaComponent(0.9).cgColor
+            dashLayer.fillColor = NSColor.controlAccentColor.withAlphaComponent(0.10).cgColor
+            dashLayer.lineWidth = 1.5
+            dashLayer.lineDashPattern = [7, 5]
+            messageLabel.textColor = .controlAccentColor
+        }
+    }
+}
+
+private final class ChatSurfaceDropView: NSView {
     var canAcceptDrop: ((NSPasteboard) -> Bool)?
     var onPerformDrop: ((NSPasteboard) -> Bool)?
 
@@ -174,20 +221,23 @@ private final class ChatAttachmentDropTargetView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateBackgroundColor()
+    }
+
+    func updateBackgroundColor() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
+        }
+    }
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        let accepts = canAcceptDrop?(sender.draggingPasteboard) ?? false
-        onHoverChanged?(accepts)
-        return accepts ? .copy : []
+        (canAcceptDrop?(sender.draggingPasteboard) ?? false) ? .copy : []
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        let accepts = canAcceptDrop?(sender.draggingPasteboard) ?? false
-        onHoverChanged?(accepts)
-        return accepts ? .copy : []
-    }
-
-    override func draggingExited(_ sender: NSDraggingInfo?) {
-        onHoverChanged?(false)
+        (canAcceptDrop?(sender.draggingPasteboard) ?? false) ? .copy : []
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
@@ -195,13 +245,7 @@ private final class ChatAttachmentDropTargetView: NSView {
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        let accepted = onPerformDrop?(sender.draggingPasteboard) ?? false
-        onHoverChanged?(false)
-        return accepted
-    }
-
-    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
-        onHoverChanged?(false)
+        onPerformDrop?(sender.draggingPasteboard) ?? false
     }
 }
 
@@ -1071,11 +1115,13 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
 
     private let scrollView = NSScrollView()
     private let messagesStack = NSStackView()
-    private let inputTextView = ChatInputTextView(frame: .zero, textContainer: nil)
+    private let inputTextView = ChatInputTextView()
     private let attachButton = NSButton()
     private let sendButton = NSButton()
     private let scrollToBottomButton = NSButton()
-    private let attachmentDropTargetView = ChatAttachmentDropTargetView()
+    private let rootDropView = ChatSurfaceDropView()
+    private let composerContainerView = NSView()
+    private let attachmentDropOverlayView = ChatAttachmentDropOverlayView()
     private let attachmentsScrollView = NSScrollView()
     private let attachmentsStackView = NSStackView()
     private let slashAutocompleteContainer = NSView()
@@ -1133,13 +1179,14 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     }
 
     override func loadView() {
-        let root = AppBackgroundView()
-        root.wantsLayer = true
-        view = root
+        rootDropView.wantsLayer = true
+        rootDropView.updateBackgroundColor()
+        view = rootDropView
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        configureSurfaceDropTarget()
         setupUI()
         installBackgroundClickGesture()
         configureModelReasoningPickers()
@@ -1194,6 +1241,15 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         view.window?.makeFirstResponder(inputTextView)
     }
 
+    private func configureSurfaceDropTarget() {
+        rootDropView.canAcceptDrop = { [weak self] pasteboard in
+            self?.canReadAttachments(from: pasteboard) ?? false
+        }
+        rootDropView.onPerformDrop = { [weak self] pasteboard in
+            self?.handleAttachmentDrop(from: pasteboard) ?? false
+        }
+    }
+
     private func setupUI() {
         let rootStack = NSStackView()
         rootStack.translatesAutoresizingMaskIntoConstraints = false
@@ -1245,16 +1301,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             messagesStack.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
         ])
 
-        let composerContainer = attachmentDropTargetView
+        let composerContainer = composerContainerView
         composerContainer.translatesAutoresizingMaskIntoConstraints = false
-        composerContainer.wantsLayer = true
-        composerContainer.layer?.cornerRadius = 10
-        composerContainer.layer?.borderWidth = 1
-        composerContainer.layer?.masksToBounds = true
-        view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            composerContainer.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.25).cgColor
-            composerContainer.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.36).cgColor
-        }
         rootStack.addArrangedSubview(composerContainer)
 
         let composerContentStack = NSStackView()
@@ -1265,10 +1313,18 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         composerContainer.addSubview(composerContentStack)
 
         NSLayoutConstraint.activate([
-            composerContentStack.leadingAnchor.constraint(equalTo: composerContainer.leadingAnchor, constant: 8),
-            composerContentStack.trailingAnchor.constraint(equalTo: composerContainer.trailingAnchor, constant: -8),
-            composerContentStack.topAnchor.constraint(equalTo: composerContainer.topAnchor, constant: 8),
-            composerContentStack.bottomAnchor.constraint(equalTo: composerContainer.bottomAnchor, constant: -8),
+            composerContentStack.leadingAnchor.constraint(equalTo: composerContainer.leadingAnchor),
+            composerContentStack.trailingAnchor.constraint(equalTo: composerContainer.trailingAnchor),
+            composerContentStack.topAnchor.constraint(equalTo: composerContainer.topAnchor),
+            composerContentStack.bottomAnchor.constraint(equalTo: composerContainer.bottomAnchor),
+        ])
+
+        composerContainer.addSubview(attachmentDropOverlayView)
+        NSLayoutConstraint.activate([
+            attachmentDropOverlayView.leadingAnchor.constraint(equalTo: composerContainer.leadingAnchor),
+            attachmentDropOverlayView.trailingAnchor.constraint(equalTo: composerContainer.trailingAnchor),
+            attachmentDropOverlayView.topAnchor.constraint(equalTo: composerContainer.topAnchor),
+            attachmentDropOverlayView.bottomAnchor.constraint(equalTo: composerContainer.bottomAnchor),
         ])
 
         setupSlashAutocompleteUI(composerContainer: composerContainer)
@@ -1317,7 +1373,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         let inputScroll = NSScrollView()
         inputScroll.translatesAutoresizingMaskIntoConstraints = false
         inputScroll.drawsBackground = false
-        inputScroll.borderType = .noBorder
+        inputScroll.borderType = .bezelBorder
         inputScroll.hasVerticalScroller = true
         inputScroll.autohidesScrollers = true
         inputScroll.scrollerStyle = .legacy
@@ -1336,12 +1392,14 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         inputTextView.string = initialDraftInput
         inputTextView.textContainer?.widthTracksTextView = true
         inputTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        inputTextView.setAccessibilityIdentifier("chat-composer-input")
         inputTextView.onControlC = { [weak self] in
             self?.handleComposerControlC() ?? false
         }
         inputTextView.onPasteImageFromClipboard = { [weak self] in
             self?.handlePasteImageFromClipboard() ?? false
         }
+        inputTextView.registerForDraggedTypes([.fileURL, .png, .tiff])
         inputTextView.onAttachmentDropHoverChanged = { [weak self] isHovering in
             self?.setAttachmentDropHoverActive(isHovering)
         }
@@ -1389,16 +1447,6 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             sendButton.widthAnchor.constraint(equalToConstant: 34),
             sendButton.heightAnchor.constraint(equalToConstant: 34),
         ])
-
-        attachmentDropTargetView.onHoverChanged = { [weak self] isHovering in
-            self?.setAttachmentDropHoverActive(isHovering)
-        }
-        attachmentDropTargetView.canAcceptDrop = { [weak self] pasteboard in
-            self?.canReadAttachments(from: pasteboard) ?? false
-        }
-        attachmentDropTargetView.onPerformDrop = { [weak self] pasteboard in
-            self?.handleAttachmentDrop(from: pasteboard) ?? false
-        }
         reloadAttachmentChips()
 
         scrollToBottomButton.translatesAutoresizingMaskIntoConstraints = false
@@ -1693,9 +1741,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         let locationInView = gesture.location(in: view)
         guard let clickedView = view.hitTest(locationInView) else { return }
 
-        // Keep typing reliable even when the root click recognizer fires first.
-        if clickedView.isDescendant(of: attachmentDropTargetView)
-            || clickedView.isDescendant(of: inputTextView)
+        if clickedView.isDescendant(of: inputTextView)
             || (inputScrollView.map { clickedView.isDescendant(of: $0) } ?? false) {
             view.window?.makeFirstResponder(inputTextView)
             return
@@ -1706,7 +1752,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     }
 
     private func shouldClearSelection(for clickedView: NSView) -> Bool {
-        if clickedView.isDescendant(of: attachmentDropTargetView) {
+        if clickedView.isDescendant(of: composerContainerView) {
             return false
         }
         if clickedView.isDescendant(of: inputTextView) {
@@ -2153,15 +2199,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     }
 
     private func setAttachmentDropHoverActive(_ isHovering: Bool) {
-        view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            if isHovering {
-                attachmentDropTargetView.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.8).cgColor
-                attachmentDropTargetView.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
-            } else {
-                attachmentDropTargetView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.25).cgColor
-                attachmentDropTargetView.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.36).cgColor
-            }
-        }
+        attachmentDropOverlayView.updateAppearance()
+        attachmentDropOverlayView.alphaValue = isHovering ? 1 : 0
     }
 
     private func canReadAttachments(from pasteboard: NSPasteboard) -> Bool {
@@ -2382,6 +2421,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
               let textContainer = inputTextView.textContainer,
               let layoutManager = inputTextView.layoutManager else { return }
 
+        syncInputTextViewFrameToScrollView()
         layoutManager.ensureLayout(for: textContainer)
         let usedHeight = layoutManager.usedRect(for: textContainer).height
         let desiredHeight = ceil(usedHeight + (inputTextView.textContainerInset.height * 2) + 6)
@@ -2395,8 +2435,29 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         }
     }
 
+    private func syncInputTextViewFrameToScrollView() {
+        guard let inputScrollView else { return }
+        let clipSize = inputScrollView.contentView.bounds.size
+        guard clipSize.width.isFinite, clipSize.height.isFinite, clipSize.width > 0 else { return }
+
+        let targetHeight = max(inputTextView.frame.height, clipSize.height, minComposerHeight)
+        let targetFrame = NSRect(x: 0, y: 0, width: clipSize.width, height: targetHeight)
+        if abs(inputTextView.frame.width - targetFrame.width) > 0.5
+            || abs(inputTextView.frame.height - targetFrame.height) > 0.5 {
+            inputTextView.frame = targetFrame
+            inputTextView.textContainer?.containerSize = NSSize(
+                width: targetFrame.width,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            inputTextView.textContainer?.widthTracksTextView = true
+            inputTextView.invalidateTextContainerOrigin()
+            inputTextView.window?.invalidateCursorRects(for: inputTextView)
+        }
+    }
+
     override func viewDidLayout() {
         super.viewDidLayout()
+        syncInputTextViewFrameToScrollView()
         updateComposerHeight()
         updateScrollToBottomButtonAppearance()
     }

@@ -98,8 +98,8 @@ All notable changes to this project will be documented in this file.
 - Fixed Codex chat slash-command behavior in GUI chat tabs by limiting autocomplete to supported commands and handling `/help`, `/clear`, `/model`, and `/effort` locally.
 - Fixed chat tab persistence reliability across backups/downgrades: chat tabs are now mirrored to a dedicated `chat-tabs.json` sidecar and recovered automatically when inline `threads.json` chat-tab payloads are missing.
 - Fixed chat tab request interruption ergonomics: `Esc` and `Ctrl+C` now cancel an in-flight chat request directly from the composer, and duplicate sends while a request is running are blocked.
-- Fixed drag-and-drop attachments in chat composer inserting filesystem paths into the input field. Dropped files/images now attach as draft thumbnails as expected.
-- Fixed chat composer focus loss that could block typing after tab interactions/background clicks.
+- Fixed drag-and-drop attachments in chat tabs inserting filesystem paths into the input field. Dropped files/images now attach as draft thumbnails from the composer or main chat surface.
+- Fixed chat composer focus loss that could block typing after tab interactions/background clicks; the composer now uses the native text view text system.
 - Fixed Codex app-server chat stalls where protocol-level error/failed-turn notifications were not surfaced, leaving turns looking stuck after partial output.
 ## 1.6.1 - 2026-04-18
 

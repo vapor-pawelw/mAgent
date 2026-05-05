@@ -133,6 +133,8 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
   - Claude: `claude -p --output-format stream-json` (resume via `--resume <session_id>`)
   - Codex: `codex app-server --listen stdio://` JSON-RPC stream (fallback: `codex exec --json`; resume fallback path: `codex exec resume <thread_id> --json`)
 - Each chat tab persists the latest agent conversation/session id so subsequent messages continue in the same native agent context.
+- Chat composer input must use a normal `NSTextView` initializer so AppKit creates the backing text system. Do not initialize the composer with `textContainer: nil`; that leaves the view editable but without text storage, which prevents normal typing.
+- Chat attachment drops are accepted both on the composer and on the main chat surface. Composer drops may show the dashed "Drop files here" overlay, but main-surface drops intentionally reuse the same attachment ingestion path without extra visual chrome.
 
 ### Chat Slash Commands (GUI Chat Tabs)
 

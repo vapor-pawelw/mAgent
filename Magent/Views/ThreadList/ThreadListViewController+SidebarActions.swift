@@ -374,6 +374,7 @@ extension ThreadListViewController {
             menuTitle: "New Thread in \(project.name)",
             defaultAgentType: threadManager.effectiveAgentType(for: project.id),
             activeAgents: activeAgents,
+            includeChatOption: settings.isChatsFeatureEnabled,
             target: self,
             action: #selector(projectAgentMenuItemSelected(_:)),
             extraData: representedData

@@ -617,6 +617,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     // MARK: - Setup
 
     private func buildPickerItems() {
+        let chatsEnabled = PersistenceService.shared.loadSettings().isChatsFeatureEnabled
         var agents = config.availableAgents
         if let defaultAgent = config.defaultAgentType, let idx = agents.firstIndex(of: defaultAgent) {
             agents.remove(at: idx)
@@ -624,7 +625,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
 
         for agent in agents {
-            for surface in agent.supportedSurfaces {
+            let surfaces = chatsEnabled
+                ? agent.supportedSurfaces
+                : agent.supportedSurfaces.filter { $0 == .terminal }
+            for surface in surfaces {
                 let isDefault = agent == config.defaultAgentType && surface == agent.defaultSurface
                 pickerItems.append(.agent(agent, surface: surface, isDefault: isDefault))
             }
@@ -637,7 +641,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         for (i, item) in pickerItems.enumerated() {
             switch item {
             case .agent(let type, let surface, let isDefault):
-                let baseTitle = type.displayName(for: surface)
+                let baseTitle = chatsEnabled ? type.displayName(for: surface) : type.displayName
                 let title = isDefault ? "\(baseTitle) (Default)" : baseTitle
                 agentPicker.addItem(withTitle: title)
                 agentPicker.lastItem?.tag = i

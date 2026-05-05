@@ -319,6 +319,17 @@
           }
         }
       }
+    },
+    "settingsDebugExperimentalChats": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

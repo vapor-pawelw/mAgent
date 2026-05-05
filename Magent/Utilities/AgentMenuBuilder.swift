@@ -22,6 +22,7 @@ enum AgentMenuBuilder {
         defaultAgentType: AgentType?,
         activeAgents: [AgentType],
         includeTerminal: Bool = true,
+        includeChatOption: Bool = true,
         target: AnyObject,
         action: Selector,
         extraData: [String: String] = [:]
@@ -67,7 +68,12 @@ enum AgentMenuBuilder {
                 details.append(reasoning.lowercased())
             }
 
-            let agentName = TmuxSessionNaming.defaultTabDisplayName(for: agent)
+            let agentName: String
+            if agent == .codex && !includeChatOption {
+                agentName = agent.displayName
+            } else {
+                agentName = TmuxSessionNaming.defaultTabDisplayName(for: agent)
+            }
             let baseName = details.isEmpty
                 ? agentName
                 : "\(agentName) (\(details.joined(separator: ", ")))"
