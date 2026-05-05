@@ -400,6 +400,25 @@ extension ThreadListViewController {
             let modelId = AgentLastSelectionStore.lastModel(for: agentType)
             let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
             createThread(for: project, requestedAgentType: agentType, useAgentCommand: true, baseBranch: baseBranch, modelId: modelId, reasoningLevel: reasoning)
+        case .chat(let agentType):
+            let modelId = AgentLastSelectionStore.lastModel(for: agentType)
+            let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
+            createThread(
+                for: project,
+                requestedAgentType: agentType,
+                useAgentCommand: false,
+                baseBranch: baseBranch,
+                initialChatTab: PersistedChatTab(
+                    identifier: "chat:\(UUID().uuidString)",
+                    agentType: agentType,
+                    title: "\(agentType.displayName) Chat",
+                    messages: [],
+                    modelId: modelId,
+                    reasoningLevel: reasoning
+                ),
+                modelId: modelId,
+                reasoningLevel: reasoning
+            )
         case .projectDefault:
             let resolvedAgent = threadManager.effectiveAgentType(for: project.id)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }

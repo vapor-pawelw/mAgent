@@ -625,10 +625,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
 
         for agent in agents {
-            let surfaces = chatsEnabled
-                ? agent.supportedSurfaces
-                : agent.supportedSurfaces.filter { $0 == .terminal }
-            for surface in surfaces {
+            for surface in agent.supportedSurfaces(chatsEnabled: chatsEnabled) {
                 let isDefault = agent == config.defaultAgentType && surface == agent.defaultSurface
                 pickerItems.append(.agent(agent, surface: surface, isDefault: isDefault))
             }
@@ -641,7 +638,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         for (i, item) in pickerItems.enumerated() {
             switch item {
             case .agent(let type, let surface, let isDefault):
-                let baseTitle = chatsEnabled ? type.displayName(for: surface) : type.displayName
+                let baseTitle = type.displayName(for: surface, chatsEnabled: chatsEnabled)
                 let title = isDefault ? "\(baseTitle) (Default)" : baseTitle
                 agentPicker.addItem(withTitle: title)
                 agentPicker.lastItem?.tag = i

@@ -126,6 +126,10 @@ public nonisolated enum AgentType: String, Codable, CaseIterable, Sendable {
         AgentSurface.allCases.filter { capabilities.supportedSurfaces.contains($0) }
     }
 
+    public func supportedSurfaces(chatsEnabled: Bool) -> [AgentSurface] {
+        supportedSurfaces.filter { chatsEnabled || $0 == .terminal }
+    }
+
     public var defaultSurface: AgentSurface {
         capabilities.defaultSurface
     }
@@ -136,6 +140,14 @@ public nonisolated enum AgentType: String, Codable, CaseIterable, Sendable {
 
     public func displayName(for surface: AgentSurface) -> String {
         let suffixNeeded = supportedSurfaces.count > 1
+        if suffixNeeded {
+            return "\(displayName) (\(surface.displayName))"
+        }
+        return displayName
+    }
+
+    public func displayName(for surface: AgentSurface, chatsEnabled: Bool) -> String {
+        let suffixNeeded = supportedSurfaces(chatsEnabled: chatsEnabled).count > 1
         if suffixNeeded {
             return "\(displayName) (\(surface.displayName))"
         }

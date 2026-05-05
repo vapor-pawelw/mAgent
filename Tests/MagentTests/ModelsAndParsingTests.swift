@@ -799,6 +799,16 @@ struct AgentTypeCapabilitiesTests {
         #expect(AgentType.codex.displayName(for: .terminal) == "Codex (Terminal)")
         #expect(AgentType.custom.displayName(for: .terminal) == "Custom")
     }
+
+    @Test("Chat feature gate collapses visible surfaces and labels")
+    func chatFeatureGateSurfacesAndLabels() {
+        #expect(AgentType.codex.supportedSurfaces(chatsEnabled: false) == [.terminal])
+        #expect(AgentType.codex.displayName(for: .terminal, chatsEnabled: false) == "Codex")
+
+        #expect(AgentType.codex.supportedSurfaces(chatsEnabled: true) == [.terminal, .chat])
+        #expect(AgentType.codex.displayName(for: .terminal, chatsEnabled: true) == "Codex (Terminal)")
+        #expect(AgentType.codex.displayName(for: .chat, chatsEnabled: true) == "Codex (Chat)")
+    }
 }
 
 // MARK: - ThreadSection decoding & color

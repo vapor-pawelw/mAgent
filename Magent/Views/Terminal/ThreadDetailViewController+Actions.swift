@@ -1418,7 +1418,7 @@ extension ThreadDetailViewController {
         case .projectDefault:
             let settings = PersistenceService.shared.loadSettings()
             startReview(using: defaultReviewAgentType(from: settings), usesMaxReasoning: usesMaxReasoning)
-        case .terminal, .web:
+        case .chat, .terminal, .web:
             return
         }
     }
@@ -1721,6 +1721,16 @@ extension ThreadDetailViewController: NSMenuDelegate {
             let modelId = AgentLastSelectionStore.lastModel(for: agentType)
             let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
             addTab(using: agentType, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
+        case .chat(let agentType):
+            let modelId = AgentLastSelectionStore.lastModel(for: agentType)
+            let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
+            openChatTab(
+                identifier: "chat:\(UUID().uuidString)",
+                agentType: agentType,
+                title: "\(agentType.displayName) Chat",
+                modelId: modelId,
+                reasoningLevel: reasoning
+            )
         case .projectDefault:
             let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }

@@ -81,6 +81,7 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Reworked agent permission controls into a single mutually exclusive mode picker (`Full Access`, `Auto`, `Ask`) shared by Claude and Codex, with per-mode descriptions and consistent launch behavior across terminal/chat/resume flows.
 - Added a dedicated `Chat` settings category with color pickers for user/agent bubble background and text colors, plus a one-click reset to defaults.
+- Added a debug-only `Settings > Debug > Experimental > Chats` toggle (off by default) that gates chat creation surfaces in new thread/tab pickers; when off, chat options are hidden and single-surface labels collapse (for example `Codex` instead of `Codex (Terminal)`).
 
 ### Tab
 
