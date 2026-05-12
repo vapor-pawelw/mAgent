@@ -126,6 +126,7 @@ private final class SidebarBackgroundView: NSView {
 final class ThreadListViewController: NSViewController {
 
     static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
+    static let lastSidebarSelectedThreadDefaultsKey = "MagentLastSidebarSelectedThreadID"
     static let lastOpenedProjectDefaultsKey = "MagentLastOpenedProjectID"
     static let collapsedProjectIdsKey = "MagentCollapsedProjectIds"
     static let collapsedSectionIdsKey = "MagentCollapsedSectionIds"
@@ -1181,6 +1182,9 @@ final class ThreadListViewController: NSViewController {
     func autoSelectFirst() {
         let defaults = UserDefaults.standard
         let persistedThreads = persistence.loadThreads()
+        let sidebarSelectedThreadId: UUID? = defaults
+            .string(forKey: Self.lastSidebarSelectedThreadDefaultsKey)
+            .flatMap(UUID.init(uuidString:))
 
         let lastOpenedThreadId: UUID? = defaults
             .string(forKey: Self.lastOpenedThreadDefaultsKey)
@@ -1188,6 +1192,19 @@ final class ThreadListViewController: NSViewController {
         let lastOpenedProjectId: UUID? = defaults
             .string(forKey: Self.lastOpenedProjectDefaultsKey)
             .flatMap(UUID.init(uuidString:))
+
+        let poppedOutThreadIds = PopoutWindowManager.shared.poppedOutThreadIds
+        let preferredThreadId = ThreadStore.resolveStartupSelectionThreadId(
+            lastOpenedThreadId: sidebarSelectedThreadId ?? lastOpenedThreadId,
+            lastOpenedProjectId: lastOpenedProjectId,
+            activeThreads: threadManager.threads,
+            persistedThreads: persistedThreads,
+            poppedOutThreadIds: poppedOutThreadIds
+        )
+        if let preferredThreadId,
+           selectThread(byId: preferredThreadId, scrollRowToVisible: false) {
+            return
+        }
 
         if let threadId = lastOpenedThreadId {
             for row in 0..<outlineView.numberOfRows {
@@ -1264,13 +1281,14 @@ final class ThreadListViewController: NSViewController {
         clearSelectedThreadState()
     }
 
-    func selectThread(byId threadId: UUID, scrollRowToVisible: Bool = true) {
+    @discardableResult
+    func selectThread(byId threadId: UUID, scrollRowToVisible: Bool = true) -> Bool {
         revealThreadIfHiddenOrCollapsed(byId: threadId)
         if PopoutWindowManager.shared.isThreadPoppedOut(threadId) {
             PopoutWindowManager.shared.bringToFront(threadId: threadId)
             centerAndPulseThreadRow(byId: threadId)
             setDiffInspectionContext(threadId: threadId, isPopoutContext: true)
-            return
+            return true
         }
         expandAncestorsIfNeeded(for: threadId)
         for row in 0..<outlineView.numberOfRows {
@@ -1292,9 +1310,10 @@ final class ThreadListViewController: NSViewController {
                         outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                     }
                 }
-                return
+                return true
             }
         }
+        return false
     }
 
     func centerThreadRow(byId threadId: UUID, completion: (() -> Void)? = nil) {
@@ -1572,6 +1591,7 @@ final class ThreadListViewController: NSViewController {
         selectedThreadID = resolved.id
         diffInspectionThreadID = resolved.id
         isDiffInspectionPopoutContext = false
+        UserDefaults.standard.set(resolved.id.uuidString, forKey: Self.lastSidebarSelectedThreadDefaultsKey)
         UserDefaults.standard.set(resolved.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
         UserDefaults.standard.set(resolved.projectId.uuidString, forKey: Self.lastOpenedProjectDefaultsKey)
         return resolved

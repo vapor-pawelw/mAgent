@@ -55,4 +55,38 @@ final class ThreadStore {
         mutate(&threads[index])
         return true
     }
+
+    // MARK: - Launch Selection
+
+    /// Resolves the preferred thread to restore on launch.
+    /// Order: last-opened thread -> thread from last-opened project -> first available.
+    static func resolveStartupSelectionThreadId(
+        lastOpenedThreadId: UUID?,
+        lastOpenedProjectId: UUID?,
+        activeThreads: [MagentThread],
+        persistedThreads: [MagentThread],
+        poppedOutThreadIds: Set<UUID>
+    ) -> UUID? {
+        if let lastOpenedThreadId,
+           activeThreads.contains(where: { $0.id == lastOpenedThreadId }),
+           !poppedOutThreadIds.contains(lastOpenedThreadId) {
+            return lastOpenedThreadId
+        }
+
+        let fallbackProjectId: UUID? = {
+            guard let lastOpenedThreadId else { return lastOpenedProjectId }
+            return lastOpenedProjectId
+                ?? activeThreads.first(where: { $0.id == lastOpenedThreadId })?.projectId
+                ?? persistedThreads.first(where: { $0.id == lastOpenedThreadId })?.projectId
+        }()
+
+        if let fallbackProjectId,
+           let projectThread = activeThreads.first(where: {
+               $0.projectId == fallbackProjectId && !poppedOutThreadIds.contains($0.id)
+           }) {
+            return projectThread.id
+        }
+
+        return activeThreads.first(where: { !poppedOutThreadIds.contains($0.id) })?.id
+    }
 }

@@ -48,11 +48,14 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Fixed Prompt TOC false positives in Codex tabs (for example, placeholder/composer rows being listed as submitted prompts). Codex TOC confirmation now anchors on the `›` line and requires matching text style/background for the prompt body.
+- Initial prompt-injection failure banners now include `Restart Tab`, matching the pending-injection banner so tab relaunch recovery is available in both states.
+- Fixed pending prompt-injection recovery disappearing after relaunch when startup injection did not complete. Recovery files are now kept until prompt-bearing injection is confirmed, so recovery banners persist across launches.
 
 ### Sidebar
 
 #### Bug Fixes
 - Fixed thread row pulse animation displacing the row. The animation now scales uniformly from the center without shifting position.
+- Fixed launch restore occasionally jumping selection back to the main worktree. Startup selection now retries visible fallbacks when the preferred saved thread cannot be selected immediately.
 
 ### Agents
 
@@ -64,12 +67,6 @@ All notable changes to this project will be documented in this file.
 - Fixed Codex tabs failing to launch on macOS with `env: -u: No such file or directory` — the managed-`CODEX_HOME` wrapper now places option flags before variable assignments so BSD `env` parses them correctly.
 - Codex sessions launched from Magent now use a shared Magent-managed `CODEX_HOME` that mirrors the user's `~/.codex` (skills, auth, config, docs, etc.) while keeping Magent IPC AGENTS hints scoped to Magent sessions only. Magent no longer writes its IPC block into the global `~/.codex/AGENTS.md`, and edits to global `~/.codex/AGENTS.md` or top-level `~/.codex` entries now resync into the managed home automatically (session monitor cadence).
 - Codex launch now respects user environment defaults for color handling. Magent no longer clears inherited `NO_COLOR`, so users who set `NO_COLOR=1` keep no-color output while default environments retain full color.
-
-### Terminal
-
-#### Bug Fixes
-- Initial prompt-injection failure banners now include `Restart Tab`, matching the pending-injection banner so tab relaunch recovery is available in both states.
-- Fixed pending prompt-injection recovery disappearing after relaunch when startup injection did not complete. Recovery files are now kept until prompt-bearing injection is confirmed, so recovery banners persist across launches.
 
 ### Tab
 

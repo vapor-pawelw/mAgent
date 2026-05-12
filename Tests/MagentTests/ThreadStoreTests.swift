@@ -128,6 +128,59 @@ struct ThreadStoreTests {
         #expect(store.thread(byId: thread.id)?.name == "only")
     }
 
+    @Test
+    func resolveStartupSelectionPrefersLastOpenedThreadWhenAvailable() {
+        let projectId = UUID()
+        let lastOpened = makeThread(projectId: projectId, name: "last")
+        let other = makeThread(projectId: projectId, name: "other")
+
+        let resolved = ThreadStore.resolveStartupSelectionThreadId(
+            lastOpenedThreadId: lastOpened.id,
+            lastOpenedProjectId: projectId,
+            activeThreads: [other, lastOpened],
+            persistedThreads: [other, lastOpened],
+            poppedOutThreadIds: []
+        )
+
+        #expect(resolved == lastOpened.id)
+    }
+
+    @Test
+    func resolveStartupSelectionFallsBackToLastOpenedProjectWhenThreadMissing() {
+        let targetProjectId = UUID()
+        let otherProjectId = UUID()
+        let fallback = makeThread(projectId: targetProjectId, name: "fallback")
+        let unrelated = makeThread(projectId: otherProjectId, name: "unrelated")
+        let missingThreadId = UUID()
+
+        let resolved = ThreadStore.resolveStartupSelectionThreadId(
+            lastOpenedThreadId: missingThreadId,
+            lastOpenedProjectId: targetProjectId,
+            activeThreads: [unrelated, fallback],
+            persistedThreads: [makeThread(projectId: targetProjectId, name: "archived-missing")],
+            poppedOutThreadIds: []
+        )
+
+        #expect(resolved == fallback.id)
+    }
+
+    @Test
+    func resolveStartupSelectionSkipsPoppedOutThreads() {
+        let projectId = UUID()
+        let poppedOut = makeThread(projectId: projectId, name: "popped-out")
+        let fallback = makeThread(projectId: projectId, name: "fallback")
+
+        let resolved = ThreadStore.resolveStartupSelectionThreadId(
+            lastOpenedThreadId: poppedOut.id,
+            lastOpenedProjectId: projectId,
+            activeThreads: [poppedOut, fallback],
+            persistedThreads: [poppedOut, fallback],
+            poppedOutThreadIds: [poppedOut.id]
+        )
+
+        #expect(resolved == fallback.id)
+    }
+
     private func makeThread(
         projectId: UUID,
         name: String,
