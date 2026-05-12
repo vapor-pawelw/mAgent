@@ -115,6 +115,7 @@ Type [picker]  Model [picker]  Reasoning [picker]
 
 The launch sheet uses a wider default content width so the three pickers have enough room to stay readable on one line without crowding the prompt field below.
 
+- **Type picker**: built from `AgentType.capabilities` in `Packages/MagentModules/Sources/MagentModels/AgentType.swift` (single source of truth for agent/surface support). Agents with multiple surfaces render as separate rows (for example `Claude (Terminal)`, `Claude (Chat)`).
 - **Model picker**: "Auto" + models from JSON for the selected agent.
 - **Reasoning picker**: "Auto" + reasoning levels. Items update when:
   - Agent changes (load that agent's reasoning levels).
@@ -123,6 +124,30 @@ The launch sheet uses a wider default content width so the three pickers have en
 Model and Reasoning pickers are **hidden** (individually, not the whole row) when agent is `.custom` or Terminal or Web.
 
 "Auto" means no flags are passed — the agent uses its own configured default.
+
+### Chat Surface Runtime Gate
+
+- Chat surfaces are selectable directly for supported agents (currently Claude and Codex).
+- No separate Pi runtime install gate is used in the launch sheet.
+- Chat message execution uses each agent's native non-interactive JSON stream path:
+  - Claude: `claude -p --output-format stream-json` (resume via `--resume <session_id>`)
+  - Codex: `codex app-server --listen stdio://` JSON-RPC stream (fallback: `codex exec --json`; resume fallback path: `codex exec resume <thread_id> --json`)
+- Each chat tab persists the latest agent conversation/session id so subsequent messages continue in the same native agent context.
+- Chat composer input must use a normal `NSTextView` initializer so AppKit creates the backing text system. Do not initialize the composer with `textContainer: nil`; that leaves the view editable but without text storage, which prevents normal typing.
+- Chat attachment drops are accepted both on the composer and on the main chat surface. Composer drops may show the dashed "Drop files here" overlay, but main-surface drops intentionally reuse the same attachment ingestion path without extra visual chrome.
+
+### Chat Slash Commands (GUI Chat Tabs)
+
+- Chat-tab slash commands are app-handled convenience commands, not a passthrough of each agent's full interactive TUI slash surface.
+- Codex chat autocomplete intentionally exposes only commands supported in this GUI surface: `/help`, `/clear`, `/model`, `/effort`.
+- `/model` and `/effort` update persisted per-tab chat selections and next request flags; `/clear` resets visible messages and conversation resume id.
+- Unsupported Codex slash commands should not be surfaced in chat autocomplete because Magent chat does not mirror the full interactive terminal slash-command surface.
+
+### Model/Reasoning Source of Truth (Reliability)
+
+- In chat tabs, the authoritative current model/reasoning is Magent's tab state (picker + slash-command updates), because requests are launched with explicit flags per turn.
+- Output-based detection (`Set model to ...`, `Model changed to ...`) remains best-effort sync only; it is useful for convergence but should not be treated as a guaranteed session-introspection API.
+- Terminal sessions still rely on output/process heuristics for passive detection and display updates.
 
 ### Fast Path (Option+click / Context Menu)
 

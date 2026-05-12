@@ -21,8 +21,70 @@ build_dir_from_xcodebuild() {
     | head -n1
 }
 
+running_app_pids() {
+  pgrep -x "$APP_NAME" 2>/dev/null || true
+}
+
+wait_for_app_exit() {
+  local deadline pids
+  deadline=$((SECONDS + 10))
+  while [[ "$SECONDS" -lt "$deadline" ]]; do
+    pids="$(running_app_pids)"
+    if [[ -z "$pids" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  pids="$(running_app_pids)"
+  if [[ -n "$pids" ]]; then
+    echo "Running $APP_NAME instance(s) did not exit after SIGTERM; forcing:" >&2
+    echo "$pids" >&2
+    kill -9 $pids 2>/dev/null || true
+  fi
+
+  deadline=$((SECONDS + 5))
+  while [[ "$SECONDS" -lt "$deadline" ]]; do
+    pids="$(running_app_pids)"
+    if [[ -z "$pids" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Failed to stop existing $APP_NAME process(es):" >&2
+  running_app_pids >&2
+  return 1
+}
+
+verify_launched_binary() {
+  local expected_binary="$1"
+  local pids pid command_line matched
+  pids="$(running_app_pids)"
+  if [[ -z "$pids" ]]; then
+    echo "Launch failed: no running '$APP_NAME' process found." >&2
+    return 1
+  fi
+
+  matched=0
+  echo "Running PID(s):"
+  for pid in $pids; do
+    command_line="$(ps -ww -p "$pid" -o command= 2>/dev/null || true)"
+    echo "$pid $command_line"
+    if [[ "$command_line" == "$expected_binary"* ]]; then
+      matched=1
+    fi
+  done
+
+  if [[ "$matched" -ne 1 ]]; then
+    echo "Launched process is not using expected binary:" >&2
+    echo "  $expected_binary" >&2
+    return 1
+  fi
+}
+
 main() {
-  local root build_dir app_path binary_path pids
+  local root build_dir app_path binary_path
   root="$(repo_root)"
   cd "$root"
 
@@ -48,7 +110,7 @@ main() {
 
   echo "Killing running $APP_NAME instances..."
   killall "$APP_NAME" 2>/dev/null || true
-  sleep 0.5
+  wait_for_app_exit
 
   echo "Launching $app_path..."
   if ! open -n "$app_path"; then
@@ -57,14 +119,7 @@ main() {
   fi
 
   sleep 1
-  pids="$(pgrep -x "$APP_NAME" || true)"
-  if [[ -z "$pids" ]]; then
-    echo "Launch failed: no running '$APP_NAME' process found." >&2
-    exit 1
-  fi
-
-  echo "Running PID(s):"
-  echo "$pids"
+  verify_launched_binary "$binary_path"
 }
 
 main "$@"

@@ -777,6 +777,13 @@ final class ThreadManager {
         let settings = persistence.loadSettings()
         var didMigrate = false
         for i in threads.indices {
+            let normalizedChatTabs = ChatBusyStateRecovery.normalizedChatTabsForAppRelaunch(
+                threads[i].persistedChatTabs
+            )
+            if normalizedChatTabs.didMutate {
+                threads[i].persistedChatTabs = normalizedChatTabs.chatTabs
+                didMigrate = true
+            }
             if threads[i].agentTmuxSessions.isEmpty && !threads[i].tmuxSessionNames.isEmpty {
                 threads[i].agentTmuxSessions = [threads[i].tmuxSessionNames[0]]
                 didMigrate = true

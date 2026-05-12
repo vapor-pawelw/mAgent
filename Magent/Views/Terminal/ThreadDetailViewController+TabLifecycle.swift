@@ -65,6 +65,8 @@ extension ThreadDetailViewController {
 
         case .draft(let identifier):
             closeDraftTab(identifier: identifier)
+        case .chat(let identifier):
+            closeChatTab(identifier: identifier)
         }
     }
 
@@ -103,6 +105,8 @@ extension ThreadDetailViewController {
 
         case .draft(let identifier):
             closeDraftTab(identifier: identifier)
+        case .chat(let identifier):
+            removeChatTab(identifier: identifier)
         }
     }
 
@@ -144,21 +148,26 @@ extension ThreadDetailViewController {
         batchCloseSlots(slotsToClose)
     }
 
-    /// Close a batch of slots (terminal + web + draft).
+    /// Close a batch of slots (terminal + web + draft + chat).
     private func batchCloseSlots(_ slots: [TabSlot]) {
         var terminalSessionsToClose: [String] = []
         var webIdsToClose: [String] = []
         var draftIdsToClose: [String] = []
+        var chatIdsToClose: [String] = []
         for slot in slots {
             switch slot {
             case .terminal(let name): terminalSessionsToClose.append(name)
             case .web(let id): webIdsToClose.append(id)
             case .draft(let id): draftIdsToClose.append(id)
+            case .chat(let id): chatIdsToClose.append(id)
             }
         }
         // Close draft tabs first (synchronous)
         for id in draftIdsToClose {
             removeDraftTab(identifier: id)
+        }
+        for id in chatIdsToClose {
+            removeChatTab(identifier: id)
         }
         // Close web tabs (synchronous)
         for id in webIdsToClose {

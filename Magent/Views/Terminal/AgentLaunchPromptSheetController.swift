@@ -68,7 +68,7 @@ struct PendingInitialPrompt: Codable {
     let modelId: String?
     /// Selected reasoning level at submission time (e.g. "high", "max"). Nil = agent default.
     let reasoningLevel: String?
-    /// Original picker selection (`agent rawValue`, `terminal`, or `web`) for exact recovery.
+    /// Original picker selection (`agentRaw[:surface]`, `terminal`, or `web`) for exact recovery.
     let selectionRaw: String?
 
     init(
@@ -215,16 +215,39 @@ enum PendingInitialPromptStore {
     /// the prompt on a future launch.
     @MainActor
     static func clearAfterInjection(fileURL: URL, sessionName: String) {
-        final class Once: @unchecked Sendable { var token: NSObjectProtocol? }
-        let once = Once()
-        once.token = NotificationCenter.default.addObserver(
+        let observerBox = PendingInjectionObserverBox()
+        let observerToken = NotificationCenter.default.addObserver(
             forName: .magentAgentKeysInjected, object: nil, queue: .main
-        ) { [once] notification in
+        ) { [observerBox] notification in
             guard (notification.userInfo?["sessionName"] as? String) == sessionName else { return }
             guard (notification.userInfo?["includedInitialPrompt"] as? Bool) == true else { return }
             try? FileManager.default.removeItem(at: fileURL)
-            if let t = once.token { NotificationCenter.default.removeObserver(t) }
-            once.token = nil
+            Task { @MainActor in
+                observerBox.removeObserverIfPresent()
+            }
+        }
+        observerBox.setToken(observerToken)
+    }
+}
+
+private final class PendingInjectionObserverBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var token: NSObjectProtocol?
+
+    func setToken(_ token: NSObjectProtocol) {
+        lock.lock()
+        self.token = token
+        lock.unlock()
+    }
+
+    func removeObserverIfPresent() {
+        lock.lock()
+        let token = self.token
+        self.token = nil
+        lock.unlock()
+
+        if let token {
+            NotificationCenter.default.removeObserver(token)
         }
     }
 }
@@ -384,6 +407,8 @@ struct AgentLaunchSheetConfig {
 
 struct AgentLaunchSheetResult {
     let agentType: AgentType?
+    /// Selected surface for agent modes (terminal/chat), nil for terminal/web.
+    let agentSurface: AgentSurface?
     let useAgentCommand: Bool
     let prompt: String?
     let description: String?
@@ -472,17 +497,47 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let projectSwitchPreviewLimit = 120
 
     private enum PickerItem {
-        case agent(AgentType, isDefault: Bool)
+        case agent(AgentType, surface: AgentSurface, isDefault: Bool)
         case terminal
         case web
 
         var storageRaw: String {
             switch self {
-            case .agent(let type, _): return type.rawValue
+            case .agent(let type, let surface, _):
+                // Keep the legacy raw value when an agent has exactly one surface,
+                // so older persisted selections keep matching across upgrades.
+                if surface == .terminal, type.supportedSurfaces.count == 1 {
+                    return type.rawValue
+                }
+                return "\(type.rawValue):\(surface.rawValue)"
             case .terminal: return "terminal"
             case .web: return "web"
             }
         }
+
+        func matchesStoredRaw(_ raw: String) -> Bool {
+            if storageRaw == raw {
+                return true
+            }
+            switch self {
+            case .agent(let type, let surface, _):
+                // Legacy fallback: pre-surface selections persisted only `agentRaw`.
+                if surface == .terminal, raw == type.rawValue {
+                    return true
+                }
+                // Forward-compat fallback: accept explicit terminal form even when
+                // the current agent has a single supported surface.
+                if surface == .terminal, raw == "\(type.rawValue):\(AgentSurface.terminal.rawValue)" {
+                    return true
+                }
+                return false
+            case .terminal:
+                return raw == "terminal"
+            case .web:
+                return raw == "web"
+            }
+        }
+
     }
 
     init(config: AgentLaunchSheetConfig) {
@@ -562,6 +617,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     // MARK: - Setup
 
     private func buildPickerItems() {
+        let chatsEnabled = PersistenceService.shared.loadSettings().isChatsFeatureEnabled
         var agents = config.availableAgents
         if let defaultAgent = config.defaultAgentType, let idx = agents.firstIndex(of: defaultAgent) {
             agents.remove(at: idx)
@@ -569,7 +625,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
 
         for agent in agents {
-            pickerItems.append(.agent(agent, isDefault: agent == config.defaultAgentType))
+            for surface in agent.supportedSurfaces(chatsEnabled: chatsEnabled) {
+                let isDefault = agent == config.defaultAgentType && surface == agent.defaultSurface
+                pickerItems.append(.agent(agent, surface: surface, isDefault: isDefault))
+            }
         }
         if !config.isAgentOnly {
             pickerItems.append(.terminal)
@@ -578,8 +637,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         for (i, item) in pickerItems.enumerated() {
             switch item {
-            case .agent(let type, let isDefault):
-                let title = isDefault ? "\(type.displayName) (Default)" : type.displayName
+            case .agent(let type, let surface, let isDefault):
+                let baseTitle = type.displayName(for: surface, chatsEnabled: chatsEnabled)
+                let title = isDefault ? "\(baseTitle) (Default)" : baseTitle
                 agentPicker.addItem(withTitle: title)
                 agentPicker.lastItem?.tag = i
             case .terminal:
@@ -600,7 +660,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private func applyLastSelection() {
         guard PersistenceService.shared.loadSettings().rememberLastTypeSelection else { return }
         guard let raw = AgentLastSelectionStore.lastSelection(for: config.draftScope),
-              let index = pickerItems.firstIndex(where: { $0.storageRaw == raw }) else {
+              let index = pickerIndex(forStoredRaw: raw) else {
             return
         }
         agentPicker.selectItem(withTag: index)
@@ -608,17 +668,23 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     private func applyRecoverySelection(_ prefill: AgentLaunchSheetPrefill) {
         if let selectionRaw = prefill.selectionRaw,
-           let index = pickerItems.firstIndex(where: { $0.storageRaw == selectionRaw }) {
+           let index = pickerIndex(forStoredRaw: selectionRaw) {
             agentPicker.selectItem(withTag: index)
             return
         }
 
         guard let agentType = prefill.agentType,
               let index = pickerItems.firstIndex(where: {
-                  if case .agent(let t, _) = $0 { return t == agentType }
+                  if case .agent(let t, let surface, _) = $0 {
+                      return t == agentType && surface == agentType.defaultSurface
+                  }
                   return false
               }) else { return }
         agentPicker.selectItem(withTag: index)
+    }
+
+    private func pickerIndex(forStoredRaw raw: String) -> Int? {
+        pickerItems.firstIndex(where: { $0.matchesStoredRaw(raw) })
     }
 
     private func applyRecoveryModelReasoningSelection(_ prefill: AgentLaunchSheetPrefill) {
@@ -1507,6 +1573,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     // MARK: - Agent picker
 
     @objc private func agentPickerChanged() {
+        applyPickerSelectionChange()
+    }
+
+    private func applyPickerSelectionChange() {
         let newMode = currentMode
         populateModelReasoningPickers()
         applyLastModelReasoningSelection()
@@ -1588,9 +1658,15 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     private func updateDraftCheckboxVisibility() {
         guard config.showDraftCheckbox else { return }
-        let isAgent = currentMode == "agent"
-        draftCheckboxRow?.isHidden = !isAgent
-        if !isAgent {
+        let isDraftEligible: Bool = {
+            guard let item = selectedPickerItem() else { return false }
+            if case .agent(_, let surface, _) = item {
+                return surface == .terminal
+            }
+            return false
+        }()
+        draftCheckboxRow?.isHidden = !isDraftEligible
+        if !isDraftEligible {
             draftCheckbox.state = .off
         }
     }
@@ -1600,7 +1676,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     /// Returns the currently selected agent type (non-custom), or nil for terminal/web/custom.
     private var selectedAgentTypeForModelPicker: AgentType? {
         guard let item = selectedPickerItem() else { return nil }
-        if case .agent(let type, _) = item, type != .custom { return type }
+        if case .agent(let type, _, _) = item, type != .custom { return type }
         return nil
     }
 
@@ -1825,7 +1901,25 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func performAccept(item: PickerItem, rawPrompt: String, rawDesc: String, rawBranch: String, rawBaseBranch: String, rawTitle: String) {
-        let isDraft = config.showDraftCheckbox && draftCheckbox.state == .on
+        if case .agent(_, let surface, _) = item,
+           surface == .chat,
+           case .newThread = config.draftScope {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "Chat mode for new threads is not available yet"
+            alert.informativeText = "Chat tabs are supported. Chat-first new-thread creation is still in progress in this build."
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+
+        let isDraft: Bool = {
+            guard config.showDraftCheckbox, draftCheckbox.state == .on else { return false }
+            if case .agent(_, let surface, _) = item {
+                return surface == .terminal
+            }
+            return false
+        }()
 
         AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
 
@@ -1841,11 +1935,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         // content is safe even if the app crashes during thread/tab creation.
         // Web tabs don't go through tmux injection, so skip crash-recovery for them.
         let agentType: AgentType? = {
-            if case .agent(let t, _) = item { return t }
+            if case .agent(let t, _, _) = item { return t }
             return nil
         }()
         let pendingPromptFileURL: URL?
         if case .web = item {
+            pendingPromptFileURL = nil
+        } else if case .agent(_, let surface, _) = item, surface == .chat {
+            // Chat tabs do not use tmux injection.
             pendingPromptFileURL = nil
         } else if isDraft {
             // Drafts are persisted in the thread model, not through tmux injection —
@@ -1891,6 +1988,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         case .terminal:
             finish(with: AgentLaunchSheetResult(
                 agentType: nil,
+                agentSurface: nil,
                 useAgentCommand: false,
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: nil,
@@ -1905,9 +2003,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 modelId: nil,
                 reasoningLevel: nil
             ))
-        case .agent(let type, _):
+        case .agent(let type, let surface, _):
             finish(with: AgentLaunchSheetResult(
                 agentType: type,
+                agentSurface: surface,
                 useAgentCommand: true,
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: rawDesc.isEmpty ? nil : rawDesc,
@@ -1926,6 +2025,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             let url = WebURLNormalizer.normalize(rawPrompt) ?? URL(string: "about:blank")!
             finish(with: AgentLaunchSheetResult(
                 agentType: nil,
+                agentSurface: nil,
                 useAgentCommand: false,
                 prompt: nil,
                 description: rawDesc.isEmpty ? nil : rawDesc,

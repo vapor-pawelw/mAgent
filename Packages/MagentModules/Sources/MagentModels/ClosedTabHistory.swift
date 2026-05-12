@@ -32,6 +32,7 @@ public nonisolated enum ClosedTabSnapshot: Sendable, Equatable {
     case terminal(ClosedTerminalTabSnapshot)
     case web(PersistedWebTab)
     case draft(PersistedDraftTab)
+    case chat(PersistedChatTab)
 }
 
 public nonisolated struct ClosedTabHistoryBuffer: Sendable, Equatable {

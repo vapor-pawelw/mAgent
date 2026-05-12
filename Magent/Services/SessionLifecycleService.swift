@@ -792,6 +792,12 @@ final class SessionLifecycleService {
         try? persistence.saveActiveThreads(store.threads)
     }
 
+    func updatePersistedChatTabs(for threadId: UUID, chatTabs: [PersistedChatTab]) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        store.threads[index].persistedChatTabs = chatTabs
+        try? persistence.saveActiveThreads(store.threads)
+    }
+
     // MARK: - Waiting-for-Input Detection
 
     func checkForWaitingForInput() async {
@@ -1904,6 +1910,54 @@ final class SessionLifecycleService {
     }
 
     // MARK: - Mark Completion / Waiting / Busy
+
+    @MainActor
+    func markSessionCompletionDetected(
+        threadId: UUID,
+        sessionName: String,
+        isActiveTab: Bool
+    ) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+
+        let settings = persistence.loadSettings()
+        let completedAt = Date()
+        store.threads[index].lastAgentCompletionAt = completedAt
+        if settings.autoReorderThreadsOnAgentCompletion {
+            bumpThreadToTop?(threadId)
+        }
+
+        store.threads[index].busySessions.remove(sessionName)
+        store.threads[index].waitingForInputSessions.remove(sessionName)
+        store.threads[index].hasUnsubmittedInputSessions.remove(sessionName)
+        notifiedWaitingSessions.remove(sessionName)
+        rateLimitLiftPendingResumeSessions.remove(sessionName)
+
+        var shouldRequestDockBounce = false
+        if !isActiveTab {
+            let hadUnreadCompletion = !store.threads[index].unreadCompletionSessions.isEmpty
+            store.threads[index].unreadCompletionSessions.insert(sessionName)
+            if !hadUnreadCompletion {
+                shouldRequestDockBounce = true
+            }
+        }
+
+        let projectName = settings.projects.first(where: { $0.id == store.threads[index].projectId })?.name ?? "Project"
+        sendAgentCompletionNotification(
+            for: store.threads[index],
+            projectName: projectName,
+            playSound: settings.playSoundForAgentCompletion,
+            sessionName: sessionName
+        )
+
+        persistence.debouncedSaveActiveThreads(store.threads)
+        updateDockBadge?()
+        if shouldRequestDockBounce {
+            requestDockBounce?()
+        }
+        onThreadsChanged?()
+        postCompletionChangedNotification(for: store.threads[index])
+        postBusySessionsChanged?(store.threads[index])
+    }
 
     @MainActor
     func markThreadCompletionSeen(threadId: UUID) {

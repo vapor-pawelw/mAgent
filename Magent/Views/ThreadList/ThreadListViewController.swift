@@ -237,6 +237,7 @@ final class ThreadListViewController: NSViewController {
     /// Generation counter for the git remote check Task spawned by reloadData().
     /// Prevents stale Tasks from running when reloadData() is called rapidly.
     private var remoteCheckGeneration: Int = 0
+    private var lastSidebarSettingsFingerprint: SidebarSettingsFingerprint?
     private(set) var selectedThreadID: UUID?
     private(set) var diffInspectionThreadID: UUID?
     private(set) var isDiffInspectionPopoutContext = false
@@ -254,6 +255,33 @@ final class ThreadListViewController: NSViewController {
         let origin: NSPoint
         let anchor: SidebarScrollAnchor?
         let anchorOffsetY: CGFloat
+    }
+
+    /// Subset of settings that can affect sidebar structure/layout/metadata rendering.
+    /// Used to avoid unnecessary outline reloads for unrelated settings (for example
+    /// chat font-size changes from Settings > Chat).
+    private struct SidebarSettingsFingerprint: Equatable {
+        let projects: [Project]
+        let threadSections: [ThreadSection]
+        let useThreadSections: Bool
+        let defaultSectionId: UUID?
+        let autoReorderThreadsOnAgentCompletion: Bool
+        let showPRStatusBadges: Bool
+        let showJiraStatusBadges: Bool
+        let showBusyStateDuration: Bool
+        let narrowThreads: Bool
+
+        init(settings: AppSettings) {
+            projects = settings.projects
+            threadSections = settings.threadSections
+            useThreadSections = settings.useThreadSections
+            defaultSectionId = settings.defaultSectionId
+            autoReorderThreadsOnAgentCompletion = settings.autoReorderThreadsOnAgentCompletion
+            showPRStatusBadges = settings.showPRStatusBadges
+            showJiraStatusBadges = settings.showJiraStatusBadges
+            showBusyStateDuration = settings.showBusyStateDuration
+            narrowThreads = settings.narrowThreads
+        }
     }
 
     // MARK: - Data Model (3-level hierarchy)
@@ -563,6 +591,14 @@ final class ThreadListViewController: NSViewController {
     }
 
     @objc private func settingsDidChange() {
+        let latestSettings = persistence.loadSettings()
+        let latestFingerprint = SidebarSettingsFingerprint(settings: latestSettings)
+        let baselineFingerprint = lastSidebarSettingsFingerprint ?? SidebarSettingsFingerprint(settings: currentSettings)
+        guard latestFingerprint != baselineFingerprint else { return }
+        // Remember the latest relevant snapshot immediately so back-to-back
+        // notifications for the same settings payload do not keep rescheduling.
+        lastSidebarSettingsFingerprint = latestFingerprint
+
         // Debounce: settings can be saved many times in quick succession (e.g. typing in a
         // text field, or multiple observers firing back-to-back). Coalesce into one reload
         // after 100 ms to avoid thrashing the outline view on every keystroke.
@@ -808,6 +844,7 @@ final class ThreadListViewController: NSViewController {
 
         let settings = persistence.loadSettings()
         currentSettings = settings
+        lastSidebarSettingsFingerprint = SidebarSettingsFingerprint(settings: settings)
         let allThreads = threadManager.threads
         let mainThreads = allThreads.filter { $0.isMain }
         let regularThreads = allThreads.filter { !$0.isMain }

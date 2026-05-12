@@ -94,7 +94,7 @@ final class ResizeHandleView: NSView {
 // MARK: - Settings Category
 
 enum SettingsCategory: Int, CaseIterable {
-    case general, terminal, threads, agents, notifications, projects, appearance, jira, debug
+    case general, terminal, chat, threads, agents, notifications, projects, appearance, jira, debug
 
     static var visibleCategories: [SettingsCategory] {
         allCases.filter(\.isVisible)
@@ -119,6 +119,7 @@ enum SettingsCategory: Int, CaseIterable {
         switch self {
         case .general: return String(localized: .CommonStrings.settingsCategoryGeneral)
         case .terminal: return String(localized: .CommonStrings.settingsCategoryTerminal)
+        case .chat: return String(localized: .CommonStrings.settingsCategoryChat)
         case .threads: return String(localized: .CommonStrings.settingsCategoryThreads)
         case .agents: return String(localized: .CommonStrings.settingsCategoryAgents)
         case .notifications: return String(localized: .CommonStrings.settingsCategoryNotifications)
@@ -134,6 +135,7 @@ enum SettingsCategory: Int, CaseIterable {
         switch self {
         case .general: return "gearshape"
         case .terminal: return "terminal"
+        case .chat: return "message"
         case .threads: return "square.stack.3d.up"
         case .agents: return "cpu"
         case .notifications: return "bell"
@@ -153,6 +155,7 @@ final class SettingsSplitViewController: NSSplitViewController {
     private let detailContainerVC = NSViewController()
     private let generalVC = SettingsGeneralViewController()
     private let terminalVC = SettingsTerminalViewController()
+    private let chatVC = SettingsChatViewController()
     private let threadsVC = SettingsThreadsViewController()
     private let agentsVC = SettingsAgentsViewController()
     private let notificationsVC = SettingsNotificationsViewController()
@@ -200,7 +203,7 @@ final class SettingsSplitViewController: NSSplitViewController {
         detailContainerVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
         let container = detailContainerVC.view
 
-        var allVCs: [NSViewController] = [generalVC, terminalVC, threadsVC, agentsVC, notificationsVC, projectsVC, appearanceVC, jiraVC]
+        var allVCs: [NSViewController] = [generalVC, terminalVC, chatVC, threadsVC, agentsVC, notificationsVC, projectsVC, appearanceVC, jiraVC]
 #if DEBUG
         allVCs.append(debugVC)
 #endif
@@ -220,6 +223,7 @@ final class SettingsSplitViewController: NSSplitViewController {
     private func showCategoryContent(_ category: SettingsCategory) {
         generalVC.view.isHidden = category != .general
         terminalVC.view.isHidden = category != .terminal
+        chatVC.view.isHidden = category != .chat
         threadsVC.view.isHidden = category != .threads
         agentsVC.view.isHidden = category != .agents
         notificationsVC.view.isHidden = category != .notifications

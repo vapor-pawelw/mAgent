@@ -103,6 +103,171 @@ public nonisolated struct PersistedDraftTab: Codable, Sendable, Equatable {
     }
 }
 
+// MARK: - Chat Tab Persistence
+
+public nonisolated enum ChatMessageRole: String, Codable, Sendable {
+    case user
+    case assistant
+}
+
+public nonisolated enum PersistedChatAttachmentKind: String, Codable, Sendable {
+    case file
+    case image
+    case video
+}
+
+public nonisolated struct PersistedChatAttachment: Codable, Sendable, Equatable, Identifiable {
+    public let id: UUID
+    public var filePath: String
+    public var kind: PersistedChatAttachmentKind
+
+    public init(
+        id: UUID = UUID(),
+        filePath: String,
+        kind: PersistedChatAttachmentKind
+    ) {
+        self.id = id
+        self.filePath = filePath
+        self.kind = kind
+    }
+}
+
+public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Identifiable {
+    public let id: UUID
+    public let role: ChatMessageRole
+    public var text: String
+    public let createdAt: Date
+    public var modelId: String?
+    public var reasoningLevel: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case role
+        case text
+        case createdAt
+        case modelId
+        case reasoningLevel
+    }
+
+    public init(
+        id: UUID = UUID(),
+        role: ChatMessageRole,
+        text: String,
+        createdAt: Date = Date(),
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
+    ) {
+        self.id = id
+        self.role = role
+        self.text = text
+        self.createdAt = createdAt
+        self.modelId = modelId
+        self.reasoningLevel = reasoningLevel
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        role = try container.decode(ChatMessageRole.self, forKey: .role)
+        text = try container.decode(String.self, forKey: .text)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
+        reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(role, forKey: .role)
+        try container.encode(text, forKey: .text)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(modelId, forKey: .modelId)
+        try container.encodeIfPresent(reasoningLevel, forKey: .reasoningLevel)
+    }
+}
+
+public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
+    public let identifier: String
+    public var agentType: AgentType
+    public var title: String
+    public var messages: [PersistedChatMessage]
+    public var draftInput: String
+    public var draftAttachments: [PersistedChatAttachment]
+    public var conversationSessionID: String?
+    public var modelId: String?
+    public var reasoningLevel: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case identifier
+        case agentType
+        case title
+        case messages
+        case draftInput
+        case draftAttachments
+        case conversationSessionID
+        case modelId
+        case reasoningLevel
+    }
+
+    public init(
+        identifier: String,
+        agentType: AgentType,
+        title: String,
+        messages: [PersistedChatMessage] = [],
+        draftInput: String = "",
+        draftAttachments: [PersistedChatAttachment] = [],
+        conversationSessionID: String? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
+    ) {
+        self.identifier = identifier
+        self.agentType = agentType
+        self.title = title
+        self.messages = messages
+        self.draftInput = draftInput
+        self.draftAttachments = draftAttachments
+        self.conversationSessionID = conversationSessionID
+        self.modelId = modelId
+        self.reasoningLevel = reasoningLevel
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        identifier = try container.decode(String.self, forKey: .identifier)
+        agentType = try container.decode(AgentType.self, forKey: .agentType)
+        title = try container.decode(String.self, forKey: .title)
+        messages = try container.decodeIfPresent([PersistedChatMessage].self, forKey: .messages) ?? []
+        draftInput = try container.decodeIfPresent(String.self, forKey: .draftInput) ?? ""
+        draftAttachments = try container.decodeIfPresent([PersistedChatAttachment].self, forKey: .draftAttachments) ?? []
+        conversationSessionID = try container.decodeIfPresent(String.self, forKey: .conversationSessionID)
+        modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
+        reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(identifier, forKey: .identifier)
+        try container.encode(agentType, forKey: .agentType)
+        try container.encode(title, forKey: .title)
+        try container.encode(messages, forKey: .messages)
+        if !draftInput.isEmpty {
+            try container.encode(draftInput, forKey: .draftInput)
+        }
+        if !draftAttachments.isEmpty {
+            try container.encode(draftAttachments, forKey: .draftAttachments)
+        }
+        if let conversationSessionID, !conversationSessionID.isEmpty {
+            try container.encode(conversationSessionID, forKey: .conversationSessionID)
+        }
+        if let modelId, !modelId.isEmpty {
+            try container.encode(modelId, forKey: .modelId)
+        }
+        if let reasoningLevel, !reasoningLevel.isEmpty {
+            try container.encode(reasoningLevel, forKey: .reasoningLevel)
+        }
+    }
+}
+
 // MARK: - Web Tab Persistence
 
 public nonisolated enum WebTabIconType: String, Codable, Sendable {
@@ -261,7 +426,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var sectionId: UUID?
     public var isMain: Bool
     /// Last-selected tab identifier — stores the slot key for any tab type
-    /// (session name for terminal, web/draft identifier for web/draft tabs).
+    /// (session name for terminal, web/draft/chat identifier for non-terminal tabs).
     public var lastSelectedTabIdentifier: String?
     public var agentHasRun: Bool
     public var isPinned: Bool
@@ -299,6 +464,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var persistedWebTabs: [PersistedWebTab]
     /// Persisted draft tabs — agent prompts saved for later execution.
     public var persistedDraftTabs: [PersistedDraftTab]
+    /// Persisted GUI chat tabs.
+    public var persistedChatTabs: [PersistedChatTab]
     /// Optional sign emoji displayed to the left of the thread icon (e.g. 🛑, ✅, ❓).
     public var signEmoji: String?
     /// Optional 1–5 priority. `nil` means no priority is set and nothing renders.
@@ -432,6 +599,12 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         // which is contradictory and confusing. The raw `unreadCompletionSessions`
         // set is preserved so the indicator reappears as soon as busy clears.
         !unreadCompletionSessions.isEmpty && !isAnyBusy
+    }
+
+    /// Tab identifiers that can legally carry unread-completion markers.
+    /// Includes terminal sessions and GUI chat tabs.
+    public var completionTrackedTabIdentifiers: Set<String> {
+        Set(tmuxSessionNames).union(persistedChatTabs.map(\.identifier))
     }
 
     /// True when newly detected rate limits haven't been acknowledged by the user yet.
@@ -629,6 +802,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case hasEverDoneWork
         case persistedWebTabs
         case persistedDraftTabs
+        case persistedChatTabs
         case signEmoji
         case priority
         case syncWithJira
@@ -680,6 +854,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         hasEverDoneWork: Bool = false,
         persistedWebTabs: [PersistedWebTab] = [],
         persistedDraftTabs: [PersistedDraftTab] = [],
+        persistedChatTabs: [PersistedChatTab] = [],
         signEmoji: String? = nil,
         priority: Int? = nil,
         syncWithJira: Bool = false
@@ -728,6 +903,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.hasEverDoneWork = hasEverDoneWork
         self.persistedWebTabs = persistedWebTabs
         self.persistedDraftTabs = persistedDraftTabs
+        self.persistedChatTabs = persistedChatTabs
         self.signEmoji = signEmoji
         self.priority = priority.map { max(1, min(5, $0)) }
         self.syncWithJira = syncWithJira
@@ -752,6 +928,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         localFileSyncEntriesSnapshot = completed.localFileSyncEntriesSnapshot
         persistedWebTabs = completed.persistedWebTabs
         persistedDraftTabs = completed.persistedDraftTabs
+        persistedChatTabs = completed.persistedChatTabs
     }
 
     public func withProjectId(_ newProjectId: UUID) -> MagentThread {
@@ -799,6 +976,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             hasEverDoneWork: hasEverDoneWork,
             persistedWebTabs: persistedWebTabs,
             persistedDraftTabs: persistedDraftTabs,
+            persistedChatTabs: persistedChatTabs,
             signEmoji: signEmoji,
             priority: priority,
             syncWithJira: syncWithJira
@@ -878,6 +1056,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         hasEverDoneWork = try container.decodeIfPresent(Bool.self, forKey: .hasEverDoneWork) ?? false
         persistedWebTabs = try container.decodeIfPresent([PersistedWebTab].self, forKey: .persistedWebTabs) ?? []
         persistedDraftTabs = try container.decodeIfPresent([PersistedDraftTab].self, forKey: .persistedDraftTabs) ?? []
+        persistedChatTabs = try container.decodeIfPresent([PersistedChatTab].self, forKey: .persistedChatTabs) ?? []
         signEmoji = try container.decodeIfPresent(String.self, forKey: .signEmoji)
         // Clamp any stray out-of-range values from older builds or manual edits.
         priority = try container.decodeIfPresent(Int.self, forKey: .priority).map { max(1, min(5, $0)) }
@@ -971,6 +1150,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         }
         if !persistedDraftTabs.isEmpty {
             try container.encode(persistedDraftTabs, forKey: .persistedDraftTabs)
+        }
+        if !persistedChatTabs.isEmpty {
+            try container.encode(persistedChatTabs, forKey: .persistedChatTabs)
         }
         try container.encodeIfPresent(signEmoji, forKey: .signEmoji)
         try container.encodeIfPresent(priority, forKey: .priority)

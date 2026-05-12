@@ -17,4 +17,9 @@ struct ThreadTabFocusResolverTests {
     func draftFocusTarget() {
         #expect(ThreadTabFocusResolver.focusTarget(for: .draft) == .draftPrompt)
     }
+
+    @Test("Chat tabs focus composer")
+    func chatFocusTarget() {
+        #expect(ThreadTabFocusResolver.focusTarget(for: .chat) == .chatComposer)
+    }
 }

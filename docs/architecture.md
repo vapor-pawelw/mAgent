@@ -308,7 +308,7 @@ Closed-tab restore behavior is thread-local and intentionally ephemeral:
 
 Magent keeps two layers of backup protection for critical app-state files in Application Support:
 
-- Rolling backups: before overwriting `threads.json`, `settings.json`, or `agent-launch-prompt-drafts.json`, keep the previous file as `<name>.bak.json`.
+- Rolling backups: before overwriting `threads.json`, `chat-tabs.json`, `settings.json`, or `agent-launch-prompt-drafts.json`, keep the previous file as `<name>.bak.json`.
 - Periodic snapshots: every 30 minutes while the app is running, copy the currently present critical files into `Application Support/Magent/backups/<timestamp>/`.
 - Settings exposes a manual `Back Up Now` action that creates the same snapshot format on demand.
 
@@ -366,6 +366,7 @@ Non-critical caches (Jira, PR, rate-limit, etc.) keep silent fallback to empty �
 | File | Contents |
 |------|----------|
 | `threads.json` | Versioned envelope containing `[MagentThread]` (active + archived) |
+| `chat-tabs.json` | Sidecar map of `thread.id` → `[PersistedChatTab]`, used to recover chat tabs when older builds rewrite `threads.json` without preserving inline chat-tab fields |
 | `settings.json` | Versioned envelope containing `AppSettings` (projects, sections, preferences) |
 | `agent-launch-prompt-drafts.json` | Draft prompts for agent launch sheets |
 | `agent-last-selections.json` | Last-used agent type, model, and reasoning effort per scope (managed by `AgentLastSelectionStore`) |
@@ -453,21 +454,23 @@ Display order is decoupled from content arrays via `tabSlots: [TabSlot]`, an enu
 - `.terminal(sessionName:)` — content is in `terminalViews`, indexed by `thread.tmuxSessionNames`
 - `.web(identifier:)` — content is in `webTabs`, keyed by identifier
 - `.draft(identifier:)` — content is in `draftTabs`, keyed by identifier; persisted in `thread.persistedDraftTabs` including agent type, prompt, and optional model/reasoning overrides used by later `Start Agent`
+- `.chat(identifier:)` — content is in `chatTabs`, keyed by identifier; persisted in `thread.persistedChatTabs` including full message history and per-tab unsent composer draft text
 
 Key invariants:
 - `tabItems.count == tabSlots.count` always
 - `terminalViews` stays parallel to `thread.tmuxSessionNames`; both are reordered together by `persistTabOrder()` during drag/pin operations
 - `webTabs` stays in creation order; never reordered by drag
 - `draftTabs` stays in creation order; view controllers are created lazily on first selection
+- `chatTabs` stays in creation order; view controllers are created lazily on first selection
 - `tabSlots` + `tabItems` change order during drag/pin operations; `persistTabOrder()` syncs `terminalViews` and `thread.tmuxSessionNames` to match
 - Single unified `pinnedCount` covers all tab types
 - Content lookup uses session name / identifier keys, not positional indices (via `terminalView(forSession:)`, `currentTerminalView()`, etc.)
-- External tab-structure mutations (for example CLI `create-tab`) must be reconciled in existing thread views. `ThreadDetailViewController.handleThreadsDidChange` compares a tab-structure fingerprint (terminal sessions + pinning + persisted web/draft identifiers) and reruns `setupTabs()` when structure changes are detected.
+- External tab-structure mutations (for example CLI `create-tab`) must be reconciled in existing thread views. `ThreadDetailViewController.handleThreadsDidChange` compares a tab-structure fingerprint (terminal sessions + pinning + persisted web/draft/chat identifiers) and reruns `setupTabs()` when structure changes are detected.
 - `setupTabs()` is a destructive rebuild path: clear existing `tabItems`, `tabSlots`, `terminalViews`, and non-terminal tab view arrays before recreating display state from model state. Rebuild paths must never append on top of previous UI state.
 - **Web-tab scheme gating**: in-app web tabs are restricted to `http`/`https` destinations. `WKNavigationDelegate`/`WKUIDelegate` paths must cancel unsupported schemes and route them through `NSWorkspace.shared.open(...)` from the app process. Persist/restore must also ignore non-HTTP(S) web-tab URLs so stale saved deep links cannot repeatedly re-trigger WebContent launchservices sandbox crashes.
 - **Non-terminal threads**: Threads created with an initial web tab or an initial draft tab have a worktree and branch but zero tmux sessions (`tmuxSessionNames` is empty). `setupTabs` treats these as intentional non-terminal threads (`sessions.isEmpty && (!persistedWebTabs.isEmpty || !persistedDraftTabs.isEmpty)`) and skips fallback session creation, restoring the saved web/draft tab directly instead of inventing a terminal session name that could collide with stale tmux state.
 - **Tab selection persistence**: `MagentThread.lastSelectedTabIdentifier` stores the identifier of the last-selected tab across all tab types (tmux session name for terminal tabs, web/draft identifier for non-terminal tabs). On thread switch, `resolveLastSelectedSlotIndex()` looks up the saved identifier against all `tabSlots` to restore the correct tab. When the last-selected tab is non-terminal, it is selected immediately while terminal sessions prepare in the background.
-- **Tab focus follows content type**: After selection or overlay dismissal, route first responder through `focusCurrentTabContent()` so terminal tabs focus `TerminalSurfaceView`, web tabs focus their `WKWebView`, and draft tabs focus the prompt editor. Do not assume terminal focus is the only restoration path.
+- **Tab focus follows content type**: After selection or overlay dismissal, route first responder through `focusCurrentTabContent()` so terminal tabs focus `TerminalSurfaceView`, web tabs focus their `WKWebView`, draft tabs focus the prompt editor, and chat tabs focus the composer. Do not assume terminal focus is the only restoration path.
 
 ## tmux Session Ownership
 

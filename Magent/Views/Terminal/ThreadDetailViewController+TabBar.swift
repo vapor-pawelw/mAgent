@@ -179,6 +179,8 @@ extension ThreadDetailViewController {
             selectWebTabByIdentifier(identifier, displayIndex: index)
         case .draft(let identifier):
             selectDraftTab(identifier: identifier, displayIndex: index)
+        case .chat(let identifier):
+            selectChatTab(identifier: identifier, displayIndex: index)
         }
     }
 
@@ -193,6 +195,7 @@ extension ThreadDetailViewController {
 
         hideActiveWebTab()
         hideActiveDraftTab()
+        hideActiveChatTab()
         hideEmptyState()
         for (_, placeholder) in detachedTabPlaceholders {
             placeholder.isHidden = true
@@ -226,6 +229,7 @@ extension ThreadDetailViewController {
                 for termView in self.terminalViews { termView.isHidden = true }
                 self.hideActiveWebTab()
                 self.hideActiveDraftTab()
+                self.hideActiveChatTab()
 
                 let sessionAgentType = await self.threadManager.loadingOverlayAgentType(
                     for: self.thread,
@@ -293,6 +297,7 @@ extension ThreadDetailViewController {
 
         hideActiveWebTab()
         hideActiveDraftTab()
+        hideActiveChatTab()
         hideEmptyState()
 
         // Hide all existing placeholders first
@@ -339,6 +344,7 @@ extension ThreadDetailViewController {
 
         hideActiveWebTab()
         hideActiveDraftTab()
+        hideActiveChatTab()
 
         // Hide detached tab placeholders when switching to a live terminal tab
         for (_, placeholder) in detachedTabPlaceholders {
@@ -521,6 +527,7 @@ extension ThreadDetailViewController {
                     item.onKillAllSessions = nil
                     item.onCopyTmuxSessionName = nil
                     item.tmuxSessionNameForMenu = nil
+                    item.showsMinimalSessionMenu = false
                     item.availableAgentsForContinue = []
                     item.showKeepAliveIcon = false
                     item.typeIcon.isHidden = true
@@ -563,6 +570,7 @@ extension ThreadDetailViewController {
                         pasteboard.setString(sessionName, forType: .string)
                     }
                     item.tmuxSessionNameForMenu = sessionName
+                    item.showsMinimalSessionMenu = false
                     item.availableAgentsForContinue = settings.availableActiveAgents
                     item.showKeepAliveIcon = !thread.isKeepAlive
                         && thread.protectedTmuxSessions.contains(sessionName)
@@ -585,6 +593,7 @@ extension ThreadDetailViewController {
                 item.onKillAllSessions = nil
                 item.onCopyTmuxSessionName = nil
                 item.tmuxSessionNameForMenu = nil
+                item.showsMinimalSessionMenu = false
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
             case .draft:
@@ -600,7 +609,32 @@ extension ThreadDetailViewController {
                 item.onKillAllSessions = nil
                 item.onCopyTmuxSessionName = nil
                 item.tmuxSessionNameForMenu = nil
+                item.showsMinimalSessionMenu = false
                 item.availableAgentsForContinue = []
+                item.showKeepAliveIcon = false
+            case .chat(let identifier):
+                let currentAgent = chatTabs.first(where: { $0.identifier == identifier })?.agentType
+                let sessionNameForMenu = chatSessionNameForMenu(identifier: identifier)
+                let availableAgents = settings.availableActiveAgents.filter { agent in
+                    guard let currentAgent else { return true }
+                    return agent != currentAgent
+                }
+                item.onRename = { [weak self] in self?.showChatTabRenameDialog(at: i) }
+                item.allowsDoubleClickRename = true
+                item.onResumeAgentInNewTab = nil
+                item.onContinueIn = { [weak self] in self?.presentContinueChatTabSheet(for: i) }
+                item.onExportContext = { [weak self] in self?.exportChatTabConversation(at: i) }
+                item.onRepairTerminal = nil
+                item.canRepairTerminal = false
+                item.onKeepAlive = nil
+                item.onKillSession = nil
+                item.onKillAllSessions = nil
+                item.onCopyTmuxSessionName = { [weak self] in
+                    self?.copySessionNameToPasteboard(sessionNameForMenu)
+                }
+                item.tmuxSessionNameForMenu = sessionNameForMenu
+                item.showsMinimalSessionMenu = true
+                item.availableAgentsForContinue = availableAgents
                 item.showKeepAliveIcon = false
             }
         }
@@ -610,7 +644,10 @@ extension ThreadDetailViewController {
 
     func refreshTabTooltips() {
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
-            tabItems[i].toolTip = tooltipText(for: slot, displayIndex: i)
+            let newTooltip = tooltipText(for: slot, displayIndex: i)
+            if tabItems[i].toolTip != newTooltip {
+                tabItems[i].toolTip = newTooltip
+            }
         }
     }
 
@@ -682,7 +719,7 @@ extension ThreadDetailViewController {
             ].joined(separator: "\n")
 
         case .draft(let identifier):
-            let draft = draftTabs.first(where: { $0.identifier == identifier })
+            let draft = thread.persistedDraftTabs.first(where: { $0.identifier == identifier })
             let agentText = draft?.agentType.displayName ?? "Unknown"
             let modelText = draft?.modelId ?? "Default"
             let reasoningText = draft?.reasoningLevel ?? "Default"
@@ -695,6 +732,40 @@ extension ThreadDetailViewController {
                 "Reasoning: \(reasoningText)",
                 "Status: saved draft",
             ].joined(separator: "\n")
+        case .chat(let identifier):
+            let chat = thread.persistedChatTabs.first(where: { $0.identifier == identifier })
+            let agentText = chat?.agentType.displayName ?? "Unknown"
+            let messageCount = chat?.messages.count ?? 0
+            var statusBits: [String] = ["GUI chat"]
+            if isChatRequestRunning(identifier: identifier) { statusBits.append("busy") }
+            if thread.unreadCompletionSessions.contains(identifier) { statusBits.append("unread completion") }
+
+            return [
+                "Type: Chat (\(agentText))",
+                "Identifier: \(identifier)",
+                "Pinned: \(pinned)",
+                "Messages: \(messageCount)",
+                "Status: \(statusBits.joined(separator: ", "))",
+            ].joined(separator: "\n")
         }
+    }
+
+    private func chatSessionNameForMenu(identifier: String) -> String {
+        guard let chat = chatTabs.first(where: { $0.identifier == identifier }) else {
+            return identifier
+        }
+
+        let conversationSessionID = chat.conversationSessionID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let conversationSessionID, !conversationSessionID.isEmpty {
+            return conversationSessionID
+        }
+        return identifier
+    }
+
+    private func copySessionNameToPasteboard(_ sessionName: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(sessionName, forType: .string)
     }
 }

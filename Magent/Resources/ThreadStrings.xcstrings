@@ -821,7 +821,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Custom…"
+            "value": "Custom\u2026"
           }
         }
       }
@@ -843,7 +843,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rename with prompt…"
+            "value": "Rename with prompt\u2026"
           }
         }
       }
@@ -1134,6 +1134,259 @@
         }
       }
     },
+    "chatSlashCommandLoginDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to your account."
+          }
+        }
+      }
+    },
+    "chatSlashCommandLogoutDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign out from your account."
+          }
+        }
+      }
+    },
+    "chatSlashCommandModelDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch the active model."
+          }
+        }
+      }
+    },
+    "chatRelativeTimeLessThanMinuteAgo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "less than a minute ago"
+          }
+        }
+      }
+    },
+    "chatAttachmentDropOverlayTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drop files here"
+          }
+        }
+      }
+    },
+    "chatTimestampCopyFullTimeAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy full time"
+          }
+        }
+      }
+    },
+    "chatSlashCommandScopedModelsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose which models Ctrl+P cycles through."
+          }
+        }
+      }
+    },
+    "chatSlashCommandSettingsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open settings and preferences."
+          }
+        }
+      }
+    },
+    "chatSlashCommandResumeDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume a previous conversation."
+          }
+        }
+      }
+    },
+    "chatSlashCommandNewDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start a new conversation."
+          }
+        }
+      }
+    },
+    "chatSlashCommandNameDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the session display name. Usage: /name <name>"
+          }
+        }
+      }
+    },
+    "chatSlashCommandSessionDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show session file, ID, token usage, and cost."
+          }
+        }
+      }
+    },
+    "chatSlashCommandTreeDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jump to a point in the session tree and continue there."
+          }
+        }
+      }
+    },
+    "chatSlashCommandForkDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fork the current conversation."
+          }
+        }
+      }
+    },
+    "chatSlashCommandCloneDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate the current branch into a new session."
+          }
+        }
+      }
+    },
+    "chatSlashCommandCompactDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summarize conversation to reduce context usage."
+          }
+        }
+      }
+    },
+    "chatSlashCommandCopyDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy the latest assistant response."
+          }
+        }
+      }
+    },
+    "chatSlashCommandExportDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export the current conversation."
+          }
+        }
+      }
+    },
+    "chatSlashCommandShareDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share as a private GitHub gist link."
+          }
+        }
+      }
+    },
+    "chatSlashCommandReloadDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload keybindings, extensions, skills, prompts, and context files."
+          }
+        }
+      }
+    },
+    "chatSlashCommandHotkeysDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show keyboard shortcuts."
+          }
+        }
+      }
+    },
+    "chatSlashCommandChangelogDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show version history."
+          }
+        }
+      }
+    },
+    "chatSlashCommandQuitDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit the CLI."
+          }
+        }
+      }
+    },
     "threadWorktree": {
       "extractionState": "manual",
       "localizations": {
@@ -1141,6 +1394,545 @@
           "stringUnit": {
             "state": "translated",
             "value": "worktree"
+          }
+        }
+      }
+    },
+    "chatSlashCommandAddDirDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add another working directory for this session."
+          }
+        }
+      }
+    },
+    "chatSlashCommandAgentDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to a spawned subagent thread."
+          }
+        }
+      }
+    },
+    "chatSlashCommandAgentsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage available subagent configurations."
+          }
+        }
+      }
+    },
+    "chatSlashCommandAppsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse app connectors and insert them into the prompt."
+          }
+        }
+      }
+    },
+    "chatSlashCommandBranchDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a branch of the current conversation."
+          }
+        }
+      }
+    },
+    "chatSlashCommandClearDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start a fresh conversation and clear visible context."
+          }
+        }
+      }
+    },
+    "chatSlashCommandConfigDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open configuration and preferences."
+          }
+        }
+      }
+    },
+    "chatSlashCommandContinueDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue a previous conversation (alias for /resume)."
+          }
+        }
+      }
+    },
+    "chatSlashCommandContextDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show current context usage."
+          }
+        }
+      }
+    },
+    "chatSlashCommandCostDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show usage/cost details (alias for /usage)."
+          }
+        }
+      }
+    },
+    "chatSlashCommandDebugConfigDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Print configuration layer diagnostics."
+          }
+        }
+      }
+    },
+    "chatSlashCommandDiffDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show current git diff for review."
+          }
+        }
+      }
+    },
+    "chatSlashCommandDoctorDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run installation and environment diagnostics."
+          }
+        }
+      }
+    },
+    "chatSlashCommandEffortDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set reasoning effort level."
+          }
+        }
+      }
+    },
+    "chatSlashCommandExitDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit the CLI session."
+          }
+        }
+      }
+    },
+    "chatSlashCommandExperimentalDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toggle experimental features."
+          }
+        }
+      }
+    },
+    "chatSlashCommandFastDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toggle fast mode."
+          }
+        }
+      }
+    },
+    "chatSlashCommandFeedbackDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send feedback and diagnostics."
+          }
+        }
+      }
+    },
+    "chatSlashCommandHelpDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show help and available commands."
+          }
+        }
+      }
+    },
+    "chatSlashCommandHooksDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View or configure hook behavior."
+          }
+        }
+      }
+    },
+    "chatSlashCommandIdeDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage IDE integration status."
+          }
+        }
+      }
+    },
+    "chatSlashCommandInitDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Initialize project guidance files."
+          }
+        }
+      }
+    },
+    "chatSlashCommandMcpDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage MCP tools and connections."
+          }
+        }
+      }
+    },
+    "chatSlashCommandMemoryDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit or manage CLAUDE.md memory."
+          }
+        }
+      }
+    },
+    "chatSlashCommandMentionDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attach files or folders to the prompt."
+          }
+        }
+      }
+    },
+    "chatSlashCommandPermissionsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage tool permission rules."
+          }
+        }
+      }
+    },
+    "chatSlashCommandPersonalityDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change response style/personality."
+          }
+        }
+      }
+    },
+    "chatSlashCommandPlanDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter plan mode (optionally with a prompt)."
+          }
+        }
+      }
+    },
+    "chatSlashCommandPluginDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage Claude plugins."
+          }
+        }
+      }
+    },
+    "chatSlashCommandPluginsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse and manage plugins."
+          }
+        }
+      }
+    },
+    "chatSlashCommandPsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show background process status."
+          }
+        }
+      }
+    },
+    "chatSlashCommandRenameDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename the current session."
+          }
+        }
+      }
+    },
+    "chatSlashCommandReviewDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review current changes."
+          }
+        }
+      }
+    },
+    "chatSlashCommandRewindDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rewind to a previous checkpoint."
+          }
+        }
+      }
+    },
+    "chatSlashCommandSandboxAddReadDirDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add an extra read-only sandbox directory."
+          }
+        }
+      }
+    },
+    "chatSlashCommandSandboxDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toggle sandbox mode."
+          }
+        }
+      }
+    },
+    "chatSlashCommandSecurityReviewDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run a security-focused code review."
+          }
+        }
+      }
+    },
+    "chatSlashCommandSkillsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse available skills."
+          }
+        }
+      }
+    },
+    "chatSlashCommandStatusDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show current session status."
+          }
+        }
+      }
+    },
+    "chatSlashCommandStatuslineDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configure status line fields."
+          }
+        }
+      }
+    },
+    "chatSlashCommandStopDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop background processes."
+          }
+        }
+      }
+    },
+    "chatSlashCommandTasksDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List and manage background tasks."
+          }
+        }
+      }
+    },
+    "chatSlashCommandTerminalSetupDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configure terminal keybindings."
+          }
+        }
+      }
+    },
+    "chatSlashCommandThemeDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change the color theme."
+          }
+        }
+      }
+    },
+    "chatSlashCommandTitleDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configure terminal/tab title fields."
+          }
+        }
+      }
+    },
+    "chatSlashCommandTuiDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch or configure the TUI renderer."
+          }
+        }
+      }
+    },
+    "chatSlashCommandUltraplanDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run advanced planning in cloud mode."
+          }
+        }
+      }
+    },
+    "chatSlashCommandUltrareviewDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run an in-depth cloud code review."
+          }
+        }
+      }
+    },
+    "chatSlashCommandUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show usage limits and cost stats."
           }
         }
       }

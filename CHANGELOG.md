@@ -10,7 +10,9 @@ All notable changes to this project will be documented in this file.
 - Added `magent-cli create-web-tab --thread <name> --url <http(s)-url> [--name <text>|--title <text>]` for opening an in-app web tab at a predefined URL in an existing thread (docs, Jira, PR links, dashboards).
 - Added `magent-cli rename-tab --thread <name> (--index <n> | --session <name>) --name <text>` for renaming existing terminal/web tabs from CLI.
 - Added `--name` as the preferred tab-title option for `magent-cli create-tab` and `magent-cli create-web-tab` (`--title` remains supported as a legacy alias).
-- `magent-cli list-tabs` / `thread-info` now return the full tab set in GUI order (terminal, web, draft) with `tabType` and stable tab identifiers for non-terminal tabs.
+- Added `magent-cli read-tab` with unified transcript reading across tab types (tmux capture for terminal tabs, persisted transcripts for chat tabs), including `--json` for structured output.
+- `magent-cli list-tabs` / `thread-info` now return the full tab set in GUI order (terminal, web, draft, chat) with `tabType` and stable tab identifiers for non-terminal tabs.
+- `magent-cli send-prompt` now supports targeting tabs via `--session` / `--index`, including chat tabs (default fallback now prefers first agent terminal tab, then first chat tab when no terminal tab exists).
 
 #### Bug Fixes
 - Fixed CLI-created tabs not reliably opening in popped-out thread windows. `create-tab` and `create-web-tab` now target the popped-out thread view when present, select the created tab there, and keep main/pop-out tab bars synchronized for terminal, web, and draft tab types.
@@ -18,6 +20,11 @@ All notable changes to this project will be documented in this file.
 - Fixed explicit custom names passed to `create-tab --title` / `--name` being overwritten by model-name auto-sync.
 - Fixed `magent-cli attach` and interactive tab picking misbehaving in mixed tab threads. Attach now targets terminal tabs only and resolves `--index` against terminal-tab order.
 - `magent-cli close-tab` now supports terminal, web, and draft tabs by index/session identifier; it still refuses to close the last remaining tab.
+
+### General
+
+#### Bug Fixes
+- Fixed `**bold**` markers rendering literally in in-app release notes. The Changelog / versioned "What’s New" window and the curated "What’s New" popup now render inline `**text**` as bold text.
 
 ### Thread
 
@@ -61,6 +68,9 @@ All notable changes to this project will be documented in this file.
 
 #### Features
 - Added `GPT 5.5` as a selectable Codex model in model pickers and model validation, and made Review-mode Codex launches default to `GPT 5.5`.
+- Agent type picker entries now support surface-specific labels (`<Agent> (Terminal)` / `<Agent> (Chat)`) driven by `AgentType.capabilities`.
+- Removed the Pi runtime dependency from Chat tabs: chat execution now uses native Claude/Codex JSON streams with persisted per-tab conversation session ids for agent-managed context (`claude --resume`, `codex exec resume`).
+- Codex chat execution now prefers the native Codex app-server JSON-RPC stream (for per-item incremental updates) and automatically falls back to `codex exec --json` when app-server startup fails.
 
 #### Bug Fixes
 - Hardened agent rate-limit detection so quoted/logged rate-limit text no longer spawns false active limits, fingerprints now use structured stable keys, and stale entries are tombstoned with traceable reasons instead of being hard-deleted.
@@ -68,14 +78,34 @@ All notable changes to this project will be documented in this file.
 - Codex sessions launched from Magent now use a shared Magent-managed `CODEX_HOME` that mirrors the user's `~/.codex` (skills, auth, config, docs, etc.) while keeping Magent IPC AGENTS hints scoped to Magent sessions only. Magent no longer writes its IPC block into the global `~/.codex/AGENTS.md`, and edits to global `~/.codex/AGENTS.md` or top-level `~/.codex` entries now resync into the managed home automatically (session monitor cadence).
 - Codex launch now respects user environment defaults for color handling. Magent no longer clears inherited `NO_COLOR`, so users who set `NO_COLOR=1` keep no-color output while default environments retain full color.
 
+### Settings
+
+#### Features
+- Reworked agent permission controls into a single mutually exclusive mode picker (`Full Access`, `Auto`, `Ask`) shared by Claude and Codex, with per-mode descriptions and consistent launch behavior across terminal/chat/resume flows.
+- Added a dedicated `Chat` settings category with color pickers for user/agent bubble background and text colors, plus a one-click reset to defaults.
+- Added a debug-only `Settings > Debug > Experimental > Chats` toggle (off by default) that gates chat creation surfaces in new thread/tab pickers; when off, chat options are hidden and single-surface labels collapse (for example `Codex` instead of `Codex (Terminal)`).
+
 ### Tab
 
 #### Features
-- Added `Restore Last Closed Tab` for tab recovery across all tab types (terminal, web, draft), backed by a per-thread in-memory history stack (max 10). Restore is available via `Cmd+Shift+T` and from the tab context menu when history is available.
+- Added `Restore Last Closed Tab` for tab recovery across all tab types (terminal, web, draft, chat), backed by a per-thread in-memory history stack (max 10). Restore is available via `Cmd+Shift+T` and from the tab context menu when history is available.
+- Added first-class GUI chat tabs with persisted message history, right/left chat bubbles (user/agent), per-message timestamps, and a dedicated in-chat `Scroll to bottom` control independent from terminal overlays.
+- Chat composer now defaults to a single-line input, auto-expands up to five lines, and then becomes scrollable; `Return` sends and `Cmd+Return` inserts a newline.
+- Chat message timestamps now render outside bubbles below the message row (user: right, agent: left), and the send action uses an icon button.
+- Chat tabs now persist unsent composer draft text per tab so switching tabs and relaunching the app restores in-progress input.
 
 #### Bug Fixes
 - Fixed web and draft tabs not reliably accepting keyboard focus after selection, so in-app chat pages and draft prompts can be clicked and typed into normally.
 - Refined tab context-menu grouping and availability rules: `Export as Markdown...` now sits directly under `Continue in...`, followed by a grouped session-actions block (`Resume Agent Session in New Tab`, `Restore Last Closed Tab`, `Session` submenu) separated from transfer actions. `Resume Agent Session in New Tab` is now shown only when the tab has a real resumable session ID, and `Restore Last Closed Tab` is shown only when restore history exists.
+- Fixed chat-tab `Session` context menu behavior: chat tabs now expose session identity + copy actions (without tmux-only actions like keep-alive/kill), matching terminal-tab affordances safely for non-tmux tabs.
+- Fixed chat in-progress indicator bubble visuals: the loader now stays a stable rounded square on the app background with a traveling border animation (instead of flashing) and dimmed `Working...` text for better contrast.
+- Fixed Codex chat slash-command behavior in GUI chat tabs by limiting autocomplete to supported commands and handling `/help`, `/clear`, `/model`, and `/effort` locally.
+- Fixed chat tab persistence reliability across backups/downgrades: chat tabs are now mirrored to a dedicated `chat-tabs.json` sidecar and recovered automatically when inline `threads.json` chat-tab payloads are missing.
+- Fixed chat tab request interruption ergonomics: `Esc` and `Ctrl+C` now cancel an in-flight chat request directly from the composer, and duplicate sends while a request is running are blocked.
+- Fixed drag-and-drop attachments in chat tabs inserting filesystem paths into the input field. Dropped files/images now attach as draft thumbnails from the composer or main chat surface.
+- Fixed chat composer focus loss that could block typing after tab interactions/background clicks; the composer now uses the native text view text system.
+- Fixed Codex app-server chat stalls where protocol-level error/failed-turn notifications were not surfaced, leaving turns looking stuck after partial output.
+
 ## 1.6.1 - 2026-04-18
 
 

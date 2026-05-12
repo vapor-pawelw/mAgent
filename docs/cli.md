@@ -202,14 +202,17 @@ Must be run from within a mAgent-managed tmux session.
 
 ### send-prompt
 
-Send a prompt to a thread's agent.
+Send a prompt to a thread tab (terminal agent tab or chat tab).
 
 ```bash
 magent-cli send-prompt --thread <name> --prompt <text>
 magent-cli send-prompt --thread <name> --prompt-file <path>
+magent-cli send-prompt --thread <name> --session <session-or-chat-id> --prompt <text>
+magent-cli send-prompt --thread <name> --index <n> --prompt <text>
 ```
 
 Use `--prompt-file` for multi-line prompts or text with special characters (quotes, dashes, newlines) to avoid shell escaping issues.
+When `--session`/`--index` is omitted, Magent targets the first agent terminal tab; if the thread has no terminal tabs, it falls back to the first chat tab.
 
 ### auto-rename-thread
 
@@ -420,17 +423,33 @@ Spaces and other non-RFC characters must be percent-encoded (`%20`, etc.) — `U
 
 ### list-tabs
 
-List all tabs in a thread, in the same order as the GUI tab strip (terminal, web, draft).
-Each row includes `tabType` (`terminal`, `web`, `draft`) and `sessionName` (for web/draft this is the tab identifier).
+List all tabs in a thread, in the same order as the GUI tab strip (terminal, web, draft, chat).
+Each row includes `tabType` (`terminal`, `web`, `draft`, `chat`) and `sessionName` (for web/draft/chat this is the tab identifier).
 
 ```bash
 magent-cli list-tabs --thread <name>
 magent-cli list-tabs --thread-id <id>
 ```
 
+### read-tab
+
+Read tab transcript content using a unified API:
+- terminal tabs: tmux capture output
+- chat tabs: persisted chat messages
+
+```bash
+magent-cli read-tab --thread <name> --index <n>
+magent-cli read-tab --thread <name> --session <session-or-chat-id>
+magent-cli read-tab --thread <name> --session <id> --limit <n>
+magent-cli read-tab --thread <name> --session <id> --json
+```
+
+By default `read-tab` prints plain text (`transcript.content`) for quick reading.
+Use `--json` for structured output (`source`, `chatMessages`, timestamps, etc.).
+
 ### close-tab
 
-Close a tab by index or session name. Works for terminal, web, and draft tabs.
+Close a tab by index or session name. Works for terminal, web, draft, and chat tabs.
 Cannot close the last tab — use `archive-thread` or `delete-thread` instead.
 
 ```bash
@@ -442,6 +461,7 @@ magent-cli close-tab --thread <name> --session <session-name>
 
 Rename an existing tab in a thread. For terminal/agent tabs, target by session name or index from `list-tabs`.
 For web tabs created via CLI, use the `tab.sessionName` identifier returned by `create-web-tab` with `--session`.
+For chat tabs, use the chat tab identifier from `list-tabs` with `--session`.
 Draft tabs cannot be renamed.
 
 ```bash

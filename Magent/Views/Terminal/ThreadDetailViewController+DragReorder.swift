@@ -187,6 +187,17 @@ extension ThreadDetailViewController {
         }
         thread.persistedWebTabs = newPersistedWebTabs
         threadManager.updatePersistedWebTabs(for: thread.id, webTabs: thread.persistedWebTabs)
+
+        // Persist chat tab order.
+        var newPersistedChatTabs: [PersistedChatTab] = []
+        for slot in tabSlots {
+            if case .chat(let identifier) = slot,
+               let persisted = thread.persistedChatTabs.first(where: { $0.identifier == identifier }) {
+                newPersistedChatTabs.append(persisted)
+            }
+        }
+        thread.persistedChatTabs = newPersistedChatTabs
+        threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)
     }
 }
 

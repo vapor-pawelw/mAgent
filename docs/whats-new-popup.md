@@ -14,6 +14,8 @@ by `WhatsNewService`, rendered by `WhatsNewSheetController`.
    `WhatsNewMultiWindows.imageset` for shape).
 3. Replace `WhatsNewContent.current` with the new `WhatsNewEntry`. One page is
    the norm; multi-page is supported (pager dots auto-shown when `pages > 1`).
+   Page body text supports inline markdown bold — use `**text**` to render
+   bold spans without showing the asterisks.
 4. Run `mise x -- tuist generate --no-open` only if you added/removed source
    files (asset catalog changes don't need it).
 

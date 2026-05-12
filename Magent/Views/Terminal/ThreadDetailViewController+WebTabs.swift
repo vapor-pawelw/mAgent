@@ -228,6 +228,7 @@ extension ThreadDetailViewController {
             tv.isHidden = true
         }
         hideActiveDraftTab()
+        hideActiveChatTab()
         for (_, placeholder) in detachedTabPlaceholders {
             placeholder.isHidden = true
         }

@@ -85,6 +85,7 @@ extension ThreadDetailViewController {
         for termView in terminalViews { termView.isHidden = true }
         hideActiveWebTab()
         hideActiveDraftTab()
+        hideActiveChatTab()
         for (_, placeholder) in detachedTabPlaceholders {
             placeholder.isHidden = true
         }
@@ -288,6 +289,7 @@ extension ThreadDetailViewController {
         for termView in terminalViews { termView.isHidden = true }
         hideActiveWebTab()
         hideActiveDraftTab()
+        hideActiveChatTab()
 
         ensureLoadingOverlay()
         loadingLabel?.stringValue = String(localized: .ThreadStrings.tabCreatingSession)

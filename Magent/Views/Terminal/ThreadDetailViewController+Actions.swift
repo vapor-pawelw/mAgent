@@ -832,6 +832,14 @@ extension ThreadDetailViewController {
                     modelId: result.modelId,
                     reasoningLevel: result.reasoningLevel
                 )
+            } else if result.agentSurface == .chat, let agentType = result.agentType {
+                let title = result.tabTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+                self.openChatTab(
+                    identifier: "chat:\(UUID().uuidString)",
+                    agentType: agentType,
+                    title: title?.isEmpty == false ? title! : "\(agentType.displayName) Chat",
+                    initialPrompt: result.prompt
+                )
             } else if let webURL = result.initialWebURL {
                 let title = result.tabTitle ?? webURL.host ?? "Web"
                 self.openWebTab(url: webURL, identifier: "web:\(UUID().uuidString)", title: title, iconType: .web)
@@ -973,7 +981,7 @@ extension ThreadDetailViewController {
                     let displayTerminalSlots: [String?] = self.tabSlots.map { slot in
                         switch slot {
                         case .terminal(let sessionName): sessionName
-                        case .web, .draft: nil
+                        case .web, .draft, .chat: nil
                         }
                     }
                     let placement = CreatedTerminalTabReconciler.resolvePlacement(
@@ -1109,6 +1117,15 @@ extension ThreadDetailViewController {
                 prompt: draft.prompt,
                 modelId: draft.modelId,
                 reasoningLevel: draft.reasoningLevel
+            )
+        case .chat(let chat):
+            openChatTab(
+                identifier: chat.identifier,
+                agentType: chat.agentType,
+                title: chat.title,
+                messages: chat.messages,
+                draftInput: chat.draftInput,
+                conversationSessionID: chat.conversationSessionID
             )
         }
     }
@@ -1313,7 +1330,8 @@ extension ThreadDetailViewController {
 
     func refreshTabStatusIndicators() {
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
-            if case .terminal(let sessionName) = slot {
+            switch slot {
+            case .terminal(let sessionName):
                 tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
                 tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
                 tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
@@ -1323,7 +1341,15 @@ extension ThreadDetailViewController {
                 tabItems[i].hasTerminalCorruption = threadManager.isTerminalCorrupted(sessionName: sessionName)
                 tabItems[i].showKeepAliveIcon = !thread.isKeepAlive
                     && thread.protectedTmuxSessions.contains(sessionName)
-            } else {
+            case .chat(let identifier):
+                tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(identifier)
+                tabItems[i].hasWaitingForInput = false
+                tabItems[i].hasBusy = isChatRequestRunning(identifier: identifier)
+                tabItems[i].hasRateLimit = false
+                tabItems[i].isRateLimitPropagated = false
+                tabItems[i].hasTerminalCorruption = false
+                tabItems[i].showKeepAliveIcon = false
+            case .web, .draft:
                 tabItems[i].hasUnreadCompletion = false
                 tabItems[i].hasWaitingForInput = false
                 tabItems[i].hasBusy = false
@@ -1392,7 +1418,7 @@ extension ThreadDetailViewController {
         case .projectDefault:
             let settings = PersistenceService.shared.loadSettings()
             startReview(using: defaultReviewAgentType(from: settings), usesMaxReasoning: usesMaxReasoning)
-        case .terminal, .web:
+        case .chat, .terminal, .web:
             return
         }
     }
@@ -1513,7 +1539,14 @@ extension ThreadDetailViewController {
     // MARK: - Context Transfer
 
     @objc func exportContextButtonTapped() {
-        exportTabContext(at: currentTabIndex)
+        switch currentSlot() {
+        case .terminal:
+            exportTabContext(at: currentTabIndex)
+        case .chat:
+            exportChatTabConversation(at: currentTabIndex)
+        case .web, .draft, .none:
+            break
+        }
     }
 
     @objc func togglePromptTOCTapped() {
@@ -1521,7 +1554,14 @@ extension ThreadDetailViewController {
     }
 
     @objc func continueInButtonTapped(_ sender: NSButton) {
-        presentContinueTabSheet(for: currentTabIndex)
+        switch currentSlot() {
+        case .terminal:
+            presentContinueTabSheet(for: currentTabIndex)
+        case .chat:
+            presentContinueChatTabSheet(for: currentTabIndex)
+        case .web, .draft, .none:
+            break
+        }
     }
 
     func continueTabInAgent(
@@ -1666,6 +1706,7 @@ extension ThreadDetailViewController: NSMenuDelegate {
             menuTitle: "New Tab",
             defaultAgentType: threadManager.effectiveAgentType(for: thread.projectId),
             activeAgents: settings.availableActiveAgents,
+            includeChatOption: settings.isChatsFeatureEnabled,
             target: self,
             action: #selector(addTabContextMenuItemSelected(_:))
         )
@@ -1680,6 +1721,16 @@ extension ThreadDetailViewController: NSMenuDelegate {
             let modelId = AgentLastSelectionStore.lastModel(for: agentType)
             let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
             addTab(using: agentType, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
+        case .chat(let agentType):
+            let modelId = AgentLastSelectionStore.lastModel(for: agentType)
+            let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
+            openChatTab(
+                identifier: "chat:\(UUID().uuidString)",
+                agentType: agentType,
+                title: "\(agentType.displayName) Chat",
+                modelId: modelId,
+                reasoningLevel: reasoning
+            )
         case .projectDefault:
             let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }

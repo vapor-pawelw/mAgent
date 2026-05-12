@@ -43,6 +43,15 @@ extension ThreadManager {
     }
 
     @MainActor
+    func markSessionCompletionDetected(threadId: UUID, sessionName: String, isActiveTab: Bool) {
+        sessionLifecycleService.markSessionCompletionDetected(
+            threadId: threadId,
+            sessionName: sessionName,
+            isActiveTab: isActiveTab
+        )
+    }
+
+    @MainActor
     func markSessionRateLimitSeen(threadId: UUID, sessionName: String) {
         sessionLifecycleService.markSessionRateLimitSeen(threadId: threadId, sessionName: sessionName)
     }

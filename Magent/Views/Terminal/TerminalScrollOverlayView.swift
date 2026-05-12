@@ -1,7 +1,7 @@
 import Cocoa
 import MagentCore
 
-private enum TerminalOverlayStyle {
+enum TerminalOverlayStyle {
     static let normalAlpha: CGFloat = 0.55
     static let hoverAlpha: CGFloat = 0.90
     static let opaqueAlpha: CGFloat = 1.0

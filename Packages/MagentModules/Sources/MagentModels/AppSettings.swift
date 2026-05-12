@@ -40,6 +40,12 @@ public enum ExternalLinkOpenPreference: String, Codable, Sendable, CaseIterable 
     }
 }
 
+public enum AgentPermissionMode: String, Codable, Sendable, CaseIterable {
+    case sandboxAuto
+    case askEveryTime
+    case unrestricted
+}
+
 public nonisolated struct AgentLaunchPromptDraft: Codable, Sendable, Equatable {
     public var prompt: String
     public var description: String
@@ -84,6 +90,9 @@ public nonisolated struct AgentLaunchPromptDraft: Codable, Sendable, Equatable {
 public nonisolated struct AppSettings: Codable, Sendable {
     public static let defaultSlugPrompt = "Generate a short kebab-case slug (2-4 words) for a git branch name. Extract the core concept or feature — ignore filler words like 'I want', 'how do I', 'can you', etc. Bug reports, observations about broken behavior, and feature requests are all actionable — generate a slug for them."
     public static let defaultReviewPrompt = "Review the changes on this branch compared to {baseBranch}. Run `git diff $(git merge-base {baseBranch} HEAD)` to see all changes (committed and uncommitted) since this branch diverged. Also run `git log HEAD..{baseBranch} --oneline` to check if {baseBranch} has moved ahead, and flag any likely merge conflicts. Provide a thorough code review covering correctness, potential bugs, code style, and any suggestions for improvement."
+    public static let minChatFontSize: Double = 12
+    public static let maxChatFontSize: Double = 22
+    public static let defaultChatFontSize: Double = 14
 
     public var projects: [Project]
     public var activeAgents: [AgentType]
@@ -133,6 +142,11 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var showScrollToBottomIndicator: Bool
     public var showTerminalScrollOverlay: Bool
     public var showPromptTOCOverlay: Bool
+    public var chatUserBubbleColorHex: String?
+    public var chatUserTextColorHex: String?
+    public var chatAssistantBubbleColorHex: String?
+    public var chatAssistantTextColorHex: String?
+    public var chatFontSize: Double
     public var preserveAgentColorTheme: Bool
     public var rememberLastTypeSelection: Bool
     public var switchToNewlyCreatedThread: Bool
@@ -142,6 +156,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var aiRenameIcon: Bool
     public var aiRenameDescription: Bool
     public var aiRenameBranch: Bool
+    public var experimentalEnableChats: Bool
     public var experimentalEnableTabDetach: Bool
     public var keyBindings: KeyBindingSettings
 
@@ -194,6 +209,11 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showScrollToBottomIndicator: Bool = true,
         showTerminalScrollOverlay: Bool = true,
         showPromptTOCOverlay: Bool = true,
+        chatUserBubbleColorHex: String? = nil,
+        chatUserTextColorHex: String? = nil,
+        chatAssistantBubbleColorHex: String? = nil,
+        chatAssistantTextColorHex: String? = nil,
+        chatFontSize: Double = AppSettings.defaultChatFontSize,
         preserveAgentColorTheme: Bool = false,
         rememberLastTypeSelection: Bool = true,
         switchToNewlyCreatedThread: Bool = true,
@@ -203,6 +223,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         aiRenameIcon: Bool = true,
         aiRenameDescription: Bool = true,
         aiRenameBranch: Bool = true,
+        experimentalEnableChats: Bool = false,
         experimentalEnableTabDetach: Bool = false,
         keyBindings: KeyBindingSettings = KeyBindingSettings()
     ) {
@@ -254,6 +275,11 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.showScrollToBottomIndicator = showScrollToBottomIndicator
         self.showTerminalScrollOverlay = showTerminalScrollOverlay
         self.showPromptTOCOverlay = showPromptTOCOverlay
+        self.chatUserBubbleColorHex = chatUserBubbleColorHex
+        self.chatUserTextColorHex = chatUserTextColorHex
+        self.chatAssistantBubbleColorHex = chatAssistantBubbleColorHex
+        self.chatAssistantTextColorHex = chatAssistantTextColorHex
+        self.chatFontSize = min(max(chatFontSize, Self.minChatFontSize), Self.maxChatFontSize)
         self.preserveAgentColorTheme = preserveAgentColorTheme
         self.rememberLastTypeSelection = rememberLastTypeSelection
         self.switchToNewlyCreatedThread = switchToNewlyCreatedThread
@@ -263,6 +289,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.aiRenameIcon = aiRenameIcon
         self.aiRenameDescription = aiRenameDescription
         self.aiRenameBranch = aiRenameBranch
+        self.experimentalEnableChats = experimentalEnableChats
         self.experimentalEnableTabDetach = experimentalEnableTabDetach
         self.keyBindings = keyBindings
     }
@@ -320,6 +347,12 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showScrollToBottomIndicator = try container.decodeIfPresent(Bool.self, forKey: .showScrollToBottomIndicator) ?? true
         showTerminalScrollOverlay = try container.decodeIfPresent(Bool.self, forKey: .showTerminalScrollOverlay) ?? true
         showPromptTOCOverlay = try container.decodeIfPresent(Bool.self, forKey: .showPromptTOCOverlay) ?? true
+        chatUserBubbleColorHex = try container.decodeIfPresent(String.self, forKey: .chatUserBubbleColorHex)
+        chatUserTextColorHex = try container.decodeIfPresent(String.self, forKey: .chatUserTextColorHex)
+        chatAssistantBubbleColorHex = try container.decodeIfPresent(String.self, forKey: .chatAssistantBubbleColorHex)
+        chatAssistantTextColorHex = try container.decodeIfPresent(String.self, forKey: .chatAssistantTextColorHex)
+        let decodedChatFontSize = try container.decodeIfPresent(Double.self, forKey: .chatFontSize) ?? Self.defaultChatFontSize
+        chatFontSize = min(max(decodedChatFontSize, Self.minChatFontSize), Self.maxChatFontSize)
         preserveAgentColorTheme = try container.decodeIfPresent(Bool.self, forKey: .preserveAgentColorTheme) ?? false
         rememberLastTypeSelection = try container.decodeIfPresent(Bool.self, forKey: .rememberLastTypeSelection) ?? true
         switchToNewlyCreatedThread = try container.decodeIfPresent(Bool.self, forKey: .switchToNewlyCreatedThread) ?? true
@@ -329,6 +362,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         aiRenameIcon = try container.decodeIfPresent(Bool.self, forKey: .aiRenameIcon) ?? true
         aiRenameDescription = try container.decodeIfPresent(Bool.self, forKey: .aiRenameDescription) ?? true
         aiRenameBranch = try container.decodeIfPresent(Bool.self, forKey: .aiRenameBranch) ?? true
+        experimentalEnableChats = try container.decodeIfPresent(Bool.self, forKey: .experimentalEnableChats) ?? false
         experimentalEnableTabDetach = try container.decodeIfPresent(Bool.self, forKey: .experimentalEnableTabDetach) ?? false
         keyBindings = try container.decodeIfPresent(KeyBindingSettings.self, forKey: .keyBindings) ?? KeyBindingSettings()
     }
@@ -384,6 +418,11 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(showScrollToBottomIndicator, forKey: .showScrollToBottomIndicator)
         try container.encode(showTerminalScrollOverlay, forKey: .showTerminalScrollOverlay)
         try container.encode(showPromptTOCOverlay, forKey: .showPromptTOCOverlay)
+        try container.encodeIfPresent(chatUserBubbleColorHex, forKey: .chatUserBubbleColorHex)
+        try container.encodeIfPresent(chatUserTextColorHex, forKey: .chatUserTextColorHex)
+        try container.encodeIfPresent(chatAssistantBubbleColorHex, forKey: .chatAssistantBubbleColorHex)
+        try container.encodeIfPresent(chatAssistantTextColorHex, forKey: .chatAssistantTextColorHex)
+        try container.encode(chatFontSize, forKey: .chatFontSize)
         try container.encode(preserveAgentColorTheme, forKey: .preserveAgentColorTheme)
         try container.encode(rememberLastTypeSelection, forKey: .rememberLastTypeSelection)
         try container.encode(switchToNewlyCreatedThread, forKey: .switchToNewlyCreatedThread)
@@ -393,6 +432,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(aiRenameIcon, forKey: .aiRenameIcon)
         try container.encode(aiRenameDescription, forKey: .aiRenameDescription)
         try container.encode(aiRenameBranch, forKey: .aiRenameBranch)
+        try container.encode(experimentalEnableChats, forKey: .experimentalEnableChats)
         try container.encode(experimentalEnableTabDetach, forKey: .experimentalEnableTabDetach)
         try container.encode(keyBindings, forKey: .keyBindings)
     }
@@ -462,9 +502,42 @@ public nonisolated struct AppSettings: Codable, Sendable {
 #endif
     }
 
+    public var isChatsFeatureEnabled: Bool {
+#if DEBUG
+        experimentalEnableChats
+#else
+        false
+#endif
+    }
+
     public var availableActiveAgents: [AgentType] {
         var seen = Set<AgentType>()
         return activeAgents.filter { seen.insert($0).inserted }
+    }
+
+    public var agentPermissionMode: AgentPermissionMode {
+        get {
+            if agentSkipPermissions {
+                return .unrestricted
+            }
+            if agentSandboxEnabled {
+                return .sandboxAuto
+            }
+            return .askEveryTime
+        }
+        set {
+            switch newValue {
+            case .sandboxAuto:
+                agentSandboxEnabled = true
+                agentSkipPermissions = false
+            case .askEveryTime:
+                agentSandboxEnabled = false
+                agentSkipPermissions = false
+            case .unrestricted:
+                agentSandboxEnabled = false
+                agentSkipPermissions = true
+            }
+        }
     }
 
     public var effectiveGlobalDefaultAgentType: AgentType? {
@@ -483,16 +556,24 @@ public nonisolated struct AppSettings: Codable, Sendable {
         switch agentType {
         case .claude:
             // Use `command claude` to bypass any shell function wrappers (same as codex).
-            return agentSkipPermissions ? "command claude --dangerously-skip-permissions" : "command claude"
+            switch agentPermissionMode {
+            case .unrestricted:
+                return "command claude --dangerously-skip-permissions"
+            case .sandboxAuto:
+                return "command claude --permission-mode auto"
+            case .askEveryTime:
+                return "command claude"
+            }
         case .codex:
             // Use `command codex` to bypass any shell function wrappers (e.g. ones that
             // inject --dangerously-bypass-approvals-and-sandbox) which would conflict with
             // our explicit flags like --yolo (an alias for the same flag in newer codex).
-            if agentSkipPermissions {
+            switch agentPermissionMode {
+            case .unrestricted:
                 return "command codex --yolo"
-            } else if agentSandboxEnabled {
+            case .sandboxAuto:
                 return "command codex --full-auto"
-            } else {
+            case .askEveryTime:
                 return "command codex"
             }
         case .custom:
@@ -567,6 +648,11 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case showScrollToBottomIndicator
         case showTerminalScrollOverlay
         case showPromptTOCOverlay
+        case chatUserBubbleColorHex
+        case chatUserTextColorHex
+        case chatAssistantBubbleColorHex
+        case chatAssistantTextColorHex
+        case chatFontSize
         case preserveAgentColorTheme
         case rememberLastTypeSelection
         case switchToNewlyCreatedThread
@@ -576,6 +662,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case aiRenameIcon
         case aiRenameDescription
         case aiRenameBranch
+        case experimentalEnableChats
         case experimentalEnableTabDetach
         case keyBindings
 

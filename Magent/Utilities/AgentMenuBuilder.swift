@@ -22,6 +22,7 @@ enum AgentMenuBuilder {
         defaultAgentType: AgentType?,
         activeAgents: [AgentType],
         includeTerminal: Bool = true,
+        includeChatOption: Bool = true,
         target: AnyObject,
         action: Selector,
         extraData: [String: String] = [:]
@@ -47,7 +48,6 @@ enum AgentMenuBuilder {
         }
 
         for agent in sortedAgents {
-            let isDefault = agent == defaultAgentType
             let modelId = AgentLastSelectionStore.lastModel(for: agent)
             let modelLabel = modelId.flatMap { id in
                 AgentModelsService.shared.config(for: agent)?.models.first(where: { $0.id == id })?.label
@@ -67,20 +67,26 @@ enum AgentMenuBuilder {
                 details.append(reasoning.lowercased())
             }
 
-            let agentName = TmuxSessionNaming.defaultTabDisplayName(for: agent)
-            let baseName = details.isEmpty
-                ? agentName
-                : "\(agentName) (\(details.joined(separator: ", ")))"
-            let title = isDefault ? "\(baseName) (Default)" : baseName
+            for surface in agent.supportedSurfaces(chatsEnabled: includeChatOption) {
+                let isDefault = agent == defaultAgentType && surface == agent.defaultSurface
+                let baseAgentName = TmuxSessionNaming.defaultTabDisplayName(for: agent)
+                let needsSurfaceSuffix = agent.supportedSurfaces(chatsEnabled: includeChatOption).count > 1
+                let agentName = needsSurfaceSuffix ? "\(baseAgentName) (\(surface.displayName))" : baseAgentName
+                let baseName = details.isEmpty
+                    ? agentName
+                    : "\(agentName) (\(details.joined(separator: ", ")))"
+                let title = isDefault ? "\(baseName) (Default)" : baseName
 
-            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-            item.target = target
-            let mode = isDefault ? "default" : "agent"
-            item.representedObject = extraData.merging([
-                "mode": mode,
-                "agentRaw": agent.rawValue,
-            ]) { _, new in new }
-            menu.addItem(item)
+                let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+                item.target = target
+                let mode = isDefault ? "default" : "agent"
+                item.representedObject = extraData.merging([
+                    "mode": mode,
+                    "agentRaw": agent.rawValue,
+                    "surface": surface.rawValue,
+                ]) { _, new in new }
+                menu.addItem(item)
+            }
         }
 
         if includeTerminal, !menu.items.isEmpty {
@@ -105,6 +111,7 @@ enum AgentMenuBuilder {
         enum Mode {
             case projectDefault
             case agent(AgentType)
+            case chat(AgentType)
             case terminal
             case web
         }
@@ -120,7 +127,11 @@ enum AgentMenuBuilder {
             return Selection(mode: .terminal, data: data)
         case "agent":
             let raw = data["agentRaw"] ?? ""
-            return Selection(mode: .agent(AgentType(rawValue: raw) ?? .claude), data: data)
+            let agent = AgentType(rawValue: raw) ?? .claude
+            if data["surface"] == AgentSurface.chat.rawValue {
+                return Selection(mode: .chat(agent), data: data)
+            }
+            return Selection(mode: .agent(agent), data: data)
         case "web":
             return Selection(mode: .web, data: data)
         default:
