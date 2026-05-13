@@ -6,6 +6,7 @@ SCHEME="${MAGENT_SCHEME:-Magent}"
 CONFIGURATION="${MAGENT_CONFIGURATION:-Debug}"
 APP_NAME="${MAGENT_APP_NAME:-Magent}"
 WORKSPACE="${MAGENT_WORKSPACE:-Magent.xcworkspace}"
+LOG_ROOT="${MAGENT_RELAUNCH_LOG_ROOT:-$HOME/Library/Logs/Magent/relaunch}"
 GHOSTTY_LIB_REL="Libraries/GhosttyKit.xcframework/macos-arm64_x86_64/libghostty.a"
 GHOSTTY_REF_METADATA_REL="Libraries/GhosttyKit.xcframework/.ghostty-ref"
 PINNED_GHOSTTY_REF="${MAGENT_GHOSTTY_REF:-v1.3.1}"
@@ -88,6 +89,98 @@ verify_launched_binary() {
     echo "  $expected_binary" >&2
     return 1
   fi
+}
+
+create_run_log_dir() {
+  local timestamp run_dir
+  timestamp="$(date +"%Y%m%d-%H%M%S")"
+  run_dir="$LOG_ROOT/$timestamp"
+  mkdir -p "$run_dir"
+  ln -sfn "$run_dir" "$LOG_ROOT/latest"
+  printf '%s\n' "$run_dir"
+}
+
+write_launch_metadata() {
+  local run_dir="$1"
+  local app_path="$2"
+  local binary_path="$3"
+  {
+    echo "timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    echo "repo=$(pwd)"
+    echo "branch=$(git branch --show-current 2>/dev/null || true)"
+    echo "head=$(git rev-parse HEAD 2>/dev/null || true)"
+    echo "scheme=$SCHEME"
+    echo "configuration=$CONFIGURATION"
+    echo "app_path=$app_path"
+    echo "binary_path=$binary_path"
+    echo "log_dir=$run_dir"
+    echo
+    echo "git status:"
+    git status --short --branch 2>/dev/null || true
+  } >"$run_dir/metadata.txt"
+}
+
+start_unified_log_capture() {
+  local run_dir="$1"
+  local predicate
+  predicate="process == \"$APP_NAME\" OR process == \"com.apple.WebKit.WebContent\" OR eventMessage CONTAINS[c] \"DiffViewer\" OR eventMessage CONTAINS[c] \"DiffPanel\" OR eventMessage CONTAINS[c] \"DiffRenderer\" OR eventMessage CONTAINS[c] \"CRASH\""
+  log stream --style compact --level debug --predicate "$predicate" >"$run_dir/unified.log" 2>&1 &
+  printf '%s\n' "$!"
+}
+
+monitor_launched_app() {
+  local binary_path="$1"
+  local log_pid="$2"
+  local run_dir="$3"
+  local start_epoch="$4"
+
+  (
+    set +e
+    MAGENT_RELAUNCH_LOG_DIR="$run_dir" "$binary_path" >"$run_dir/stdout-stderr.log" 2>&1 &
+    local app_pid=$!
+    echo "$app_pid" >"$run_dir/pid.txt"
+
+    wait "$app_pid"
+    local exit_code=$?
+    local ended_at
+    ended_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    {
+      echo "ended_at=$ended_at"
+      echo "exit_code=$exit_code"
+    } >"$run_dir/exit.txt"
+
+    sleep 2
+
+    log show --style compact --info --debug --start "@$start_epoch" \
+      --predicate "process == \"$APP_NAME\" OR process == \"com.apple.WebKit.WebContent\" OR eventMessage CONTAINS[c] \"DiffViewer\" OR eventMessage CONTAINS[c] \"DiffPanel\" OR eventMessage CONTAINS[c] \"DiffRenderer\" OR eventMessage CONTAINS[c] \"CRASH\"" \
+      >"$run_dir/unified-after-exit.log" 2>&1
+
+    find "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports \
+      -maxdepth 1 -type f -newer "$run_dir/metadata.txt" \
+      \( -iname "*$APP_NAME*" -o -iname "*magent*" -o -iname "JetsamEvent-*.ips" \) \
+      -print -exec cp {} "$run_dir/" \; >"$run_dir/diagnostic-reports.txt" 2>&1
+
+    kill "$log_pid" >/dev/null 2>&1 || true
+  ) &
+}
+
+launch_with_logging() {
+  local app_path="$1"
+  local binary_path="$2"
+  local run_dir="${3:-}"
+  local log_pid start_epoch
+
+  if [[ -z "$run_dir" ]]; then
+    run_dir="$(create_run_log_dir)"
+  fi
+  write_launch_metadata "$run_dir" "$app_path" "$binary_path"
+  start_epoch="$(date +%s)"
+  log_pid="$(start_unified_log_capture "$run_dir")"
+
+  echo "Logs: $run_dir"
+  echo "Launching $binary_path..."
+  echo "$log_pid" >"$run_dir/log-stream.pid"
+  monitor_launched_app "$binary_path" "$log_pid" "$run_dir" "$start_epoch"
 }
 
 refresh_workspace_with_tuist() {
@@ -174,7 +267,6 @@ ensure_build_prerequisites() {
 main() {
   require_cmd xcodebuild
   require_cmd sed
-  require_cmd open
   require_cmd pgrep
 
   local root build_dir app_path binary_path
@@ -192,8 +284,13 @@ main() {
   binary_path="$app_path/Contents/MacOS/$APP_NAME"
 
   echo "Build products: $build_dir"
+  local run_dir
+  run_dir="$(create_run_log_dir)"
+  write_launch_metadata "$run_dir" "$app_path" "$binary_path"
+
+  echo "Logs: $run_dir"
   echo "Building $SCHEME ($CONFIGURATION)..."
-  xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration "$CONFIGURATION" build
+  xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration "$CONFIGURATION" build 2>&1 | tee "$run_dir/build.log"
 
   if [[ ! -d "$app_path" ]]; then
     echo "Built app not found at: $app_path" >&2
@@ -204,11 +301,7 @@ main() {
   killall "$APP_NAME" 2>/dev/null || true
   wait_for_app_exit
 
-  echo "Launching $app_path..."
-  if ! open -n "$app_path"; then
-    echo "open failed, launching binary directly..."
-    "$binary_path" >/tmp/magent-relaunch.log 2>&1 &
-  fi
+  launch_with_logging "$app_path" "$binary_path" "$run_dir"
 
   sleep 1
   verify_launched_binary "$binary_path"
