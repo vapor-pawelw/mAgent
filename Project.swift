@@ -63,6 +63,7 @@ let project = Project(
                 "Magent/Resources/Assets.xcassets",
                 "Magent/Resources/AppIcon.icon",
                 "Magent/Resources/**/*.xcstrings",
+                "Magent/Resources/DiffRenderer/dist/**",
                 "config/agent-models.json",
             ],
             entitlements: .file(path: "Magent/Magent.entitlements"),
