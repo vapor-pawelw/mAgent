@@ -9,6 +9,7 @@ extension ThreadDetailViewController {
     @objc func handleTabDrag(_ gesture: NSPanGestureRecognizer) {
         guard let draggedView = gesture.view as? TabItemView,
               let dragIndex = tabItems.firstIndex(where: { $0 === draggedView }) else { return }
+        guard dragIndex >= Self.fixedTabCount else { return }
 
         switch gesture.state {
         case .began:
@@ -23,8 +24,12 @@ extension ThreadDetailViewController {
             let draggedCenter = draggedView.frame.midX + translation.x
 
             // Only two drag groups: pinned and unpinned. All tab types mix freely.
-            let isPinned = dragIndex < pinnedCount
-            let rangeStart = isPinned ? 0 : pinnedCount
+            let isPinned = TabPinningState.isPinnedMovableIndex(
+                dragIndex,
+                pinnedBoundary: pinnedCount,
+                fixedCount: Self.fixedTabCount
+            )
+            let rangeStart = isPinned ? Self.fixedTabCount : max(pinnedCount, Self.fixedTabCount)
             let rangeEnd = isPinned ? pinnedCount : tabSlots.count
 
             // Check left neighbor
@@ -115,6 +120,7 @@ extension ThreadDetailViewController {
     func moveTab(from source: Int, to dest: Int) {
         guard source != dest else { return }
         guard source < tabSlots.count, dest < tabSlots.count else { return }
+        guard source >= Self.fixedTabCount, dest >= Self.fixedTabCount else { return }
 
         let item = tabItems.remove(at: source)
         tabItems.insert(item, at: dest)
@@ -152,7 +158,11 @@ extension ThreadDetailViewController {
         for (i, slot) in tabSlots.enumerated() {
             if case .terminal(let name) = slot {
                 terminalOrder.append(name)
-                if i < pinnedCount {
+                if TabPinningState.isPinnedMovableIndex(
+                    i,
+                    pinnedBoundary: pinnedCount,
+                    fixedCount: Self.fixedTabCount
+                ) {
                     pinnedSessions.append(name)
                 }
             }
@@ -180,7 +190,11 @@ extension ThreadDetailViewController {
         for (i, slot) in tabSlots.enumerated() {
             if case .web(let identifier) = slot {
                 if var persisted = thread.persistedWebTabs.first(where: { $0.identifier == identifier }) {
-                    persisted.isPinned = (i < pinnedCount)
+                    persisted.isPinned = TabPinningState.isPinnedMovableIndex(
+                        i,
+                        pinnedBoundary: pinnedCount,
+                        fixedCount: Self.fixedTabCount
+                    )
                     newPersistedWebTabs.append(persisted)
                 }
             }

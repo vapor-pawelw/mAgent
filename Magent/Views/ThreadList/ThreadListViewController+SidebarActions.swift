@@ -1307,6 +1307,7 @@ extension ThreadListViewController {
             let hasMoreCommits: Bool
             let baseBranch: String?
             let upstreamStatus: BranchUpstreamStatus
+            let diffFingerprint: String
 
             if current.isMain {
                 baseBranch = nil
@@ -1316,12 +1317,17 @@ extension ThreadListViewController {
                     limit: commitLimit + 1
                 )
                 async let upstreamTask = GitService.shared.upstreamTrackingStatus(worktreePath: current.worktreePath)
+                async let fingerprintTask = GitService.shared.diffFingerprint(
+                    worktreePath: current.worktreePath,
+                    baseBranch: nil
+                )
                 entries = await entriesTask
                 allBranchEntries = entries // main thread: all changes = uncommitted
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
                 upstreamStatus = await upstreamTask
+                diffFingerprint = await fingerprintTask
             } else {
                 let resolvedBaseBranch = self.threadManager.resolveBaseBranch(for: current)
                 baseBranch = resolvedBaseBranch
@@ -1332,18 +1338,32 @@ extension ThreadListViewController {
                     limit: commitLimit + 1
                 )
                 async let upstreamTask = GitService.shared.upstreamTrackingStatus(worktreePath: current.worktreePath)
+                async let fingerprintTask = GitService.shared.diffFingerprint(
+                    worktreePath: current.worktreePath,
+                    baseBranch: resolvedBaseBranch
+                )
                 entries = await entriesTask
                 allBranchEntries = nil
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
                 upstreamStatus = await upstreamTask
+                diffFingerprint = await fingerprintTask
             }
 
             await MainActor.run {
                 guard (self.diffInspectionThreadID ?? self.selectedThreadID) == current.id else { return }
                 // Discard stale results: a newer refresh call was made after this task was spawned.
                 guard (self.diffPanelRefreshGeneration[current.id] ?? 0) == generation else { return }
+                self.threadManager.updateCurrentDiffFingerprint(for: current.id, fingerprint: diffFingerprint)
+                NotificationCenter.default.post(
+                    name: .magentDiffFileCountChanged,
+                    object: nil,
+                    userInfo: [
+                        "threadId": current.id,
+                        "fileCount": entries.count,
+                    ]
+                )
                 self.updateDiffContextThreadIndicator(for: current)
                 self.diffPanelView.update(
                     with: entries,

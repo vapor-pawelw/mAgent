@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import ShellInfra
 import MagentModels
 
@@ -887,6 +888,21 @@ public final class GitService: Sendable {
         return parseDiffEntries(numstatOutput: numstatOutput, statusMap: statusMap)
     }
 
+    /// Lists non-ignored untracked files below a worktree-relative directory path.
+    public func untrackedFiles(worktreePath: String, under relativeDirectoryPath: String) async -> [String] {
+        let result = await ShellExecutor.execute(
+            "git -c core.quotePath=false ls-files --others --exclude-standard -z -- \(shellQuote(relativeDirectoryPath))",
+            workingDirectory: worktreePath
+        )
+        guard result.exitCode == 0 else { return [] }
+
+        return result.stdout
+            .split(separator: "\0")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     /// Returns the full unified diff output comparing the worktree to its base branch.
     public func diffContent(worktreePath: String, baseBranch: String) async -> String? {
         guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return nil }
@@ -958,6 +974,20 @@ public final class GitService: Sendable {
 
         let combined = diffResult.stdout + untrackedDiff
         return combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : combined
+    }
+
+    /// Stable fingerprint for the current thread diff state.
+    /// Uses the same content surface as the diff viewer (including untracked pseudo-diffs).
+    public func diffFingerprint(worktreePath: String, baseBranch: String?) async -> String {
+        let content: String?
+        if let baseBranch {
+            content = await diffContent(worktreePath: worktreePath, baseBranch: baseBranch)
+        } else {
+            content = await workingTreeDiffContent(worktreePath: worktreePath)
+        }
+        let payload = content ?? ""
+        let digest = SHA256.hash(data: Data(payload.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     /// Returns per-file diff stats for a single commit (files changed in that commit).

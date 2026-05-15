@@ -981,7 +981,7 @@ extension ThreadDetailViewController {
                     let displayTerminalSlots: [String?] = self.tabSlots.map { slot in
                         switch slot {
                         case .terminal(let sessionName): sessionName
-                        case .web, .draft, .chat: nil
+                        case .diff, .web, .draft, .chat: nil
                         }
                     }
                     let placement = CreatedTerminalTabReconciler.resolvePlacement(
@@ -1349,6 +1349,15 @@ extension ThreadDetailViewController {
                 tabItems[i].isRateLimitPropagated = false
                 tabItems[i].hasTerminalCorruption = false
                 tabItems[i].showKeepAliveIcon = false
+            case .diff:
+                tabItems[i].hasUnreadCompletion = false
+                tabItems[i].hasWaitingForInput = false
+                tabItems[i].hasBusy = false
+                tabItems[i].hasRateLimit = false
+                tabItems[i].isRateLimitPropagated = false
+                tabItems[i].hasTerminalCorruption = false
+                tabItems[i].showKeepAliveIcon = false
+                tabItems[i].hasUnreadDiff = isDiffUnread()
             case .web, .draft:
                 tabItems[i].hasUnreadCompletion = false
                 tabItems[i].hasWaitingForInput = false
@@ -1544,7 +1553,7 @@ extension ThreadDetailViewController {
             exportTabContext(at: currentTabIndex)
         case .chat:
             exportChatTabConversation(at: currentTabIndex)
-        case .web, .draft, .none:
+        case .diff, .web, .draft, .none:
             break
         }
     }
@@ -1559,7 +1568,7 @@ extension ThreadDetailViewController {
             presentContinueTabSheet(for: currentTabIndex)
         case .chat:
             presentContinueChatTabSheet(for: currentTabIndex)
-        case .web, .draft, .none:
+        case .diff, .web, .draft, .none:
             break
         }
     }

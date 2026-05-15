@@ -12,6 +12,7 @@ extension ThreadDetailViewController {
 
     func closeTab(at index: Int) {
         guard index < tabSlots.count else { return }
+        guard index >= Self.fixedTabCount else { return }
 
         switch tabSlots[index] {
         case .terminal(let sessionName):
@@ -67,12 +68,15 @@ extension ThreadDetailViewController {
             closeDraftTab(identifier: identifier)
         case .chat(let identifier):
             closeChatTab(identifier: identifier)
+        case .diff:
+            return
         }
     }
 
     /// Close a tab without showing a confirmation alert (Option+middle-click).
     func forceCloseTab(at index: Int) {
         guard index < tabSlots.count else { return }
+        guard index >= Self.fixedTabCount else { return }
 
         switch tabSlots[index] {
         case .terminal(let sessionName):
@@ -107,6 +111,8 @@ extension ThreadDetailViewController {
             closeDraftTab(identifier: identifier)
         case .chat(let identifier):
             removeChatTab(identifier: identifier)
+        case .diff:
+            return
         }
     }
 
@@ -160,6 +166,7 @@ extension ThreadDetailViewController {
             case .web(let id): webIdsToClose.append(id)
             case .draft(let id): draftIdsToClose.append(id)
             case .chat(let id): chatIdsToClose.append(id)
+            case .diff: break
             }
         }
         // Close draft tabs first (synchronous)
@@ -546,7 +553,8 @@ extension ThreadDetailViewController {
     // MARK: - Pin/Unpin
 
     func togglePin(at index: Int) {
-        if index < pinnedCount {
+        guard index >= Self.fixedTabCount else { return }
+        if TabPinningState.isPinnedMovableIndex(index, pinnedBoundary: pinnedCount, fixedCount: Self.fixedTabCount) {
             unpinTab(at: index)
         } else {
             pinTab(at: index)
@@ -554,17 +562,29 @@ extension ThreadDetailViewController {
     }
 
     private func pinTab(at index: Int) {
+        guard index >= Self.fixedTabCount else { return }
         guard index >= pinnedCount else { return }
         moveTab(from: index, to: pinnedCount)
         pinnedCount += 1
+        pinnedCount = TabPinningState.clampedPinnedBoundary(
+            pinnedCount,
+            fixedCount: Self.fixedTabCount,
+            totalCount: tabSlots.count
+        )
         rebindAllTabActions()
         rebuildTabBar()
         persistTabOrder()
     }
 
     private func unpinTab(at index: Int) {
+        guard index >= Self.fixedTabCount else { return }
         guard index < pinnedCount else { return }
         pinnedCount -= 1
+        pinnedCount = TabPinningState.clampedPinnedBoundary(
+            pinnedCount,
+            fixedCount: Self.fixedTabCount,
+            totalCount: tabSlots.count
+        )
         moveTab(from: index, to: pinnedCount)
         rebindAllTabActions()
         rebuildTabBar()

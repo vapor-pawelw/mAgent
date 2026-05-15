@@ -67,6 +67,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         didSet { updateAppearance() }
     }
 
+    var hasUnreadDiff: Bool = false {
+        didSet { updateAppearance() }
+    }
+
     var hasTerminalCorruption: Bool = false {
         didSet { updateIndicator() }
     }
@@ -78,6 +82,13 @@ final class TabItemView: NSView, NSMenuDelegate {
     var isDetached: Bool = false {
         didSet { updateAppearance() }
     }
+
+    var isUtilityTab: Bool = false {
+        didSet { updateAppearance() }
+    }
+    var suppressContextMenu: Bool = false
+    var suppressBulkCloseActions: Bool = false
+    var suppressCloseThisAction: Bool = false
 
     private func updateIndicator() {
         if hasTerminalCorruption {
@@ -368,6 +379,14 @@ final class TabItemView: NSView, NSMenuDelegate {
         }
     }
 
+    override func rightMouseDown(with event: NSEvent) {
+        if suppressContextMenu {
+            onSelect?()
+            return
+        }
+        super.rightMouseDown(with: event)
+    }
+
     @objc private func closeTapped() {
         onClose?()
     }
@@ -451,6 +470,9 @@ final class TabItemView: NSView, NSMenuDelegate {
         if hasUnreadRateLimit && !isSelected {
             titleColor = .systemRed
             titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        } else if hasUnreadDiff && !isSelected {
+            titleColor = NSColor(resource: .primaryBrand)
+            titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         } else if isSelected {
             titleColor = NSColor(resource: .textPrimary)
             titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
@@ -471,9 +493,18 @@ final class TabItemView: NSView, NSMenuDelegate {
         // when the window is in light mode.
         effectiveAppearance.performAsCurrentDrawingAppearance {
             if self.isSelected {
-                self.layer?.backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.18).cgColor
+                let alpha: CGFloat = self.isUtilityTab ? 0.12 : 0.18
+                self.layer?.backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(alpha).cgColor
             } else {
-                self.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.62).cgColor
+                let alpha: CGFloat = self.isUtilityTab ? 0.42 : 0.62
+                self.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(alpha).cgColor
+            }
+            if self.isUtilityTab {
+                self.layer?.borderWidth = 1
+                self.layer?.borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(self.isSelected ? 0.45 : 0.3).cgColor
+            } else {
+                self.layer?.borderWidth = 0
+                self.layer?.borderColor = NSColor.clear.cgColor
             }
         }
         titleLabel.textColor = titleColor
@@ -488,11 +519,16 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        if suppressContextMenu {
+            return
+        }
 
-        let pinTitle = showPinIcon ? "Unpin Tab" : "Pin Tab"
-        let pinItem = NSMenuItem(title: pinTitle, action: #selector(pinTapped), keyEquivalent: "")
-        pinItem.target = self
-        menu.addItem(pinItem)
+        if onPin != nil {
+            let pinTitle = showPinIcon ? "Unpin Tab" : "Pin Tab"
+            let pinItem = NSMenuItem(title: pinTitle, action: #selector(pinTapped), keyEquivalent: "")
+            pinItem.target = self
+            menu.addItem(pinItem)
+        }
 
         // Detach/Return actions
         if isDetached {
@@ -647,9 +683,11 @@ final class TabItemView: NSView, NSMenuDelegate {
         }
 
         // Close tabs section at the bottom — single separator before all close actions
-        menu.addItem(.separator())
+        if !suppressBulkCloseActions || !suppressCloseThisAction {
+            menu.addItem(.separator())
+        }
 
-        if hasTabsToRight || hasTabsToLeft {
+        if !suppressBulkCloseActions, hasTabsToRight || hasTabsToLeft {
             if hasTabsToRight {
                 let closeRightItem = NSMenuItem(
                     title: "Close Tabs to the Right",
@@ -686,8 +724,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         }
 
         // "Close this tab" — always the last option
-        let closeThisItem = NSMenuItem(title: "Close This Tab", action: #selector(closeTapped), keyEquivalent: "")
-        closeThisItem.target = self
-        menu.addItem(closeThisItem)
+        if !suppressCloseThisAction {
+            let closeThisItem = NSMenuItem(title: "Close This Tab", action: #selector(closeTapped), keyEquivalent: "")
+            closeThisItem.target = self
+            menu.addItem(closeThisItem)
+        }
     }
 }

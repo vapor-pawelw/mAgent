@@ -3,7 +3,7 @@
 ## User Behavior
 
 - In the sidebar `CHANGES` panel, single-clicking a file still selects it and opens the inline diff viewer for that path.
-- Added directories in the `CHANGES` panel now render with a folder icon, a trailing slash in the label, and a full-path tooltip on hover so they are easier to distinguish from files.
+- Added directories in the `CHANGES` panel now render with a folder icon, a trailing slash in the label, and a full-path tooltip on hover so they are easier to distinguish from files. Untracked directory rows are expandable and reveal non-ignored child files on demand.
 - The `CHANGES` panel `ⓘ` legend popover keeps consistent padding around every row instead of letting the first rows sit flush against the popover edge.
 - Inline diff rendering is handled by the bundled web renderer in a local `WKWebView`, so text selection and copy behavior are provided by WebKit.
 - Double-clicking a file opens the file with the system default macOS app.
@@ -23,8 +23,10 @@
 - Discard is only available for rows whose `workingStatus` is not `.committed`. Tracked staged/unstaged rows are reset to `HEAD` with `git restore --staged --worktree`; untracked rows are removed with `git clean -fd`. Committed rows intentionally have no discard action.
 - Bulk uncommitted-row discard uses the same underlying per-path `GitService.discardFile(...)` path (tracked paths as restore, untracked paths as clean), then triggers one panel refresh. If any path fails, show a warning banner with the failure count and still refresh so UI state converges to git state.
 - Directory detection is UI-side in `DiffPanelView`: treat a path as a directory when it ends in `/` or resolves to a directory under the selected worktree path. Untracked directory rows can otherwise look identical to files because Git status reports them as plain paths.
+- Expanding an untracked directory calls `GitService.untrackedFiles(worktreePath:under:)`, which uses `git ls-files --others --exclude-standard -z -- <dir>`. This keeps ignored files hidden, avoids filesystem-only scans, and preserves folder-level stage/discard actions on the parent row. Child rows are capped in the panel with a `+N more` footer for large directories.
 - The inline viewer is a local WebKit host for `Magent/Resources/DiffRenderer/dist`. Keep git/status/file-list behavior in Swift and pass unified patch text into the renderer. Core diff rendering must stay bundled and work offline; syntax-highlighting language modules may be lazily imported from a CDN after the diff is visible, and should fail back to plain text if the network is unavailable.
-- `InlineDiffViewController` keeps the `WKWebView` transparent behind an AppKit loading overlay until the renderer posts `rendered`. This prevents WebKit's initial blank page from flashing white and keeps the loading state aligned with the app theme.
+- `InlineDiffViewController` keeps the `WKWebView` hidden behind an AppKit loading overlay until the renderer posts `rendered`. It also sets the WebKit layer/under-page color and injects a document-start background/theme script before loading `index.html`; without all three layers, WebKit can briefly flash its default white page before renderer CSS executes.
+- The renderer should not show raw `@@ -a,b +c,d @@` hunk headers as primary UI. Parse them into friendly hunk headers with before/after line ranges, keep the raw header only as tooltip/debug metadata, and allow each hunk to collapse independently.
 - The renderer source lives beside the built bundle in `Magent/Resources/DiffRenderer/src`. After changing it, run `npm install` if dependencies changed, then `npm run build`, and commit the updated `dist` assets. `node_modules` must remain untracked.
 - The legend popover in `DiffPanelView.makeLegendViewController()` should use explicit container-to-stack inset constraints for padding. Relying on `NSStackView.edgeInsets` alone can render inconsistently in AppKit popovers.
 

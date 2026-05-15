@@ -738,6 +738,31 @@ final class SessionLifecycleService {
         try? persistence.saveActiveThreads(store.threads)
     }
 
+    func updateCurrentDiffFingerprint(for threadId: UUID, fingerprint: String?) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        if store.threads[index].currentDiffFingerprint == fingerprint { return }
+        store.threads[index].currentDiffFingerprint = fingerprint
+        try? persistence.saveActiveThreads(store.threads)
+        onThreadsChanged?()
+    }
+
+    func markDiffSeen(for threadId: UUID) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        let current = store.threads[index].currentDiffFingerprint
+        if store.threads[index].lastSeenDiffFingerprint == current { return }
+        store.threads[index].lastSeenDiffFingerprint = current
+        try? persistence.saveActiveThreads(store.threads)
+        onThreadsChanged?()
+    }
+
+    func updateDiffReviewedFileSignatures(for threadId: UUID, signatures: [String: String]) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        if store.threads[index].diffReviewedFileSignatures == signatures { return }
+        store.threads[index].diffReviewedFileSignatures = signatures
+        try? persistence.saveActiveThreads(store.threads)
+        onThreadsChanged?()
+    }
+
     @MainActor
     func setActiveThread(_ threadId: UUID?) {
         store.activeThreadId = threadId

@@ -18,8 +18,8 @@ struct DiffRendererResourceTests {
     func builtRendererUsesRelativeFlatAssetURLsForBundleLoading() throws {
         let html = try String(contentsOf: rendererFile("dist/index.html"), encoding: .utf8)
 
-        #expect(html.contains("src=\"./index-"))
-        #expect(html.contains("href=\"./index-"))
+        #expect(html.contains("src=\"./index.js\""))
+        #expect(html.contains("href=\"./index.css\""))
         #expect(!html.contains("src=\"/assets/"))
         #expect(!html.contains("href=\"/assets/"))
         #expect(!html.contains("src=\"./assets/"))
@@ -63,5 +63,34 @@ struct DiffRendererResourceTests {
         #expect(javascript.contains("https://esm.sh/highlight.js@11.11.1/lib/core"))
         #expect(javascript.contains("https://esm.sh/highlight.js@11.11.1/lib/languages/"))
         #expect(!packageJSON.contains("\"highlight.js\""))
+    }
+
+    @Test
+    func builtRendererUsesFriendlyCollapsibleHunkHeaders() throws {
+        let builtFiles = try FileManager.default.contentsOfDirectory(
+            at: rendererFile("dist"),
+            includingPropertiesForKeys: nil
+        )
+        let javascript = try builtFiles
+            .filter { $0.pathExtension == "js" }
+            .map { try String(contentsOf: $0, encoding: .utf8) }
+            .joined(separator: "\n")
+        let css = try builtFiles
+            .filter { $0.pathExtension == "css" }
+            .map { try String(contentsOf: $0, encoding: .utf8) }
+            .joined(separator: "\n")
+
+        #expect(javascript.contains("Edited around line"))
+        #expect(javascript.contains("Added "))
+        #expect(javascript.contains("Removed "))
+        #expect(javascript.contains("hidden line"))
+        #expect(javascript.contains("startLine"))
+        #expect(javascript.contains("endLine"))
+        #expect(javascript.contains("replaceWith"))
+        #expect(!javascript.contains("Before:"))
+        #expect(!javascript.contains("After:"))
+        #expect(javascript.contains("hunk-chevron"))
+        #expect(javascript.contains("aria-expanded"))
+        #expect(css.contains(".hunk-title"))
     }
 }

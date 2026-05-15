@@ -114,21 +114,48 @@ extension ThreadDetailViewController {
             sv.removeFromSuperview()
         }
 
-        // Pinned tabs (any type)
-        for i in 0..<pinnedCount where i < tabItems.count {
+        let tabCount = tabItems.count
+        let fixedCount = min(Self.fixedTabCount, tabCount)
+        let pinnedUpperBound = min(max(pinnedCount, 0), tabCount)
+        let pinnedStart = min(fixedCount, pinnedUpperBound)
+        let unpinnedStart = min(max(pinnedUpperBound, fixedCount), tabCount)
+
+        // Fixed tabs always first.
+        for i in 0..<fixedCount {
+            tabItems[i].showPinIcon = false
+            tabBarStack.addArrangedSubview(tabItems[i])
+        }
+        if fixedCount > 0,
+           tabCount > fixedCount,
+           tabBarStack.arrangedSubviews.contains(tabItems[fixedCount - 1]) {
+            let anchor = tabItems[fixedCount - 1]
+            tabBarStack.setCustomSpacing(tabBarStack.spacing + 4, after: anchor)
+            tabBarStack.addArrangedSubview(fixedTabsSeparator)
+            tabBarStack.setCustomSpacing(tabBarStack.spacing + 4, after: fixedTabsSeparator)
+        }
+
+        // Pinned tabs (excluding fixed tabs)
+        for i in pinnedStart..<pinnedUpperBound {
             tabItems[i].showPinIcon = true
             tabBarStack.addArrangedSubview(tabItems[i])
         }
 
-        if pinnedCount > 0 && pinnedCount < tabItems.count {
+        if pinnedUpperBound > fixedCount && pinnedUpperBound < tabCount {
             // Extra 4 pt padding on each side of the separator (stack spacing = 4, so total gap = 8)
-            tabBarStack.setCustomSpacing(tabBarStack.spacing + 4, after: tabItems[pinnedCount - 1])
+            let anchor = tabItems[pinnedUpperBound - 1]
+            guard tabBarStack.arrangedSubviews.contains(anchor) else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.refreshTabScrollArrowsVisibility()
+                }
+                return
+            }
+            tabBarStack.setCustomSpacing(tabBarStack.spacing + 4, after: anchor)
             tabBarStack.addArrangedSubview(pinSeparator)
             tabBarStack.setCustomSpacing(tabBarStack.spacing + 4, after: pinSeparator)
         }
 
-        // Unpinned tabs (any type)
-        for i in pinnedCount..<tabItems.count {
+        // Unpinned tabs
+        for i in unpinnedStart..<tabCount {
             tabItems[i].showPinIcon = false
             tabBarStack.addArrangedSubview(tabItems[i])
         }
@@ -163,6 +190,22 @@ extension ThreadDetailViewController {
 
     func selectTab(at index: Int) {
         guard index >= 0, index < tabSlots.count, index < tabItems.count else { return }
+        let wasDiffTabSelected = currentTabIndex < tabSlots.count && {
+            if case .diff = tabSlots[currentTabIndex] { return true }
+            return false
+        }()
+        let isSelectingDiffTab: Bool = {
+            if case .diff = tabSlots[index] { return true }
+            return false
+        }()
+        if wasDiffTabSelected && !isSelectingDiffTab {
+            notifyDiffTabDidDeactivate()
+        }
+        if case .diff = tabSlots[index] {
+            // keep visible
+        } else {
+            setDiffViewerVisible(false)
+        }
 
         switch tabSlots[index] {
         case .terminal(let sessionName):
@@ -181,6 +224,8 @@ extension ThreadDetailViewController {
             selectDraftTab(identifier: identifier, displayIndex: index)
         case .chat(let identifier):
             selectChatTab(identifier: identifier, displayIndex: index)
+        case .diff:
+            selectDiffTab(displayIndex: index)
         }
     }
 
@@ -489,6 +534,7 @@ extension ThreadDetailViewController {
         let isTabDetachEnabled = settings.isTabDetachFeatureEnabled
         let canRestoreLastClosedTab = threadManager.hasClosedTabSnapshot(for: thread.id)
         let count = tabItems.count
+        let movableTabCount = max(0, count - Self.fixedTabCount)
 
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
             let item = tabItems[i]
@@ -498,16 +544,36 @@ extension ThreadDetailViewController {
             item.onPin = { [weak self] in self?.togglePin(at: i) }
             item.onCloseTabsToTheRight = { [weak self] in self?.closeTabsToTheRight(of: i) }
             item.onCloseTabsToTheLeft = { [weak self] in self?.closeTabsToTheLeft(of: i) }
-            item.tabIndex = i
-            item.totalTabCount = count
-            item.showCloseButton = true
-            item.showPinIcon = (i < pinnedCount)
+            item.tabIndex = max(0, i - Self.fixedTabCount)
+            item.totalTabCount = movableTabCount
+            item.showCloseButton = i >= Self.fixedTabCount
+            item.showPinIcon = TabPinningState.isPinnedMovableIndex(
+                i,
+                pinnedBoundary: pinnedCount,
+                fixedCount: Self.fixedTabCount
+            )
+            item.isUtilityTab = i < Self.fixedTabCount
+            item.suppressContextMenu = false
+            item.suppressBulkCloseActions = false
+            item.suppressCloseThisAction = false
             item.onRestoreLastClosedTab = canRestoreLastClosedTab ? { [weak self] in
                 self?.reopenLastClosedTab()
             } : nil
 
             switch slot {
             case .terminal(let sessionName):
+                let isPrimaryTerminal = i == 0
+                item.typeIcon.image = isPrimaryTerminal
+                    ? NSImage(systemSymbolName: "terminal.fill", accessibilityDescription: "Terminal")
+                    : nil
+                item.typeIcon.contentTintColor = .secondaryLabelColor
+                item.typeIcon.isHidden = !isPrimaryTerminal
+                if isPrimaryTerminal {
+                    item.suppressBulkCloseActions = true
+                    item.suppressCloseThisAction = true
+                    item.onPin = nil
+                    item.availableAgentsForContinue = []
+                }
                 let isPending = sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 if isPending {
                     item.showCloseButton = false
@@ -574,11 +640,23 @@ extension ThreadDetailViewController {
                     item.availableAgentsForContinue = settings.availableActiveAgents
                     item.showKeepAliveIcon = !thread.isKeepAlive
                         && thread.protectedTmuxSessions.contains(sessionName)
-                    item.typeIcon.image = isForwardedContinuation
-                        ? NSImage(systemSymbolName: "arrowshape.turn.up.forward", accessibilityDescription: "Forwarded continuation")
-                        : nil
-                    item.typeIcon.contentTintColor = .secondaryLabelColor
-                    item.typeIcon.isHidden = !isForwardedContinuation
+                    if !isPrimaryTerminal {
+                        item.typeIcon.image = isForwardedContinuation
+                            ? NSImage(systemSymbolName: "arrowshape.turn.up.forward", accessibilityDescription: "Forwarded continuation")
+                            : nil
+                        item.typeIcon.contentTintColor = .secondaryLabelColor
+                        item.typeIcon.isHidden = !isForwardedContinuation
+                    }
+                    if isPrimaryTerminal {
+                        item.onDetach = nil
+                        item.onRename = nil
+                        item.allowsDoubleClickRename = false
+                        item.onResumeAgentInNewTab = nil
+                        item.onContinueIn = nil
+                        item.onExportContext = nil
+                        item.onRestoreLastClosedTab = nil
+                        item.availableAgentsForContinue = []
+                    }
                 }
             case .web:
                 item.onRename = { [weak self] in self?.showWebTabRenameDialog(at: i) }
@@ -636,6 +714,28 @@ extension ThreadDetailViewController {
                 item.showsMinimalSessionMenu = true
                 item.availableAgentsForContinue = availableAgents
                 item.showKeepAliveIcon = false
+            case .diff:
+                item.showCloseButton = false
+                item.suppressContextMenu = true
+                item.typeIcon.image = NSImage(systemSymbolName: "doc.text.magnifyingglass", accessibilityDescription: "Diff")
+                item.typeIcon.contentTintColor = .secondaryLabelColor
+                item.typeIcon.isHidden = false
+                item.onRename = nil
+                item.allowsDoubleClickRename = false
+                item.onResumeAgentInNewTab = nil
+                item.onContinueIn = nil
+                item.onExportContext = nil
+                item.onRepairTerminal = nil
+                item.canRepairTerminal = false
+                item.onKeepAlive = nil
+                item.onKillSession = nil
+                item.onKillAllSessions = nil
+                item.onCopyTmuxSessionName = nil
+                item.tmuxSessionNameForMenu = nil
+                item.showsMinimalSessionMenu = false
+                item.availableAgentsForContinue = []
+                item.showKeepAliveIcon = false
+                item.hasUnreadDiff = isDiffUnread()
             }
         }
 
@@ -652,10 +752,24 @@ extension ThreadDetailViewController {
     }
 
     private func tooltipText(for slot: TabSlot, displayIndex: Int) -> String {
-        let pinned = displayIndex < pinnedCount ? "Yes" : "No"
+        let pinned = TabPinningState.isPinnedMovableIndex(
+            displayIndex,
+            pinnedBoundary: pinnedCount,
+            fixedCount: Self.fixedTabCount
+        ) ? "Yes" : "No"
 
         switch slot {
         case .terminal(let sessionName):
+            if displayIndex == 0 {
+                let keepAlive = thread.isKeepAlive
+                    ? "Thread-level"
+                    : (thread.protectedTmuxSessions.contains(sessionName) ? "Tab-level" : "No")
+                return [
+                    "Type: Terminal",
+                    "Session: \(sessionName)",
+                    "Keep Alive: \(keepAlive)",
+                ].joined(separator: "\n")
+            }
             let agentType = threadManager.agentType(for: thread, sessionName: sessionName)
             let typeText = agentType.map { "Terminal (\($0.displayName))" } ?? "Terminal"
             var statusBits: [String] = []
@@ -746,6 +860,12 @@ extension ThreadDetailViewController {
                 "Pinned: \(pinned)",
                 "Messages: \(messageCount)",
                 "Status: \(statusBits.joined(separator: ", "))",
+            ].joined(separator: "\n")
+        case .diff:
+            let unread = isDiffUnread() ? "updated since last view" : "up to date"
+            return [
+                "Type: Diff",
+                "Changes: \(unread)",
             ].joined(separator: "\n")
         }
     }

@@ -1191,6 +1191,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         }
         let selectionChanged = selectedThreadID != thread.id
         let resolved = recordSelectedThread(thread)
+        if selectionChanged,
+           let forcedThreadId = diffPanelForcedAllChangesThreadId,
+           forcedThreadId != resolved.id {
+            restoreDiffPanelTabAfterDiffForce(for: forcedThreadId)
+        }
         updateSelectedThreadJumpCapsuleVisibility()
         if selectionChanged {
             // New thread selected: delegate calls refreshDiffPanelForSelectedThread() which resets

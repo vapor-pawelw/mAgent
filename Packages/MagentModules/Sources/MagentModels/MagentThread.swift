@@ -435,6 +435,13 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var isSidebarHidden: Bool
     public var lastAgentCompletionAt: Date?
     public var unreadCompletionSessions: Set<String>
+    /// Persisted fingerprint of the latest known git diff state for this thread.
+    public var currentDiffFingerprint: String?
+    /// Persisted fingerprint last seen by the user in the Diff tab.
+    public var lastSeenDiffFingerprint: String?
+    /// Persisted per-file reviewed signatures for the Diff tab.
+    /// Key: normalized file path in diff; value: signature of the reviewed file diff chunk.
+    public var diffReviewedFileSignatures: [String: String]
     public var didAutoRenameFromFirstPrompt: Bool
     public var customTabNames: [String: String]
     /// Monotonic per-base counters for auto-deduplicated tab display names.
@@ -785,6 +792,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case lastSelectedTabIdentifier = "lastSelectedTmuxSessionName"
         case agentHasRun, isPinned, isFavorite, favoritedAt, isSidebarHidden, lastAgentCompletionAt
         case unreadCompletionSessions
+        case currentDiffFingerprint
+        case lastSeenDiffFingerprint
+        case diffReviewedFileSignatures
         case hasUnreadAgentCompletion // migration only
         case didAutoRenameFromFirstPrompt
         case customTabNames
@@ -839,6 +849,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isSidebarHidden: Bool = false,
         lastAgentCompletionAt: Date? = nil,
         unreadCompletionSessions: Set<String> = [],
+        currentDiffFingerprint: String? = nil,
+        lastSeenDiffFingerprint: String? = nil,
+        diffReviewedFileSignatures: [String: String] = [:],
         didAutoRenameFromFirstPrompt: Bool = false,
         customTabNames: [String: String] = [:],
         tabNameSuffixCounters: [String: Int] = [:],
@@ -888,6 +901,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.isSidebarHidden = isSidebarHidden
         self.lastAgentCompletionAt = lastAgentCompletionAt
         self.unreadCompletionSessions = unreadCompletionSessions
+        self.currentDiffFingerprint = currentDiffFingerprint
+        self.lastSeenDiffFingerprint = lastSeenDiffFingerprint
+        self.diffReviewedFileSignatures = diffReviewedFileSignatures
         self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
         self.customTabNames = customTabNames
         self.tabNameSuffixCounters = tabNameSuffixCounters
@@ -1075,6 +1091,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             let oldBool = try container.decodeIfPresent(Bool.self, forKey: .hasUnreadAgentCompletion) ?? false
             unreadCompletionSessions = oldBool ? Set(agentTmuxSessions) : []
         }
+        currentDiffFingerprint = try container.decodeIfPresent(String.self, forKey: .currentDiffFingerprint)
+        lastSeenDiffFingerprint = try container.decodeIfPresent(String.self, forKey: .lastSeenDiffFingerprint)
+        diffReviewedFileSignatures = try container.decodeIfPresent([String: String].self, forKey: .diffReviewedFileSignatures) ?? [:]
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -1124,6 +1143,11 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(isSidebarHidden, forKey: .isSidebarHidden)
         try container.encodeIfPresent(lastAgentCompletionAt, forKey: .lastAgentCompletionAt)
         try container.encode(unreadCompletionSessions, forKey: .unreadCompletionSessions)
+        try container.encodeIfPresent(currentDiffFingerprint, forKey: .currentDiffFingerprint)
+        try container.encodeIfPresent(lastSeenDiffFingerprint, forKey: .lastSeenDiffFingerprint)
+        if !diffReviewedFileSignatures.isEmpty {
+            try container.encode(diffReviewedFileSignatures, forKey: .diffReviewedFileSignatures)
+        }
         try container.encode(didAutoRenameFromFirstPrompt, forKey: .didAutoRenameFromFirstPrompt)
         if !customTabNames.isEmpty {
             try container.encode(customTabNames, forKey: .customTabNames)

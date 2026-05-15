@@ -44,6 +44,7 @@ let project = Project(
                 "Magent/Services/PullRequestService.swift",
                 "Magent/Services/RateLimitService.swift",
                 "Magent/Services/SidebarOrderingService.swift",
+                "Magent/Services/TabPinningState.swift",
                 "Magent/Services/TabNameAllocator.swift",
                 "Magent/Services/GitStateService.swift",
                 "Magent/Services/WorktreeService.swift",
@@ -127,6 +128,7 @@ let project = Project(
                 "Magent/Services/SessionRecreationAction.swift",
                 "Magent/Services/SessionRecreationService.swift",
                 "Magent/Services/TabNameAllocator.swift",
+                "Magent/Services/TabPinningState.swift",
                 "Tests/MagentTests/**",
             ],
             dependencies: [

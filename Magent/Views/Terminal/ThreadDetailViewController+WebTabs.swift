@@ -305,6 +305,11 @@ extension ThreadDetailViewController {
             tabItems.insert(item, at: insertIndex)
             tabSlots.insert(.web(identifier: persisted.identifier), at: insertIndex)
             pinnedCount += 1
+            pinnedCount = TabPinningState.clampedPinnedBoundary(
+                pinnedCount,
+                fixedCount: Self.fixedTabCount,
+                totalCount: tabSlots.count
+            )
         } else {
             insertIndex = tabItems.count
             tabItems.append(item)
@@ -333,7 +338,11 @@ extension ThreadDetailViewController {
                 url: webTabs[webIndex].url,
                 title: tabItems[displayIndex].titleLabel.stringValue,
                 iconType: webTabs[webIndex].iconType,
-                isPinned: displayIndex < pinnedCount,
+                isPinned: TabPinningState.isPinnedMovableIndex(
+                    displayIndex,
+                    pinnedBoundary: pinnedCount,
+                    fixedCount: Self.fixedTabCount
+                ),
                 customTitle: nil
             )
         threadManager.pushClosedTabSnapshot(.web(persistedSnapshot), for: thread.id)
@@ -344,7 +353,18 @@ extension ThreadDetailViewController {
         tabItems.remove(at: displayIndex)
         tabSlots.remove(at: displayIndex)
 
-        if displayIndex < pinnedCount { pinnedCount -= 1 }
+        if TabPinningState.isPinnedMovableIndex(
+            displayIndex,
+            pinnedBoundary: pinnedCount,
+            fixedCount: Self.fixedTabCount
+        ) {
+            pinnedCount -= 1
+            pinnedCount = TabPinningState.clampedPinnedBoundary(
+                pinnedCount,
+                fixedCount: Self.fixedTabCount,
+                totalCount: tabSlots.count
+            )
+        }
 
         thread.persistedWebTabs.removeAll { $0.identifier == identifier }
         persistWebTabs()

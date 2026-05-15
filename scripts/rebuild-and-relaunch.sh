@@ -128,20 +128,56 @@ start_unified_log_capture() {
   printf '%s\n' "$!"
 }
 
+resolve_launched_app_pid() {
+  local expected_binary="$1"
+  local deadline pid command_line
+  deadline=$((SECONDS + 5))
+  while [[ "$SECONDS" -lt "$deadline" ]]; do
+    for pid in $(running_app_pids); do
+      command_line="$(ps -ww -p "$pid" -o command= 2>/dev/null || true)"
+      if [[ "$command_line" == "$expected_binary"* ]]; then
+        printf '%s\n' "$pid"
+        return 0
+      fi
+    done
+    sleep 0.1
+  done
+  return 1
+}
+
 monitor_launched_app() {
-  local binary_path="$1"
-  local log_pid="$2"
-  local run_dir="$3"
-  local start_epoch="$4"
+  local app_path="$1"
+  local binary_path="$2"
+  local log_pid="$3"
+  local run_dir="$4"
+  local start_epoch="$5"
 
   (
     set +e
-    MAGENT_RELAUNCH_LOG_DIR="$run_dir" "$binary_path" >"$run_dir/stdout-stderr.log" 2>&1 &
-    local app_pid=$!
-    echo "$app_pid" >"$run_dir/pid.txt"
+    local app_pid=""
+    local open_log="$run_dir/open.log"
+    if ! MAGENT_RELAUNCH_LOG_DIR="$run_dir" open -n "$app_path" >"$open_log" 2>&1; then
+      MAGENT_RELAUNCH_LOG_DIR="$run_dir" "$binary_path" >"$run_dir/stdout-stderr.log" 2>&1 &
+      app_pid=$!
+    else
+      app_pid="$(resolve_launched_app_pid "$binary_path" || true)"
+    fi
 
-    wait "$app_pid"
-    local exit_code=$?
+    if [[ -z "$app_pid" ]]; then
+      {
+        echo "ended_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        echo "exit_code=1"
+        echo "error=failed to resolve launched app pid"
+      } >"$run_dir/exit.txt"
+      kill "$log_pid" >/dev/null 2>&1 || true
+      exit 0
+    fi
+
+    echo "$app_pid" >"$run_dir/pid.txt"
+    local exit_code=0
+    while kill -0 "$app_pid" >/dev/null 2>&1; do
+      sleep 0.2
+    done
     local ended_at
     ended_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     {
@@ -178,9 +214,9 @@ launch_with_logging() {
   log_pid="$(start_unified_log_capture "$run_dir")"
 
   echo "Logs: $run_dir"
-  echo "Launching $binary_path..."
+  echo "Launching $app_path..."
   echo "$log_pid" >"$run_dir/log-stream.pid"
-  monitor_launched_app "$binary_path" "$log_pid" "$run_dir" "$start_epoch"
+  monitor_launched_app "$app_path" "$binary_path" "$log_pid" "$run_dir" "$start_epoch"
 }
 
 refresh_workspace_with_tuist() {

@@ -241,6 +241,8 @@ final class ThreadListViewController: NSViewController {
     private(set) var selectedThreadID: UUID?
     private(set) var diffInspectionThreadID: UUID?
     private(set) var isDiffInspectionPopoutContext = false
+    var diffPanelForcedAllChangesThreadId: UUID?
+    var diffPanelTabBeforeDiffForce: DiffPanelTab?
     private var hasSidebarAppeared = false
     private var didCenterInitialSelectedThreadOnLaunch = false
     private var pendingInitialSelectedThreadCenteringWorkItem: DispatchWorkItem?
@@ -363,6 +365,18 @@ final class ThreadListViewController: NSViewController {
             name: .magentTabReturnedToThread,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDiffTabDidActivate(_:)),
+            name: .magentDiffTabDidActivate,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDiffTabDidDeactivate(_:)),
+            name: .magentDiffTabDidDeactivate,
+            object: nil
+        )
         checkForPendingPromptRecovery()
 
         // Observe scroll position to update sticky headers
@@ -432,6 +446,34 @@ final class ThreadListViewController: NSViewController {
     @objc private func scrollViewDidScroll(_ notification: Notification) {
         updateStickyHeaders()
         updateSelectedThreadJumpCapsuleVisibility()
+    }
+
+    @objc private func handleDiffTabDidActivate(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
+        guard (diffInspectionThreadID ?? selectedThreadID) == threadId else { return }
+
+        if let forcedId = diffPanelForcedAllChangesThreadId, forcedId != threadId {
+            restoreDiffPanelTabAfterDiffForce(for: forcedId)
+        }
+        if diffPanelForcedAllChangesThreadId == nil {
+            diffPanelTabBeforeDiffForce = diffPanelView.currentTab()
+        }
+        diffPanelForcedAllChangesThreadId = threadId
+        diffPanelView.selectTab(.changes)
+    }
+
+    @objc private func handleDiffTabDidDeactivate(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
+        restoreDiffPanelTabAfterDiffForce(for: threadId)
+    }
+
+    func restoreDiffPanelTabAfterDiffForce(for threadId: UUID) {
+        guard diffPanelForcedAllChangesThreadId == threadId else { return }
+        if let previous = diffPanelTabBeforeDiffForce {
+            diffPanelView.selectTab(previous)
+        }
+        diffPanelForcedAllChangesThreadId = nil
+        diffPanelTabBeforeDiffForce = nil
     }
 
     /// Determines which project/section header should be pinned at the top of the
