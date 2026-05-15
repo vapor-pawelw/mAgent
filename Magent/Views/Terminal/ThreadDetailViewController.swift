@@ -816,9 +816,6 @@ final class ThreadDetailViewController: NSViewController {
             thread = latest
         }
 
-        let settings = PersistenceService.shared.loadSettings()
-        let defaultAgentType = threadManager.effectiveAgentType(for: thread.projectId)
-
         // Determine tab order with pinned tabs first
         let pinnedSet = Set(thread.pinnedTmuxSessions)
 
@@ -828,22 +825,33 @@ final class ThreadDetailViewController: NSViewController {
         if sessions.isEmpty && !hasNonTerminalTabsOnly {
             // Thread has no tabs at all — create a fallback terminal session so the user
             // still has somewhere to land when opening an otherwise empty thread.
-            let slug = TmuxSessionNaming.repoSlug(from:
-                settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
-            )
-            let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(TmuxSessionNaming.defaultTabDisplayName(for: defaultAgentType))
-            let fallbackName: String
-            if thread.isMain {
-                fallbackName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
-            } else {
-                fallbackName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
-            }
+            let fallbackName = await makeUniqueFallbackTerminalSessionName(existingSessions: sessions)
             sessions = [fallbackName]
             // Pass nil — this is a plain terminal fallback, not an agent session.
-            // Using defaultAgentType here would cause agent resume/recovery to trigger
+            // Using an agent type here would cause agent resume/recovery to trigger
             // incorrectly when this session is recreated.
             threadManager.registerFallbackSession(fallbackName, for: thread.id, agentType: nil)
             // Refresh local copy after manager update
+            if let latest = threadManager.threads.first(where: { $0.id == thread.id }) {
+                thread = latest
+            }
+        }
+
+        if TabPinningState.needsPlainPrimaryFallback(
+            sessions: sessions,
+            agentSessions: Set(thread.agentTmuxSessions)
+        ) {
+            let fallbackName = await makeUniqueFallbackTerminalSessionName(existingSessions: sessions)
+            sessions.insert(fallbackName, at: 0)
+            // Legacy/current threads can contain only agent sessions. The fixed
+            // Terminal tab still needs a plain terminal primary, but adding it
+            // must not steal selection from the user's last selected agent tab.
+            threadManager.registerFallbackSession(
+                fallbackName,
+                for: thread.id,
+                agentType: nil,
+                selectFallback: false
+            )
             if let latest = threadManager.threads.first(where: { $0.id == thread.id }) {
                 thread = latest
             }
@@ -1212,6 +1220,28 @@ final class ThreadDetailViewController: NSViewController {
         view.tmuxSessionName = sessionName
         configureTerminalViewHandlers(view, sessionName: sessionName)
         return view
+    }
+
+    private func makeUniqueFallbackTerminalSessionName(existingSessions: [String]) async -> String {
+        let settings = PersistenceService.shared.loadSettings()
+        let slug = TmuxSessionNaming.repoSlug(from:
+            settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
+        )
+        let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(Self.terminalTabTitle)
+        let baseName: String
+        if thread.isMain {
+            baseName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
+        } else {
+            baseName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
+        }
+
+        var candidate = baseName
+        var suffix = 2
+        while await threadManager.isTabNameTaken(candidate, existingNames: existingSessions) {
+            candidate = "\(baseName)-\(suffix)"
+            suffix += 1
+        }
+        return candidate
     }
 
     func rebuildDetachedTerminalView(for sessionName: String) {

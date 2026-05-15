@@ -316,8 +316,18 @@ extension ThreadManager {
         sessionLifecycleService.reorderTabs(for: threadId, newOrder: newOrder)
     }
 
-    func registerFallbackSession(_ sessionName: String, for threadId: UUID, agentType: AgentType?) {
-        sessionLifecycleService.registerFallbackSession(sessionName, for: threadId, agentType: agentType)
+    func registerFallbackSession(
+        _ sessionName: String,
+        for threadId: UUID,
+        agentType: AgentType?,
+        selectFallback: Bool = true
+    ) {
+        sessionLifecycleService.registerFallbackSession(
+            sessionName,
+            for: threadId,
+            agentType: agentType,
+            selectFallback: selectFallback
+        )
     }
 
     // MARK: - Tab Pinning & Selection

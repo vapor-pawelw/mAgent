@@ -776,7 +776,12 @@ final class SessionLifecycleService {
         }
     }
 
-    func registerFallbackSession(_ sessionName: String, for threadId: UUID, agentType: AgentType?) {
+    func registerFallbackSession(
+        _ sessionName: String,
+        for threadId: UUID,
+        agentType: AgentType?,
+        selectFallback: Bool = true
+    ) {
         guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard !store.threads[index].tmuxSessionNames.contains(sessionName) else { return }
         store.threads[index].tmuxSessionNames.append(sessionName)
@@ -789,7 +794,9 @@ final class SessionLifecycleService {
             store.threads[index].agentHasRun = true
         }
         store.threads[index].customTabNames[sessionName] = TmuxSessionNaming.defaultTabDisplayName(for: agentType)
-        store.threads[index].lastSelectedTabIdentifier = sessionName
+        if selectFallback {
+            store.threads[index].lastSelectedTabIdentifier = sessionName
+        }
         try? persistence.saveActiveThreads(store.threads)
     }
 

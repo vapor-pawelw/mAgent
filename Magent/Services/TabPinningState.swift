@@ -1,6 +1,13 @@
 import Foundation
 
 enum TabPinningState {
+    static func needsPlainPrimaryFallback(
+        sessions: [String],
+        agentSessions: Set<String>
+    ) -> Bool {
+        !sessions.isEmpty && sessions.allSatisfy { agentSessions.contains($0) }
+    }
+
     static func preferredPrimarySession(
         sessions: [String],
         agentSessions: Set<String>,

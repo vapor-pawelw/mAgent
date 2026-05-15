@@ -101,6 +101,7 @@ All notable changes to this project will be documented in this file.
 - Chat tabs now persist unsent composer draft text per tab so switching tabs and relaunching the app restores in-progress input.
 
 #### Bug Fixes
+- Fixed agent-only threads opening with the agent hidden behind the fixed Terminal tab. Magent now creates a plain Terminal fallback when needed and keeps the agent tab visible as the first movable tab.
 - Fixed web and draft tabs not reliably accepting keyboard focus after selection, so in-app chat pages and draft prompts can be clicked and typed into normally.
 - Refined tab context-menu grouping and availability rules: `Export as Markdown...` now sits directly under `Continue in...`, followed by a grouped session-actions block (`Resume Agent Session in New Tab`, `Restore Last Closed Tab`, `Session` submenu) separated from transfer actions. `Resume Agent Session in New Tab` is now shown only when the tab has a real resumable session ID, and `Restore Last Closed Tab` is shown only when restore history exists.
 - Fixed chat-tab `Session` context menu behavior: chat tabs now expose session identity + copy actions (without tmux-only actions like keep-alive/kill), matching terminal-tab affordances safely for non-tmux tabs.

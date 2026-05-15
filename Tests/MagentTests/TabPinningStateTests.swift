@@ -94,4 +94,20 @@ struct TabPinningStateTests {
         )
         #expect(primary == "s-term")
     }
+
+    @Test
+    func detectsWhenFixedTerminalNeedsPlainFallback() {
+        #expect(TabPinningState.needsPlainPrimaryFallback(
+            sessions: ["s-agent", "s-agent-2"],
+            agentSessions: ["s-agent", "s-agent-2"]
+        ))
+        #expect(!TabPinningState.needsPlainPrimaryFallback(
+            sessions: ["s-terminal", "s-agent"],
+            agentSessions: ["s-agent"]
+        ))
+        #expect(!TabPinningState.needsPlainPrimaryFallback(
+            sessions: [],
+            agentSessions: []
+        ))
+    }
 }
