@@ -1549,3 +1549,58 @@ struct RateLimitCacheEntryTests {
         #expect(entry.staleReason == nil)
     }
 }
+
+// MARK: - RateLimitFingerprinting
+
+@Suite("RateLimitFingerprinting")
+struct RateLimitFingerprintingTests {
+
+    @Test("Relative reset fingerprints do not drift as now advances")
+    func relativeResetFingerprintsDoNotDrift() {
+        let focusText = "You've hit your limit. Try again in 5 hours.\n1. Stop and wait for limit to reset"
+        let firstReset = Date(timeIntervalSince1970: 1_800_000_000)
+        let laterReset = firstReset.addingTimeInterval(65)
+
+        let first = RateLimitFingerprinting.structuredFingerprint(
+            resetAt: firstReset,
+            agent: .claude,
+            detectorMode: "claude_prompt_menu",
+            focusText: focusText,
+            hasRelativeReset: true
+        )
+        let later = RateLimitFingerprinting.structuredFingerprint(
+            resetAt: laterReset,
+            agent: .claude,
+            detectorMode: "claude_prompt_menu",
+            focusText: focusText,
+            hasRelativeReset: true
+        )
+
+        #expect(first == later)
+        #expect(first.contains("|relative|"))
+    }
+
+    @Test("Absolute reset fingerprints stay keyed by reset minute")
+    func absoluteResetFingerprintsUseResetMinute() {
+        let focusText = "You've hit your limit · resets 4pm (Europe/Warsaw)"
+        let firstReset = Date(timeIntervalSince1970: 1_800_000_000)
+        let laterReset = firstReset.addingTimeInterval(60)
+
+        let first = RateLimitFingerprinting.structuredFingerprint(
+            resetAt: firstReset,
+            agent: .claude,
+            detectorMode: "claude_prompt_menu",
+            focusText: focusText,
+            hasRelativeReset: false
+        )
+        let later = RateLimitFingerprinting.structuredFingerprint(
+            resetAt: laterReset,
+            agent: .claude,
+            detectorMode: "claude_prompt_menu",
+            focusText: focusText,
+            hasRelativeReset: false
+        )
+
+        #expect(first != later)
+    }
+}

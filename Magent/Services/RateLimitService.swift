@@ -222,6 +222,15 @@ final class RateLimitService {
         }
     }
 
+    private func cachedInfo(for detection: RateLimitDetection, cached: RateLimitCacheEntry) -> AgentRateLimitInfo {
+        var info = detection.info
+        info.resetAt = cached.resetAt
+        if let detectedAt = cached.detectedAt {
+            info.detectedAt = detectedAt
+        }
+        return info
+    }
+
     /// Called when the rate-limit detection setting is toggled in Settings.
     /// Immediately clears state (if disabled) or runs a full scan (if enabled).
     func applyRateLimitDetectionSettingChange() {
@@ -420,8 +429,7 @@ final class RateLimitService {
                                 )
                                 rateLimitCacheDirty = true
                             }
-                            var info = detection.info
-                            info.resetAt = cached.resetAt
+                            let info = cachedInfo(for: detection, cached: cached)
                             if updatedRateLimits[sessionName] != info {
                                 updatedRateLimits[sessionName] = info
                                 changedThreadIds.insert(threadId)
@@ -466,8 +474,7 @@ final class RateLimitService {
                             )
                             rateLimitCacheDirty = true
                         }
-                        var info = detection.info
-                        info.resetAt = cached.resetAt
+                        let info = cachedInfo(for: detection, cached: cached)
                         if updatedRateLimits[sessionName] != info {
                             updatedRateLimits[sessionName] = info
                             changedThreadIds.insert(threadId)
@@ -1116,8 +1123,6 @@ final class RateLimitService {
     private static let rateLimitFocusContextBeforeLines = 2
     private static let rateLimitFocusContextAfterLines = 8
     private static let claudePromptDeadlineLookbackLines = 14
-    private static let maxRateLimitFingerprintLength = 512
-    private static let rateLimitFingerprintVersion = "v2"
 
     private func rateLimitDetection(
         from paneContent: String,
@@ -1159,12 +1164,13 @@ final class RateLimitService {
         guard let parsed = parseResetDate(from: focusText, now: now) else { return nil }
 
         let resetDescription = extractRateLimitResetDescription(from: focusText)
-        let legacyFingerprint = rateLimitFingerprint(from: focusText, fallback: resetDescription)
-        let fingerprint = rateLimitFingerprintV2(
+        let legacyFingerprint = RateLimitFingerprinting.legacyFingerprint(from: focusText, fallback: resetDescription)
+        let fingerprint = RateLimitFingerprinting.structuredFingerprint(
             resetAt: parsed.resetAt,
             agent: agent,
             detectorMode: "pane_generic",
-            focusText: focusText
+            focusText: focusText,
+            hasRelativeReset: parsed.hasRelativeReset
         )
         return RateLimitDetection(
             info: AgentRateLimitInfo(resetAt: parsed.resetAt, resetDescription: resetDescription, detectedAt: now, agentType: agent),
@@ -1320,15 +1326,16 @@ final class RateLimitService {
             guard let parsed = parseResetDate(from: focusText, now: now) else { continue }
 
             let resetDescription = extractRateLimitResetDescription(from: focusText)
-            let legacyFingerprint = rateLimitFingerprint(
+            let legacyFingerprint = RateLimitFingerprinting.legacyFingerprint(
                 from: focusText,
                 fallback: resetDescription
             )
-            let fingerprint = rateLimitFingerprintV2(
+            let fingerprint = RateLimitFingerprinting.structuredFingerprint(
                 resetAt: parsed.resetAt,
                 agent: .claude,
                 detectorMode: "claude_prompt_menu",
-                focusText: focusText
+                focusText: focusText,
+                hasRelativeReset: parsed.hasRelativeReset
             )
             return RateLimitDetection(
                 info: AgentRateLimitInfo(resetAt: parsed.resetAt, resetDescription: resetDescription, detectedAt: now, agentType: .claude),
@@ -1529,67 +1536,6 @@ final class RateLimitService {
         }
         return (focusLines.isEmpty ? context.suffix(12) : focusLines.suffix(12))
             .joined(separator: "\n")
-    }
-
-    private func rateLimitFingerprint(from focusText: String, fallback: String?) -> String {
-        let normalizedFocus = focusText
-            .lowercased()
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !normalizedFocus.isEmpty {
-            return String(normalizedFocus.prefix(Self.maxRateLimitFingerprintLength))
-        }
-        let normalizedFallback = fallback?
-            .lowercased()
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if let normalizedFallback, !normalizedFallback.isEmpty {
-            return String(normalizedFallback.prefix(Self.maxRateLimitFingerprintLength))
-        }
-        return "__empty_rate_limit_fingerprint__"
-    }
-
-    private func rateLimitFingerprintV2(
-        resetAt: Date,
-        agent: AgentType,
-        detectorMode: String,
-        focusText: String
-    ) -> String {
-        let resetMinuteBucket = Int(resetAt.timeIntervalSince1970) / 60
-        let indicatorClass = rateLimitIndicatorClass(from: focusText)
-        return [
-            Self.rateLimitFingerprintVersion,
-            agent.rawValue,
-            detectorMode,
-            indicatorClass,
-            String(resetMinuteBucket),
-        ].joined(separator: "|")
-    }
-
-    private func rateLimitIndicatorClass(from focusText: String) -> String {
-        let normalized = focusText
-            .lowercased()
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalized.contains("you've hit your limit") || normalized.contains("hit your limit") {
-            return "hit_limit"
-        }
-        if normalized.contains("hit your usage limit") || normalized.contains("usage limit") {
-            return "usage_limit"
-        }
-        if normalized.contains("too many requests") {
-            return "too_many_requests"
-        }
-        if normalized.contains("quota exceeded") {
-            return "quota_exceeded"
-        }
-        if normalized.contains("retry after") || normalized.contains("try again") {
-            return "retry_after"
-        }
-        if normalized.contains("rate limit") || normalized.contains("rate limited") {
-            return "rate_limit"
-        }
-        return "generic_limit"
     }
 
     private func parseRelativeResetDate(from text: String, now: Date) -> Date? {

@@ -31,7 +31,7 @@ When Magent first sees a rate-limit message, it computes a **fingerprint** (norm
 
 These are written to disk in `rate-limit-cache.json`.
 
-Fingerprint keys are versioned and structured (for example: `v2|claude|pane_generic|hit_limit|<reset-minute-bucket>`). This avoids storing large free-form pane text as cache keys while still preserving a legacy-text fallback path during migration.
+Fingerprint keys are versioned and structured (for example: `v2|claude|pane_generic|hit_limit|<reset-minute-bucket>`). Relative reset messages (for example "try again in 5 hours") use a stable hash of the normalized blocker text instead of the computed reset minute, so the key does not drift as time advances. This avoids storing large free-form pane text as cache keys while still preserving a legacy-text fallback path during migration.
 
 Magent also stores a per-agent ignore list for exact reset timestamps you manually dismiss (`ignored-rate-limit-fingerprints.json`).
 

@@ -73,6 +73,7 @@ All notable changes to this project will be documented in this file.
 - Codex chat execution now prefers the native Codex app-server JSON-RPC stream (for per-item incremental updates) and automatically falls back to `codex exec --json` when app-server startup fails.
 
 #### Bug Fixes
+- Fixed repeated Claude rate-limit detections from the same terminal message. Relative reset fingerprints now stay stable across scans, and cached detections keep their original timestamp instead of refreshing every monitor tick.
 - Hardened agent rate-limit detection so quoted/logged rate-limit text no longer spawns false active limits, fingerprints now use structured stable keys, and stale entries are tombstoned with traceable reasons instead of being hard-deleted.
 - Fixed Codex tabs failing to launch on macOS with `env: -u: No such file or directory` — the managed-`CODEX_HOME` wrapper now places option flags before variable assignments so BSD `env` parses them correctly.
 - Codex sessions launched from Magent now use a shared Magent-managed `CODEX_HOME` that mirrors the user's `~/.codex` (skills, auth, config, docs, etc.) while keeping Magent IPC AGENTS hints scoped to Magent sessions only. Magent no longer writes its IPC block into the global `~/.codex/AGENTS.md`, and edits to global `~/.codex/AGENTS.md` or top-level `~/.codex` entries now resync into the managed home automatically (session monitor cadence).
