@@ -45,6 +45,7 @@ let project = Project(
                 "Magent/Services/RateLimitFingerprinting.swift",
                 "Magent/Services/RateLimitService.swift",
                 "Magent/Services/SidebarOrderingService.swift",
+                "Magent/Services/TabPinningState.swift",
                 "Magent/Services/TabNameAllocator.swift",
                 "Magent/Services/GitStateService.swift",
                 "Magent/Services/WorktreeService.swift",
@@ -64,6 +65,7 @@ let project = Project(
                 "Magent/Resources/Assets.xcassets",
                 "Magent/Resources/AppIcon.icon",
                 "Magent/Resources/**/*.xcstrings",
+                "Magent/Resources/DiffRenderer/dist/**",
                 "config/agent-models.json",
             ],
             entitlements: .file(path: "Magent/Magent.entitlements"),
@@ -128,6 +130,7 @@ let project = Project(
                 "Magent/Services/SessionRecreationService.swift",
                 "Magent/Services/RateLimitFingerprinting.swift",
                 "Magent/Services/TabNameAllocator.swift",
+                "Magent/Services/TabPinningState.swift",
                 "Tests/MagentTests/**",
             ],
             dependencies: [

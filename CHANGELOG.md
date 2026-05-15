@@ -60,7 +60,12 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 
+#### Features
+- Added expandable untracked-directory rows in the CHANGES panel so new folders can reveal their non-ignored child files without leaving Magent.
+- Reworked the CHANGES panel inline diff viewer with a WebKit renderer that supports scroll-synced file selection, selectable/copyable diff text, lazy syntax highlighting, friendly collapsible hunk headers, and a theme-matched loading spinner.
+
 #### Bug Fixes
+- Fixed crashes when opening diffs from the CHANGES panel and removed duplicate line numbers from rendered diff rows.
 - Fixed thread row pulse animation displacing the row. The animation now scales uniformly from the center without shifting position.
 - Fixed launch restore occasionally jumping selection back to the main worktree. Startup selection now retries visible fallbacks when the preferred saved thread cannot be selected immediately.
 

@@ -13,6 +13,15 @@ extension Notification.Name {
     static let magentOpenExternalLinkInApp = Notification.Name("magentOpenExternalLinkInApp")
     static let magentShowDiffViewer = Notification.Name("magentShowDiffViewer")
     static let magentHideDiffViewer = Notification.Name("magentHideDiffViewer")
+    /// Posted when a thread's fixed Diff tab is selected.
+    /// Carries "threadId" (UUID).
+    static let magentDiffTabDidActivate = Notification.Name("magentDiffTabDidActivate")
+    /// Posted when leaving a thread's fixed Diff tab or when its detail view is torn down.
+    /// Carries "threadId" (UUID).
+    static let magentDiffTabDidDeactivate = Notification.Name("magentDiffTabDidDeactivate")
+    /// Posted when git-derived diff stats are refreshed for a thread.
+    /// Carries "threadId" (UUID) and "fileCount" (Int).
+    static let magentDiffFileCountChanged = Notification.Name("magentDiffFileCountChanged")
     static let magentDiffViewerScrolledToFile = Notification.Name("magentDiffViewerScrolledToFile")
     static let magentNavigateToThread = Notification.Name("magentNavigateToThread")
     static let magentPullRequestInfoChanged = Notification.Name("magentPullRequestInfoChanged")

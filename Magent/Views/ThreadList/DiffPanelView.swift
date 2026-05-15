@@ -20,6 +20,7 @@ private final class DiffPanelResizeHandle: NSView {
 private final class DiffFileRowView: NSView {
     let filePath: String
     var workingStatus: FileWorkingStatus = .committed
+    var isDiffSelectable = true
     var onClick: ((String) -> Void)?
     var onSecondaryClick: ((String) -> Void)?
     var onDoubleClick: ((String) -> Void)?
@@ -185,7 +186,7 @@ private final class CommitRowView: NSView {
     }
 }
 
-private enum DiffPanelTab {
+enum DiffPanelTab {
     case commits
     case changes
 }
@@ -221,6 +222,9 @@ final class DiffPanelView: NSView {
     private var selectedCommitHash: String? = nil
     private var selectedFilePath: String?
     private var worktreePath: String?
+    private var expandedDirectoryPaths = Set<String>()
+    private var loadingDirectoryPaths = Set<String>()
+    private var directoryChildrenByPath: [String: [String]] = [:]
     private var hasMoreCommits = false
     private var forceVisible = false
     private var contextThreadIndicatorText: String?
@@ -269,6 +273,7 @@ final class DiffPanelView: NSView {
 
     private var allBranchEntries: [FileDiffEntry]?
     private var isLoadingAllChanges = false
+    private static let directoryChildPreviewLimit = 50
 
     /// The entries currently shown in the ALL CHANGES tab.
     private var activeEntries: [FileDiffEntry] {
@@ -635,31 +640,32 @@ final class DiffPanelView: NSView {
     override var acceptsFirstResponder: Bool { true }
 
     override func keyDown(with event: NSEvent) {
-        guard activeTab == .changes, !activeEntries.isEmpty else {
+        let selectablePaths = visibleSelectableFilePaths()
+        guard activeTab == .changes, !selectablePaths.isEmpty else {
             super.keyDown(with: event)
             return
         }
 
         switch Int(event.keyCode) {
         case 126: // Up arrow
-            let currentIndex = activeEntries.firstIndex(where: { $0.relativePath == selectedFilePath })
+            let currentIndex = selectablePaths.firstIndex(where: { $0 == selectedFilePath })
             let newIndex: Int
             if let idx = currentIndex {
-                newIndex = idx > 0 ? idx - 1 : activeEntries.count - 1
+                newIndex = idx > 0 ? idx - 1 : selectablePaths.count - 1
             } else {
-                newIndex = activeEntries.count - 1
+                newIndex = selectablePaths.count - 1
             }
-            selectFile(activeEntries[newIndex].relativePath)
+            selectFile(selectablePaths[newIndex])
 
         case 125: // Down arrow
-            let currentIndex = activeEntries.firstIndex(where: { $0.relativePath == selectedFilePath })
+            let currentIndex = selectablePaths.firstIndex(where: { $0 == selectedFilePath })
             let newIndex: Int
             if let idx = currentIndex {
-                newIndex = idx < activeEntries.count - 1 ? idx + 1 : 0
+                newIndex = idx < selectablePaths.count - 1 ? idx + 1 : 0
             } else {
                 newIndex = 0
             }
-            selectFile(activeEntries[newIndex].relativePath)
+            selectFile(selectablePaths[newIndex])
 
         case 53: // Escape
             deselectFile()
@@ -720,6 +726,13 @@ final class DiffPanelView: NSView {
         for case let row as DiffFileRowView in stackView.arrangedSubviews
             where row.filePath == filePath || row.filePath == previousPath {
             row.isFileSelected = (row.filePath == filePath)
+        }
+    }
+
+    private func visibleSelectableFilePaths() -> [String] {
+        stackView.arrangedSubviews.compactMap { subview in
+            guard let row = subview as? DiffFileRowView, row.isDiffSelectable else { return nil }
+            return row.filePath
         }
     }
 
@@ -976,6 +989,9 @@ final class DiffPanelView: NSView {
     func optimisticallyRemoveFile(path: String) {
         uncommittedEntries.removeAll { $0.relativePath == path }
         allBranchEntries?.removeAll { $0.relativePath == path }
+        for key in directoryChildrenByPath.keys {
+            directoryChildrenByPath[key]?.removeAll { $0 == path }
+        }
         updateTabTitles()
         guard activeTab == .changes, !isInCommitDetailMode else { return }
         rebuildRows()
@@ -1049,6 +1065,9 @@ final class DiffPanelView: NSView {
         selectedCommitHash = nil
         selectedFilePath = nil
         worktreePath = nil
+        expandedDirectoryPaths = []
+        loadingDirectoryPaths = []
+        directoryChildrenByPath = [:]
         hasMoreCommits = false
         forceVisible = false
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -1164,10 +1183,7 @@ final class DiffPanelView: NSView {
             row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
         } else {
             for entry in entries {
-                let row = makeEntryRow(entry)
-                stackView.addArrangedSubview(row)
-                row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
-                row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+                addEntryRowAndDirectoryChildren(entry)
             }
         }
     }
@@ -1259,6 +1275,27 @@ final class DiffPanelView: NSView {
         commitEntries = []
         updateTabTitles()
         rebuildRows()
+    }
+
+    func currentTab() -> DiffPanelTab {
+        activeTab
+    }
+
+    func selectTab(_ tab: DiffPanelTab) {
+        guard activeTab != tab else { return }
+        switch tab {
+        case .commits:
+            activeTab = .commits
+            selectedFilePath = nil
+            updateTabTitles()
+            rebuildRows()
+        case .changes:
+            activeTab = .changes
+            selectedCommitHash = nil
+            commitEntries = []
+            updateTabTitles()
+            rebuildRows()
+        }
     }
 
     func setRefreshInProgress(_ isRefreshing: Bool) {
@@ -1365,11 +1402,53 @@ final class DiffPanelView: NSView {
             row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
         } else {
             for entry in commitDetailEntries {
-                let row = makeEntryRow(entry)
-                stackView.addArrangedSubview(row)
-                row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
-                row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+                addEntryRowAndDirectoryChildren(entry)
             }
+        }
+    }
+
+    private func addArrangedFullWidthRow(_ row: NSView) {
+        stackView.addArrangedSubview(row)
+        row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+        row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+    }
+
+    private func addEntryRowAndDirectoryChildren(_ entry: FileDiffEntry) {
+        let isDirectory = isDirectoryPath(entry.relativePath)
+        addArrangedFullWidthRow(makeEntryRow(entry, nestingLevel: 0, isDirectoryChild: false))
+
+        guard isDirectory,
+              entry.workingStatus == .untracked,
+              expandedDirectoryPaths.contains(entry.relativePath) else { return }
+        if loadingDirectoryPaths.contains(entry.relativePath) {
+            addArrangedFullWidthRow(makeDirectoryChildStatusRow(message: "Loading files..."))
+            return
+        }
+
+        guard let children = directoryChildrenByPath[entry.relativePath] else {
+            loadDirectoryChildrenIfNeeded(for: entry)
+            addArrangedFullWidthRow(makeDirectoryChildStatusRow(message: "Loading files..."))
+            return
+        }
+
+        if children.isEmpty {
+            addArrangedFullWidthRow(makeDirectoryChildStatusRow(message: "No non-ignored files"))
+            return
+        }
+
+        for path in children.prefix(Self.directoryChildPreviewLimit) {
+            let childEntry = FileDiffEntry(
+                relativePath: path,
+                additions: 0,
+                deletions: 0,
+                workingStatus: entry.workingStatus
+            )
+            addArrangedFullWidthRow(makeEntryRow(childEntry, nestingLevel: 1, isDirectoryChild: true))
+        }
+
+        let remainingCount = children.count - Self.directoryChildPreviewLimit
+        if remainingCount > 0 {
+            addArrangedFullWidthRow(makeDirectoryChildStatusRow(message: "+\(remainingCount) more"))
         }
     }
 
@@ -1425,14 +1504,20 @@ final class DiffPanelView: NSView {
         return container
     }
 
-    private func makeEntryRow(_ entry: FileDiffEntry) -> NSView {
+    private func makeEntryRow(_ entry: FileDiffEntry, nestingLevel: Int = 0, isDirectoryChild: Bool = false) -> NSView {
         let container = DiffFileRowView(filePath: entry.relativePath)
         container.workingStatus = entry.workingStatus
         container.translatesAutoresizingMaskIntoConstraints = false
         let isDirectory = isDirectoryPath(entry.relativePath)
+        let isExpandableDirectory = isDirectory && entry.workingStatus == .untracked
+        container.isDiffSelectable = !isDirectory
         if isDirectory {
             container.onClick = { [weak self] _ in
-                self?.deselectFile()
+                if isExpandableDirectory {
+                    self?.toggleDirectoryExpansion(entry)
+                } else {
+                    self?.deselectFile()
+                }
             }
             container.onSecondaryClick = { [weak self] _ in
                 self?.deselectFile()
@@ -1497,8 +1582,32 @@ final class DiffPanelView: NSView {
         nameLabel.toolTip = pathTooltip
         container.toolTip = pathTooltip
 
+        let baseLeading: CGFloat = 12 + CGFloat(nestingLevel * 18)
         var nameLeadingAnchor = container.leadingAnchor
-        var nameLeadingConstant: CGFloat = 12
+        var nameLeadingConstant: CGFloat = baseLeading
+        if isExpandableDirectory {
+            let disclosureButton = NSButton()
+            disclosureButton.isBordered = false
+            disclosureButton.target = self
+            disclosureButton.action = #selector(directoryDisclosureTapped(_:))
+            disclosureButton.identifier = NSUserInterfaceItemIdentifier(entry.relativePath)
+            disclosureButton.image = NSImage(
+                systemSymbolName: expandedDirectoryPaths.contains(entry.relativePath) ? "chevron.down" : "chevron.right",
+                accessibilityDescription: expandedDirectoryPaths.contains(entry.relativePath) ? "Collapse directory" : "Expand directory"
+            )?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold))
+            disclosureButton.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.75)
+            disclosureButton.translatesAutoresizingMaskIntoConstraints = false
+            disclosureButton.toolTip = expandedDirectoryPaths.contains(entry.relativePath) ? "Collapse directory" : "Expand directory"
+            container.addSubview(disclosureButton)
+            NSLayoutConstraint.activate([
+                disclosureButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: baseLeading - 2),
+                disclosureButton.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                disclosureButton.widthAnchor.constraint(equalToConstant: 14),
+                disclosureButton.heightAnchor.constraint(equalToConstant: 14),
+            ])
+            nameLeadingAnchor = disclosureButton.trailingAnchor
+            nameLeadingConstant = 2
+        }
         if let icon = directoryIcon(for: entry, isDirectory: isDirectory) {
             let iconView = NSImageView()
             iconView.translatesAutoresizingMaskIntoConstraints = false
@@ -1507,7 +1616,25 @@ final class DiffPanelView: NSView {
             iconView.toolTip = pathTooltip
             container.addSubview(iconView)
             NSLayoutConstraint.activate([
-                iconView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+                iconView.leadingAnchor.constraint(equalTo: nameLeadingAnchor, constant: nameLeadingConstant),
+                iconView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                iconView.widthAnchor.constraint(equalToConstant: 12),
+                iconView.heightAnchor.constraint(equalToConstant: 12),
+            ])
+            nameLeadingAnchor = iconView.trailingAnchor
+            nameLeadingConstant = 5
+        } else if isDirectoryChild {
+            let iconView = NSImageView()
+            iconView.translatesAutoresizingMaskIntoConstraints = false
+            iconView.image = NSImage(
+                systemSymbolName: "doc",
+                accessibilityDescription: "File"
+            )?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .regular))
+            iconView.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.65)
+            iconView.toolTip = pathTooltip
+            container.addSubview(iconView)
+            NSLayoutConstraint.activate([
+                iconView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: baseLeading),
                 iconView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
                 iconView.widthAnchor.constraint(equalToConstant: 12),
                 iconView.heightAnchor.constraint(equalToConstant: 12),
@@ -1541,8 +1668,21 @@ final class DiffPanelView: NSView {
             statsStack.addArrangedSubview(delLabel)
         }
 
-        if entry.workingStatus == .untracked && entry.additions == 0 && entry.deletions == 0 {
-            let untrackedLabel = NSTextField(labelWithString: "new")
+        if isDirectory,
+           let childCount = directoryChildrenByPath[entry.relativePath]?.count {
+            let filesLabel = NSTextField(labelWithString: "\(childCount) file\(childCount == 1 ? "" : "s")")
+            filesLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+            filesLabel.textColor = NSColor(resource: .textSecondary)
+            filesLabel.translatesAutoresizingMaskIntoConstraints = false
+            statsStack.addArrangedSubview(filesLabel)
+        } else if isDirectory, loadingDirectoryPaths.contains(entry.relativePath) {
+            let loadingLabel = NSTextField(labelWithString: "loading")
+            loadingLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+            loadingLabel.textColor = NSColor(resource: .textSecondary)
+            loadingLabel.translatesAutoresizingMaskIntoConstraints = false
+            statsStack.addArrangedSubview(loadingLabel)
+        } else if entry.workingStatus == .untracked && entry.additions == 0 && entry.deletions == 0 {
+            let untrackedLabel = NSTextField(labelWithString: isDirectoryChild ? "new file" : "new")
             untrackedLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
             untrackedLabel.textColor = colorForStatus(.untracked)
             untrackedLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -1563,6 +1703,71 @@ final class DiffPanelView: NSView {
         ])
 
         return container
+    }
+
+    private func makeDirectoryChildStatusRow(message: String) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = NSTextField(labelWithString: message)
+        label.font = .systemFont(ofSize: 10)
+        label.textColor = NSColor(resource: .textSecondary).withAlphaComponent(0.75)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 42),
+            label.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            container.heightAnchor.constraint(equalToConstant: 18),
+        ])
+
+        return container
+    }
+
+    @objc private func directoryDisclosureTapped(_ sender: NSButton) {
+        guard let path = sender.identifier?.rawValue,
+              let entry = currentEntry(for: path) else { return }
+        toggleDirectoryExpansion(entry)
+    }
+
+    private func toggleDirectoryExpansion(_ entry: FileDiffEntry) {
+        if expandedDirectoryPaths.contains(entry.relativePath) {
+            expandedDirectoryPaths.remove(entry.relativePath)
+        } else {
+            expandedDirectoryPaths.insert(entry.relativePath)
+            loadDirectoryChildrenIfNeeded(for: entry)
+        }
+        deselectFile()
+        rebuildRows()
+    }
+
+    private func currentEntry(for relativePath: String) -> FileDiffEntry? {
+        if isInCommitDetailMode {
+            return commitDetailEntries.first { $0.relativePath == relativePath }
+        }
+        return activeEntries.first { $0.relativePath == relativePath }
+    }
+
+    private func loadDirectoryChildrenIfNeeded(for entry: FileDiffEntry) {
+        guard entry.workingStatus == .untracked,
+              directoryChildrenByPath[entry.relativePath] == nil,
+              !loadingDirectoryPaths.contains(entry.relativePath),
+              let worktreePath else { return }
+
+        loadingDirectoryPaths.insert(entry.relativePath)
+        let directoryPath = entry.relativePath
+        Task { [weak self, worktreePath, directoryPath] in
+            let children = await GitService.shared.untrackedFiles(
+                worktreePath: worktreePath,
+                under: directoryPath
+            )
+            await MainActor.run {
+                guard let self else { return }
+                self.loadingDirectoryPaths.remove(directoryPath)
+                self.directoryChildrenByPath[directoryPath] = children
+                self.rebuildRows()
+            }
+        }
     }
 
     private func makeEmptyStateRow(message: String) -> NSView {

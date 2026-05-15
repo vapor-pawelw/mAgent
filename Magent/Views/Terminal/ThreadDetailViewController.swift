@@ -154,6 +154,7 @@ final class ThreadDetailViewController: NSViewController {
     /// Display-order mapping: `tabSlots[i]` tells what content `tabItems[i]` shows.
     enum TabSlot: Equatable {
         case terminal(sessionName: String)
+        case diff
         case web(identifier: String)
         case draft(identifier: String)
         case chat(identifier: String)
@@ -162,6 +163,8 @@ final class ThreadDetailViewController: NSViewController {
             let contentKind: ThreadTabContentKind = switch self {
             case .terminal:
                 .terminal
+            case .diff:
+                .web
             case .web:
                 .web
             case .draft:
@@ -193,7 +196,8 @@ final class ThreadDetailViewController: NSViewController {
     var activeWebTabId: String?
     var activeChatTabId: String?
     var currentTabIndex = 0
-    /// Index of the non-closable "primary" tab. -1 means all tabs are closable (main threads).
+    /// Number of leading fixed tabs that cannot be closed/reordered.
+    static let fixedTabCount = 2
     var primaryTabIndex = 0
     var pinnedCount = 0
     /// Placeholder views shown for detached tabs, keyed by sessionName.
@@ -274,15 +278,18 @@ final class ThreadDetailViewController: NSViewController {
     static let diffHeightKey = "InlineDiffViewController.height"
     static let diffMaxFileCount = 2_000
     static let diffMaxLineCount = 60_000
+    static let diffTabTitle = "Diff"
+    static let terminalTabTitle = "Terminal"
 
     let prJiraSeparator = VerticalSeparatorView()
     let pinSeparator = VerticalSeparatorView()
+    let fixedTabsSeparator = VerticalSeparatorView()
 
     init(thread: MagentThread, showsHeaderInfoStrip: Bool = true, isPopoutContext: Bool = false) {
         self.isPopoutContext = isPopoutContext
         self.showsHeaderInfoStrip = showsHeaderInfoStrip
         self.thread = thread
-        self.primaryTabIndex = thread.isMain ? -1 : 0
+        self.primaryTabIndex = 0
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -409,6 +416,12 @@ final class ThreadDetailViewController: NSViewController {
             name: .magentThreadsDidChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDiffFileCountChanged(_:)),
+            name: .magentDiffFileCountChanged,
+            object: nil
+        )
 
         // Observe diff viewer open/close requests from sidebar only in the main window.
         // Pop-out thread windows should not mirror inline diff content.
@@ -498,6 +511,8 @@ final class ThreadDetailViewController: NSViewController {
     /// before this controller is removed. Called from SplitContentContainerViewController.setContent
     /// since deinit can't access @MainActor properties.
     func cleanUpBeforeRemoval() {
+        notifyDiffTabDidDeactivate()
+        hideDiffViewer()
         // DiffImageOverlayView lives on window.contentView, not on our view,
         // so it survives view controller replacement and blocks all mouse events.
         diffImageOverlay?.removeFromSuperview()
@@ -808,8 +823,7 @@ final class ThreadDetailViewController: NSViewController {
         let pinnedSet = Set(thread.pinnedTmuxSessions)
 
         var sessions: [String] = thread.tmuxSessionNames
-        let hasNonTerminalTabsOnly = sessions.isEmpty
-            && (!thread.persistedWebTabs.isEmpty || !thread.persistedDraftTabs.isEmpty || !thread.persistedChatTabs.isEmpty)
+        let hasNonTerminalTabsOnly = false
 
         if sessions.isEmpty && !hasNonTerminalTabsOnly {
             // Thread has no tabs at all — create a fallback terminal session so the user
@@ -835,10 +849,27 @@ final class ThreadDetailViewController: NSViewController {
             }
         }
 
-        let pinned = sessions.filter { pinnedSet.contains($0) }
-        let unpinned = sessions.filter { !pinnedSet.contains($0) }
-        let orderedSessions = pinned + unpinned
-        pinnedCount = pinned.count
+        let preferredPrimarySession = TabPinningState.preferredPrimarySession(
+            sessions: sessions,
+            agentSessions: Set(thread.agentTmuxSessions),
+            canonicalPrimarySession: thread.tmuxSessionNames.first
+        )
+        let display = TabPinningState.sessionDisplayOrder(
+            sessions: sessions,
+            canonicalPrimarySession: preferredPrimarySession
+        )
+        let primarySessionName = display.primary
+        let orderedMovableSessions = TabPinningState.orderedMovableSessions(
+            movableSessions: display.movable,
+            pinnedSessions: pinnedSet
+        )
+        let pinnedMovableCount = orderedMovableSessions.prefix { pinnedSet.contains($0) }.count
+        let sessionDisplayOrder = [primarySessionName] + orderedMovableSessions
+        pinnedCount = TabPinningState.pinnedBoundary(
+            fixedCount: Self.fixedTabCount,
+            pinnedMovableCount: pinnedMovableCount,
+            totalCount: orderedMovableSessions.count + Self.fixedTabCount
+        )
 
         await MainActor.run {
             preparedSessions.removeAll()
@@ -865,9 +896,20 @@ final class ThreadDetailViewController: NSViewController {
             activeDraftTabId = nil
             activeChatTabId = nil
 
-            for (i, sessionName) in orderedSessions.enumerated() {
-                let title = thread.displayName(for: sessionName, at: i)
-                createTabItem(title: title, closable: true, pinned: i < pinnedCount)
+            createTabItem(title: Self.terminalTabTitle, closable: false, pinned: false)
+            tabSlots.append(.terminal(sessionName: primarySessionName))
+            createTabItem(title: Self.diffTabTitle, closable: false, pinned: false)
+            tabSlots.append(.diff)
+
+            for (i, sessionName) in orderedMovableSessions.enumerated() {
+                let title = thread.displayName(for: sessionName, at: i + 1)
+                let displayIndex = tabItems.count
+                let isPinnedAtDisplayIndex = TabPinningState.isPinnedMovableIndex(
+                    displayIndex,
+                    pinnedBoundary: pinnedCount,
+                    fixedCount: Self.fixedTabCount
+                )
+                createTabItem(title: title, closable: true, pinned: isPinnedAtDisplayIndex)
                 tabSlots.append(.terminal(sessionName: sessionName))
             }
 
@@ -910,17 +952,7 @@ final class ThreadDetailViewController: NSViewController {
 
         // Non-terminal thread: skip terminal session setup entirely, just restore the
         // selected draft/web/chat tab instead of inventing a fallback tmux session name.
-        if hasNonTerminalTabsOnly {
-            await MainActor.run {
-                dismissLoadingOverlay()
-                if let idx = resolveLastSelectedSlotIndex() ?? tabSlots.indices.first {
-                    selectTab(at: idx)
-                } else {
-                    showEmptyState()
-                }
-            }
-            return
-        }
+        if hasNonTerminalTabsOnly { return }
 
         // Resolve whether the last-selected tab was a non-terminal tab (web/draft/chat).
         // If so, we still prepare terminal sessions in the background but select the
@@ -930,6 +962,7 @@ final class ThreadDetailViewController: NSViewController {
                 guard idx < tabSlots.count else { return nil }
                 switch tabSlots[idx] {
                 case .web, .draft, .chat: return idx
+                case .diff: return idx
                 case .terminal: return nil
                 }
             }
@@ -941,7 +974,7 @@ final class ThreadDetailViewController: NSViewController {
             .flatMap(UUID.init(uuidString:))
         let defaultsSession = defaults.string(forKey: Self.lastOpenedTabDefaultsKey)
         let initialIndex = TabRestoreSelectionResolver.resolveInitialTerminalIndex(
-            orderedSessions: orderedSessions,
+            orderedSessions: sessionDisplayOrder,
             threadId: thread.id,
             defaultsThreadId: defaultsThreadId,
             defaultsIdentifier: defaultsSession,
@@ -949,7 +982,7 @@ final class ThreadDetailViewController: NSViewController {
             magentBusySessions: thread.magentBusySessions
         )
 
-        let initialSessionName = orderedSessions[initialIndex]
+        let initialSessionName = sessionDisplayOrder[initialIndex]
         let initialAgentType = await threadManager.loadingOverlayAgentType(
             for: thread,
             sessionName: initialSessionName
@@ -979,6 +1012,8 @@ final class ThreadDetailViewController: NSViewController {
                     tabItems[i].hasTerminalCorruption = threadManager.isTerminalCorrupted(sessionName: sessionName)
                 case .chat(let identifier):
                     tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(identifier)
+                case .diff:
+                    tabItems[i].hasUnreadDiff = isDiffUnread()
                 case .web, .draft:
                     continue
                 }
@@ -1021,7 +1056,7 @@ final class ThreadDetailViewController: NSViewController {
                     dismissLoadingOverlay()
                 }
             }
-            prepareSessionsInBackground(orderedSessions.enumerated().compactMap { offset, sessionName in
+            prepareSessionsInBackground(sessionDisplayOrder.enumerated().compactMap { offset, sessionName in
                 offset == initialIndex ? nil : sessionName
             })
         }
@@ -1036,6 +1071,10 @@ final class ThreadDetailViewController: NSViewController {
     func currentSlot() -> TabSlot? {
         guard currentTabIndex >= 0, currentTabIndex < tabSlots.count else { return nil }
         return tabSlots[currentTabIndex]
+    }
+
+    func isDiffUnread() -> Bool {
+        thread.currentDiffFingerprint != thread.lastSeenDiffFingerprint
     }
 
     func focusCurrentTabForNavigation() {
@@ -1122,6 +1161,7 @@ final class ThreadDetailViewController: NSViewController {
         tabSlots.firstIndex { slot in
             switch slot {
             case .terminal(let name): return name == id
+            case .diff: return id == "__diff__"
             case .web(let identifier): return identifier == id
             case .draft(let identifier): return identifier == id
             case .chat(let identifier): return identifier == id
@@ -1375,7 +1415,18 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         // Keep pinnedCount / primaryTabIndex in sync.
-        if displayIndex < pinnedCount { pinnedCount -= 1 }
+        if TabPinningState.isPinnedMovableIndex(
+            displayIndex,
+            pinnedBoundary: pinnedCount,
+            fixedCount: Self.fixedTabCount
+        ) {
+            pinnedCount -= 1
+            pinnedCount = TabPinningState.clampedPinnedBoundary(
+                pinnedCount,
+                fixedCount: Self.fixedTabCount,
+                totalCount: tabSlots.count
+            )
+        }
         if displayIndex == primaryTabIndex {
             primaryTabIndex = 0
         } else if primaryTabIndex > displayIndex {
@@ -1617,12 +1668,22 @@ final class ThreadDetailViewController: NSViewController {
         let filePath = notification.userInfo?["filePath"] as? String
         let commitHash = notification.userInfo?["commitHash"] as? String
         let forceWorkingTree = (notification.userInfo?["mode"] as? String) == "uncommitted"
+        if let diffIndex = tabSlots.firstIndex(of: .diff) {
+            selectTab(at: diffIndex)
+        }
         showDiffViewer(scrollToFile: filePath, commitHash: commitHash, forceWorkingTreeDiff: forceWorkingTree)
     }
 
     @objc private func handleHideDiffViewerNotification() {
         guard !isPopoutContext else { return }
         hideDiffViewer()
+    }
+
+    @objc private func handleDiffFileCountChanged(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID,
+              threadId == thread.id,
+              let fileCount = notification.userInfo?["fileCount"] as? Int else { return }
+        updateDiffTabTitle(fileCount: fileCount)
     }
 
     @objc private func handleSectionsDidChange() {
@@ -1758,6 +1819,7 @@ final class ThreadDetailViewController: NSViewController {
 
             topBar.needsDisplay = true
             pinSeparator.needsDisplay = true
+            fixedTabsSeparator.needsDisplay = true
         }
     }
 

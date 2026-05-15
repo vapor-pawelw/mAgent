@@ -178,12 +178,68 @@ extension ThreadDetailViewController {
 
     // MARK: - Inline Diff Viewer
 
+    func updateDiffTabTitle(fileCount: Int) {
+        guard let diffIndex = tabSlots.firstIndex(of: .diff), diffIndex < tabItems.count else { return }
+        tabItems[diffIndex].titleLabel.stringValue = "Diff (\(fileCount))"
+    }
+
+    func setDiffViewerVisible(_ visible: Bool) {
+        guard let vc = diffVC else { return }
+        vc.view.isHidden = !visible
+    }
+
+    func notifyDiffTabDidActivate() {
+        NotificationCenter.default.post(
+            name: .magentDiffTabDidActivate,
+            object: nil,
+            userInfo: ["threadId": thread.id]
+        )
+    }
+
+    func notifyDiffTabDidDeactivate() {
+        NotificationCenter.default.post(
+            name: .magentDiffTabDidDeactivate,
+            object: nil,
+            userInfo: ["threadId": thread.id]
+        )
+    }
+
+    func selectDiffTab(displayIndex: Int) {
+        notifyDiffTabDidActivate()
+        for (i, item) in tabItems.enumerated() {
+            item.isSelected = (i == displayIndex)
+            if case .diff = tabSlots[i] {
+                item.hasUnreadDiff = isDiffUnread()
+            }
+        }
+
+        for tv in terminalViews where tv.superview != nil {
+            tv.isHidden = true
+        }
+        hideActiveWebTab()
+        hideActiveDraftTab()
+        hideActiveChatTab()
+        hideEmptyState()
+
+        currentTabIndex = displayIndex
+        threadManager.markDiffSeen(for: thread.id)
+        if let latest = threadManager.threads.first(where: { $0.id == thread.id }) {
+            thread = latest
+        }
+        if displayIndex < tabItems.count {
+            tabItems[displayIndex].hasUnreadDiff = isDiffUnread()
+        }
+        postFocusedThreadContextChangedIfKeyWindow()
+        showDiffViewer()
+    }
+
     func showDiffViewer(scrollToFile: String? = nil, commitHash: String? = nil, forceWorkingTreeDiff: Bool = false) {
         NSLog("[DiffViewer] showDiffViewer called, scrollToFile=%@, commitHash=%@, diffVC=%@, isLoading=%d, view.window=%@",
               scrollToFile ?? "nil", commitHash ?? "nil", String(describing: diffVC), isLoadingDiffViewer ? 1 : 0,
               String(describing: view.window))
 
         if let existing = diffVC {
+            setDiffViewerVisible(true)
             // If the commit context or working-tree mode changed, reload the viewer entirely
             if currentDiffCommitHash != commitHash || currentDiffForceWorkingTree != forceWorkingTreeDiff {
                 hideDiffViewer()
@@ -283,6 +339,8 @@ extension ThreadDetailViewController {
             }
 
             let fileCount = entries.count
+            let additions = entries.reduce(0) { $0 + $1.additions }
+            let deletions = entries.reduce(0) { $0 + $1.deletions }
             NSLog("[DiffViewer] got %d entries, entering MainActor", fileCount)
 
             await MainActor.run {
@@ -299,6 +357,7 @@ extension ThreadDetailViewController {
                 }
 
                 let vc = InlineDiffViewController()
+                vc.setShowsInlineChrome(false)
                 vc.onClose = { [weak self] in
                     self?.hideDiffViewer()
                 }
@@ -308,6 +367,13 @@ extension ThreadDetailViewController {
                 vc.onResizeDrag = { [weak self] phase, delta in
                     self?.handleDiffResizeDrag(phase: phase, delta: delta)
                 }
+                vc.onReviewedFilesChanged = { [weak self] signatures in
+                    guard let self else { return }
+                    threadManager.updateDiffReviewedFileSignatures(for: thread.id, signatures: signatures)
+                    if let latest = threadManager.threads.first(where: { $0.id == thread.id }) {
+                        thread = latest
+                    }
+                }
                 NSLog("[DiffViewer] addChild")
                 addChild(vc)
 
@@ -315,36 +381,31 @@ extension ThreadDetailViewController {
                 let diffView = vc.view
                 diffView.translatesAutoresizingMaskIntoConstraints = false
                 NSLog("[DiffViewer] adding diffView to view hierarchy")
-                view.addSubview(diffView)
-
-                // Calculate default height (70% of available space)
-                let availableHeight = terminalContainer.frame.height
-                let savedHeight = UserDefaults.standard.object(forKey: Self.diffHeightKey) as? CGFloat
-                let defaultHeight = availableHeight * Self.diffDefaultRatio
-                let height = savedHeight ?? defaultHeight
-                let clampedHeight = max(min(height, availableHeight - 60), Self.diffMinHeight)
-                NSLog("[DiffViewer] availableHeight=%.1f, clampedHeight=%.1f", availableHeight, clampedHeight)
-
-                // Deactivate old bottom constraint, create new ones
-                NSLog("[DiffViewer] deactivating terminalBottomToView, activating new constraints")
-                terminalBottomToView?.isActive = false
-                terminalBottomToDiff = terminalContainer.bottomAnchor.constraint(equalTo: diffView.topAnchor)
-                diffHeightConstraint = diffView.heightAnchor.constraint(equalToConstant: clampedHeight)
-
+                terminalContainer.addSubview(diffView)
+                diffView.isHidden = false
                 NSLayoutConstraint.activate([
-                    terminalBottomToDiff!,
-                    diffView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                    diffView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                    diffView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-                    diffHeightConstraint!,
+                    diffView.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+                    diffView.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
+                    diffView.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
+                    diffView.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
                 ])
                 NSLog("[DiffViewer] constraints activated")
 
                 if let message = tooLargeMessage {
                     vc.setDiffUnavailableMessage(message)
                 } else if let diffContent {
+                    self.updateDiffTabTitle(fileCount: fileCount)
+                    vc.setDiffSummary(fileCount: fileCount, additions: additions, deletions: deletions)
                     NSLog("[DiffViewer] calling setDiffContent")
-                    vc.setDiffContent(diffContent, fileCount: fileCount, worktreePath: worktreePath, mergeBase: mergeBase)
+                    vc.setDiffContent(
+                        diffContent,
+                        fileCount: fileCount,
+                        worktreePath: worktreePath,
+                        mergeBase: mergeBase,
+                        reviewedFileSignatures: commitHash == nil ? self.thread.diffReviewedFileSignatures : [:],
+                        allowsReviewMarkers: commitHash == nil,
+                        showsSpinner: true
+                    )
                 }
                 diffVC = vc
                 currentDiffCommitHash = commitHash
@@ -370,20 +431,12 @@ extension ThreadDetailViewController {
     func hideDiffViewer() {
         dismissDiffImageOverlay(animated: false)
         guard let vc = diffVC else { return }
-        // Save height before removing
-        if let h = diffHeightConstraint?.constant {
-            UserDefaults.standard.set(h, forKey: Self.diffHeightKey)
-        }
-        terminalBottomToDiff?.isActive = false
-        diffHeightConstraint?.isActive = false
         vc.view.removeFromSuperview()
         vc.removeFromParent()
         diffVC = nil
         currentDiffCommitHash = nil
         currentDiffForceWorkingTree = false
         isLoadingDiffViewer = false
-
-        terminalBottomToView?.isActive = true
     }
 
     func refreshDiffViewerIfVisible() {
@@ -443,7 +496,19 @@ extension ThreadDetailViewController {
                 if let message = tooLargeMessage {
                     self.diffVC?.setDiffUnavailableMessage(message)
                 } else if let content = diffContent {
-                    self.diffVC?.setDiffContent(content, fileCount: entries.count, worktreePath: worktreePath, mergeBase: mergeBase)
+                    self.updateDiffTabTitle(fileCount: entries.count)
+                    let additions = entries.reduce(0) { $0 + $1.additions }
+                    let deletions = entries.reduce(0) { $0 + $1.deletions }
+                    self.diffVC?.setDiffSummary(fileCount: entries.count, additions: additions, deletions: deletions)
+                    self.diffVC?.setDiffContent(
+                        content,
+                        fileCount: entries.count,
+                        worktreePath: worktreePath,
+                        mergeBase: mergeBase,
+                        reviewedFileSignatures: self.thread.diffReviewedFileSignatures,
+                        allowsReviewMarkers: true,
+                        showsSpinner: false
+                    )
                 } else {
                     // No more changes — auto-dismiss
                     self.hideDiffViewer()

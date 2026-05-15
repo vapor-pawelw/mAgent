@@ -16,6 +16,7 @@ xcuserdata/
 Tests/.build/
 .swiftpm/
 Package.resolved
+node_modules/
 
 # Tuist
 Tuist/.build/

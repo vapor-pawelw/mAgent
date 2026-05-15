@@ -117,12 +117,13 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 
 ### Diff Viewer
 - `showDiffViewer(scrollToFile:commitHash:forceWorkingTreeDiff:)` in `ThreadDetailViewController+DiffViewer.swift` accepts an optional `commitHash` and `forceWorkingTreeDiff` flag.
-- `ThreadDetailViewController.diffMaxFileCount` / `diffMaxLineCount` cap pathological diffs before AppKit parsing/rendering. When a cap is exceeded, `InlineDiffViewController.setDiffUnavailableMessage(...)` renders a placeholder instead of building sections.
+- `ThreadDetailViewController.diffMaxFileCount` / `diffMaxLineCount` cap pathological diffs before WebKit rendering. When a cap is exceeded, `InlineDiffViewController.setDiffUnavailableMessage(...)` renders a placeholder instead of handing the patch to the bundled renderer.
 - `currentDiffCommitHash: String?` on `ThreadDetailViewController` tracks what the open viewer is showing. If it differs from the requested `commitHash` (or `forceWorkingTreeDiff` changed), the viewer is closed and rebuilt.
 - `currentDiffForceWorkingTree: Bool` — set when opening a diff for the "Uncommitted" detail mode; causes `refreshDiffViewerIfVisible()` and `showDiffViewer` to use `workingTreeDiffContent/Stats` instead of branch diff.
 - `refreshDiffViewerIfVisible()` skips refresh when `currentDiffCommitHash != nil` (commit diffs are static); respects `currentDiffForceWorkingTree` to determine which diff to refresh.
 - `hideDiffViewer()` resets both `currentDiffCommitHash` and `currentDiffForceWorkingTree` to nil/false.
 - The `magentShowDiffViewer` notification carries an optional `"commitHash"` key, or `"mode": "uncommitted"` (from uncommitted detail mode file selection), set by `DiffPanelView.selectFile()`.
+- `InlineDiffViewController` hosts `Magent/Resources/DiffRenderer/dist/index.html` in a local `WKWebView`. It passes unified git patch text to `window.magentDiffRenderer.setDiff(...)` and keeps the native close, collapse/expand, and resize controls in AppKit.
 
 ## Gotchas
 
@@ -138,7 +139,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 
 - **`uncommittedEntries` holds working-tree diff only (vs HEAD)**: the "Uncommitted" row count reflects only files not yet committed. The ALL CHANGES tab uses `allBranchEntries` (full branch diff from merge-base) which is a separate data source.
 - **`allBranchEntries == nil` means "not loaded yet", not "no changes"**: when the tab has never been opened for a non-main thread, the ALL CHANGES button intentionally shows no count and the body requests data lazily on first open. Only an empty array means "loaded and there are no branch changes".
-- **Large diff safety caps apply to both sidebar file lists and the inline diff viewer**: if the loaded file list exceeds `diffMaxFileCount`, the panel shows `Diff is too large` instead of creating thousands of `NSView` rows. If the diff body exceeds either `diffMaxFileCount` or `diffMaxLineCount`, the inline viewer shows the same placeholder instead of parsing and rendering sections.
+- **Large diff safety caps apply to both sidebar file lists and the inline diff viewer**: if the loaded file list exceeds `diffMaxFileCount`, the panel shows `Diff is too large` instead of creating thousands of `NSView` rows. If the diff body exceeds either `diffMaxFileCount` or `diffMaxLineCount`, the inline viewer shows the same placeholder instead of parsing/rendering the patch in WebKit.
 - **"Uncommitted" row is conditionally hidden**: When `uncommittedEntries` is empty (clean working tree), the row is not rendered. This is purely visual — `uncommittedEntries` is still stored and used for the count badge when non-empty.
 - **Uncommitted-row discard is bulk and destructive**: the row-level `Discard Changes` action runs `GitService.discardFile` for each tracked/untracked path in `uncommittedEntries` after explicit confirmation. Keep the confirmation modal and warning styling; this action can remove untracked files and reset staged changes across the whole worktree.
 - **`forceWorkingTreeDiff` must reload viewer when it changes**: The viewer reload guard checks both `currentDiffCommitHash` and `currentDiffForceWorkingTree`. Without the latter, switching between "Uncommitted" detail mode (force working-tree) and normal CHANGES tab (branch diff) would reuse the wrong diff content.

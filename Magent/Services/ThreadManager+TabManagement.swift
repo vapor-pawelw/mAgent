@@ -343,6 +343,18 @@ extension ThreadManager {
         sessionLifecycleService.updateLastSelectedTab(for: threadId, identifier: identifier)
     }
 
+    func updateCurrentDiffFingerprint(for threadId: UUID, fingerprint: String?) {
+        sessionLifecycleService.updateCurrentDiffFingerprint(for: threadId, fingerprint: fingerprint)
+    }
+
+    func markDiffSeen(for threadId: UUID) {
+        sessionLifecycleService.markDiffSeen(for: threadId)
+    }
+
+    func updateDiffReviewedFileSignatures(for threadId: UUID, signatures: [String: String]) {
+        sessionLifecycleService.updateDiffReviewedFileSignatures(for: threadId, signatures: signatures)
+    }
+
     // MARK: - Closed Tab History
 
     func pushClosedTabSnapshot(_ snapshot: ClosedTabSnapshot, for threadId: UUID) {
