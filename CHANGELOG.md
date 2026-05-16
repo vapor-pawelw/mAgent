@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.6.2 - 2026-05-16
+
+
 ### CLI
 
 #### Features
@@ -112,6 +117,7 @@ All notable changes to this project will be documented in this file.
 - Fixed drag-and-drop attachments in chat tabs inserting filesystem paths into the input field. Dropped files/images now attach as draft thumbnails from the composer or main chat surface.
 - Fixed chat composer focus loss that could block typing after tab interactions/background clicks; the composer now uses the native text view text system.
 - Fixed Codex app-server chat stalls where protocol-level error/failed-turn notifications were not surfaced, leaving turns looking stuck after partial output.
+
 
 ## 1.6.1 - 2026-04-18
 
