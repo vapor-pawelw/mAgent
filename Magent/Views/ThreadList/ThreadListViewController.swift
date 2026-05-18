@@ -1544,7 +1544,12 @@ final class ThreadListViewController: NSViewController {
             return
         }
 
-        selectedThreadJumpIconView.image = NSImage(systemSymbolName: selectedThread.threadIcon.symbolName, accessibilityDescription: selectedThread.threadIcon.accessibilityDescription)
+        let iconSymbolName = selectedThread.isMain ? "house.fill" : selectedThread.threadIcon.symbolName
+        let iconAccessibilityDescription = selectedThread.isMain ? nil : selectedThread.threadIcon.accessibilityDescription
+        selectedThreadJumpIconView.image = NSImage(
+            systemSymbolName: iconSymbolName,
+            accessibilityDescription: iconAccessibilityDescription
+        )
         selectedThreadJumpIconView.contentTintColor = NSColor(resource: .primaryBrand)
         let description = selectedThread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let worktreeName = (selectedThread.worktreePath as NSString).lastPathComponent
