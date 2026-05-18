@@ -89,6 +89,7 @@ final class UpdateService {
     private let persistence = PersistenceService.shared
     private let releasesURL = URL(string: "https://api.github.com/repos/vapor-pawelw/mAgent/releases?per_page=10")!
     private let updaterLogPath = "/tmp/magent-self-update.log"
+    private let updaterStatusPath = "/tmp/magent-self-update.status"
     private let preparedUpdateRootURL = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("magent-prepared-update", isDirectory: true)
 
@@ -103,6 +104,9 @@ final class UpdateService {
     private var preparedVersion: String?
     /// Which install strategy produced the prepared update; drives how `installPreparedUpdate` relaunches.
     private var preparedStrategy: InstallStrategy?
+    /// Tracks the Homebrew tap refresh done during prefetch so relaunch can avoid
+    /// repeating the slowest part immediately after the app exits.
+    private var homebrewPrefetchedAt: Date?
     private var bundleUpdatePhase: BundleUpdatePhase = .idle
 
     private enum BundleUpdatePhase: Equatable {
@@ -599,6 +603,7 @@ final class UpdateService {
                 }
                 self.preparedAppURL = finalPreparedURL
                 self.preparedVersion = version
+                self.preparedStrategy = .bundleReplacement
                 showReadyToInstallBanner(version: version)
             }
         } catch {
@@ -885,6 +890,7 @@ final class UpdateService {
     private func runHomebrewPrefetch() async throws {
         let brewEnvPrefix = "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\n"
         _ = await ShellExecutor.execute(brewEnvPrefix + "brew update --quiet || true")
+        homebrewPrefetchedAt = Date()
         let fetchResult = await ShellExecutor.execute(brewEnvPrefix + "brew fetch --cask magent")
         guard fetchResult.exitCode == 0 else {
             let stderr = fetchResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -899,9 +905,9 @@ final class UpdateService {
         setBundleUpdatePhase(.installing)
         do {
             let updaterScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
-            try writeHomebrewUpdaterScript(at: updaterScriptPath)
+            try writeHomebrewUpdaterScript(at: updaterScriptPath, shouldRefreshTap: shouldRefreshHomebrewTapBeforeUpgrade())
             let q = ShellExecutor.shellQuote
-            let command = "/usr/bin/nohup /bin/zsh \(q(updaterScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(updaterLogPath)) >/dev/null 2>&1 &"
+            let command = "/usr/bin/nohup /bin/zsh \(q(updaterScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(updaterLogPath)) \(q(updaterStatusPath)) >/dev/null 2>&1 &"
             let result = await ShellExecutor.execute(command)
             guard result.exitCode == 0 else {
                 let msg = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -910,8 +916,9 @@ final class UpdateService {
             clearSkippedVersion(matching: update.version.displayString)
             preparedVersion = nil
             preparedStrategy = nil
-            showUpdateProgressBanner(String(localized: .UpdateStrings.updateInstalling))
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            homebrewPrefetchedAt = nil
+            showUpdateProgressBanner(String(localized: .UpdateStrings.updateInstallingHomebrew))
+            try? await Task.sleep(nanoseconds: 100_000_000)
             NSApp.terminate(nil)
         } catch {
             isUpdating = false
@@ -924,21 +931,48 @@ final class UpdateService {
         }
     }
 
-    private func writeHomebrewUpdaterScript(at path: String) throws {
+    private func shouldRefreshHomebrewTapBeforeUpgrade() -> Bool {
+        guard let homebrewPrefetchedAt else { return true }
+        return Date().timeIntervalSince(homebrewPrefetchedAt) > 600
+    }
+
+    private func writeHomebrewUpdaterScript(at path: String, shouldRefreshTap: Bool) throws {
+        let q = ShellExecutor.shellQuote
+        let waitingMessage = String(localized: .UpdateStrings.updateHomebrewWaitingNotification)
+        let refreshMessage = String(localized: .UpdateStrings.updateHomebrewRefreshNotification)
+        let upgradeMessage = String(localized: .UpdateStrings.updateHomebrewUpgradeNotification)
+        let cleanupMessage = String(localized: .UpdateStrings.updateHomebrewCleanupNotification)
+        let relaunchMessage = String(localized: .UpdateStrings.updateHomebrewRelaunchNotification)
+        let shouldRefreshTapValue = shouldRefreshTap ? "1" : "0"
         let script = """
         #!/bin/zsh
         set -euo pipefail
 
         pid="$1"
         log_path="$2"
+        status_path="$3"
         PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        should_refresh_tap="\(shouldRefreshTapValue)"
 
         exec >>"$log_path" 2>&1
 
         echo "[magent-updater] homebrew flow started at $(date)"
 
+        update_status() {
+          phase="$1"
+          message="$2"
+          printf "%s\\t%s\\t%s\\n" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$phase" "$message" > "$status_path"
+          /usr/bin/osascript \\
+            -e 'on run argv' \\
+            -e 'display notification (item 1 of argv) with title "Magent Update"' \\
+            -e 'end run' \\
+            "$message" >/dev/null 2>&1 || true
+          echo "[magent-updater] $phase: $message"
+        }
+
+        update_status "waiting" \(q(waitingMessage))
         while /bin/kill -0 "$pid" 2>/dev/null; do
-          /bin/sleep 0.2
+          /bin/sleep 0.1
         done
 
         if ! command -v brew >/dev/null 2>&1; then
@@ -951,23 +985,29 @@ final class UpdateService {
           exit 41
         fi
 
-        # Refresh the tap so `brew upgrade` sees the newest cask version.
-        # Without this, a stale local tap can make `brew upgrade` a no-op
-        # even when the release workflow has already pushed a new cask.
-        if ! brew update --quiet; then
-          echo "[magent-updater] brew update failed (continuing anyway)"
+        if [[ "$should_refresh_tap" == "1" ]]; then
+          # Refresh the tap so `brew upgrade` sees the newest cask version.
+          # The in-app prefetch normally did this moments ago, so skip it for
+          # the common path to keep the relaunch gap short.
+          update_status "refreshing-tap" \(q(refreshMessage))
+          if ! brew update --quiet; then
+            echo "[magent-updater] brew update failed (continuing anyway)"
+          fi
         fi
 
+        update_status "upgrading" \(q(upgradeMessage))
         if ! brew upgrade --cask magent; then
           echo "[magent-updater] brew upgrade failed, trying reinstall"
           brew reinstall --cask magent
         fi
 
+        update_status "cleaning" \(q(cleanupMessage))
         if [[ -d "/Applications/Magent.app" ]]; then
           /usr/bin/xattr -dr com.apple.quarantine "/Applications/Magent.app" >/dev/null 2>&1 || true
           /usr/bin/xattr -dr com.apple.provenance "/Applications/Magent.app" >/dev/null 2>&1 || true
         fi
 
+        update_status "relaunching" \(q(relaunchMessage))
         /usr/bin/open -a Magent
         /bin/rm -f "$0"
         echo "[magent-updater] homebrew flow completed"
