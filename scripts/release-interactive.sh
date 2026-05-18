@@ -152,6 +152,19 @@ has_meaningful_changelog_notes() {
   [[ "${count:-0}" -gt 0 ]]
 }
 
+print_changelog_domain_order() {
+  local notes_file="$1"
+  awk '
+    /^### / {
+      domain = $0
+      sub(/^### /, "", domain)
+      if (domain != "") {
+        print "- " domain
+      }
+    }
+  ' "$notes_file"
+}
+
 promote_unreleased_changelog() {
   local changelog_file="$1"
   local version="$2"
@@ -456,6 +469,11 @@ main() {
   echo "- Watch workflow in ${source_repo}: $RELEASE_WORKFLOW_NAME"
   echo "- Verify GitHub release in ${release_repo} contains Magent.dmg and Magent.zip"
   echo "- Verify Homebrew tap ${tap_repo} points to version ${version}"
+  echo
+  echo "Pending changelog domain order:"
+  print_changelog_domain_order "$release_notes_file"
+  echo
+  echo "Review this order for release importance before proceeding; the script preserves it exactly."
   echo
 
   if ! confirm "Proceed with this release"; then

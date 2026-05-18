@@ -13,6 +13,7 @@ Guidelines:
 - Group notes by product domain using `### <Domain>` headings (for example: `Thread`, `Sidebar`, `Settings`, `Agents`).
 - Hide empty domains; only include a domain heading when it has at least one note.
 - **Each `### <Domain>` heading must appear at most once per release section.** When adding a new bullet to a release that already has that domain, merge it into the existing `### <Domain>` block (under the appropriate `#### Features` or `#### Bug Fixes` subsection) instead of creating a second `### <Domain>` further down the file. Before any commit that touches `CHANGELOG.md`, scan the affected release section for duplicate domain headings and collapse them. The "What's New" renderer auto-merges duplicates as a safety net, but the on-disk file should still be clean.
+- Order domain sections by release importance, not by when a thread happened to add its changelog entry. Put broad user-facing changes and headline fixes first; keep niche domains, CLI/API details, and supporting fixes later unless they are the primary release story.
 - Keep `Thread` as a single top-level domain by default. Do not split it into permanent domains like `Thread: Rename`.
 - Within each domain, use `#### Features` and `#### Bug Fixes` subsections when both exist, with `#### Bug Fixes` listed below `#### Features`. Do not interleave bullets — all features for a domain go under its `#### Features`, all fixes under its `#### Bug Fixes`.
 - If one topic inside a domain dominates a release, use an optional temporary `##### <Topic>` subheading inside `#### Features` or `#### Bug Fixes` (for example `##### Rename`) and remove it in later releases when no longer needed.
@@ -33,10 +34,11 @@ Run:
 The script will:
 
 1. Read notes from `CHANGELOG.md` under `## Unreleased`
-2. Move them to a versioned section (`## <version> - <YYYY-MM-DD>`)
-3. Commit and push the changelog update
-4. Create an annotated tag containing the new version section
-5. Push the tag and verify release/homebrew automation
+2. Show the pending domain order so it can be reviewed before release
+3. Move them to a versioned section (`## <version> - <YYYY-MM-DD>`)
+4. Commit and push the changelog update
+5. Create an annotated tag containing the new version section
+6. Push the tag and verify release/homebrew automation
 
 GitHub Releases read release notes from the matching `CHANGELOG.md` version section first, with annotated-tag fallback.
 

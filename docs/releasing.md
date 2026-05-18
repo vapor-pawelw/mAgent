@@ -63,18 +63,19 @@ When updating `CHANGELOG.md` for a release or pre-release notes:
 1. Keep pending release notes under `## Unreleased`, then let `./scripts/release-interactive.sh` promote them into the versioned section.
 2. Group notes by domain using `### <Domain>` headings (for example: `Thread`, `Sidebar`, `Settings`, `Agents`).
 3. Omit empty domains; only keep headings that have at least one note.
-4. Keep `Thread` as a single top-level domain by default; avoid permanent split domains like `Thread: Rename`.
-5. Within each domain, split entries into `#### Features` and `#### Bug Fixes` when both exist, with bug fixes listed below features.
-6. If one topic dominates in a domain for a specific release, use an optional temporary `##### <Topic>` subheading inside `#### Features`/`#### Bug Fixes` and drop it once no longer needed.
-7. Include only:
+4. Order domain sections by release importance, not by insertion time. Put broad user-facing changes and headline fixes first; keep niche CLI/API details later unless they are the main release story.
+5. Keep `Thread` as a single top-level domain by default; avoid permanent split domains like `Thread: Rename`.
+6. Within each domain, split entries into `#### Features` and `#### Bug Fixes` when both exist, with bug fixes listed below features.
+7. If one topic dominates in a domain for a specific release, use an optional temporary `##### <Topic>` subheading inside `#### Features`/`#### Bug Fixes` and drop it once no longer needed.
+8. Include only:
    - New features
    - Bug fixes
    - Performance improvements
-8. Omit implementation details, internal refactors, tooling-only changes, and infrastructure-only updates.
-9. Within each subsection, order entries by user impact:
+9. Omit implementation details, internal refactors, tooling-only changes, and infrastructure-only updates.
+10. Within each subsection, order entries by user impact:
    - Put broad/high-impact items first and describe them at a higher level.
    - Keep niche or smaller items shorter and place them near the end.
-10. Use user-facing wording focused on outcomes, not code internals.
+11. Use user-facing wording focused on outcomes, not code internals.
 
 ## Feature Flags
 
