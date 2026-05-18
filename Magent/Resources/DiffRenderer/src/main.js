@@ -308,6 +308,33 @@ function createStatus(message) {
   return createElement("div", "status", message);
 }
 
+function errorPayload(error, source) {
+  const message = error instanceof Error ? error.message : String(error ?? "Unknown error");
+  return {
+    type: "error",
+    source,
+    message,
+    stack: error instanceof Error ? error.stack ?? "" : "",
+    fileCount: files.length,
+    patchLength: lastPatch.length,
+  };
+}
+
+function renderFailure(error) {
+  console.error("Diff renderer failed", error);
+  root.replaceChildren(createStatus("Diff renderer failed."));
+  post(errorPayload(error, "renderFailure"));
+  post({ type: "rendered", fileCount: 0, reviewedCount: 0 });
+}
+
+function renderSafely(render) {
+  try {
+    render();
+  } catch (error) {
+    renderFailure(error);
+  }
+}
+
 function normalizeReviewedState(state) {
   if (!state || typeof state !== "object") return {};
   const normalized = {};
@@ -682,6 +709,14 @@ window.addEventListener("scroll", () => {
   });
 }, { passive: true });
 
+window.addEventListener("error", (event) => {
+  post(errorPayload(event.error ?? event.message, "window.error"));
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  post(errorPayload(event.reason, "unhandledrejection"));
+});
+
 window.magentDiffRenderer = {
   setDiff(payload) {
     lastPatch = payload.patch ?? "";
@@ -691,7 +726,7 @@ window.magentDiffRenderer = {
     document.documentElement.dataset.theme = lastThemeType;
     allCollapsed = false;
     expandedContextByHunk.clear();
-    renderCurrent();
+    renderSafely(renderCurrent);
   },
   setMessage(message) {
     root.replaceChildren(createStatus(message));

@@ -40,6 +40,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     private let resizeHandle = DiffDividerResizeHandle()
     private let loadingOverlay = NSView()
     private let loadingSpinner = NSProgressIndicator()
+    private let loadingMessageLabel = NSTextField(labelWithString: "")
     private let summaryFilesLabel = NSTextField(labelWithString: "")
     private let summaryAddedLabel = NSTextField(labelWithString: "")
     private let summaryDeletedLabel = NSTextField(labelWithString: "")
@@ -58,6 +59,11 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     private var currentWorktreePath: String?
     private var currentFileCountSummary: Int = 0
     private var currentReviewedFileCountSummary: Int = 0
+    private var loadingWatchdog: Timer?
+    private var loadingGeneration = 0
+    private var currentRenderDiagnosticSummary = "no render requested"
+
+    private static let rendererLoadTimeout: TimeInterval = 12
 
     var onClose: (() -> Void)?
     var onImageClick: ((_ imageView: NSImageView, _ image: NSImage) -> Void)?
@@ -200,7 +206,21 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         loadingSpinner.controlSize = .regular
         loadingSpinner.isDisplayedWhenStopped = false
         loadingSpinner.translatesAutoresizingMaskIntoConstraints = false
-        loadingOverlay.addSubview(loadingSpinner)
+
+        loadingMessageLabel.font = .systemFont(ofSize: 12, weight: .regular)
+        loadingMessageLabel.textColor = NSColor(resource: .textSecondary)
+        loadingMessageLabel.alignment = .center
+        loadingMessageLabel.lineBreakMode = .byWordWrapping
+        loadingMessageLabel.maximumNumberOfLines = 3
+        loadingMessageLabel.isHidden = true
+        loadingMessageLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let loadingStack = NSStackView(views: [loadingSpinner, loadingMessageLabel])
+        loadingStack.orientation = .vertical
+        loadingStack.alignment = .centerX
+        loadingStack.spacing = 10
+        loadingStack.translatesAutoresizingMaskIntoConstraints = false
+        loadingOverlay.addSubview(loadingStack)
 
         let panGesture = NSPanGestureRecognizer(target: self, action: #selector(handleResizeDrag(_:)))
         resizeHandle.addGestureRecognizer(panGesture)
@@ -272,8 +292,10 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             loadingOverlay.trailingAnchor.constraint(equalTo: webView.trailingAnchor),
             loadingOverlay.bottomAnchor.constraint(equalTo: webView.bottomAnchor),
 
-            loadingSpinner.centerXAnchor.constraint(equalTo: loadingOverlay.centerXAnchor),
-            loadingSpinner.centerYAnchor.constraint(equalTo: loadingOverlay.centerYAnchor),
+            loadingStack.centerXAnchor.constraint(equalTo: loadingOverlay.centerXAnchor),
+            loadingStack.centerYAnchor.constraint(equalTo: loadingOverlay.centerYAnchor),
+            loadingStack.leadingAnchor.constraint(greaterThanOrEqualTo: loadingOverlay.leadingAnchor, constant: 24),
+            loadingStack.trailingAnchor.constraint(lessThanOrEqualTo: loadingOverlay.trailingAnchor, constant: -24),
         ])
     }
 
@@ -325,17 +347,34 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     }
 
     private func showLoadingOverlay() {
+        loadingGeneration += 1
+        let generation = loadingGeneration
         didRevealWebView = false
+        loadingMessageLabel.isHidden = true
+        loadingMessageLabel.stringValue = ""
         loadingOverlay.isHidden = false
         loadingOverlay.alphaValue = 1
         loadingSpinner.startAnimation(nil)
         webView.alphaValue = 0
         webView.isHidden = true
+        loadingWatchdog?.invalidate()
+        loadingWatchdog = Timer.scheduledTimer(withTimeInterval: Self.rendererLoadTimeout, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      !self.didRevealWebView,
+                      self.loadingGeneration == generation else { return }
+                self.handleLoadingTimeout()
+            }
+        }
     }
 
     private func hideLoadingOverlay() {
         guard !didRevealWebView else { return }
         didRevealWebView = true
+        loadingWatchdog?.invalidate()
+        loadingWatchdog = nil
+        loadingMessageLabel.isHidden = true
+        loadingMessageLabel.stringValue = ""
         loadingSpinner.stopAnimation(nil)
         webView.alphaValue = 0
         webView.isHidden = false
@@ -350,6 +389,69 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
                 self.loadingOverlay.alphaValue = 1
             }
         }
+    }
+
+    private func showLoadingFailure(_ message: String) {
+        loadingSpinner.stopAnimation(nil)
+        loadingMessageLabel.stringValue = message
+        loadingMessageLabel.isHidden = false
+    }
+
+    private func handleLoadingTimeout() {
+        showLoadingFailure(String(localized: .ThreadStrings.diffRendererTimedOut))
+        logRendererFailure(
+            "timeout",
+            detail: "rendererReady=\(isRendererReady) pendingCalls=\(pendingJavaScriptCalls.count) webViewLoading=\(webView.isLoading) estimatedProgress=\(webView.estimatedProgress)"
+        )
+        captureRendererDiagnosticSnapshot()
+    }
+
+    private func captureRendererDiagnosticSnapshot() {
+        let script = """
+        (() => {
+          const root = document.getElementById("root");
+          const bodyText = document.body?.innerText ?? "";
+          return {
+            readyState: document.readyState,
+            url: location.href,
+            rendererType: typeof window.magentDiffRenderer,
+            rootChildCount: root ? root.childElementCount : -1,
+            rootTextLength: root ? root.innerText.length : -1,
+            bodyTextLength: bodyText.length,
+            bodyTextStart: bodyText.slice(0, 240),
+            theme: document.documentElement.dataset.theme || ""
+          };
+        })()
+        """
+        webView.evaluateJavaScript(script) { [weak self] result, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let error {
+                    self.logRendererFailure("timeout diagnostic probe failed", detail: error.localizedDescription)
+                } else {
+                    self.logRendererFailure("timeout diagnostic snapshot", detail: self.diagnosticDescription(result))
+                }
+            }
+        }
+    }
+
+    private func logRendererFailure(_ reason: String, detail: String?) {
+        NSLog(
+            "[DiffRenderer] failure reason=%@ context=%@ detail=%@",
+            reason,
+            currentRenderDiagnosticSummary,
+            detail ?? "nil"
+        )
+    }
+
+    private func diagnosticDescription(_ value: Any?) -> String {
+        guard let value else { return "nil" }
+        if JSONSerialization.isValidJSONObject(value),
+           let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+           let string = String(data: data, encoding: .utf8) {
+            return string
+        }
+        return String(describing: value)
     }
 
     private func configureDocumentStartThemeScript() {
@@ -529,6 +631,14 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         showsSpinner: Bool = true
     ) {
         currentWorktreePath = worktreePath
+        currentRenderDiagnosticSummary = renderDiagnosticSummary(
+            rawDiff: rawDiff,
+            fileCount: fileCount,
+            worktreePath: worktreePath,
+            mergeBase: mergeBase,
+            reviewedFileSignatures: reviewedFileSignatures,
+            allowsReviewMarkers: allowsReviewMarkers
+        )
         headerLabel.stringValue = "DIFF (\(fileCount) files)"
         expandCollapseButton.isEnabled = true
         expandCollapseButton.alphaValue = 1
@@ -552,6 +662,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         evaluateRendererCall("window.magentDiffRenderer?.setDiff(\(payload))") { [weak self] _, error in
             guard let self else { return }
             if let error {
+                self.logRendererFailure("setDiff evaluation failed", detail: error.localizedDescription)
                 self.setDiffUnavailableMessage("Diff renderer failed: \(error.localizedDescription)")
                 return
             }
@@ -578,6 +689,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     }
 
     func setDiffUnavailableMessage(_ message: String) {
+        currentRenderDiagnosticSummary = "message=\(message)"
         headerLabel.stringValue = "DIFF"
         expandCollapseButton.isEnabled = false
         expandCollapseButton.alphaValue = 0.45
@@ -592,6 +704,29 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             guard let self, !self.didRevealWebView else { return }
             self.hideLoadingOverlay()
         }
+    }
+
+    private func renderDiagnosticSummary(
+        rawDiff: String,
+        fileCount: Int,
+        worktreePath: String?,
+        mergeBase: String?,
+        reviewedFileSignatures: [String: String],
+        allowsReviewMarkers: Bool
+    ) -> String {
+        let lineCount = rawDiff.utf8.reduce(into: 0) { count, byte in
+            if byte == 10 { count += 1 }
+        } + (rawDiff.isEmpty ? 0 : 1)
+        return [
+            "files=\(fileCount)",
+            "patchChars=\(rawDiff.count)",
+            "patchBytes=\(rawDiff.utf8.count)",
+            "patchLines=\(lineCount)",
+            "reviewedSignatures=\(reviewedFileSignatures.count)",
+            "allowsReviewMarkers=\(allowsReviewMarkers)",
+            "mergeBase=\(mergeBase ?? "nil")",
+            "worktree=\(worktreePath ?? "nil")",
+        ].joined(separator: " ")
     }
 
     func expandFile(_ relativePath: String, collapseOthers: Bool) {
@@ -687,7 +822,19 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
                     endLine: endLine
                 )
             } else if type == "error", let errorMessage {
-                NSLog("[DiffRenderer] %@", errorMessage)
+                let source = body["source"] as? String ?? "renderer"
+                let stack = body["stack"] as? String
+                let rendererFileCount = body["fileCount"] as? Int
+                let patchLength = body["patchLength"] as? Int
+                self.logRendererFailure(
+                    source,
+                    detail: [
+                        "message=\(errorMessage)",
+                        stack.map { "stack=\($0)" },
+                        rendererFileCount.map { "rendererFileCount=\($0)" },
+                        patchLength.map { "patchLength=\($0)" },
+                    ].compactMap { $0 }.joined(separator: " ")
+                )
             } else if type == "reviewedStateChanged" {
                 let reviewed = body["reviewedFileSignatures"] as? [String: String] ?? [:]
                 let fileCount = body["fileCount"] as? Int ?? self.currentFileCountSummary

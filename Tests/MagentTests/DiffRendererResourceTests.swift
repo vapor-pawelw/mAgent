@@ -14,6 +14,10 @@ struct DiffRendererResourceTests {
         repositoryRoot.appendingPathComponent("Magent/Resources/DiffRenderer/\(path)")
     }
 
+    private func appFile(_ path: String) -> URL {
+        repositoryRoot.appendingPathComponent("Magent/\(path)")
+    }
+
     @Test
     func builtRendererUsesRelativeFlatAssetURLsForBundleLoading() throws {
         let html = try String(contentsOf: rendererFile("dist/index.html"), encoding: .utf8)
@@ -99,8 +103,27 @@ struct DiffRendererResourceTests {
         let source = try String(contentsOf: rendererFile("src/main.js"), encoding: .utf8)
 
         #expect(source.contains("setDiff(payload)"))
-        #expect(source.contains("renderCurrent();"))
+        #expect(source.contains("renderSafely(renderCurrent);"))
+        #expect(source.contains("function renderFailure(error)"))
+        #expect(source.contains("function errorPayload(error, source)"))
+        #expect(source.contains("window.addEventListener(\"error\""))
+        #expect(source.contains("window.addEventListener(\"unhandledrejection\""))
         #expect(source.contains("post({ type: \"rendered\", fileCount: 0, reviewedCount: 0 });"))
         #expect(source.contains("post({\n    type: \"rendered\",\n    fileCount: files.length"))
+    }
+
+    @Test
+    func inlineDiffHostHasNativeLoadingTimeoutFallback() throws {
+        let source = try String(
+            contentsOf: appFile("Views/Terminal/InlineDiffViewController.swift"),
+            encoding: .utf8
+        )
+
+        #expect(source.contains("rendererLoadTimeout"))
+        #expect(source.contains("Timer.scheduledTimer"))
+        #expect(source.contains("showLoadingFailure"))
+        #expect(source.contains("captureRendererDiagnosticSnapshot"))
+        #expect(source.contains("currentRenderDiagnosticSummary"))
+        #expect(source.contains("ThreadStrings.diffRendererTimedOut"))
     }
 }

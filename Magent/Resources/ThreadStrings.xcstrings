@@ -1860,6 +1860,17 @@
         }
       }
     },
+    "diffRendererTimedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diff renderer did not finish loading."
+          }
+        }
+      }
+    },
     "chatSlashCommandTerminalSetupDescription": {
       "extractionState": "manual",
       "localizations": {
