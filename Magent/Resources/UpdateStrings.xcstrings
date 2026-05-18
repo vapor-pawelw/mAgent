@@ -67,6 +67,17 @@
         }
       }
     },
+    "updateInstallingHomebrew": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installing with Homebrew... macOS notifications will show progress while Magent restarts."
+          }
+        }
+      }
+    },
     "updateCheckAlreadyInProgress": {
       "extractionState": "manual",
       "localizations": {
@@ -85,6 +96,61 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hide Changes"
+          }
+        }
+      }
+    },
+    "updateHomebrewCleanupNotification": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finishing the Homebrew update."
+          }
+        }
+      }
+    },
+    "updateHomebrewRefreshNotification": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refreshing Homebrew before installing."
+          }
+        }
+      }
+    },
+    "updateHomebrewRelaunchNotification": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relaunching Magent."
+          }
+        }
+      }
+    },
+    "updateHomebrewUpgradeNotification": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installing the Homebrew cask."
+          }
+        }
+      }
+    },
+    "updateHomebrewWaitingNotification": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for Magent to quit before installing."
           }
         }
       }
