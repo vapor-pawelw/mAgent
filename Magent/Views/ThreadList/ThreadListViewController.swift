@@ -1551,16 +1551,7 @@ final class ThreadListViewController: NSViewController {
             accessibilityDescription: iconAccessibilityDescription
         )
         selectedThreadJumpIconView.contentTintColor = NSColor(resource: .primaryBrand)
-        let description = selectedThread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let worktreeName = (selectedThread.worktreePath as NSString).lastPathComponent
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !description.isEmpty {
-            selectedThreadJumpTitleLabel.stringValue = description
-        } else if !worktreeName.isEmpty {
-            selectedThreadJumpTitleLabel.stringValue = worktreeName
-        } else {
-            selectedThreadJumpTitleLabel.stringValue = "Thread"
-        }
+        selectedThreadJumpTitleLabel.stringValue = SelectedThreadJumpPresenter.title(for: selectedThread)
 
         let row = outlineView.row(forItem: selectedThread)
         let shouldShow: Bool
