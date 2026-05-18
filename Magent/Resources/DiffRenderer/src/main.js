@@ -588,12 +588,14 @@ function renderCurrent() {
 
   if (!lastPatch.trim()) {
     root.append(createStatus("No files changed"));
+    post({ type: "rendered", fileCount: 0, reviewedCount: 0 });
     return;
   }
 
   files = parsePatch(lastPatch);
   if (files.length === 0) {
     root.append(createStatus("No files changed"));
+    post({ type: "rendered", fileCount: 0, reviewedCount: 0 });
     return;
   }
 

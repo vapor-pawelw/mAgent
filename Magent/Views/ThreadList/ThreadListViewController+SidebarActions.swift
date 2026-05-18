@@ -1308,6 +1308,7 @@ extension ThreadListViewController {
             let baseBranch: String?
             let upstreamStatus: BranchUpstreamStatus
             let diffFingerprint: String
+            let diffTabFileCount: Int
 
             if current.isMain {
                 baseBranch = nil
@@ -1328,10 +1329,15 @@ extension ThreadListViewController {
                 commits = Array(commitPage.prefix(commitLimit))
                 upstreamStatus = await upstreamTask
                 diffFingerprint = await fingerprintTask
+                diffTabFileCount = entries.count
             } else {
                 let resolvedBaseBranch = self.threadManager.resolveBaseBranch(for: current)
                 baseBranch = resolvedBaseBranch
                 async let entriesTask = GitService.shared.workingTreeDiffStats(worktreePath: current.worktreePath)
+                async let diffTabEntriesTask = GitService.shared.threadDiffTabStats(
+                    worktreePath: current.worktreePath,
+                    baseBranch: resolvedBaseBranch
+                )
                 async let commitsTask = GitService.shared.commitLog(
                     worktreePath: current.worktreePath,
                     baseBranch: resolvedBaseBranch,
@@ -1349,6 +1355,8 @@ extension ThreadListViewController {
                 commits = Array(commitPage.prefix(commitLimit))
                 upstreamStatus = await upstreamTask
                 diffFingerprint = await fingerprintTask
+                let diffTabEntries = await diffTabEntriesTask
+                diffTabFileCount = diffTabEntries.count
             }
 
             await MainActor.run {
@@ -1361,7 +1369,7 @@ extension ThreadListViewController {
                     object: nil,
                     userInfo: [
                         "threadId": current.id,
-                        "fileCount": entries.count,
+                        "fileCount": diffTabFileCount,
                     ]
                 )
                 self.updateDiffContextThreadIndicator(for: current)

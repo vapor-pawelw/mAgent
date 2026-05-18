@@ -28,6 +28,11 @@ private final class WeakDiffScriptMessageHandler: NSObject, WKScriptMessageHandl
     }
 }
 
+private struct PendingDiffRendererCall {
+    let javaScript: String
+    let completion: ((Any?, (any Error)?) -> Void)?
+}
+
 final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHandler {
     private let closeButton = NSButton()
     private let expandCollapseButton = NSButton()
@@ -47,7 +52,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     private var showsInlineChrome = true
 
     private var isRendererReady = false
-    private var pendingJavaScriptCalls: [String] = []
+    private var pendingJavaScriptCalls: [PendingDiffRendererCall] = []
     private var allExpanded = true
     private var didRevealWebView = false
     private var currentWorktreePath: String?
@@ -386,19 +391,34 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         return (isDark ? "dark" : "light", backgroundHex)
     }
 
-    private func evaluateRendererCall(_ javaScript: String) {
+    private func evaluateRendererCall(
+        _ javaScript: String,
+        completion: ((Any?, (any Error)?) -> Void)? = nil
+    ) {
         guard isRendererReady else {
-            pendingJavaScriptCalls.append(javaScript)
+            pendingJavaScriptCalls.append(PendingDiffRendererCall(javaScript: javaScript, completion: completion))
             return
         }
-        webView.evaluateJavaScript(javaScript)
+        evaluateRendererJavaScript(javaScript, completion: completion)
     }
 
     private func flushPendingJavaScriptCalls() {
         let calls = pendingJavaScriptCalls
         pendingJavaScriptCalls.removeAll()
         for call in calls {
-            webView.evaluateJavaScript(call)
+            evaluateRendererJavaScript(call.javaScript, completion: call.completion)
+        }
+    }
+
+    private func evaluateRendererJavaScript(
+        _ javaScript: String,
+        completion: ((Any?, (any Error)?) -> Void)?
+    ) {
+        webView.evaluateJavaScript(javaScript) { result, error in
+            guard let completion else { return }
+            Task { @MainActor in
+                completion(result, error)
+            }
         }
     }
 
@@ -529,7 +549,20 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             "reviewedFileSignatures": reviewedFileSignatures,
             "allowsReviewMarkers": allowsReviewMarkers,
         ])
-        evaluateRendererCall("window.magentDiffRenderer?.setDiff(\(payload))")
+        evaluateRendererCall("window.magentDiffRenderer?.setDiff(\(payload))") { [weak self] _, error in
+            guard let self else { return }
+            if let error {
+                self.setDiffUnavailableMessage("Diff renderer failed: \(error.localizedDescription)")
+                return
+            }
+            // `setDiff` renders synchronously. The renderer normally posts a `rendered`
+            // message that hides the spinner, but WKScriptMessage delivery can fail
+            // independently of JavaScript evaluation. Do not leave the tab spinning
+            // forever when the DOM has already been updated.
+            if !self.didRevealWebView {
+                self.hideLoadingOverlay()
+            }
+        }
     }
 
     func setDiffSummary(fileCount: Int, additions: Int, deletions: Int) {
@@ -555,7 +588,10 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         allExpanded = true
         updateExpandCollapseButton()
         showLoadingOverlay()
-        evaluateRendererCall("window.magentDiffRenderer?.setMessage(\(jsonString(message)))")
+        evaluateRendererCall("window.magentDiffRenderer?.setMessage(\(jsonString(message)))") { [weak self] _, _ in
+            guard let self, !self.didRevealWebView else { return }
+            self.hideLoadingOverlay()
+        }
     }
 
     func expandFile(_ relativePath: String, collapseOthers: Bool) {
@@ -587,6 +623,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.applyAppearance()
+            self.flushRendererCallsIfReady()
         }
     }
 
@@ -614,9 +651,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             let filePath = body["filePath"] as? String
 
             if type == "ready" {
-                self.isRendererReady = true
-                self.applyAppearance()
-                self.flushPendingJavaScriptCalls()
+                self.markRendererReady()
             } else if type == "rendered" {
                 let fileCount = body["fileCount"] as? Int ?? self.currentFileCountSummary
                 let reviewedCount = body["reviewedCount"] as? Int ?? self.currentReviewedFileCountSummary
@@ -669,6 +704,25 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
                 )
             }
         }
+    }
+
+    private func flushRendererCallsIfReady() {
+        guard !isRendererReady else { return }
+        webView.evaluateJavaScript("typeof window.magentDiffRenderer !== 'undefined'") { [weak self] result, _ in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      !self.isRendererReady,
+                      (result as? Bool) == true else { return }
+                self.markRendererReady()
+            }
+        }
+    }
+
+    private func markRendererReady() {
+        guard !isRendererReady else { return }
+        isRendererReady = true
+        applyAppearance()
+        flushPendingJavaScriptCalls()
     }
 
     private func respondWithHunkContext(hunkId: String, filePath: String, startLine: Int, endLine: Int) {

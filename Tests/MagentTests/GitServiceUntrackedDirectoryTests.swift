@@ -41,4 +41,28 @@ struct GitServiceUntrackedDirectoryTests {
             "NewFolder/Nested/B.swift",
         ])
     }
+
+    @Test
+    func threadDiffTabStatsCountsCommittedBranchChanges() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("magent-git-service-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        _ = await ShellExecutor.execute("git init -b main", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.name Magent Tests", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.email magent-tests@example.com", workingDirectory: root.path)
+
+        try "one\n".write(to: root.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
+        _ = await ShellExecutor.execute("git add tracked.txt && git commit -m initial", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git checkout -b feature", workingDirectory: root.path)
+        try "one\ntwo\n".write(to: root.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
+        _ = await ShellExecutor.execute("git add tracked.txt && git commit -m feature", workingDirectory: root.path)
+
+        let workingTreeOnly = await GitService.shared.workingTreeDiffStats(worktreePath: root.path)
+        let diffTabStats = await GitService.shared.threadDiffTabStats(worktreePath: root.path, baseBranch: "main")
+
+        #expect(workingTreeOnly.isEmpty)
+        #expect(diffTabStats.map(\.relativePath) == ["tracked.txt"])
+    }
 }

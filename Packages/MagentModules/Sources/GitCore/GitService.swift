@@ -888,6 +888,17 @@ public final class GitService: Sendable {
         return parseDiffEntries(numstatOutput: numstatOutput, statusMap: statusMap)
     }
 
+    /// Returns the stats shown by the fixed Diff tab.
+    /// Non-main threads show every file changed since the base branch merge-base,
+    /// including committed and uncommitted changes. Main threads show only working
+    /// tree changes relative to `HEAD`.
+    public func threadDiffTabStats(worktreePath: String, baseBranch: String?) async -> [FileDiffEntry] {
+        if let baseBranch, !baseBranch.isEmpty {
+            return await diffStats(worktreePath: worktreePath, baseBranch: baseBranch)
+        }
+        return await workingTreeDiffStats(worktreePath: worktreePath)
+    }
+
     /// Lists non-ignored untracked files below a worktree-relative directory path.
     public func untrackedFiles(worktreePath: String, under relativeDirectoryPath: String) async -> [String] {
         let result = await ShellExecutor.execute(

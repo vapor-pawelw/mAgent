@@ -295,7 +295,10 @@ extension ThreadDetailViewController {
                     worktreePath: worktreePath,
                     baseBranch: baseBranch
                 )
-                async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
+                async let entriesTask = GitService.shared.threadDiffTabStats(
+                    worktreePath: worktreePath,
+                    baseBranch: baseBranch
+                )
                 entries = await entriesTask
                 mergeBase = await mergeBaseTask
                 if let message = diffTooLargeMessage(fileCount: entries.count, lineCount: 0) {
@@ -456,7 +459,10 @@ extension ThreadDetailViewController {
                     worktreePath: worktreePath,
                     baseBranch: baseBranch
                 )
-                async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
+                async let entriesTask = GitService.shared.threadDiffTabStats(
+                    worktreePath: worktreePath,
+                    baseBranch: baseBranch
+                )
                 entries = await entriesTask
                 mergeBase = await mergeBaseTask
                 if let message = diffTooLargeMessage(fileCount: entries.count, lineCount: 0) {

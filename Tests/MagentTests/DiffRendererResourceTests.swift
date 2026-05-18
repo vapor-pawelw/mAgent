@@ -93,4 +93,14 @@ struct DiffRendererResourceTests {
         #expect(javascript.contains("aria-expanded"))
         #expect(css.contains(".hunk-title"))
     }
+
+    @Test
+    func rendererSetDiffAlwaysPostsRenderedMessage() throws {
+        let source = try String(contentsOf: rendererFile("src/main.js"), encoding: .utf8)
+
+        #expect(source.contains("setDiff(payload)"))
+        #expect(source.contains("renderCurrent();"))
+        #expect(source.contains("post({ type: \"rendered\", fileCount: 0, reviewedCount: 0 });"))
+        #expect(source.contains("post({\n    type: \"rendered\",\n    fileCount: files.length"))
+    }
 }

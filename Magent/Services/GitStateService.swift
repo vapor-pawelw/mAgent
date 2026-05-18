@@ -587,8 +587,8 @@ final class GitStateService {
 
     func refreshDiffStats(for threadId: UUID) async -> [FileDiffEntry] {
         guard let thread = store.threads.first(where: { $0.id == threadId }) else { return [] }
-        let baseBranch = resolveBaseBranch(for: thread)
-        return await git.diffStats(worktreePath: thread.worktreePath, baseBranch: baseBranch)
+        let baseBranch = thread.isMain ? nil : resolveBaseBranch(for: thread)
+        return await git.threadDiffTabStats(worktreePath: thread.worktreePath, baseBranch: baseBranch)
     }
 
     // MARK: - Manual Base Branch Override

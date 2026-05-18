@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Sidebar
+
+#### Bug Fixes
+- Fixed diff tabs staying stuck on the loading spinner when the WebKit renderer missed its ready/rendered callback.
+- Fixed the fixed Diff tab showing `Diff (0)` on clean branches with committed changes until the tab was opened.
 
 ## 1.6.2 - 2026-05-16
 
