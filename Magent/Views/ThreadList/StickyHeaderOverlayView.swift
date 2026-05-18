@@ -11,6 +11,7 @@ final class StickyHeaderOverlayView: NSView {
     static let sectionRowHeight: CGFloat = 28
     private static let leadingInset: CGFloat = ThreadListViewController.capsuleAlignedLeading
     private static let trailingInset: CGFloat = ThreadListViewController.capsuleAlignedTrailing
+    private static let topInset: CGFloat = 6
     private static let fadeHeight: CGFloat = 12
 
     // MARK: - Subviews
@@ -111,7 +112,10 @@ final class StickyHeaderOverlayView: NSView {
         sectionTopToProject = sectionContainer.topAnchor.constraint(
             equalTo: projectContainer.bottomAnchor
         )
-        sectionTopToSuperview = sectionContainer.topAnchor.constraint(equalTo: topAnchor)
+        sectionTopToSuperview = sectionContainer.topAnchor.constraint(
+            equalTo: topAnchor,
+            constant: Self.topInset
+        )
 
         // Fade sits below project (section-only hidden) or below section
         fadeTopToProject = fadeGradientView.topAnchor.constraint(
@@ -128,7 +132,7 @@ final class StickyHeaderOverlayView: NSView {
             opaqueBackground.trailingAnchor.constraint(equalTo: trailingAnchor),
             opaqueBackground.bottomAnchor.constraint(equalTo: fadeGradientView.topAnchor),
 
-            projectContainer.topAnchor.constraint(equalTo: topAnchor),
+            projectContainer.topAnchor.constraint(equalTo: topAnchor, constant: Self.topInset),
             projectContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
             projectContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
             projectContainer.heightAnchor.constraint(equalToConstant: Self.projectRowHeight),
@@ -231,7 +235,7 @@ final class StickyHeaderOverlayView: NSView {
         var h: CGFloat = 0
         if !projectContainer.isHidden { h += Self.projectRowHeight }
         if !sectionContainer.isHidden { h += Self.sectionRowHeight }
-        if h > 0 { h += Self.fadeHeight }
+        if h > 0 { h += Self.topInset + Self.fadeHeight }
         return NSSize(width: NSView.noIntrinsicMetric, height: h)
     }
 

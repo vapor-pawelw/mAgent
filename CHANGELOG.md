@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 
 #### Bug Fixes
+- Gave sticky sidebar headers more top breathing room while scrolling.
 - Fixed the selected-thread jump button showing a generic thread icon instead of the home icon when the selected row is a main worktree.
 - Refined the thread context menu so section moves are top-level, rename/customization actions live under `Customize`, and `AI Rename…` stays at the top of that submenu.
 - Fixed diff tabs staying stuck on the loading spinner when the WebKit renderer missed its ready/rendered callback, timed out, or hit a render error, with compact diagnostics logged for unresolved renderer failures.
