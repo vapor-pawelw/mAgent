@@ -97,11 +97,17 @@ enum SettingsCategory: Int, CaseIterable {
     case general, terminal, chat, threads, agents, notifications, projects, appearance, jira, debug
 
     static var visibleCategories: [SettingsCategory] {
-        allCases.filter(\.isVisible)
+        visibleCategories(for: PersistenceService.shared.loadSettings())
     }
 
-    var isVisible: Bool {
+    static func visibleCategories(for settings: AppSettings) -> [SettingsCategory] {
+        allCases.filter { $0.isVisible(for: settings) }
+    }
+
+    func isVisible(for settings: AppSettings) -> Bool {
         switch self {
+        case .chat:
+            settings.shouldShowChatSettingsCategory
         case .jira:
             true
         case .debug:
@@ -168,6 +174,10 @@ final class SettingsSplitViewController: NSSplitViewController {
     private var detailSplitItem: NSSplitViewItem!
     private var currentCategory: SettingsCategory = .general
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         preferredContentSize = NSSize(width: 900, height: 640)
@@ -189,6 +199,13 @@ final class SettingsSplitViewController: NSSplitViewController {
         addSplitViewItem(detailSplitItem)
 
         splitView.dividerStyle = .thin
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(settingsDidChange),
+            name: .magentSettingsDidChange,
+            object: nil
+        )
     }
 
     override func cancelOperation(_ sender: Any?) {
@@ -236,10 +253,24 @@ final class SettingsSplitViewController: NSSplitViewController {
     }
 
     fileprivate func showCategory(_ category: SettingsCategory) {
+        let settings = PersistenceService.shared.loadSettings()
+        guard category.isVisible(for: settings) else {
+            showCategory(.general)
+            return
+        }
         guard category != currentCategory else { return }
         currentCategory = category
 
         showCategoryContent(category)
+    }
+
+    @objc private func settingsDidChange() {
+        let settings = PersistenceService.shared.loadSettings()
+        if !currentCategory.isVisible(for: settings) {
+            currentCategory = .general
+            showCategoryContent(.general)
+        }
+        sidebarVC.reloadCategories(selecting: currentCategory, settings: settings)
     }
 }
 
@@ -316,12 +347,19 @@ final class SettingsSidebarViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         if tableView.selectedRow < 0 {
-            tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+            reloadCategories(selecting: .general)
         }
     }
 
     @objc private func doneTapped() {
         delegate?.settingsSidebarDidDismiss(self)
+    }
+
+    func reloadCategories(selecting selectedCategory: SettingsCategory, settings: AppSettings = PersistenceService.shared.loadSettings()) {
+        let categories = SettingsCategory.visibleCategories(for: settings)
+        tableView.reloadData()
+        let selectedRow = categories.firstIndex(of: selectedCategory) ?? 0
+        tableView.selectRowIndexes(IndexSet(integer: selectedRow), byExtendingSelection: false)
     }
 }
 

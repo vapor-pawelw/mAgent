@@ -510,6 +510,10 @@ public nonisolated struct AppSettings: Codable, Sendable {
 #endif
     }
 
+    public var shouldShowChatSettingsCategory: Bool {
+        isChatsFeatureEnabled
+    }
+
     public var availableActiveAgents: [AgentType] {
         var seen = Set<AgentType>()
         return activeAgents.filter { seen.insert($0).inserted }

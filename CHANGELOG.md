@@ -107,6 +107,9 @@ All notable changes to this project will be documented in this file.
 - Added a dedicated `Chat` settings category with color pickers for user/agent bubble background and text colors, plus a one-click reset to defaults.
 - Added a debug-only `Settings > Debug > Experimental > Chats` toggle (off by default) that gates chat creation surfaces in new thread/tab pickers; when off, chat options are hidden and single-surface labels collapse (for example `Codex` instead of `Codex (Terminal)`).
 
+#### Bug Fixes
+- Hid the Chat settings category whenever experimental Chats are disabled.
+
 ### Tab
 
 #### Features

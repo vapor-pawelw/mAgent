@@ -745,6 +745,16 @@ struct AppSettingsChatAppearanceTests {
         #expect(!AppSettings(experimentalEnableChats: true).isChatsFeatureEnabled)
         #endif
     }
+
+    @Test("Chat settings category follows chats feature gate")
+    func chatSettingsCategoryGate() {
+        #if DEBUG
+        #expect(!AppSettings().shouldShowChatSettingsCategory)
+        #expect(AppSettings(experimentalEnableChats: true).shouldShowChatSettingsCategory)
+        #else
+        #expect(!AppSettings(experimentalEnableChats: true).shouldShowChatSettingsCategory)
+        #endif
+    }
 }
 
 // MARK: - AgentType.capabilities
