@@ -210,6 +210,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func applicationDidBecomeActive(_ notification: Notification) {
         applyAppAppearanceAndTerminalPreferences()
         ThreadManager.shared.startSessionMonitor()
+        ThreadManager.shared.refreshAfterAppBecameActive()
         let hasVisibleAppWindow = NSApp.windows.contains { window in
             window.isVisible && !window.isMiniaturized
         }

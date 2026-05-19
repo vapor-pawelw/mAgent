@@ -34,7 +34,7 @@ extension ThreadManager {
             return
         }
         guard sessionMonitorTimer == nil else { return }
-        sessionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        sessionMonitorTimer = Timer.scheduledTimer(withTimeInterval: SessionMonitorRefreshCadence.monitorIntervalSeconds, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.runSessionMonitorTick()
             }
@@ -83,8 +83,8 @@ extension ThreadManager {
 
             // Refresh dirty and delivered states every 10th tick (~50 seconds)
             dirtyCheckTickCounter += 1
-            if dirtyCheckTickCounter >= 10 {
-                dirtyCheckTickCounter = 0
+            if dirtyCheckTickCounter >= SessionMonitorRefreshCadence.gitStateIntervalTicks {
+                SessionMonitorRefreshCadence.resetGitStateCounter(&dirtyCheckTickCounter)
                 await refreshDirtyStates()
                 await refreshDeliveredStates()
                 await refreshBranchStates()
@@ -94,7 +94,7 @@ extension ThreadManager {
 
             // Jira sync every 60th tick (~5 minutes)
             _jiraSyncTickCounter += 1
-            if _jiraSyncTickCounter >= 60 {
+            if _jiraSyncTickCounter >= SessionMonitorRefreshCadence.statusSyncIntervalTicks {
                 _jiraSyncTickCounter = 0
                 let jiraResult = await runJiraSyncTick()
                 if jiraResult.hadErrors {
@@ -109,7 +109,7 @@ extension ThreadManager {
             // PR sync every 60th tick (~5 minutes).
             // Runs with yields between threads to avoid blocking.
             _prSyncTickCounter += 1
-            if _prSyncTickCounter >= 60 {
+            if _prSyncTickCounter >= SessionMonitorRefreshCadence.statusSyncIntervalTicks {
                 _prSyncTickCounter = 0
                 let prResult = await runPRSyncTick()
                 if prResult.hadErrors {
@@ -147,12 +147,72 @@ extension ThreadManager {
                 ? mergeStatusSyncFailureSummaries([prResult.failureSummary, jiraResult.failureSummary].compactMap { $0 })
                 : nil
             // Reset counters so the next periodic tick doesn't re-run immediately.
-            _prSyncTickCounter = 0
-            _jiraSyncTickCounter = 0
+            SessionMonitorRefreshCadence.resetStatusSyncCounters(
+                prCounter: &_prSyncTickCounter,
+                jiraCounter: &_jiraSyncTickCounter
+            )
             await MainActor.run {
                 NotificationCenter.default.post(name: .magentStatusSyncCompleted, object: nil)
             }
         }
+    }
+
+    /// Refreshes state that can become stale while the app is inactive, then
+    /// restarts the normal periodic cadence from that foreground refresh.
+    func refreshAfterAppBecameActive() {
+        guard !isForegroundRefreshRunning else { return }
+        isForegroundRefreshRunning = true
+        resetSessionMonitorFireDate()
+
+        Task {
+            defer {
+                self.resetSessionMonitorFireDate()
+                self.isForegroundRefreshRunning = false
+            }
+
+            await refreshDirtyStates()
+            await refreshDeliveredStates()
+            await refreshBranchStates()
+            await syncTabNamesFromModelChanges()
+            SessionMonitorRefreshCadence.resetGitStateCounter(&dirtyCheckTickCounter)
+
+            var syncHadErrors = false
+            var syncFailureSummaries: [String] = []
+
+            let jiraResult = await runJiraSyncTick()
+            if jiraResult.hadErrors {
+                syncHadErrors = true
+                if let summary = jiraResult.failureSummary {
+                    syncFailureSummaries.append(summary)
+                }
+            }
+
+            let prResult = await runPRSyncTick()
+            if prResult.hadErrors {
+                syncHadErrors = true
+                if let summary = prResult.failureSummary {
+                    syncFailureSummaries.append(summary)
+                }
+            }
+
+            lastStatusSyncAt = Date()
+            lastStatusSyncFailed = syncHadErrors
+            lastStatusSyncFailureSummary = syncHadErrors
+                ? mergeStatusSyncFailureSummaries(syncFailureSummaries)
+                : nil
+            SessionMonitorRefreshCadence.resetStatusSyncCounters(
+                prCounter: &_prSyncTickCounter,
+                jiraCounter: &_jiraSyncTickCounter
+            )
+
+            await MainActor.run {
+                NotificationCenter.default.post(name: .magentStatusSyncCompleted, object: nil)
+            }
+        }
+    }
+
+    private func resetSessionMonitorFireDate() {
+        sessionMonitorTimer?.fireDate = Date().addingTimeInterval(SessionMonitorRefreshCadence.monitorIntervalSeconds)
     }
 
     private func shouldRunStaleSessionCleanupTick(now: Date = Date()) -> Bool {

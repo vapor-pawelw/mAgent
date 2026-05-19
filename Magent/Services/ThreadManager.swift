@@ -737,6 +737,7 @@ final class ThreadManager {
     // baseBranchResets is forwarded to gitStateService — see forwarding computed property above.
     var sessionMonitorTimer: Timer?
     var isSessionMonitorTickRunning = false
+    var isForegroundRefreshRunning = false
     var lastTmuxZombieHealthCheckAt: Date = .distantPast
     var lastTmuxZombieSummary: TmuxService.ZombieParentSummary?
     var didShowTmuxZombieWarning = false

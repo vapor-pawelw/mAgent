@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 
 #### Bug Fixes
+- Refreshed git state and PR/Jira status when Magent returns to the foreground, resetting the normal refresh cadence so stale indicators do not linger after switching back to the app.
 - Gave sticky sidebar headers more top breathing room while scrolling.
 - Fixed the selected-thread jump button showing a generic thread icon instead of the home icon when the selected row is a main worktree.
 - Fixed the selected-thread jump button labeling the selected main worktree with the repo folder name instead of "Main worktree".
