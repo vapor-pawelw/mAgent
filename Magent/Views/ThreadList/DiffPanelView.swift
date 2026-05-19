@@ -221,6 +221,7 @@ final class DiffPanelView: NSView {
     // nil = "Uncommitted" selected; non-nil = a commit hash is selected
     private var selectedCommitHash: String? = nil
     private var selectedFilePath: String?
+    private var threadId: UUID?
     private var worktreePath: String?
     private var expandedDirectoryPaths = Set<String>()
     private var loadingDirectoryPaths = Set<String>()
@@ -694,6 +695,9 @@ final class DiffPanelView: NSView {
         } else if let hash = selectedCommitHash {
             userInfo["commitHash"] = hash
         }
+        if let threadId {
+            userInfo["threadId"] = threadId
+        }
         NotificationCenter.default.post(
             name: .magentShowDiffViewer,
             object: nil,
@@ -706,9 +710,14 @@ final class DiffPanelView: NSView {
         guard selectedFilePath != nil else { return }
         selectedFilePath = nil
         updateRowSelectionAppearance()
+        var userInfo: [String: Any] = [:]
+        if let threadId {
+            userInfo["threadId"] = threadId
+        }
         NotificationCenter.default.post(
             name: .magentHideDiffViewer,
-            object: nil
+            object: nil,
+            userInfo: userInfo
         )
     }
 
@@ -926,6 +935,7 @@ final class DiffPanelView: NSView {
         branchName: String? = nil,
         baseBranch: String? = nil,
         upstreamStatus: BranchUpstreamStatus? = nil,
+        threadId: UUID? = nil,
         preserveSelection: Bool = false
     ) {
         uncommittedEntries = newEntries
@@ -933,6 +943,7 @@ final class DiffPanelView: NSView {
         isLoadingAllChanges = false
         commits = newCommits
         self.worktreePath = worktreePath
+        self.threadId = threadId
         self.hasMoreCommits = hasMoreCommits
         self.forceVisible = forceVisible
 
@@ -1065,6 +1076,7 @@ final class DiffPanelView: NSView {
         selectedCommitHash = nil
         selectedFilePath = nil
         worktreePath = nil
+        threadId = nil
         expandedDirectoryPaths = []
         loadingDirectoryPaths = []
         directoryChildrenByPath = [:]
@@ -1267,6 +1279,10 @@ final class DiffPanelView: NSView {
             if let hash = selectedCommitHash {
                 userInfo = ["commitHash": hash]
             }
+            if let threadId {
+                if userInfo == nil { userInfo = [:] }
+                userInfo?["threadId"] = threadId
+            }
             NotificationCenter.default.post(name: .magentShowDiffViewer, object: nil, userInfo: userInfo)
             return
         }
@@ -1355,13 +1371,21 @@ final class DiffPanelView: NSView {
     }
 
     @objc private func backButtonTapped() {
+        exitCommitDetailModeAndShowCurrentChanges()
+    }
+
+    func exitCommitDetailModeAndShowCurrentChanges() {
         resetCommitDetailMode()
         activeTab = .commits
         selectedCommitHash = nil
         commitEntries = []
         updateTabTitles()
         rebuildRows()
-        NotificationCenter.default.post(name: .magentHideDiffViewer, object: nil)
+        var userInfo: [String: Any] = [:]
+        if let threadId {
+            userInfo["threadId"] = threadId
+        }
+        NotificationCenter.default.post(name: .magentShowDiffViewer, object: nil, userInfo: userInfo)
     }
 
     private func resetCommitDetailMode() {

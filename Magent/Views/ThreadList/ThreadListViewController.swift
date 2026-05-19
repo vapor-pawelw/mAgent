@@ -377,6 +377,12 @@ final class ThreadListViewController: NSViewController {
             name: .magentDiffTabDidDeactivate,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDiffCommitReviewBackRequested(_:)),
+            name: .magentDiffCommitReviewBackRequested,
+            object: nil
+        )
         checkForPendingPromptRecovery()
 
         // Observe scroll position to update sticky headers
@@ -663,6 +669,13 @@ final class ThreadListViewController: NSViewController {
 
     @objc private func handlePopoutStateChanged(_ notification: Notification) {
         refreshDiffPanelContextForSelectedThread()
+    }
+
+    @objc private func handleDiffCommitReviewBackRequested(_ notification: Notification) {
+        if let threadId = notification.userInfo?["threadId"] as? UUID {
+            guard (diffInspectionThreadID ?? selectedThreadID) == threadId else { return }
+        }
+        diffPanelView.exitCommitDetailModeAndShowCurrentChanges()
     }
 
     // MARK: - Outline View

@@ -423,22 +423,18 @@ final class ThreadDetailViewController: NSViewController {
             object: nil
         )
 
-        // Observe diff viewer open/close requests from sidebar only in the main window.
-        // Pop-out thread windows should not mirror inline diff content.
-        if !isPopoutContext {
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handleShowDiffViewerNotification(_:)),
-                name: .magentShowDiffViewer,
-                object: nil
-            )
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handleHideDiffViewerNotification),
-                name: .magentHideDiffViewer,
-                object: nil
-            )
-        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleShowDiffViewerNotification(_:)),
+            name: .magentShowDiffViewer,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleHideDiffViewerNotification(_:)),
+            name: .magentHideDiffViewer,
+            object: nil
+        )
 
         // Observe ghostty scrollbar updates to show/hide floating scroll-to-bottom button
         NotificationCenter.default.addObserver(
@@ -1694,18 +1690,28 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     @objc private func handleShowDiffViewerNotification(_ notification: Notification) {
-        guard !isPopoutContext else { return }
+        if let threadId = notification.userInfo?["threadId"] as? UUID {
+            guard threadId == thread.id else { return }
+        } else {
+            guard !isPopoutContext else { return }
+        }
         let filePath = notification.userInfo?["filePath"] as? String
         let commitHash = notification.userInfo?["commitHash"] as? String
+        let commitTitle = notification.userInfo?["commitTitle"] as? String
         let forceWorkingTree = (notification.userInfo?["mode"] as? String) == "uncommitted"
         if let diffIndex = tabSlots.firstIndex(of: .diff) {
             selectTab(at: diffIndex)
         }
-        showDiffViewer(scrollToFile: filePath, commitHash: commitHash, forceWorkingTreeDiff: forceWorkingTree)
+        showDiffViewer(scrollToFile: filePath, commitHash: commitHash, commitTitle: commitTitle, forceWorkingTreeDiff: forceWorkingTree)
+        diffVC?.setCommitReviewContext(commitHash == nil ? nil : (commitTitle ?? commitHash))
     }
 
-    @objc private func handleHideDiffViewerNotification() {
-        guard !isPopoutContext else { return }
+    @objc private func handleHideDiffViewerNotification(_ notification: Notification) {
+        if let threadId = notification.userInfo?["threadId"] as? UUID {
+            guard threadId == thread.id else { return }
+        } else {
+            guard !isPopoutContext else { return }
+        }
         hideDiffViewer()
     }
 

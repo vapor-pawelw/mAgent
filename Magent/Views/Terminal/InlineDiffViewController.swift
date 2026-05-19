@@ -46,6 +46,10 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     private let summaryDeletedLabel = NSTextField(labelWithString: "")
     private let reviewMenuButton = NSButton(title: "Review ▾", target: nil, action: nil)
     private let viewMenuButton = NSButton(title: "Files ▾", target: nil, action: nil)
+    private let commitReviewBannerView = NSView()
+    private let commitReviewIconView = NSImageView()
+    private let commitReviewLabel = NSTextField(labelWithString: "")
+    private let currentChangesButton = NSButton(title: String(localized: .ThreadStrings.diffCommitReviewCurrentChanges), target: nil, action: nil)
     private let webView: WKWebView
     private var headerBar: NSView?
     private var resizeHandleHeightConstraint: NSLayoutConstraint?
@@ -70,6 +74,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     /// Called during drag with the delta (positive = drag up = diff taller).
     var onResizeDrag: ((_ phase: NSPanGestureRecognizer.State, _ deltaY: CGFloat) -> Void)?
     var onReviewedFilesChanged: (([String: String]) -> Void)?
+    var onReturnToCurrentChanges: (() -> Void)?
 
     init() {
         let userContentController = WKUserContentController()
@@ -192,6 +197,30 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         viewMenuButton.isHidden = true
         headerBar.addSubview(viewMenuButton)
 
+        commitReviewBannerView.wantsLayer = true
+        commitReviewBannerView.layer?.cornerRadius = 6
+        commitReviewBannerView.layer?.borderWidth = 1
+        commitReviewBannerView.translatesAutoresizingMaskIntoConstraints = false
+        commitReviewBannerView.isHidden = true
+        headerBar.addSubview(commitReviewBannerView)
+
+        commitReviewIconView.image = NSImage(systemSymbolName: "doc.text.magnifyingglass", accessibilityDescription: "Commit review")
+        commitReviewIconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+        commitReviewIconView.translatesAutoresizingMaskIntoConstraints = false
+        commitReviewBannerView.addSubview(commitReviewIconView)
+
+        commitReviewLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        commitReviewLabel.lineBreakMode = .byTruncatingMiddle
+        commitReviewLabel.translatesAutoresizingMaskIntoConstraints = false
+        commitReviewBannerView.addSubview(commitReviewLabel)
+
+        currentChangesButton.bezelStyle = .rounded
+        currentChangesButton.controlSize = .small
+        currentChangesButton.target = self
+        currentChangesButton.action = #selector(returnToCurrentChangesTapped)
+        currentChangesButton.translatesAutoresizingMaskIntoConstraints = false
+        commitReviewBannerView.addSubview(currentChangesButton)
+
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.wantsLayer = true
         webView.setValue(false, forKey: "drawsBackground")
@@ -282,6 +311,22 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             viewMenuButton.trailingAnchor.constraint(equalTo: reviewMenuButton.leadingAnchor, constant: -8),
             viewMenuButton.centerYAnchor.constraint(equalTo: headerBar.centerYAnchor),
 
+            commitReviewBannerView.leadingAnchor.constraint(equalTo: headerBar.leadingAnchor, constant: 12),
+            commitReviewBannerView.trailingAnchor.constraint(lessThanOrEqualTo: viewMenuButton.leadingAnchor, constant: -12),
+            commitReviewBannerView.centerYAnchor.constraint(equalTo: headerBar.centerYAnchor),
+            commitReviewBannerView.heightAnchor.constraint(equalToConstant: 28),
+
+            commitReviewIconView.leadingAnchor.constraint(equalTo: commitReviewBannerView.leadingAnchor, constant: 8),
+            commitReviewIconView.centerYAnchor.constraint(equalTo: commitReviewBannerView.centerYAnchor),
+            commitReviewIconView.widthAnchor.constraint(equalToConstant: 16),
+
+            commitReviewLabel.leadingAnchor.constraint(equalTo: commitReviewIconView.trailingAnchor, constant: 6),
+            commitReviewLabel.centerYAnchor.constraint(equalTo: commitReviewBannerView.centerYAnchor),
+
+            currentChangesButton.leadingAnchor.constraint(equalTo: commitReviewLabel.trailingAnchor, constant: 10),
+            currentChangesButton.trailingAnchor.constraint(equalTo: commitReviewBannerView.trailingAnchor, constant: -6),
+            currentChangesButton.centerYAnchor.constraint(equalTo: commitReviewBannerView.centerYAnchor),
+
             webView.topAnchor.constraint(equalTo: headerBar.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -310,6 +355,9 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         summaryDeletedLabel.isHidden = showsInlineChrome
         reviewMenuButton.isHidden = showsInlineChrome
         viewMenuButton.isHidden = showsInlineChrome
+        if showsInlineChrome {
+            commitReviewBannerView.isHidden = true
+        }
         resizeHandleHeightConstraint?.constant = showsInlineChrome ? 6 : 0
         headerBarHeightConstraint?.constant = 40
     }
@@ -338,10 +386,14 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             view.layer?.backgroundColor = background
             webView.layer?.backgroundColor = background
             loadingOverlay.layer?.backgroundColor = background
+            commitReviewBannerView.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
+            commitReviewBannerView.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.55).cgColor
             if #available(macOS 12.0, *) {
                 webView.underPageBackgroundColor = backgroundColor
             }
         }
+        commitReviewIconView.contentTintColor = .controlAccentColor
+        commitReviewLabel.textColor = .controlAccentColor
         let isDark = view.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         evaluateRendererCall("window.magentDiffRenderer?.setTheme(\(jsonString(isDark ? "dark" : "light")))")
     }
@@ -586,6 +638,10 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         )
     }
 
+    @objc private func returnToCurrentChangesTapped() {
+        onReturnToCurrentChanges?()
+    }
+
     @objc private func showViewMenu() {
         let menu = NSMenu()
         let collapseAll = NSMenuItem(title: "Collapse all", action: #selector(collapseAllFilesFromMenu), keyEquivalent: "")
@@ -644,8 +700,10 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         expandCollapseButton.alphaValue = 1
         reviewMenuButton.isEnabled = allowsReviewMarkers
         reviewMenuButton.alphaValue = allowsReviewMarkers ? 1 : 0.5
+        reviewMenuButton.isHidden = showsInlineChrome || !allowsReviewMarkers
         viewMenuButton.isEnabled = true
         viewMenuButton.alphaValue = 1
+        viewMenuButton.isHidden = showsInlineChrome
         allExpanded = true
         updateExpandCollapseButton()
         if showsSpinner || !didRevealWebView {
@@ -674,6 +732,14 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
                 self.hideLoadingOverlay()
             }
         }
+    }
+
+    func setCommitReviewContext(_ title: String?) {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        commitReviewBannerView.isHidden = trimmed.isEmpty || showsInlineChrome
+        commitReviewLabel.stringValue = trimmed.isEmpty
+            ? ""
+            : String(localized: .ThreadStrings.diffCommitReviewViewingCommit(trimmed))
     }
 
     func setDiffSummary(fileCount: Int, additions: Int, deletions: Int) {

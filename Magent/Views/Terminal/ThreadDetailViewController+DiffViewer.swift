@@ -233,7 +233,7 @@ extension ThreadDetailViewController {
         showDiffViewer()
     }
 
-    func showDiffViewer(scrollToFile: String? = nil, commitHash: String? = nil, forceWorkingTreeDiff: Bool = false) {
+    func showDiffViewer(scrollToFile: String? = nil, commitHash: String? = nil, commitTitle: String? = nil, forceWorkingTreeDiff: Bool = false) {
         NSLog("[DiffViewer] showDiffViewer called, scrollToFile=%@, commitHash=%@, diffVC=%@, isLoading=%d, view.window=%@",
               scrollToFile ?? "nil", commitHash ?? "nil", String(describing: diffVC), isLoadingDiffViewer ? 1 : 0,
               String(describing: view.window))
@@ -335,12 +335,6 @@ extension ThreadDetailViewController {
                 }
             }
 
-            if diffContent == nil, tooLargeMessage == nil {
-                NSLog("[DiffViewer] diffContent is nil, aborting")
-                isLoadingDiffViewer = false
-                return
-            }
-
             let fileCount = entries.count
             let additions = entries.reduce(0) { $0 + $1.additions }
             let deletions = entries.reduce(0) { $0 + $1.deletions }
@@ -377,6 +371,14 @@ extension ThreadDetailViewController {
                         thread = latest
                     }
                 }
+                vc.onReturnToCurrentChanges = { [weak self] in
+                    guard let self else { return }
+                    NotificationCenter.default.post(
+                        name: .magentDiffCommitReviewBackRequested,
+                        object: nil,
+                        userInfo: ["threadId": self.thread.id]
+                    )
+                }
                 NSLog("[DiffViewer] addChild")
                 addChild(vc)
 
@@ -394,7 +396,15 @@ extension ThreadDetailViewController {
                 ])
                 NSLog("[DiffViewer] constraints activated")
 
+                vc.setCommitReviewContext(commitHash == nil ? nil : (commitTitle ?? commitHash))
                 if let message = tooLargeMessage {
+                    vc.setDiffUnavailableMessage(message)
+                } else if diffContent == nil {
+                    self.updateDiffTabTitle(fileCount: 0)
+                    vc.setDiffSummary(fileCount: 0, additions: 0, deletions: 0)
+                    let message = commitHash == nil
+                        ? String(localized: .ThreadStrings.diffCommitReviewNoChanges)
+                        : String(localized: .ThreadStrings.diffCommitReviewNoCommitChanges)
                     vc.setDiffUnavailableMessage(message)
                 } else if let diffContent {
                     self.updateDiffTabTitle(fileCount: fileCount)
@@ -516,8 +526,9 @@ extension ThreadDetailViewController {
                         showsSpinner: false
                     )
                 } else {
-                    // No more changes — auto-dismiss
-                    self.hideDiffViewer()
+                    self.updateDiffTabTitle(fileCount: 0)
+                    self.diffVC?.setDiffSummary(fileCount: 0, additions: 0, deletions: 0)
+                    self.diffVC?.setDiffUnavailableMessage(String(localized: .ThreadStrings.diffCommitReviewNoChanges))
                 }
             }
         }

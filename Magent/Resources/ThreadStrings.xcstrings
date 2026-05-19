@@ -1871,6 +1871,50 @@
         }
       }
     },
+    "diffCommitReviewCurrentChanges": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current Changes"
+          }
+        }
+      }
+    },
+    "diffCommitReviewNoChanges": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No changes to show."
+          }
+        }
+      }
+    },
+    "diffCommitReviewNoCommitChanges": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No changed files in this commit."
+          }
+        }
+      }
+    },
+    "diffCommitReviewViewingCommit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viewing commit: %@"
+          }
+        }
+      }
+    },
     "chatSlashCommandTerminalSetupDescription": {
       "extractionState": "manual",
       "localizations": {

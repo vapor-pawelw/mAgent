@@ -1383,6 +1383,7 @@ extension ThreadListViewController {
                     branchName: current.actualBranch ?? current.branchName,
                     baseBranch: baseBranch,
                     upstreamStatus: upstreamStatus,
+                    threadId: current.id,
                     preserveSelection: preserveSelection
                 )
             }
@@ -1426,6 +1427,16 @@ extension ThreadListViewController {
             await MainActor.run {
                 guard (self.diffInspectionThreadID ?? self.selectedThreadID) == thread.id else { return }
                 self.diffPanelView.enterCommitDetailMode(hash: commitHash, title: title, entries: entries)
+                var userInfo: [String: Any] = [
+                    "threadId": thread.id,
+                    "commitTitle": title,
+                ]
+                if let commitHash {
+                    userInfo["commitHash"] = commitHash
+                } else {
+                    userInfo["mode"] = "uncommitted"
+                }
+                NotificationCenter.default.post(name: .magentShowDiffViewer, object: nil, userInfo: userInfo)
             }
         }
     }

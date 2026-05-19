@@ -407,10 +407,39 @@ body {
 }
 
 .status {
+  min-height: 240px;
+  display: grid;
+  place-content: center;
+  gap: 10px;
   padding: 22px;
   color: var(--muted);
   font-size: 12px;
   text-align: center;
+}
+
+.status-icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: color-mix(in srgb, var(--muted) 80%, var(--text));
+  font-family: "SF Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0;
+}
+
+.status-icon::before {
+  content: "\01F50D";
+  font-size: 20px;
+  line-height: 1;
+}
+
+.status-message {
+  font-size: 12px;
+  font-weight: 500;
 }
 
 ::selection {

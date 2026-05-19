@@ -11,7 +11,11 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 
+#### Features
+- Reviewing a specific commit from the CHANGES panel now opens that commit in the fixed Diff tab, shows a clear commit-review banner with a return-to-current-changes action, and hides review checkboxes while viewing historical changes.
+
 #### Bug Fixes
+- Empty diffs now show a centered no-content state instead of closing the Diff tab or leaving the renderer blank.
 - Refreshed git state and PR/Jira status when Magent returns to the foreground, resetting the normal refresh cadence so stale indicators do not linger after switching back to the app.
 - Gave sticky sidebar headers more top breathing room while scrolling.
 - Fixed the selected-thread jump button showing a generic thread icon instead of the home icon when the selected row is a main worktree.

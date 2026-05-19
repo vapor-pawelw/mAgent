@@ -305,7 +305,12 @@ function parsePatch(patch) {
 }
 
 function createStatus(message) {
-  return createElement("div", "status", message);
+  const status = createElement("div", "status");
+  status.append(
+    createElement("div", "status-icon", "doc.text.magnifyingglass"),
+    createElement("div", "status-message", message)
+  );
+  return status;
 }
 
 function errorPayload(error, source) {

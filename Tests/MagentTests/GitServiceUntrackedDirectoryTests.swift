@@ -65,4 +65,37 @@ struct GitServiceUntrackedDirectoryTests {
         #expect(workingTreeOnly.isEmpty)
         #expect(diffTabStats.map(\.relativePath) == ["tracked.txt"])
     }
+
+    @Test
+    func commitDiffStatsAndContentReflectSpecificCommitOnly() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("magent-git-service-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        _ = await ShellExecutor.execute("git init -b main", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.name Magent Tests", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.email magent-tests@example.com", workingDirectory: root.path)
+
+        try "one\n".write(to: root.appendingPathComponent("first.txt"), atomically: true, encoding: .utf8)
+        _ = await ShellExecutor.execute("git add first.txt && git commit -m initial", workingDirectory: root.path)
+
+        try "two\n".write(to: root.appendingPathComponent("second.txt"), atomically: true, encoding: .utf8)
+        _ = await ShellExecutor.execute("git add second.txt && git commit -m second", workingDirectory: root.path)
+        let commit = await ShellExecutor.execute("git rev-parse --short HEAD", workingDirectory: root.path)
+        let commitHash = commit.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        try "uncommitted\n".write(
+            to: root.appendingPathComponent("working-tree.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let stats = await GitService.shared.commitDiffStats(worktreePath: root.path, commitHash: commitHash)
+        let content = await GitService.shared.commitDiffContent(worktreePath: root.path, commitHash: commitHash)
+
+        #expect(stats.map(\.relativePath) == ["second.txt"])
+        #expect(content?.contains("diff --git a/second.txt b/second.txt") == true)
+        #expect(content?.contains("working-tree.txt") == false)
+    }
 }

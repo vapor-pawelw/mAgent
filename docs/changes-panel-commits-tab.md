@@ -45,7 +45,8 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - Clicking a file opens the diff viewer scoped to that context:
   - Commit detail: shows `git show <hash>` diff (same as single-click CHANGES flow).
   - Uncommitted detail: forces working-tree-only diff (ignores base branch), via `forceWorkingTreeDiff: true`.
-- **Back**: tapping `‹ Back` exits detail mode, returns to COMMITS tab, and closes the diff viewer.
+- While viewing a specific commit, the fixed Diff tab shows a prominent commit-review banner with the commit title/hash and a **Current Changes** action. Review markers/check-all controls are hidden because historical commit diffs are not part of the current review checklist.
+- **Back / Current Changes**: tapping `‹ Back` in the changes panel or **Current Changes** in the Diff tab exits detail mode, returns to COMMITS tab, and reloads the normal current thread diff.
 - **Thread change**: `DiffPanelView.update()` and `clear()` both call `resetCommitDetailMode()`, which exits detail mode without posting a hide-viewer notification (the panel teardown handles that).
 - Keyboard `↑`/`↓` navigation only operates in the CHANGES tab; it passes through to super from the COMMITS tab.
 
@@ -74,6 +75,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - `onRefreshRequested: (() -> Void)?` — fires when the user taps the top-right refresh button.
 - `updateCommitEntries(hash:entries:subject:)` — called by controller; only applies if `selectedCommitHash == hash` to avoid stale updates from cancelled async loads.
 - `enterCommitDetailMode(hash:title:entries:)` — public; hides tab bar, shows commit detail header + file list.
+- `exitCommitDetailModeAndShowCurrentChanges()` — public; shared by the panel back button and the fixed Diff tab's **Current Changes** action. It exits detail mode and posts a thread-scoped `magentShowDiffViewer` notification so the owning detail view reloads the normal current diff.
 - `resetCommitDetailMode()` — private; restores tab bar, clears detail state. Called from `clear()`, `update()`, and `backButtonTapped()`.
 - `rebuildCommitDetailRows()` — builds file rows from `commitDetailEntries`; called by `rebuildRows()` when `isInCommitDetailMode`.
 - `isInCommitDetailMode`, `commitDetailHash`, `commitDetailEntries`, `commitDetailHeaderView`, `backButton`, `commitDetailTitleLabel` — detail-mode state and UI.
@@ -114,16 +116,21 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 
 ### Controller Layer (Commit Detail)
 - `handleCommitDoubleTapped(_:title:)` in `ThreadListViewController+SidebarActions.swift` — loads entries async (`commitDiffStats` or `workingTreeDiffStats`) then calls `diffPanelView.enterCommitDetailMode`.
+- The same handler posts `magentShowDiffViewer` with `threadId`, optional `commitHash`, optional `commitTitle`, or `"mode": "uncommitted"` so the correct thread detail view opens the fixed Diff tab immediately.
+- `ThreadListViewController` observes `magentDiffCommitReviewBackRequested` from the fixed Diff tab's **Current Changes** button and routes it to `DiffPanelView.exitCommitDetailModeAndShowCurrentChanges()` only when the notification's `threadId` matches the current changes-panel context.
 
 ### Diff Viewer
-- `showDiffViewer(scrollToFile:commitHash:forceWorkingTreeDiff:)` in `ThreadDetailViewController+DiffViewer.swift` accepts an optional `commitHash` and `forceWorkingTreeDiff` flag.
+- `showDiffViewer(scrollToFile:commitHash:commitTitle:forceWorkingTreeDiff:)` in `ThreadDetailViewController+DiffViewer.swift` accepts an optional `commitHash`, display title, and `forceWorkingTreeDiff` flag.
 - `ThreadDetailViewController.diffMaxFileCount` / `diffMaxLineCount` cap pathological diffs before WebKit rendering. When a cap is exceeded, `InlineDiffViewController.setDiffUnavailableMessage(...)` renders a placeholder instead of handing the patch to the bundled renderer.
 - `currentDiffCommitHash: String?` on `ThreadDetailViewController` tracks what the open viewer is showing. If it differs from the requested `commitHash` (or `forceWorkingTreeDiff` changed), the viewer is closed and rebuilt.
 - `currentDiffForceWorkingTree: Bool` — set when opening a diff for the "Uncommitted" detail mode; causes `refreshDiffViewerIfVisible()` and `showDiffViewer` to use `workingTreeDiffContent/Stats` instead of branch diff.
 - `refreshDiffViewerIfVisible()` skips refresh when `currentDiffCommitHash != nil` (commit diffs are static); respects `currentDiffForceWorkingTree` to determine which diff to refresh.
 - `hideDiffViewer()` resets both `currentDiffCommitHash` and `currentDiffForceWorkingTree` to nil/false.
-- The `magentShowDiffViewer` notification carries an optional `"commitHash"` key, or `"mode": "uncommitted"` (from uncommitted detail mode file selection), set by `DiffPanelView.selectFile()`.
+- The `magentShowDiffViewer` notification carries `threadId` whenever it originates from the changes panel. Thread detail controllers use that scope to open the diff in the matching main or pop-out window only. Legacy unscoped notifications are still ignored by pop-out windows.
+- The notification also carries an optional `"commitHash"` key, optional `"commitTitle"`, or `"mode": "uncommitted"` (from uncommitted detail mode file selection), set by `DiffPanelView.selectFile()` and commit-detail controller paths.
 - `InlineDiffViewController` hosts `Magent/Resources/DiffRenderer/dist/index.html` in a local `WKWebView`. It passes unified git patch text to `window.magentDiffRenderer.setDiff(...)` and keeps the native close, collapse/expand, and resize controls in AppKit.
+- `InlineDiffViewController.setCommitReviewContext(_:)` shows/hides the top-bar commit-review banner. `setDiffContent(... allowsReviewMarkers: false ...)` hides review checklist controls for commit diffs.
+- When there is no diff content to render, the fixed Diff tab stays open and shows a centered no-content state instead of auto-dismissing.
 
 ## Gotchas
 
@@ -135,7 +142,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - **`autoSelectFirst()` and `selectThread(byId:)` must not call the delegate for the same thread**: These methods call `recordSelectedThread` (sets `selectedThreadID`) then `outlineView.selectRowIndexes`, which fires `outlineViewSelectionDidChange` with `selectionChanged = false` → preserve Task B. If the delegate is also called unconditionally (→ no-preserve Task A), and Task A completes after Task B, the panel resets. Fix: check `isNewThread = selectedThreadID != thread.id` before `recordSelectedThread`, and only call the delegate when `isNewThread`.
 - **Context ownership must be user-action driven, not raw responder churn**: pop-out terminals can emit first-responder transitions while their window is not key (for example during attach/rebuild). Those must not steal changes-panel context. Main-window context should not switch on key-window activation alone; require sidebar selection or direct terminal interaction in the target session.
 - **Do not show context badge when there are no pop-outs**: even if diff context happens to point at the selected/main thread, the badge should stay hidden until at least one pop-out thread or detached tab exists.
-- **Inline diff viewer notifications are main-window scoped**: `magentShowDiffViewer` / `magentHideDiffViewer` are broadcast notifications from the shared sidebar panel, but only non-popout `ThreadDetailViewController` instances should observe/handle them (`isPopoutContext == false`). Otherwise selecting a file in CHANGES opens the same diff in every popped-out thread window.
+- **Inline diff viewer notifications must be thread-scoped for pop-outs**: `magentShowDiffViewer` / `magentHideDiffViewer` are broadcast notifications from the shared sidebar panel. When they include `threadId`, both main and pop-out `ThreadDetailViewController` instances may observe them, but only the matching thread may handle them. Unscoped legacy notifications must remain main-window-only (`isPopoutContext == false`) so they cannot open stale diffs in pop-out windows.
 
 - **`uncommittedEntries` holds working-tree diff only (vs HEAD)**: the "Uncommitted" row count reflects only files not yet committed. The ALL CHANGES tab uses `allBranchEntries` (full branch diff from merge-base) which is a separate data source.
 - **`allBranchEntries == nil` means "not loaded yet", not "no changes"**: when the tab has never been opened for a non-main thread, the ALL CHANGES button intentionally shows no count and the body requests data lazily on first open. Only an empty array means "loaded and there are no branch changes".
@@ -145,7 +152,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - **"Uncommitted" row is conditionally hidden**: When `uncommittedEntries` is empty (clean working tree), the row is not rendered. This is purely visual — `uncommittedEntries` is still stored and used for the count badge when non-empty.
 - **Uncommitted-row discard is bulk and destructive**: the row-level `Discard Changes` action runs `GitService.discardFile` for each tracked/untracked path in `uncommittedEntries` after explicit confirmation. Keep the confirmation modal and warning styling; this action can remove untracked files and reset staged changes across the whole worktree.
 - **`forceWorkingTreeDiff` must reload viewer when it changes**: The viewer reload guard checks both `currentDiffCommitHash` and `currentDiffForceWorkingTree`. Without the latter, switching between "Uncommitted" detail mode (force working-tree) and normal CHANGES tab (branch diff) would reuse the wrong diff content.
-- **`resetCommitDetailMode()` does not post `magentHideDiffViewer`**: Cleanup on thread change (via `update()` / `clear()`) must not post hide-viewer — the thread-switch flow handles diff viewer lifecycle separately. Only `backButtonTapped()` posts the hide notification explicitly.
+- **`resetCommitDetailMode()` does not post diff notifications**: Cleanup on thread change (via `update()` / `clear()`) must not post show/hide notifications — the thread-switch flow handles diff viewer lifecycle separately. User-initiated back paths go through `exitCommitDetailModeAndShowCurrentChanges()` so the panel and fixed Diff tab return to the same current-diff state.
 - **`selectCommit` closes the diff viewer softly**: `deselectFileWithoutHidingViewer()` updates the file row highlight but does not post `magentHideDiffViewer`. The viewer stays visible but its content becomes stale until the user clicks a file. This is intentional — force-closing the viewer on every commit tap would be jarring.
 - **Stale `updateCommitEntries` guard**: async loads for commit stats must be guarded by `selectedCommitHash == hash`. If the user clicks two commits quickly, the second load may arrive first; the guard prevents the first (now-wrong) result from overwriting the correct one.
 - **`commitDiffStats` passes an empty `statusMap`**: files in a committed diff are always `.committed` status (gray). There is no working-tree status to overlay.
