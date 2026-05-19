@@ -815,6 +815,7 @@ public final class GitService: Sendable {
         for line in numstatOutput.components(separatedBy: "\n") where !line.isEmpty {
             let parts = line.split(separator: "\t", maxSplits: 2)
             guard parts.count >= 3 else { continue }
+            let isBinary = parts[0] == "-" || parts[1] == "-"
             let additions = Int(parts[0]) ?? 0
             let deletions = Int(parts[1]) ?? 0
             let filePath = normalizedNumstatPath(String(parts[2]))
@@ -826,7 +827,8 @@ public final class GitService: Sendable {
                 relativePath: filePath,
                 additions: additions,
                 deletions: deletions,
-                workingStatus: status
+                workingStatus: status,
+                isBinary: isBinary
             ))
         }
 

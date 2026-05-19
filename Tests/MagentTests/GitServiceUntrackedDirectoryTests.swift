@@ -65,4 +65,34 @@ struct GitServiceUntrackedDirectoryTests {
         #expect(workingTreeOnly.isEmpty)
         #expect(diffTabStats.map(\.relativePath) == ["tracked.txt"])
     }
+
+    @Test
+    func workingTreeDiffStatsMarksBinaryFiles() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("magent-git-service-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        _ = await ShellExecutor.execute("git init -b main", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.name Magent Tests", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.email magent-tests@example.com", workingDirectory: root.path)
+
+        let image = root.appendingPathComponent("image.bin")
+        try Data([0, 1, 2, 3, 4, 5]).write(to: image)
+        try "text\n".write(to: root.appendingPathComponent("note.txt"), atomically: true, encoding: .utf8)
+        _ = await ShellExecutor.execute("git add image.bin note.txt && git commit -m initial", workingDirectory: root.path)
+
+        try Data([0, 1, 9, 3, 4, 5, 6]).write(to: image)
+        try "text\nmore\n".write(to: root.appendingPathComponent("note.txt"), atomically: true, encoding: .utf8)
+
+        let stats = await GitService.shared.workingTreeDiffStats(worktreePath: root.path)
+        let binary = try #require(stats.first { $0.relativePath == "image.bin" })
+        let text = try #require(stats.first { $0.relativePath == "note.txt" })
+
+        #expect(binary.isBinary)
+        #expect(binary.additions == 0)
+        #expect(binary.deletions == 0)
+        #expect(!text.isBinary)
+        #expect(text.additions == 1)
+    }
 }

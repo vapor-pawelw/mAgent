@@ -1262,6 +1262,33 @@ struct ThreadTabStructureFingerprintTests {
     }
 }
 
+@Suite("MagentThread diff state persistence")
+struct MagentThreadDiffStatePersistenceTests {
+
+    @Test("Persists diff collapsed file state through Codable")
+    func persistsDiffCollapsedFileStateThroughCodable() throws {
+        let original = MagentThread(
+            projectId: UUID(),
+            name: "thread",
+            worktreePath: "/tmp/thread",
+            branchName: "thread",
+            diffReviewedFileSignatures: [
+                "Sources/App.swift": "code-v2\nstatus:modified\nadd:1:hello",
+            ],
+            diffCollapsedFileStates: [
+                "Sources/App.swift": true,
+                "Tests/AppTests.swift": false,
+            ]
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(MagentThread.self, from: data)
+
+        #expect(decoded.diffReviewedFileSignatures == original.diffReviewedFileSignatures)
+        #expect(decoded.diffCollapsedFileStates == original.diffCollapsedFileStates)
+    }
+}
+
 @Suite("MagentThread completion identifiers")
 struct MagentThreadCompletionIdentifierTests {
 

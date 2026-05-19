@@ -1652,7 +1652,15 @@ final class DiffPanelView: NSView {
         statsStack.setContentHuggingPriority(.required, for: .horizontal)
         statsStack.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        if entry.additions > 0 {
+        if entry.isBinary {
+            let binaryLabel = NSTextField(labelWithString: "Binary")
+            binaryLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+            binaryLabel.textColor = NSColor(resource: .textSecondary)
+            binaryLabel.translatesAutoresizingMaskIntoConstraints = false
+            statsStack.addArrangedSubview(binaryLabel)
+        }
+
+        if !entry.isBinary, entry.additions > 0 {
             let addLabel = NSTextField(labelWithString: "+\(entry.additions)")
             addLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
             addLabel.textColor = NSColor(red: 0.35, green: 0.65, blue: 0.35, alpha: 1.0)
@@ -1660,7 +1668,7 @@ final class DiffPanelView: NSView {
             statsStack.addArrangedSubview(addLabel)
         }
 
-        if entry.deletions > 0 {
+        if !entry.isBinary, entry.deletions > 0 {
             let delLabel = NSTextField(labelWithString: "-\(entry.deletions)")
             delLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
             delLabel.textColor = NSColor(red: 0.78, green: 0.3, blue: 0.3, alpha: 1.0)

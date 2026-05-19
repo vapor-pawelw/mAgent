@@ -178,9 +178,15 @@ extension ThreadDetailViewController {
 
     // MARK: - Inline Diff Viewer
 
-    func updateDiffTabTitle(fileCount: Int) {
+    func updateDiffTabTitle(fileCount: Int, reviewedCount: Int? = nil) {
         guard let diffIndex = tabSlots.firstIndex(of: .diff), diffIndex < tabItems.count else { return }
-        tabItems[diffIndex].titleLabel.stringValue = "Diff (\(fileCount))"
+        if let reviewedCount {
+            let isFullyReviewed = fileCount > 0 && reviewedCount >= fileCount
+            let suffix = isFullyReviewed ? " ✅" : ""
+            tabItems[diffIndex].titleLabel.stringValue = "Diff (\(reviewedCount)/\(fileCount))\(suffix)"
+        } else {
+            tabItems[diffIndex].titleLabel.stringValue = "Diff (\(fileCount))"
+        }
     }
 
     func setDiffViewerVisible(_ visible: Bool) {
@@ -377,6 +383,16 @@ extension ThreadDetailViewController {
                         thread = latest
                     }
                 }
+                vc.onReviewProgressChanged = { [weak self] reviewedCount, fileCount in
+                    self?.updateDiffTabTitle(fileCount: fileCount, reviewedCount: commitHash == nil ? reviewedCount : nil)
+                }
+                vc.onCollapsedFilesChanged = { [weak self] states in
+                    guard let self else { return }
+                    threadManager.updateDiffCollapsedFileStates(for: thread.id, states: states)
+                    if let latest = threadManager.threads.first(where: { $0.id == thread.id }) {
+                        thread = latest
+                    }
+                }
                 NSLog("[DiffViewer] addChild")
                 addChild(vc)
 
@@ -397,7 +413,10 @@ extension ThreadDetailViewController {
                 if let message = tooLargeMessage {
                     vc.setDiffUnavailableMessage(message)
                 } else if let diffContent {
-                    self.updateDiffTabTitle(fileCount: fileCount)
+                    self.updateDiffTabTitle(
+                        fileCount: fileCount,
+                        reviewedCount: commitHash == nil ? self.thread.diffReviewedFileSignatures.count : nil
+                    )
                     vc.setDiffSummary(fileCount: fileCount, additions: additions, deletions: deletions)
                     NSLog("[DiffViewer] calling setDiffContent")
                     vc.setDiffContent(
@@ -406,6 +425,7 @@ extension ThreadDetailViewController {
                         worktreePath: worktreePath,
                         mergeBase: mergeBase,
                         reviewedFileSignatures: commitHash == nil ? self.thread.diffReviewedFileSignatures : [:],
+                        collapsedFileStates: commitHash == nil ? self.thread.diffCollapsedFileStates : [:],
                         allowsReviewMarkers: commitHash == nil,
                         showsSpinner: true
                     )
@@ -421,10 +441,6 @@ extension ThreadDetailViewController {
                         vc.expandFile(file, collapseOthers: false)
                         NSLog("[DiffViewer] expandFile done")
                     }
-                } else if tooLargeMessage == nil {
-                    NSLog("[DiffViewer] expandAll")
-                    vc.expandAll()
-                    NSLog("[DiffViewer] expandAll done")
                 }
                 NSLog("[DiffViewer] showDiffViewer complete")
             }
@@ -502,7 +518,10 @@ extension ThreadDetailViewController {
                 if let message = tooLargeMessage {
                     self.diffVC?.setDiffUnavailableMessage(message)
                 } else if let content = diffContent {
-                    self.updateDiffTabTitle(fileCount: entries.count)
+                    self.updateDiffTabTitle(
+                        fileCount: entries.count,
+                        reviewedCount: self.thread.diffReviewedFileSignatures.count
+                    )
                     let additions = entries.reduce(0) { $0 + $1.additions }
                     let deletions = entries.reduce(0) { $0 + $1.deletions }
                     self.diffVC?.setDiffSummary(fileCount: entries.count, additions: additions, deletions: deletions)
@@ -512,6 +531,7 @@ extension ThreadDetailViewController {
                         worktreePath: worktreePath,
                         mergeBase: mergeBase,
                         reviewedFileSignatures: self.thread.diffReviewedFileSignatures,
+                        collapsedFileStates: self.thread.diffCollapsedFileStates,
                         allowsReviewMarkers: true,
                         showsSpinner: false
                     )

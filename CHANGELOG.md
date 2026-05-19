@@ -11,7 +11,13 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 
+#### Features
+- Added in-diff search with `Cmd+F`, next/previous navigation, match counts, and case/regex modes remembered across Diff tabs.
+- Diff tab titles now show reviewed-file progress and a completion checkmark when every changed file has been reviewed.
+- Added binary-file labels plus added/removed file badges in Diff headers and the changes file list.
+
 #### Bug Fixes
+- Diff file review state now only resets and expands files whose actual added/deleted code changed, and preserves collapsed file sections across app launches.
 - Gave sticky sidebar headers more top breathing room while scrolling.
 - Fixed the selected-thread jump button showing a generic thread icon instead of the home icon when the selected row is a main worktree.
 - Fixed the selected-thread jump button labeling the selected main worktree with the repo folder name instead of "Main worktree".
