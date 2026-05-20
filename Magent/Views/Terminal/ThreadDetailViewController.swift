@@ -1719,7 +1719,7 @@ final class ThreadDetailViewController: NSViewController {
         guard let threadId = notification.userInfo?["threadId"] as? UUID,
               threadId == thread.id,
               let fileCount = notification.userInfo?["fileCount"] as? Int else { return }
-        updateDiffTabTitle(fileCount: fileCount)
+        updateDiffTabTitle(fileCount: fileCount, reviewedCount: thread.diffReviewedFileSignatures.count)
     }
 
     @objc private func handleSectionsDidChange() {

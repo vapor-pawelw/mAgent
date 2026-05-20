@@ -305,12 +305,14 @@ public nonisolated struct FileDiffEntry: Sendable {
     public let additions: Int
     public let deletions: Int
     public let workingStatus: FileWorkingStatus
+    public let isBinary: Bool
 
-    public init(relativePath: String, additions: Int, deletions: Int, workingStatus: FileWorkingStatus) {
+    public init(relativePath: String, additions: Int, deletions: Int, workingStatus: FileWorkingStatus, isBinary: Bool = false) {
         self.relativePath = relativePath
         self.additions = additions
         self.deletions = deletions
         self.workingStatus = workingStatus
+        self.isBinary = isBinary
     }
 }
 

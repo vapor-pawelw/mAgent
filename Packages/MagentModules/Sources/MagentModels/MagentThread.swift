@@ -442,6 +442,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     /// Persisted per-file reviewed signatures for the Diff tab.
     /// Key: normalized file path in diff; value: signature of the reviewed file diff chunk.
     public var diffReviewedFileSignatures: [String: String]
+    /// Persisted per-file collapsed state for the Diff tab.
+    /// Key: normalized file path in diff; value: true when the file section is collapsed.
+    public var diffCollapsedFileStates: [String: Bool]
     public var didAutoRenameFromFirstPrompt: Bool
     public var customTabNames: [String: String]
     /// Monotonic per-base counters for auto-deduplicated tab display names.
@@ -795,6 +798,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case currentDiffFingerprint
         case lastSeenDiffFingerprint
         case diffReviewedFileSignatures
+        case diffCollapsedFileStates
         case hasUnreadAgentCompletion // migration only
         case didAutoRenameFromFirstPrompt
         case customTabNames
@@ -852,6 +856,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         currentDiffFingerprint: String? = nil,
         lastSeenDiffFingerprint: String? = nil,
         diffReviewedFileSignatures: [String: String] = [:],
+        diffCollapsedFileStates: [String: Bool] = [:],
         didAutoRenameFromFirstPrompt: Bool = false,
         customTabNames: [String: String] = [:],
         tabNameSuffixCounters: [String: Int] = [:],
@@ -904,6 +909,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.currentDiffFingerprint = currentDiffFingerprint
         self.lastSeenDiffFingerprint = lastSeenDiffFingerprint
         self.diffReviewedFileSignatures = diffReviewedFileSignatures
+        self.diffCollapsedFileStates = diffCollapsedFileStates
         self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
         self.customTabNames = customTabNames
         self.tabNameSuffixCounters = tabNameSuffixCounters
@@ -978,6 +984,10 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             isSidebarHidden: isSidebarHidden,
             lastAgentCompletionAt: lastAgentCompletionAt,
             unreadCompletionSessions: unreadCompletionSessions,
+            currentDiffFingerprint: currentDiffFingerprint,
+            lastSeenDiffFingerprint: lastSeenDiffFingerprint,
+            diffReviewedFileSignatures: diffReviewedFileSignatures,
+            diffCollapsedFileStates: diffCollapsedFileStates,
             didAutoRenameFromFirstPrompt: didAutoRenameFromFirstPrompt,
             customTabNames: customTabNames,
             tabNameSuffixCounters: tabNameSuffixCounters,
@@ -1094,6 +1104,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         currentDiffFingerprint = try container.decodeIfPresent(String.self, forKey: .currentDiffFingerprint)
         lastSeenDiffFingerprint = try container.decodeIfPresent(String.self, forKey: .lastSeenDiffFingerprint)
         diffReviewedFileSignatures = try container.decodeIfPresent([String: String].self, forKey: .diffReviewedFileSignatures) ?? [:]
+        diffCollapsedFileStates = try container.decodeIfPresent([String: Bool].self, forKey: .diffCollapsedFileStates) ?? [:]
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -1147,6 +1158,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encodeIfPresent(lastSeenDiffFingerprint, forKey: .lastSeenDiffFingerprint)
         if !diffReviewedFileSignatures.isEmpty {
             try container.encode(diffReviewedFileSignatures, forKey: .diffReviewedFileSignatures)
+        }
+        if !diffCollapsedFileStates.isEmpty {
+            try container.encode(diffCollapsedFileStates, forKey: .diffCollapsedFileStates)
         }
         try container.encode(didAutoRenameFromFirstPrompt, forKey: .didAutoRenameFromFirstPrompt)
         if !customTabNames.isEmpty {

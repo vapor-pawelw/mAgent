@@ -365,6 +365,10 @@ extension ThreadManager {
         sessionLifecycleService.updateDiffReviewedFileSignatures(for: threadId, signatures: signatures)
     }
 
+    func updateDiffCollapsedFileStates(for threadId: UUID, states: [String: Bool]) {
+        sessionLifecycleService.updateDiffCollapsedFileStates(for: threadId, states: states)
+    }
+
     // MARK: - Closed Tab History
 
     func pushClosedTabSnapshot(_ snapshot: ClosedTabSnapshot, for threadId: UUID) {

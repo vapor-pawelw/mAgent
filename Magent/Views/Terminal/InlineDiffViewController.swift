@@ -9,10 +9,18 @@ private final class DiffDividerResizeHandle: NSView {
 
 private final class DiffHostView: NSView {
     var onAppearanceChange: (() -> Void)?
+    var onPerformKeyEquivalent: ((NSEvent) -> Bool)?
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         onAppearanceChange?()
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if onPerformKeyEquivalent?(event) == true {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }
 
@@ -33,6 +41,43 @@ private struct PendingDiffRendererCall {
     let completion: ((Any?, (any Error)?) -> Void)?
 }
 
+private enum DiffSearchMode: String, CaseIterable {
+    case caseInsensitive
+    case caseSensitive
+    case regex
+
+    static let defaultsKey = "InlineDiffViewController.searchMode"
+
+    var title: String {
+        switch self {
+        case .caseInsensitive: "Case Insensitive"
+        case .caseSensitive: "Case Sensitive"
+        case .regex: "Regex"
+        }
+    }
+
+    var tooltip: String {
+        switch self {
+        case .caseInsensitive: "Case Insensitive"
+        case .caseSensitive: "Case Sensitive"
+        case .regex: "Regex"
+        }
+    }
+
+    static var persisted: DiffSearchMode {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: defaultsKey),
+                  let mode = DiffSearchMode(rawValue: raw) else {
+                return .caseInsensitive
+            }
+            return mode
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: defaultsKey)
+        }
+    }
+}
+
 final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHandler {
     private let closeButton = NSButton()
     private let expandCollapseButton = NSButton()
@@ -50,6 +95,13 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     private let commitReviewIconView = NSImageView()
     private let commitReviewLabel = NSTextField(labelWithString: "")
     private let currentChangesButton = NSButton(title: String(localized: .ThreadStrings.diffCommitReviewCurrentChanges), target: nil, action: nil)
+    private let findBar = NSStackView()
+    private let findField = NSSearchField()
+    private let findModeButton = NSPopUpButton()
+    private let findPreviousButton = NSButton()
+    private let findNextButton = NSButton()
+    private let findDoneButton = NSButton()
+    private let findStatusLabel = NSTextField(labelWithString: "")
     private let webView: WKWebView
     private var headerBar: NSView?
     private var resizeHandleHeightConstraint: NSLayoutConstraint?
@@ -64,6 +116,8 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     private var currentFileCountSummary: Int = 0
     private var currentReviewedFileCountSummary: Int = 0
     private var loadingWatchdog: Timer?
+    private var searchDebounceTimer: Timer?
+    private var searchMode: DiffSearchMode = .persisted
     private var loadingGeneration = 0
     private var currentRenderDiagnosticSummary = "no render requested"
 
@@ -75,6 +129,8 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     var onResizeDrag: ((_ phase: NSPanGestureRecognizer.State, _ deltaY: CGFloat) -> Void)?
     var onReviewedFilesChanged: (([String: String]) -> Void)?
     var onReturnToCurrentChanges: (() -> Void)?
+    var onReviewProgressChanged: ((_ reviewedCount: Int, _ fileCount: Int) -> Void)?
+    var onCollapsedFilesChanged: (([String: Bool]) -> Void)?
 
     init() {
         let userContentController = WKUserContentController()
@@ -107,6 +163,9 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         let hostView = DiffHostView()
         hostView.onAppearanceChange = { [weak self] in
             self?.applyAppearance()
+        }
+        hostView.onPerformKeyEquivalent = { [weak self] event in
+            self?.handleKeyEquivalent(event) ?? false
         }
         view = hostView
     }
@@ -221,6 +280,66 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         currentChangesButton.translatesAutoresizingMaskIntoConstraints = false
         commitReviewBannerView.addSubview(currentChangesButton)
 
+        findField.placeholderString = "Find in diff"
+        findField.controlSize = .small
+        findField.sendsSearchStringImmediately = true
+        findField.sendsWholeSearchString = false
+        findField.translatesAutoresizingMaskIntoConstraints = false
+        findField.delegate = self
+
+        findModeButton.controlSize = .small
+        findModeButton.bezelStyle = .rounded
+        findModeButton.translatesAutoresizingMaskIntoConstraints = false
+        findModeButton.setContentHuggingPriority(.required, for: .horizontal)
+        findModeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        findModeButton.target = self
+        findModeButton.action = #selector(searchModeChanged)
+        for mode in DiffSearchMode.allCases {
+            findModeButton.addItem(withTitle: mode.title)
+            findModeButton.lastItem?.representedObject = mode.rawValue
+            findModeButton.lastItem?.toolTip = mode.tooltip
+        }
+        findModeButton.selectItem(withTitle: searchMode.title)
+        findModeButton.toolTip = searchMode.tooltip
+
+        findPreviousButton.image = NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Previous")
+        findNextButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Next")
+        findDoneButton.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: "Close Search")
+        for button in [findPreviousButton, findNextButton, findDoneButton] {
+            button.bezelStyle = .rounded
+            button.isBordered = true
+            button.controlSize = .small
+            button.imageScaling = .scaleProportionallyDown
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.setContentHuggingPriority(.required, for: .horizontal)
+        }
+        findPreviousButton.target = self
+        findPreviousButton.action = #selector(findPrevious)
+        findNextButton.target = self
+        findNextButton.action = #selector(findNext)
+        findDoneButton.target = self
+        findDoneButton.action = #selector(hideFindBar)
+
+        findStatusLabel.font = .systemFont(ofSize: 11)
+        findStatusLabel.textColor = .secondaryLabelColor
+        findStatusLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        findBar.orientation = .horizontal
+        findBar.spacing = 6
+        findBar.alignment = .centerY
+        findBar.translatesAutoresizingMaskIntoConstraints = false
+        findBar.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+        findBar.wantsLayer = true
+        findBar.layer?.cornerRadius = 8
+        findBar.layer?.borderWidth = 1
+        findBar.isHidden = true
+        findBar.addArrangedSubview(findField)
+        findBar.addArrangedSubview(findModeButton)
+        findBar.addArrangedSubview(findPreviousButton)
+        findBar.addArrangedSubview(findNextButton)
+        findBar.addArrangedSubview(findStatusLabel)
+        findBar.addArrangedSubview(findDoneButton)
+
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.wantsLayer = true
         webView.setValue(false, forKey: "drawsBackground")
@@ -256,6 +375,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
 
         view.addSubview(resizeHandle)
         view.addSubview(headerBar)
+        headerBar.addSubview(findBar)
         view.addSubview(webView)
         view.addSubview(loadingOverlay)
 
@@ -327,6 +447,18 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             currentChangesButton.trailingAnchor.constraint(equalTo: commitReviewBannerView.trailingAnchor, constant: -6),
             currentChangesButton.centerYAnchor.constraint(equalTo: commitReviewBannerView.centerYAnchor),
 
+            findBar.centerYAnchor.constraint(equalTo: headerBar.centerYAnchor),
+            findBar.trailingAnchor.constraint(equalTo: headerBar.trailingAnchor, constant: -8),
+            findBar.leadingAnchor.constraint(greaterThanOrEqualTo: headerLabel.trailingAnchor, constant: 12),
+            findField.widthAnchor.constraint(equalToConstant: 220),
+            findModeButton.widthAnchor.constraint(equalToConstant: 150),
+            findPreviousButton.widthAnchor.constraint(equalToConstant: 24),
+            findPreviousButton.heightAnchor.constraint(equalToConstant: 24),
+            findNextButton.widthAnchor.constraint(equalToConstant: 24),
+            findNextButton.heightAnchor.constraint(equalToConstant: 24),
+            findDoneButton.widthAnchor.constraint(equalToConstant: 24),
+            findDoneButton.heightAnchor.constraint(equalToConstant: 24),
+
             webView.topAnchor.constraint(equalTo: headerBar.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -360,6 +492,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         }
         resizeHandleHeightConstraint?.constant = showsInlineChrome ? 6 : 0
         headerBarHeightConstraint?.constant = 40
+        applySearchMode()
     }
 
     private func loadRenderer() {
@@ -388,6 +521,8 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             loadingOverlay.layer?.backgroundColor = background
             commitReviewBannerView.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
             commitReviewBannerView.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.55).cgColor
+            findBar.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.94).cgColor
+            findBar.layer?.borderColor = NSColor.separatorColor.cgColor
             if #available(macOS 12.0, *) {
                 webView.underPageBackgroundColor = backgroundColor
             }
@@ -593,6 +728,27 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         return string
     }
 
+    private func handleKeyEquivalent(_ event: NSEvent) -> Bool {
+        let commandModifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if event.charactersIgnoringModifiers == "f", commandModifiers == [.command] {
+            showFindBar()
+            return true
+        }
+        if event.charactersIgnoringModifiers == "g", commandModifiers == [.command] {
+            findNext()
+            return true
+        }
+        if event.charactersIgnoringModifiers == "g", commandModifiers == [.command, .shift] {
+            findPrevious()
+            return true
+        }
+        if event.keyCode == 53, !findBar.isHidden {
+            hideFindBar()
+            return true
+        }
+        return false
+    }
+
     // MARK: - Actions
 
     @objc private func closeTapped() {
@@ -683,6 +839,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         worktreePath: String?,
         mergeBase: String?,
         reviewedFileSignatures: [String: String] = [:],
+        collapsedFileStates: [String: Bool] = [:],
         allowsReviewMarkers: Bool = true,
         showsSpinner: Bool = true
     ) {
@@ -704,7 +861,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         viewMenuButton.isEnabled = true
         viewMenuButton.alphaValue = 1
         viewMenuButton.isHidden = showsInlineChrome
-        allExpanded = true
+        allExpanded = !collapsedFileStates.values.contains(true)
         updateExpandCollapseButton()
         if showsSpinner || !didRevealWebView {
             showLoadingOverlay()
@@ -715,6 +872,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             "patch": rawDiff,
             "themeType": isDark ? "dark" : "light",
             "reviewedFileSignatures": reviewedFileSignatures,
+            "collapsedFileStates": collapsedFileStates,
             "allowsReviewMarkers": allowsReviewMarkers,
         ])
         evaluateRendererCall("window.magentDiffRenderer?.setDiff(\(payload))") { [weak self] _, error in
@@ -736,10 +894,10 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
 
     func setCommitReviewContext(_ title: String?) {
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        commitReviewBannerView.isHidden = trimmed.isEmpty || showsInlineChrome
         commitReviewLabel.stringValue = trimmed.isEmpty
             ? ""
             : String(localized: .ThreadStrings.diffCommitReviewViewingCommit(trimmed))
+        applySearchMode()
     }
 
     func setDiffSummary(fileCount: Int, additions: Int, deletions: Int) {
@@ -818,6 +976,99 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         evaluateRendererCall("window.magentDiffRenderer?.scrollToFile(\(jsonString(relativePath)))")
     }
 
+    @objc private func showFindBar() {
+        findBar.isHidden = false
+        applySearchMode()
+        view.window?.makeFirstResponder(findField)
+        if !findField.stringValue.isEmpty {
+            scheduleSearchUpdate()
+        }
+    }
+
+    @objc private func hideFindBar() {
+        searchDebounceTimer?.invalidate()
+        searchDebounceTimer = nil
+        findBar.isHidden = true
+        findStatusLabel.stringValue = ""
+        findField.stringValue = ""
+        evaluateRendererCall("window.magentDiffRenderer?.clearSearch()")
+        applySearchMode()
+        view.window?.makeFirstResponder(webView)
+    }
+
+    @objc private func findNext() {
+        guard !findField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            showFindBar()
+            return
+        }
+        evaluateRendererCall("window.magentDiffRenderer?.findNext()")
+    }
+
+    @objc private func findPrevious() {
+        guard !findField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            showFindBar()
+            return
+        }
+        evaluateRendererCall("window.magentDiffRenderer?.findPrevious()")
+    }
+
+    @objc private func searchModeChanged() {
+        guard let raw = findModeButton.selectedItem?.representedObject as? String,
+              let mode = DiffSearchMode(rawValue: raw) else { return }
+        searchMode = mode
+        DiffSearchMode.persisted = mode
+        findModeButton.toolTip = mode.tooltip
+        updateSearch()
+    }
+
+    private func scheduleSearchUpdate() {
+        searchDebounceTimer?.invalidate()
+        searchDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.updateSearch()
+            }
+        }
+    }
+
+    private func updateSearch() {
+        let query = findField.stringValue
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            findStatusLabel.stringValue = ""
+            evaluateRendererCall("window.magentDiffRenderer?.clearSearch()")
+            return
+        }
+        let payload = jsonPayload([
+            "query": query,
+            "mode": searchMode.rawValue,
+        ])
+        evaluateRendererCall("window.magentDiffRenderer?.setSearch(\(payload))")
+    }
+
+    private func updateSearchStatus(current: Int, total: Int) {
+        if total == 0 {
+            findStatusLabel.stringValue = findField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? ""
+                : "No matches"
+            findPreviousButton.isEnabled = false
+            findNextButton.isEnabled = false
+        } else {
+            findStatusLabel.stringValue = "\(current)/\(total)"
+            findPreviousButton.isEnabled = true
+            findNextButton.isEnabled = true
+        }
+    }
+
+    private func applySearchMode() {
+        let isSearching = !findBar.isHidden
+        expandCollapseButton.isHidden = isSearching || !showsInlineChrome
+        closeButton.isHidden = isSearching || !showsInlineChrome
+        summaryAddedLabel.isHidden = isSearching || showsInlineChrome
+        summaryDeletedLabel.isHidden = isSearching || showsInlineChrome
+        reviewMenuButton.isHidden = isSearching || showsInlineChrome
+        viewMenuButton.isHidden = isSearching || showsInlineChrome
+        commitReviewBannerView.isHidden = isSearching || showsInlineChrome || commitReviewLabel.stringValue.isEmpty
+    }
+
     // MARK: - WKNavigationDelegate / WKScriptMessageHandler
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -859,6 +1110,10 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
                 self.currentFileCountSummary = max(0, fileCount)
                 self.currentReviewedFileCountSummary = max(0, reviewedCount)
                 self.refreshSummaryFilesLabel()
+                self.onReviewProgressChanged?(
+                    self.currentReviewedFileCountSummary,
+                    self.currentFileCountSummary
+                )
                 self.hideLoadingOverlay()
             } else if type == "hunkToggle" {
                 let hunkId = body["hunkId"] as? String ?? "unknown"
@@ -908,7 +1163,18 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
                 self.currentFileCountSummary = max(0, fileCount)
                 self.currentReviewedFileCountSummary = max(0, reviewedCount)
                 self.refreshSummaryFilesLabel()
+                self.onReviewProgressChanged?(
+                    self.currentReviewedFileCountSummary,
+                    self.currentFileCountSummary
+                )
                 self.onReviewedFilesChanged?(reviewed)
+            } else if type == "collapsedStateChanged" {
+                let states = body["collapsedFileStates"] as? [String: Bool] ?? [:]
+                self.onCollapsedFilesChanged?(states)
+            } else if type == "searchStateChanged" {
+                let current = body["current"] as? Int ?? 0
+                let total = body["total"] as? Int ?? 0
+                self.updateSearchStatus(current: current, total: total)
             } else if type == "scrolledToFile", let filePath {
                 NotificationCenter.default.post(
                     name: .magentDiffViewerScrolledToFile,
@@ -973,5 +1239,27 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             "lines": context
         ])
         evaluateRendererCall("window.magentDiffRenderer?.showHunkContext(\(payload))")
+    }
+}
+
+extension InlineDiffViewController: NSSearchFieldDelegate {
+    func controlTextDidChange(_ notification: Notification) {
+        guard notification.object as? NSSearchField === findField else { return }
+        scheduleSearchUpdate()
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard control === findField else { return false }
+
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            let goForward = NSApp.currentEvent?.modifierFlags.contains(.shift) != true
+            goForward ? findNext() : findPrevious()
+            return true
+        }
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            hideFindBar()
+            return true
+        }
+        return false
     }
 }

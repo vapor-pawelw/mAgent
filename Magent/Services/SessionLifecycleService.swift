@@ -763,6 +763,14 @@ final class SessionLifecycleService {
         onThreadsChanged?()
     }
 
+    func updateDiffCollapsedFileStates(for threadId: UUID, states: [String: Bool]) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        if store.threads[index].diffCollapsedFileStates == states { return }
+        store.threads[index].diffCollapsedFileStates = states
+        try? persistence.saveActiveThreads(store.threads)
+        onThreadsChanged?()
+    }
+
     @MainActor
     func setActiveThread(_ threadId: UUID?) {
         store.activeThreadId = threadId
