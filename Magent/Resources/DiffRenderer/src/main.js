@@ -321,12 +321,34 @@ function parsePatch(patch) {
     .filter((file) => file.rows.length > 0 || file.metadata.length > 0);
 }
 
-function createStatus(message) {
+function createSearchIcon() {
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 64 64");
+  icon.setAttribute("aria-hidden", "true");
+  icon.classList.add("status-symbol");
+
+  const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  circle.setAttribute("cx", "28");
+  circle.setAttribute("cy", "28");
+  circle.setAttribute("r", "13");
+
+  const handle = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  handle.setAttribute("d", "M38 38 L49 49");
+
+  icon.append(circle, handle);
+  return icon;
+}
+
+function createStatus(message, detail = null) {
   const status = createElement("div", "status");
-  status.append(
-    createElement("div", "status-icon", "doc.text.magnifyingglass"),
-    createElement("div", "status-message", message)
-  );
+  const iconWrap = createElement("div", "status-icon");
+  iconWrap.append(createSearchIcon());
+  const text = createElement("div", "status-copy");
+  text.append(createElement("div", "status-title", message));
+  if (detail) {
+    text.append(createElement("div", "status-description", detail));
+  }
+  status.append(iconWrap, text);
   return status;
 }
 
@@ -888,7 +910,7 @@ function renderCurrent() {
   currentVisiblePath = null;
 
   if (!lastPatch.trim()) {
-    root.append(createStatus("No files changed"));
+    root.append(createStatus("No files changed", "There are no changes to review right now."));
     const hadReviewedState = Object.keys(reviewedFileSignatures).length > 0;
     const hadCollapsedState = Object.keys(collapsedFileStates).length > 0;
     reviewedFileSignatures = {};
@@ -901,7 +923,7 @@ function renderCurrent() {
 
   files = parsePatch(lastPatch);
   if (files.length === 0) {
-    root.append(createStatus("No files changed"));
+    root.append(createStatus("No files changed", "There are no changes to review right now."));
     const hadReviewedState = Object.keys(reviewedFileSignatures).length > 0;
     const hadCollapsedState = Object.keys(collapsedFileStates).length > 0;
     reviewedFileSignatures = {};

@@ -1363,7 +1363,10 @@ extension ThreadListViewController {
                 guard (self.diffInspectionThreadID ?? self.selectedThreadID) == current.id else { return }
                 // Discard stale results: a newer refresh call was made after this task was spawned.
                 guard (self.diffPanelRefreshGeneration[current.id] ?? 0) == generation else { return }
-                self.threadManager.updateCurrentDiffFingerprint(for: current.id, fingerprint: diffFingerprint)
+                self.threadManager.updateCurrentDiffFingerprint(
+                    for: current.id,
+                    fingerprint: diffTabFileCount > 0 ? diffFingerprint : nil
+                )
                 NotificationCenter.default.post(
                     name: .magentDiffFileCountChanged,
                     object: nil,

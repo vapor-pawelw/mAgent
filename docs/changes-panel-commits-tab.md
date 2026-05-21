@@ -130,7 +130,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - The notification also carries an optional `"commitHash"` key, optional `"commitTitle"`, or `"mode": "uncommitted"` (from uncommitted detail mode file selection), set by `DiffPanelView.selectFile()` and commit-detail controller paths.
 - `InlineDiffViewController` hosts `Magent/Resources/DiffRenderer/dist/index.html` in a local `WKWebView`. It passes unified git patch text to `window.magentDiffRenderer.setDiff(...)` and keeps the native close, collapse/expand, and resize controls in AppKit.
 - `InlineDiffViewController.setCommitReviewContext(_:)` shows/hides the top-bar commit-review banner. `setDiffContent(... allowsReviewMarkers: false ...)` hides review checklist controls for commit diffs.
-- When there is no diff content to render, the fixed Diff tab stays open and shows a centered no-content state instead of auto-dismissing.
+- When there is no diff content to render, the fixed Diff tab stays open and shows a vertically centered no-content state with a search icon, title, and description instead of auto-dismissing. Empty current diffs do not carry a diff fingerprint and must not mark the fixed Diff tab as unread.
 
 ## Gotchas
 

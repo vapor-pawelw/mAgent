@@ -1078,7 +1078,8 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func isDiffUnread() -> Bool {
-        thread.currentDiffFingerprint != thread.lastSeenDiffFingerprint
+        guard let current = thread.currentDiffFingerprint else { return false }
+        return current != thread.lastSeenDiffFingerprint
     }
 
     func focusCurrentTabForNavigation() {
