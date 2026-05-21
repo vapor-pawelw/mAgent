@@ -1719,6 +1719,9 @@ final class ThreadDetailViewController: NSViewController {
         guard let threadId = notification.userInfo?["threadId"] as? UUID,
               threadId == thread.id,
               let fileCount = notification.userInfo?["fileCount"] as? Int else { return }
+        if fileCount == 0 {
+            clearCurrentDiffReviewStateIfNeeded()
+        }
         updateDiffTabTitle(fileCount: fileCount, reviewedCount: thread.diffReviewedFileSignatures.count)
     }
 

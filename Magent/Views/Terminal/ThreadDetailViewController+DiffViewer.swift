@@ -20,6 +20,18 @@ private func diffTooLargeMessage(fileCount: Int, lineCount: Int) -> String? {
     return nil
 }
 
+private final class DiffFileActionMenuTarget: NSObject {
+    let action: () -> Void
+
+    init(action: @escaping () -> Void) {
+        self.action = action
+    }
+
+    @objc func performAction() {
+        action()
+    }
+}
+
 final class DiffImageOverlayView: NSView {
     private let dimView = NSView()
     private let imageCardView = NSView()
@@ -180,13 +192,94 @@ extension ThreadDetailViewController {
 
     func updateDiffTabTitle(fileCount: Int, reviewedCount: Int? = nil) {
         guard let diffIndex = tabSlots.firstIndex(of: .diff), diffIndex < tabItems.count else { return }
+        guard fileCount > 0 else {
+            tabItems[diffIndex].titleLabel.stringValue = "Diff"
+            return
+        }
+
         if let reviewedCount {
-            let isFullyReviewed = fileCount > 0 && reviewedCount >= fileCount
+            let reviewedCount = min(max(0, reviewedCount), fileCount)
+            let isFullyReviewed = reviewedCount >= fileCount
             let suffix = isFullyReviewed ? " ✅" : ""
             tabItems[diffIndex].titleLabel.stringValue = "Diff (\(reviewedCount)/\(fileCount))\(suffix)"
         } else {
             tabItems[diffIndex].titleLabel.stringValue = "Diff (\(fileCount))"
         }
+    }
+
+    func clearCurrentDiffReviewStateIfNeeded() {
+        guard !thread.diffReviewedFileSignatures.isEmpty || !thread.diffCollapsedFileStates.isEmpty else { return }
+        threadManager.updateDiffReviewedFileSignatures(for: thread.id, signatures: [:])
+        threadManager.updateDiffCollapsedFileStates(for: thread.id, states: [:])
+        thread.diffReviewedFileSignatures = [:]
+        thread.diffCollapsedFileStates = [:]
+    }
+
+    func showDiffFileActionsMenu(filePath: String, at point: NSPoint, in diffViewController: InlineDiffViewController) {
+        let fileURL = URL(fileURLWithPath: thread.worktreePath, isDirectory: true)
+            .appendingPathComponent(filePath)
+            .standardizedFileURL
+
+        let menu = NSMenu()
+        let finderTarget = DiffFileActionMenuTarget { [weak self] in
+            self?.showDiffFileInFinder(fileURL: fileURL, relativePath: filePath)
+        }
+        let finderItem = NSMenuItem(title: "Open in Finder", action: #selector(DiffFileActionMenuTarget.performAction), keyEquivalent: "")
+        finderItem.target = finderTarget
+        finderItem.representedObject = finderTarget
+        finderItem.image = OpenActionIcons.finderIcon(size: 16)
+        menu.addItem(finderItem)
+
+        let openTarget = DiffFileActionMenuTarget { [weak self] in
+            self?.openDiffFile(fileURL: fileURL, relativePath: filePath)
+        }
+        let (openTitle, openIcon) = defaultOpenMenuPresentation(for: fileURL)
+        let openItem = NSMenuItem(title: openTitle, action: #selector(DiffFileActionMenuTarget.performAction), keyEquivalent: "")
+        openItem.target = openTarget
+        openItem.representedObject = openTarget
+        openItem.image = openIcon
+        menu.addItem(openItem)
+
+        menu.popUp(positioning: nil, at: point, in: diffViewController.view)
+    }
+
+    private func defaultOpenMenuPresentation(for fileURL: URL) -> (String, NSImage?) {
+        guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: fileURL) else {
+            return (
+                "Open File",
+                NSImage(systemSymbolName: "doc", accessibilityDescription: "Open File")
+            )
+        }
+
+        let appName = Bundle(url: appURL)?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle(url: appURL)?.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? appURL.deletingPathExtension().lastPathComponent
+        let icon = NSWorkspace.shared.icon(forFile: appURL.path)
+        icon.size = NSSize(width: 16, height: 16)
+        icon.isTemplate = false
+        return ("Open with \(appName)", icon)
+    }
+
+    private func openDiffFile(fileURL: URL, relativePath: String) {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            BannerManager.shared.show(
+                message: "Could not open \(relativePath) because the file is missing.",
+                style: .warning
+            )
+            return
+        }
+        NSWorkspace.shared.open(fileURL)
+    }
+
+    private func showDiffFileInFinder(fileURL: URL, relativePath: String) {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            BannerManager.shared.show(
+                message: "Could not open \(relativePath) in Finder because the file is missing.",
+                style: .warning
+            )
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
     }
 
     func setDiffViewerVisible(_ visible: Bool) {
@@ -395,6 +488,10 @@ extension ThreadDetailViewController {
                         thread = latest
                     }
                 }
+                vc.onFileActionsMenuRequested = { [weak self, weak vc] filePath, point in
+                    guard let self, let vc else { return }
+                    self.showDiffFileActionsMenu(filePath: filePath, at: point, in: vc)
+                }
                 NSLog("[DiffViewer] addChild")
                 addChild(vc)
 
@@ -417,6 +514,9 @@ extension ThreadDetailViewController {
                     vc.setDiffUnavailableMessage(message)
                 } else if diffContent == nil {
                     self.updateDiffTabTitle(fileCount: 0)
+                    if commitHash == nil {
+                        self.clearCurrentDiffReviewStateIfNeeded()
+                    }
                     vc.setDiffSummary(fileCount: 0, additions: 0, deletions: 0)
                     let message = commitHash == nil
                         ? String(localized: .ThreadStrings.diffCommitReviewNoChanges)
@@ -547,6 +647,7 @@ extension ThreadDetailViewController {
                     )
                 } else {
                     self.updateDiffTabTitle(fileCount: 0)
+                    self.clearCurrentDiffReviewStateIfNeeded()
                     self.diffVC?.setDiffSummary(fileCount: 0, additions: 0, deletions: 0)
                     self.diffVC?.setDiffUnavailableMessage(String(localized: .ThreadStrings.diffCommitReviewNoChanges))
                 }

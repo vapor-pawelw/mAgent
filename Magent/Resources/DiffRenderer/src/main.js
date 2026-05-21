@@ -524,8 +524,27 @@ function renderFileHeader(file, initiallyCollapsed) {
     if (file.additions === 0 && file.deletions === 0) stats.append(createStat("neutral", file.status));
   }
 
+  const moreButton = createElement("button", "file-more-button", "⋯");
+  moreButton.type = "button";
+  moreButton.title = "More";
+  moreButton.setAttribute("aria-label", `More actions for ${file.path}`);
+  moreButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = moreButton.getBoundingClientRect();
+    post({
+      type: "fileActionsMenuRequested",
+      filePath: file.path,
+      anchorX: rect.left + rect.width / 2,
+      anchorY: rect.bottom,
+    });
+  });
+
+  const trailing = createElement("span", "file-trailing");
+  trailing.append(stats, moreButton);
+
   leading.append(titleWrap);
-  header.append(leading, stats);
+  header.append(leading, trailing);
   header.addEventListener("click", () => {
     const section = header.closest(".file");
     if (!section) return;
@@ -870,6 +889,12 @@ function renderCurrent() {
 
   if (!lastPatch.trim()) {
     root.append(createStatus("No files changed"));
+    const hadReviewedState = Object.keys(reviewedFileSignatures).length > 0;
+    const hadCollapsedState = Object.keys(collapsedFileStates).length > 0;
+    reviewedFileSignatures = {};
+    collapsedFileStates = {};
+    if (hadReviewedState) postReviewedStateChanged();
+    if (hadCollapsedState) postCollapsedStateChanged();
     post({ type: "rendered", fileCount: 0, reviewedCount: 0 });
     return;
   }
@@ -877,6 +902,12 @@ function renderCurrent() {
   files = parsePatch(lastPatch);
   if (files.length === 0) {
     root.append(createStatus("No files changed"));
+    const hadReviewedState = Object.keys(reviewedFileSignatures).length > 0;
+    const hadCollapsedState = Object.keys(collapsedFileStates).length > 0;
+    reviewedFileSignatures = {};
+    collapsedFileStates = {};
+    if (hadReviewedState) postReviewedStateChanged();
+    if (hadCollapsedState) postCollapsedStateChanged();
     post({ type: "rendered", fileCount: 0, reviewedCount: 0 });
     return;
   }
@@ -887,6 +918,17 @@ function renderCurrent() {
   let reviewedStateDidChange = false;
   let collapsedStateDidChange = false;
   const changedReviewedPaths = [];
+  const currentPaths = new Set(files.map((file) => file.path));
+  for (const path of Object.keys(reviewedFileSignatures)) {
+    if (currentPaths.has(path)) continue;
+    delete reviewedFileSignatures[path];
+    reviewedStateDidChange = true;
+  }
+  for (const path of Object.keys(collapsedFileStates)) {
+    if (currentPaths.has(path)) continue;
+    delete collapsedFileStates[path];
+    collapsedStateDidChange = true;
+  }
   for (const file of files) {
     const previousSignature = reviewedFileSignatures[file.path];
     if (!previousSignature) continue;

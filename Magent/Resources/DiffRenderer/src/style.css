@@ -205,6 +205,39 @@ body {
   font-size: 11px;
 }
 
+.file-trailing {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-more-button {
+  appearance: none;
+  flex: none;
+  width: 24px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: default;
+}
+
+.file-more-button:hover,
+.file-more-button:focus-visible {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--panel) 78%, var(--panel-alt));
+  color: var(--text);
+  outline: none;
+}
+
 .stat {
   min-width: 28px;
   text-align: right;

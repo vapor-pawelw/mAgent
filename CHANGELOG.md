@@ -14,11 +14,13 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Reviewing a specific commit from the CHANGES panel now opens that commit in the fixed Diff tab, shows a clear commit-review banner with a return-to-current-changes action, and hides review checkboxes while viewing historical changes.
 - Added in-diff search with `Cmd+F`, next/previous navigation, match counts, and case/regex modes remembered across Diff tabs.
+- Diff file headers now include a more-actions button for opening the file in Finder or with its default app.
 - Diff tab titles now show reviewed-file progress and a completion checkmark when every changed file has been reviewed.
 - Added binary-file labels plus added/removed file badges in Diff headers and the changes file list.
 
 #### Bug Fixes
 - Empty diffs now show a centered no-content state instead of closing the Diff tab or leaving the renderer blank.
+- Diff tab review counts now reset stale checked files when changed files are removed, and empty diffs show plain `Diff` instead of `Diff (0/0)`.
 - Refreshed git state and PR/Jira status when Magent returns to the foreground, resetting the normal refresh cadence so stale indicators do not linger after switching back to the app.
 - Diff file review state now only resets and expands files whose actual added/deleted code changed, and preserves collapsed file sections across app launches.
 - Gave sticky sidebar headers more top breathing room while scrolling.
