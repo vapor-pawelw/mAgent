@@ -243,6 +243,165 @@ extension ThreadDetailViewController {
         menu.popUp(positioning: nil, at: point, in: diffViewController.view)
     }
 
+    func showDiffTextContextMenu(
+        selectedText: String,
+        fallbackText: String,
+        lineFilePath: String?,
+        lineNumber: Int?,
+        at point: NSPoint,
+        in diffViewController: InlineDiffViewController
+    ) {
+        let textToCopy = selectedText.isEmpty ? fallbackText : selectedText
+        guard !textToCopy.isEmpty else { return }
+        let menu = NSMenu()
+
+        let copyTarget = DiffFileActionMenuTarget {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(textToCopy, forType: .string)
+        }
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(DiffFileActionMenuTarget.performAction), keyEquivalent: "")
+        copyItem.target = copyTarget
+        copyItem.representedObject = copyTarget
+        copyItem.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")
+        menu.addItem(copyItem)
+
+        if let lineFilePath,
+           !lineFilePath.isEmpty,
+           let lineNumber,
+           lineNumber > 0 {
+            let fileURL = URL(fileURLWithPath: thread.worktreePath, isDirectory: true)
+                .appendingPathComponent(lineFilePath)
+                .standardizedFileURL
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                menu.addItem(.separator())
+                let (openTitle, openIcon) = defaultOpenMenuPresentation(for: fileURL)
+                let openLineTarget = DiffFileActionMenuTarget { [weak self] in
+                    self?.openDiffFileAtLineIfSupported(fileURL, line: lineNumber)
+                }
+                let openLineItem = NSMenuItem(
+                    title: openTitle,
+                    action: #selector(DiffFileActionMenuTarget.performAction),
+                    keyEquivalent: ""
+                )
+                openLineItem.target = openLineTarget
+                openLineItem.representedObject = openLineTarget
+                openLineItem.image = openIcon
+                menu.addItem(openLineItem)
+            }
+        }
+
+        menu.popUp(positioning: nil, at: point, in: diffViewController.view)
+    }
+
+    private func openDiffFileAtLineIfSupported(_ fileURL: URL, line: Int) {
+        guard line > 0,
+              let command = lineOpenCommand(for: fileURL, line: line) else {
+            NSWorkspace.shared.open(fileURL)
+            return
+        }
+
+        let process = Process()
+        process.executableURL = command.executableURL
+        process.arguments = command.arguments
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus != 0 {
+                NSWorkspace.shared.open(fileURL)
+            }
+        } catch {
+            NSWorkspace.shared.open(fileURL)
+        }
+    }
+
+    private struct LineOpenCommand {
+        let executableURL: URL
+        let arguments: [String]
+    }
+
+    private func lineOpenCommand(for fileURL: URL, line: Int) -> LineOpenCommand? {
+        guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: fileURL),
+              let bundle = Bundle(url: appURL) else { return nil }
+        let bundleIdentifier = bundle.bundleIdentifier ?? ""
+        let executableName = bundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String
+
+        if bundleIdentifier == "com.apple.dt.Xcode" {
+            return LineOpenCommand(
+                executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+                arguments: ["xed", "--line", String(line), fileURL.path]
+            )
+        }
+
+        if bundleIdentifier == "com.microsoft.VSCode" || bundleIdentifier == "com.microsoft.VSCodeInsiders" {
+            let commandName = bundleIdentifier == "com.microsoft.VSCodeInsiders" ? "code-insiders" : "code"
+            if let executableURL = bundledVSCodeCLI(appURL: appURL, commandName: commandName)
+                ?? shellExecutableURL(named: commandName) {
+                return LineOpenCommand(
+                    executableURL: executableURL,
+                    arguments: ["-g", "\(fileURL.path):\(line)"]
+                )
+            }
+        }
+
+        if bundleIdentifier.hasPrefix("com.sublimetext.") {
+            if let executableURL = shellExecutableURL(named: "subl") {
+                return LineOpenCommand(
+                    executableURL: executableURL,
+                    arguments: ["\(fileURL.path):\(line)"]
+                )
+            }
+        }
+
+        if bundleIdentifier.hasPrefix("dev.zed.") || bundleIdentifier == "dev.zed.Zed" {
+            if let executableURL = shellExecutableURL(named: "zed") ?? shellExecutableURL(named: "zeditor") {
+                return LineOpenCommand(
+                    executableURL: executableURL,
+                    arguments: ["\(fileURL.path):\(line)"]
+                )
+            }
+        }
+
+        if bundleIdentifier.hasPrefix("com.jetbrains.") || bundleIdentifier == "com.google.android.studio" {
+            if let executableURL = jetBrainsExecutableURL(appURL: appURL, executableName: executableName) {
+                return LineOpenCommand(
+                    executableURL: executableURL,
+                    arguments: ["--line", String(line), fileURL.path]
+                )
+            }
+        }
+
+        return nil
+    }
+
+    private func bundledVSCodeCLI(appURL: URL, commandName: String) -> URL? {
+        let candidate = appURL
+            .appendingPathComponent("Contents/Resources/app/bin", isDirectory: true)
+            .appendingPathComponent(commandName)
+        return FileManager.default.isExecutableFile(atPath: candidate.path) ? candidate : nil
+    }
+
+    private func jetBrainsExecutableURL(appURL: URL, executableName: String?) -> URL? {
+        guard let executableName else { return nil }
+        let candidate = appURL
+            .appendingPathComponent("Contents/MacOS", isDirectory: true)
+            .appendingPathComponent(executableName)
+        return FileManager.default.isExecutableFile(atPath: candidate.path) ? candidate : nil
+    }
+
+    private func shellExecutableURL(named name: String) -> URL? {
+        [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+        ]
+            .map { URL(fileURLWithPath: $0, isDirectory: true).appendingPathComponent(name) }
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+
     private func defaultOpenMenuPresentation(for fileURL: URL) -> (String, NSImage?) {
         guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: fileURL) else {
             return (
@@ -491,6 +650,17 @@ extension ThreadDetailViewController {
                 vc.onFileActionsMenuRequested = { [weak self, weak vc] filePath, point in
                     guard let self, let vc else { return }
                     self.showDiffFileActionsMenu(filePath: filePath, at: point, in: vc)
+                }
+                vc.onTextContextMenuRequested = { [weak self, weak vc] selectedText, fallbackText, lineFilePath, lineNumber, point in
+                    guard let self, let vc else { return }
+                    self.showDiffTextContextMenu(
+                        selectedText: selectedText,
+                        fallbackText: fallbackText,
+                        lineFilePath: lineFilePath,
+                        lineNumber: lineNumber,
+                        at: point,
+                        in: vc
+                    )
                 }
                 NSLog("[DiffViewer] addChild")
                 addChild(vc)

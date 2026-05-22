@@ -132,6 +132,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     var onReviewProgressChanged: ((_ reviewedCount: Int, _ fileCount: Int) -> Void)?
     var onCollapsedFilesChanged: (([String: Bool]) -> Void)?
     var onFileActionsMenuRequested: ((_ filePath: String, _ point: NSPoint) -> Void)?
+    var onTextContextMenuRequested: ((_ selectedText: String, _ fallbackText: String, _ lineFilePath: String?, _ lineNumber: Int?, _ point: NSPoint) -> Void)?
 
     init() {
         let userContentController = WKUserContentController()
@@ -1181,6 +1182,19 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
                 )
                 let viewPoint = self.view.convert(webViewPoint, from: self.webView)
                 self.onFileActionsMenuRequested?(filePath, viewPoint)
+            } else if type == "textContextMenuRequested" {
+                let selectedText = body["selectedText"] as? String ?? ""
+                let fallbackText = body["fallbackText"] as? String ?? ""
+                let lineFilePath = body["lineFilePath"] as? String
+                let lineNumber = body["lineNumber"] as? Int
+                let x = body["anchorX"] as? Double ?? 0
+                let y = body["anchorY"] as? Double ?? 0
+                let webViewPoint = NSPoint(
+                    x: min(max(0, x), self.webView.bounds.width),
+                    y: min(max(0, y), self.webView.bounds.height)
+                )
+                let viewPoint = self.view.convert(webViewPoint, from: self.webView)
+                self.onTextContextMenuRequested?(selectedText, fallbackText, lineFilePath, lineNumber, viewPoint)
             } else if type == "searchStateChanged" {
                 let current = body["current"] as? Int ?? 0
                 let total = body["total"] as? Int ?? 0

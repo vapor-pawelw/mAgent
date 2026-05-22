@@ -299,6 +299,10 @@ function parseFileChunk(lines, fileIndex) {
   let finalRows = rows;
   for (const row of finalRows) {
     if (row.type === "hunk") row.filePath = path;
+    if (row.type !== "hunk" && row.type !== "notice") {
+      row.filePath = row.type === "delete" ? (oldPath || path) : path;
+      row.openLineNumber = row.lineNumber;
+    }
   }
 
   return {
@@ -580,6 +584,9 @@ function renderRow(row) {
 
   const line = createElement("div", `diff-row ${row.type}`);
   if (row.hunkId) line.dataset.hunkId = row.hunkId;
+  line.dataset.copyText = row.text ?? "";
+  if (row.filePath) line.dataset.filePath = row.filePath;
+  if (row.openLineNumber) line.dataset.openLineNumber = String(row.openLineNumber);
   const lineNo = createElement("span", "line-number", row.lineNumber);
   const marker = createElement("span", "marker", row.type === "add" ? "+" : row.type === "delete" ? "-" : "");
   const code = createElement("code", "code", row.text);
@@ -599,6 +606,7 @@ function renderHunkRow(row) {
   line.dataset.filePath = row.filePath ?? "";
   line.dataset.startLine = String(row.hiddenStartLine ?? 1);
   line.dataset.endLine = String(row.hiddenEndLine ?? row.hiddenStartLine ?? 1);
+  line.dataset.copyText = row.rawText ?? row.title ?? "";
   line.setAttribute("aria-expanded", "false");
   line.title = row.rawText ?? "";
 
@@ -1038,6 +1046,26 @@ window.addEventListener("scroll", () => {
     updateVisibleFile();
   });
 }, { passive: true });
+
+window.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  const selection = window.getSelection()?.toString() ?? "";
+  const target = event.target instanceof Element ? event.target : null;
+  const headerText = target?.closest(".file-title, .file-subtitle, .file-badge");
+  const row = target?.closest(".diff-row");
+  const fallbackText = headerText?.textContent?.trim() ?? row?.dataset.copyText ?? "";
+  const lineFilePath = row?.dataset.filePath ?? "";
+  const lineNumber = Number(row?.dataset.openLineNumber ?? "0");
+  post({
+    type: "textContextMenuRequested",
+    selectedText: selection,
+    fallbackText,
+    lineFilePath,
+    lineNumber: Number.isFinite(lineNumber) ? lineNumber : 0,
+    anchorX: event.clientX,
+    anchorY: event.clientY,
+  });
+});
 
 window.addEventListener("error", (event) => {
   post(errorPayload(event.error ?? event.message, "window.error"));
