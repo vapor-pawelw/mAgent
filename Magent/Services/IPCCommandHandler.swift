@@ -940,6 +940,12 @@ final class IPCCommandHandler {
 
             switch submissionAction {
             case .steered:
+                chatTabs[chatIndex].messages = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
+                    into: chatTabs[chatIndex].messages,
+                    nextModelName: modelId,
+                    nextModelId: modelId,
+                    nextReasoningLevel: reasoningLevel
+                )
                 let steeringUser = PersistedChatMessage(
                     role: .user,
                     text: prompt,
@@ -961,6 +967,12 @@ final class IPCCommandHandler {
                 break
             }
 
+            chatTabs[chatIndex].messages = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
+                into: chatTabs[chatIndex].messages,
+                nextModelName: modelId,
+                nextModelId: modelId,
+                nextReasoningLevel: reasoningLevel
+            )
             let user = PersistedChatMessage(
                 role: .user,
                 text: prompt,

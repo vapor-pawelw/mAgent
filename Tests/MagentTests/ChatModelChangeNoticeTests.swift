@@ -59,4 +59,33 @@ struct ChatModelChangeNoticeTests {
 
         #expect(updated == [previous, assistant])
     }
+
+    @Test("persists system notice messages in chat tab codable payloads")
+    func persistsSystemNoticeMessages() throws {
+        let notice = PersistedChatMessage(
+            role: .system,
+            text: "Model changed to GPT-5.1 (high)",
+            modelId: "gpt-5.1",
+            reasoningLevel: "high"
+        )
+        let tab = PersistedChatTab(
+            identifier: "chat:notice",
+            agentType: .codex,
+            title: "Chat",
+            messages: [
+                PersistedChatMessage(role: .user, text: "before", modelId: "gpt-5", reasoningLevel: "medium"),
+                notice,
+                PersistedChatMessage(role: .user, text: "after", modelId: "gpt-5.1", reasoningLevel: "high"),
+            ]
+        )
+
+        let data = try JSONEncoder().encode(tab)
+        let decoded = try JSONDecoder().decode(PersistedChatTab.self, from: data)
+
+        #expect(decoded.messages.map(\.role) == [.user, .system, .user])
+        #expect(decoded.messages[1].text == notice.text)
+        #expect(decoded.messages[1].modelId == "gpt-5.1")
+        #expect(decoded.messages[1].reasoningLevel == "high")
+    }
+
 }

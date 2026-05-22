@@ -139,8 +139,9 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 ### Chat Model-Change Notices
 
 - Each persisted chat user message stores the model ID and reasoning level used for that turn.
-- Before appending a newly sent user message, compare its selected model/reasoning against the previous user message in that chat. If either value changed, insert a `system` chat message immediately before the new user message with the text `Model changed to <model name> (<reasoning>)`.
-- Render system chat messages as centered, timestamp-hidden metadata bubbles so they read like Codex/Claude status output without being confused for user or assistant content.
+- Before appending a newly sent user message from either the GUI composer or IPC `sendPrompt` chat path, compare its selected model/reasoning against the previous user message in that chat. If either value changed, insert a `system` chat message immediately before the new user message with the text `Model changed to <model name> (<reasoning>)`.
+- Persist the inserted `system` message in the chat tab just like user and assistant messages so it survives tab switches, app relaunches, and transcript reconciliation.
+- Render system chat messages as full-width separator rows with centered, timestamp-hidden metadata text and 8 pt spacing between the label and separator lines, so they read like session metadata without being confused for user or assistant content.
 - Do not insert a marker before the first user message, and do not insert duplicates when the metadata is unchanged.
 
 ### Chat Slash Commands (GUI Chat Tabs)

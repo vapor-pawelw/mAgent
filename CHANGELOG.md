@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Agents
 
 #### Bug Fixes
-- Chat tabs now insert a subtle model-change marker before the next sent message when its model or reasoning effort differs from the previous user message.
+- Chat tabs now persist a full-width model-change marker before the next sent message when its model or reasoning effort differs from the previous user message.
 - Fixed new-thread creation from the prompt sheet when selecting an agent's Chat type, preserving the typed prompt as the new chat tab draft.
 - Fixed Codex chat drag-and-drop attachments creating duplicate screenshot files.
 - Chat attachments now stay attached after sending, render as thumbnails in user messages, and are passed to the agent from a sandbox-readable worktree path.
