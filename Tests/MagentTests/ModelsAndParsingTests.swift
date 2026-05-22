@@ -1025,6 +1025,38 @@ struct AgentChatRuntimeParsingTests {
         #expect(parsed.assistantText == "codex reply")
     }
 
+    @Test("Codex transcript reconciliation preserves commentary and tool calls")
+    func codexTranscriptReconciliationPreservesCodexEvents() {
+        let existingUser = PersistedChatMessage(
+            role: .user,
+            text: "hello",
+            attachments: [PersistedChatAttachment(filePath: "/tmp/a.png", kind: .image)],
+            modelId: "gpt-5.5",
+            reasoningLevel: "low"
+        )
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"hello"}}
+        {"timestamp":"2026-05-22T08:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"I’ll inspect first.","phase":"commentary"}}
+        {"timestamp":"2026-05-22T08:00:02Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\\"cmd\\":\\"rg hello\\"}","call_id":"call_1"}}
+        {"timestamp":"2026-05-22T08:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_1","output":"found"}}
+        {"timestamp":"2026-05-22T08:00:04Z","type":"event_msg","payload":{"type":"agent_message","message":"Done.","phase":"final_answer"}}
+        """
+
+        let messages = CodexChatTranscriptReconciler.messages(
+            fromCodexJSONL: jsonl,
+            existingMessages: [existingUser]
+        )
+
+        #expect(messages.map(\.role) == [.user, .assistant, .system, .system, .assistant])
+        #expect(messages[0].attachments == existingUser.attachments)
+        #expect(messages[0].modelId == "gpt-5.5")
+        #expect(messages[0].reasoningLevel == "low")
+        #expect(messages[1].text == "I’ll inspect first.")
+        #expect(messages[2].text.contains("Tool call: exec_command"))
+        #expect(messages[3].text == "Tool output:\nfound")
+        #expect(messages[4].text == "Done.")
+    }
+
     @Test("Claude model-change text parsing returns model label and effort")
     func claudeModelChangeParsing() {
         let output = """
