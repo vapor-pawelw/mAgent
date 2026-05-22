@@ -897,13 +897,20 @@ struct PersistedChatMessageTests {
         let message = try decoder.decode(PersistedChatMessage.self, from: json)
         #expect(message.modelId == nil)
         #expect(message.reasoningLevel == nil)
+        #expect(message.attachments.isEmpty)
     }
 
-    @Test("Round-trip preserves model metadata")
-    func roundTripPreservesModelMetadata() throws {
+    @Test("Round-trip preserves model metadata and attachments")
+    func roundTripPreservesModelMetadataAndAttachments() throws {
+        let attachment = PersistedChatAttachment(
+            id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+            filePath: "/tmp/Screenshot 2026-05-22 at 10.49.01.png",
+            kind: .image
+        )
         let original = PersistedChatMessage(
             role: .assistant,
             text: "done",
+            attachments: [attachment],
             createdAt: Date(timeIntervalSince1970: 1_750_000_000),
             modelId: "gpt-5.5",
             reasoningLevel: "high"
@@ -917,6 +924,7 @@ struct PersistedChatMessageTests {
         let decoded = try decoder.decode(PersistedChatMessage.self, from: data)
         #expect(decoded.modelId == "gpt-5.5")
         #expect(decoded.reasoningLevel == "high")
+        #expect(decoded.attachments == [attachment])
     }
 }
 
@@ -936,7 +944,7 @@ struct PersistedChatTabTests {
         #expect(tab.conversationSessionID == nil)
     }
 
-    @Test("Round-trip preserves non-empty draftInput and conversation session id")
+    @Test("Round-trip preserves non-empty draftInput, conversation session id, and model metadata")
     func roundTripDraftInput() throws {
         let original = PersistedChatTab(
             identifier: "chat:2",
@@ -944,12 +952,16 @@ struct PersistedChatTabTests {
             title: "Chat",
             messages: [],
             draftInput: "hello draft",
-            conversationSessionID: "session-123"
+            conversationSessionID: "session-123",
+            modelId: "gpt-5.5",
+            reasoningLevel: "high"
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(PersistedChatTab.self, from: data)
         #expect(decoded.draftInput == "hello draft")
         #expect(decoded.conversationSessionID == "session-123")
+        #expect(decoded.modelId == "gpt-5.5")
+        #expect(decoded.reasoningLevel == "high")
     }
 
     @Test("Round-trip preserves draft attachments")
@@ -1048,7 +1060,7 @@ struct AgentChatRuntimeParsingTests {
             existingMessages: [existingUser]
         )
 
-        #expect(messages.map(\.role) == [.user, .assistant, .system, .system, .assistant])
+        #expect(messages.map(\.role) == [.user, .assistant, .assistant, .assistant, .assistant])
         #expect(messages[0].attachments == existingUser.attachments)
         #expect(messages[0].modelId == "gpt-5.5")
         #expect(messages[0].reasoningLevel == "low")
@@ -1056,6 +1068,23 @@ struct AgentChatRuntimeParsingTests {
         #expect(messages[2].text.contains("Tool call: exec_command"))
         #expect(messages[3].text == "Tool output:\nfound")
         #expect(messages[4].text == "Done.")
+    }
+
+
+    @Test("Tool transcript formatter parses JSON and summarizes folded headers")
+    func toolTranscriptFormatterParsesJSONAndSummarizesHeaders() {
+        let presentation = ChatToolTranscriptFormatter.presentation(
+            for: ChatToolTranscriptFormatter.toolCallText(
+                name: "exec_command",
+                arguments: "{\"cmd\":\"rg hello\",\"yield_time_ms\":1000}"
+            )
+        )
+
+        #expect(presentation?.kind == .call)
+        #expect(presentation?.title == "Tool call: exec_command")
+        #expect(presentation?.detail == "rg hello")
+        #expect(presentation?.body.contains("cmd: rg hello") == true)
+        #expect(presentation?.body.contains("yield_time_ms: 1000") == true)
     }
 
     @Test("Codex chat tab restore skips tabs without session ids")
@@ -1099,6 +1128,52 @@ struct AgentChatRuntimeParsingTests {
 
         #expect(messages.map(\.role) == [.user, .assistant])
         #expect(messages.last?.text == "Done.")
+    }
+
+    @Test("Codex transcript reconciliation preserves existing attachments across attachment footer")
+    func codexTranscriptReconciliationPreservesAttachmentsAcrossAttachmentFooter() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("magent-codex-attachment-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let imageURL = directory.appendingPathComponent("Screenshot.png")
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let existingUser = PersistedChatMessage(
+            role: .user,
+            text: "can you read whats on this image?",
+            attachments: [PersistedChatAttachment(filePath: imageURL.path, kind: .image)]
+        )
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"can you read whats on this image?\\n\\nAttached files:\\n- file://\(imageURL.path) (image, local path: \(imageURL.path))","local_images":["\(imageURL.path)"]}}
+        {"timestamp":"2026-05-22T08:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"It says Uncommitted."}}
+        {"timestamp":"2026-05-22T08:00:02Z","type":"event_msg","payload":{"type":"task_complete"}}
+        """
+
+        let messages = CodexChatTranscriptReconciler.messages(
+            fromCodexJSONL: jsonl,
+            existingMessages: [existingUser]
+        )
+
+        #expect(messages.first?.id == existingUser.id)
+        #expect(messages.first?.text == "can you read whats on this image?")
+        #expect(messages.first?.attachments == existingUser.attachments)
+    }
+
+    @Test("Codex transcript reconciliation ignores near-duplicate user replay")
+    func codexTranscriptReconciliationIgnoresNearDuplicateUserReplay() {
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"repeat me"}}
+        {"timestamp":"2026-05-22T08:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"First"}}
+        {"timestamp":"2026-05-22T08:04:00Z","type":"event_msg","payload":{"type":"user_message","message":"repeat me"}}
+        {"timestamp":"2026-05-22T08:04:01Z","type":"event_msg","payload":{"type":"agent_message","message":"Second"}}
+        {"timestamp":"2026-05-22T08:04:02Z","type":"event_msg","payload":{"type":"task_complete"}}
+        """
+
+        let messages = CodexChatTranscriptReconciler.messages(fromCodexJSONL: jsonl)
+
+        #expect(messages.filter { $0.role == .user }.map(\.text) == ["repeat me"])
+        #expect(messages.filter { $0.role == .assistant }.map(\.text) == ["First"])
     }
 
     @Test("Claude transcript reconciliation preserves user, assistant, and tool events")

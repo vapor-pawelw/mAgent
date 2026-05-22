@@ -53,6 +53,10 @@ public enum CodexChatTranscriptReconciler {
             existingMessages.filter { $0.role == .user }.map { ($0.text, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        let existingUsersByCanonicalText = Dictionary(
+            existingMessages.filter { $0.role == .user }.map { (canonicalUserText($0.text), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let existingAssistantsByText = Dictionary(
             existingMessages.filter { $0.role == .assistant }.map { ($0.text, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -69,8 +73,10 @@ public enum CodexChatTranscriptReconciler {
         var latestUserMessageAt: Date?
         var latestCompletionAt: Date?
         var latestAbortAt: Date?
+        var seenUserMessagesByCanonicalText: [String: Date] = [:]
+        var suppressMessagesForDuplicateUserReplay = false
 
-        func appendMessage(role: ChatMessageRole, text: String, createdAt: Date?) {
+        func appendMessage(role: ChatMessageRole, text: String, createdAt: Date?, attachments: [PersistedChatAttachment] = []) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             if lastAppended?.role == role, lastAppended?.text == trimmed {
@@ -79,7 +85,7 @@ public enum CodexChatTranscriptReconciler {
             lastAppended = (role, trimmed)
 
             let existing: PersistedChatMessage? = switch role {
-            case .user: existingUsersByText[trimmed]
+            case .user: existingUsersByText[trimmed] ?? existingUsersByCanonicalText[canonicalUserText(trimmed)]
             case .assistant: existingAssistantsByText[trimmed]
             case .system: existingSystemsByText[trimmed]
             }
@@ -87,7 +93,7 @@ public enum CodexChatTranscriptReconciler {
                 id: existing?.id ?? UUID(),
                 role: role,
                 text: trimmed,
-                attachments: existing?.attachments ?? [],
+                attachments: existing?.attachments ?? attachments,
                 createdAt: existing?.createdAt ?? createdAt ?? Date(),
                 modelId: existing?.modelId,
                 reasoningLevel: existing?.reasoningLevel
@@ -102,43 +108,65 @@ public enum CodexChatTranscriptReconciler {
 
             switch (event.type, event.payload?.type) {
             case ("event_msg", "user_message"):
+                let text = event.payload?.message ?? ""
+                let canonicalText = canonicalUserText(text)
+                if let previousDate = seenUserMessagesByCanonicalText[canonicalText],
+                   let timestamp = event.timestamp,
+                   timestamp.timeIntervalSince(previousDate) < 15 * 60 {
+                    suppressMessagesForDuplicateUserReplay = true
+                    continue
+                }
+                suppressMessagesForDuplicateUserReplay = false
                 latestUserMessageAt = event.timestamp ?? latestUserMessageAt
-                appendMessage(role: .user, text: event.payload?.message ?? "", createdAt: event.timestamp)
+                if !canonicalText.isEmpty {
+                    seenUserMessagesByCanonicalText[canonicalText] = event.timestamp ?? Date()
+                }
+                appendMessage(
+                    role: .user,
+                    text: canonicalText.isEmpty ? text : canonicalText,
+                    createdAt: event.timestamp,
+                    attachments: attachments(from: event.payload)
+                )
             case ("event_msg", "agent_message"):
+                guard !suppressMessagesForDuplicateUserReplay else { continue }
                 appendMessage(role: .assistant, text: event.payload?.message ?? "", createdAt: event.timestamp)
             case ("event_msg", "task_complete"):
                 latestCompletionAt = event.timestamp ?? latestCompletionAt
             case ("event_msg", "turn_aborted"):
                 latestAbortAt = event.timestamp ?? latestAbortAt
             case ("response_item", "function_call"):
+                guard !suppressMessagesForDuplicateUserReplay else { continue }
                 guard let payload = event.payload else { continue }
                 let name = payload.name ?? "tool"
                 let arguments = payload.arguments ?? ""
                 appendMessage(
-                    role: .system,
-                    text: "Tool call: \(name)\n\(arguments)",
+                    role: .assistant,
+                    text: ChatToolTranscriptFormatter.toolCallText(name: name, arguments: arguments),
                     createdAt: event.timestamp
                 )
             case ("response_item", "function_call_output"):
+                guard !suppressMessagesForDuplicateUserReplay else { continue }
                 guard let payload = event.payload else { continue }
                 let output = payload.output ?? ""
                 appendMessage(
-                    role: .system,
-                    text: "Tool output:\n\(output)",
+                    role: .assistant,
+                    text: ChatToolTranscriptFormatter.toolOutputText(output),
                     createdAt: event.timestamp
                 )
             case ("response_item", "custom_tool_call"):
+                guard !suppressMessagesForDuplicateUserReplay else { continue }
                 guard let payload = event.payload else { continue }
                 appendMessage(
-                    role: .system,
-                    text: "Tool call: \(payload.name ?? "custom")\n\(payload.input ?? "")",
+                    role: .assistant,
+                    text: ChatToolTranscriptFormatter.toolCallText(name: payload.name ?? "custom", arguments: payload.input ?? ""),
                     createdAt: event.timestamp
                 )
             case ("response_item", "custom_tool_call_output"):
+                guard !suppressMessagesForDuplicateUserReplay else { continue }
                 guard let payload = event.payload else { continue }
                 appendMessage(
-                    role: .system,
-                    text: "Tool output:\n\(payload.output ?? "")",
+                    role: .assistant,
+                    text: ChatToolTranscriptFormatter.toolOutputText(payload.output ?? ""),
                     createdAt: event.timestamp
                 )
             default:
@@ -159,6 +187,23 @@ public enum CodexChatTranscriptReconciler {
         }
 
         return messages
+    }
+
+    private static func canonicalUserText(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let range = trimmed.range(of: "\n\nAttached files:\n") else {
+            return trimmed
+        }
+        return String(trimmed[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func attachments(from payload: CodexSessionLine.Payload?) -> [PersistedChatAttachment] {
+        guard let payload else { return [] }
+        return payload.localImages.compactMap { path in
+            let normalizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+            guard FileManager.default.fileExists(atPath: normalizedPath) else { return nil }
+            return PersistedChatAttachment(filePath: normalizedPath, kind: .image)
+        }
     }
 
     private static func codexSessionURL(sessionID: String, homeDirectory: URL) -> URL? {
@@ -194,5 +239,27 @@ private struct CodexSessionLine: Decodable {
         var arguments: String?
         var output: String?
         var input: String?
+        var localImages: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case type
+            case message
+            case name
+            case arguments
+            case output
+            case input
+            case localImages = "local_images"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            type = try container.decodeIfPresent(String.self, forKey: .type)
+            message = try container.decodeIfPresent(String.self, forKey: .message)
+            name = try container.decodeIfPresent(String.self, forKey: .name)
+            arguments = try container.decodeIfPresent(String.self, forKey: .arguments)
+            output = try container.decodeIfPresent(String.self, forKey: .output)
+            input = try container.decodeIfPresent(String.self, forKey: .input)
+            localImages = try container.decodeIfPresent([String].self, forKey: .localImages) ?? []
+        }
     }
 }
