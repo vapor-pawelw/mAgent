@@ -116,7 +116,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 
 ### Controller Layer (Commit Detail)
 - `handleCommitDoubleTapped(_:title:)` in `ThreadListViewController+SidebarActions.swift` — loads entries async (`commitDiffStats` or `workingTreeDiffStats`) then calls `diffPanelView.enterCommitDetailMode`.
-- The same handler posts `magentShowDiffViewer` with `threadId`, optional `commitHash`, optional `commitTitle`, or `"mode": "uncommitted"` so the correct thread detail view opens the fixed Diff tab immediately.
+- The same handler posts `magentShowDiffViewer` with `threadId`, optional `commitHash`, optional `commitTitle`, or `"mode": "uncommitted"` so the correct thread detail view updates the fixed Diff tab's content without selecting the Diff tab.
 - `ThreadListViewController` observes `magentDiffCommitReviewBackRequested` from the fixed Diff tab's **Current Changes** button and routes it to `DiffPanelView.exitCommitDetailModeAndShowCurrentChanges()` only when the notification's `threadId` matches the current changes-panel context.
 
 ### Diff Viewer
@@ -126,7 +126,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - `currentDiffForceWorkingTree: Bool` — set when opening a diff for the "Uncommitted" detail mode; causes `refreshDiffViewerIfVisible()` and `showDiffViewer` to use `workingTreeDiffContent/Stats` instead of branch diff.
 - `refreshDiffViewerIfVisible()` skips refresh when `currentDiffCommitHash != nil` (commit diffs are static); respects `currentDiffForceWorkingTree` to determine which diff to refresh.
 - `hideDiffViewer()` resets both `currentDiffCommitHash` and `currentDiffForceWorkingTree` to nil/false.
-- The `magentShowDiffViewer` notification carries `threadId` whenever it originates from the changes panel. Thread detail controllers use that scope to open the diff in the matching main or pop-out window only. Legacy unscoped notifications are still ignored by pop-out windows.
+- The `magentShowDiffViewer` notification carries `threadId` whenever it originates from the changes panel. Thread detail controllers use that scope to update the diff in the matching main or pop-out window only, without changing the active tab selection. Legacy unscoped notifications are still ignored by pop-out windows.
 - The notification also carries an optional `"commitHash"` key, optional `"commitTitle"`, or `"mode": "uncommitted"` (from uncommitted detail mode file selection), set by `DiffPanelView.selectFile()` and commit-detail controller paths.
 - `InlineDiffViewController` hosts `Magent/Resources/DiffRenderer/dist/index.html` in a local `WKWebView`. It passes unified git patch text to `window.magentDiffRenderer.setDiff(...)` and keeps the native close, collapse/expand, and resize controls in AppKit.
 - `InlineDiffViewController.setCommitReviewContext(_:)` shows/hides the top-bar commit-review banner. `setDiffContent(... allowsReviewMarkers: false ...)` hides review checklist controls for commit diffs.

@@ -1700,9 +1700,6 @@ final class ThreadDetailViewController: NSViewController {
         let commitHash = notification.userInfo?["commitHash"] as? String
         let commitTitle = notification.userInfo?["commitTitle"] as? String
         let forceWorkingTree = (notification.userInfo?["mode"] as? String) == "uncommitted"
-        if let diffIndex = tabSlots.firstIndex(of: .diff) {
-            selectTab(at: diffIndex)
-        }
         showDiffViewer(scrollToFile: filePath, commitHash: commitHash, commitTitle: commitTitle, forceWorkingTreeDiff: forceWorkingTree)
         diffVC?.setCommitReviewContext(commitHash == nil ? nil : (commitTitle ?? commitHash))
     }

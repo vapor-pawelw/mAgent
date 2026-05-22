@@ -275,11 +275,13 @@ extension ThreadDetailViewController {
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 menu.addItem(.separator())
                 let (openTitle, openIcon) = defaultOpenMenuPresentation(for: fileURL)
+                let supportsLineOpening = lineOpenCommand(for: fileURL, line: lineNumber) != nil
+                let menuTitle = supportsLineOpening ? "\(openTitle) on line \(lineNumber)" : openTitle
                 let openLineTarget = DiffFileActionMenuTarget { [weak self] in
                     self?.openDiffFileAtLineIfSupported(fileURL, line: lineNumber)
                 }
                 let openLineItem = NSMenuItem(
-                    title: openTitle,
+                    title: menuTitle,
                     action: #selector(DiffFileActionMenuTarget.performAction),
                     keyEquivalent: ""
                 )
@@ -491,13 +493,19 @@ extension ThreadDetailViewController {
         showDiffViewer()
     }
 
+    private func isDiffTabSelected() -> Bool {
+        guard currentTabIndex >= 0, currentTabIndex < tabSlots.count else { return false }
+        if case .diff = tabSlots[currentTabIndex] { return true }
+        return false
+    }
+
     func showDiffViewer(scrollToFile: String? = nil, commitHash: String? = nil, commitTitle: String? = nil, forceWorkingTreeDiff: Bool = false) {
         NSLog("[DiffViewer] showDiffViewer called, scrollToFile=%@, commitHash=%@, diffVC=%@, isLoading=%d, view.window=%@",
               scrollToFile ?? "nil", commitHash ?? "nil", String(describing: diffVC), isLoadingDiffViewer ? 1 : 0,
               String(describing: view.window))
 
         if let existing = diffVC {
-            setDiffViewerVisible(true)
+            setDiffViewerVisible(isDiffTabSelected())
             // If the commit context or working-tree mode changed, reload the viewer entirely
             if currentDiffCommitHash != commitHash || currentDiffForceWorkingTree != forceWorkingTreeDiff {
                 hideDiffViewer()
@@ -670,7 +678,7 @@ extension ThreadDetailViewController {
                 diffView.translatesAutoresizingMaskIntoConstraints = false
                 NSLog("[DiffViewer] adding diffView to view hierarchy")
                 terminalContainer.addSubview(diffView)
-                diffView.isHidden = false
+                diffView.isHidden = !self.isDiffTabSelected()
                 NSLayoutConstraint.activate([
                     diffView.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
                     diffView.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),

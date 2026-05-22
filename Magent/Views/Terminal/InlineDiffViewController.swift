@@ -226,6 +226,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         summaryFilesLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         summaryFilesLabel.textColor = NSColor(resource: .textSecondary)
         summaryFilesLabel.translatesAutoresizingMaskIntoConstraints = false
+        summaryFilesLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         headerBar.addSubview(summaryFilesLabel)
 
         summaryAddedLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
@@ -273,6 +274,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         commitReviewLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         commitReviewLabel.lineBreakMode = .byTruncatingMiddle
         commitReviewLabel.translatesAutoresizingMaskIntoConstraints = false
+        commitReviewLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         commitReviewBannerView.addSubview(commitReviewLabel)
 
         currentChangesButton.bezelStyle = .rounded
@@ -433,7 +435,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             viewMenuButton.trailingAnchor.constraint(equalTo: reviewMenuButton.leadingAnchor, constant: -8),
             viewMenuButton.centerYAnchor.constraint(equalTo: headerBar.centerYAnchor),
 
-            commitReviewBannerView.leadingAnchor.constraint(equalTo: headerBar.leadingAnchor, constant: 12),
+            commitReviewBannerView.leadingAnchor.constraint(equalTo: summaryFilesLabel.trailingAnchor, constant: 12),
             commitReviewBannerView.trailingAnchor.constraint(lessThanOrEqualTo: viewMenuButton.leadingAnchor, constant: -12),
             commitReviewBannerView.centerYAnchor.constraint(equalTo: headerBar.centerYAnchor),
             commitReviewBannerView.heightAnchor.constraint(equalToConstant: 28),

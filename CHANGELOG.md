@@ -20,6 +20,8 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Empty diffs now show a centered no-content state with title and description, and no longer mark the Diff tab as unread.
+- Selecting files or commits from the changes panel now updates the fixed Diff tab in the background without switching away from the active tab.
+- Commit-review status in the fixed Diff tab now sits beside the file-change summary instead of overlapping it.
 - Right-clicking inside the Diff renderer now shows only diff text actions instead of WebKit reload/navigation options.
 - Right-clicking a diff line now includes the same file-open action as the file header menu; supported editors jump to the clicked line, while unsupported default apps open the file normally.
 - Diff tab review counts now reset stale checked files when changed files are removed, and empty diffs show plain `Diff` instead of `Diff (0/0)`.
