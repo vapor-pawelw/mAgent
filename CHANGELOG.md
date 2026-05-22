@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Fixed Codex chat answers sometimes saving only the first streamed assistant message instead of the full final response.
 - Fixed switching away from a running chat tab saving its in-progress answer as "Request cancelled."
 - Codex chat tabs now replay saved Codex session logs when restored, including commentary and tool-call messages missed while the thread or app was inactive.
+- Restored in-progress Codex chat turns now show the live loading indicator with elapsed time instead of a cancelled placeholder.
 
 ### Sidebar
 

@@ -9,13 +9,21 @@ extension ThreadDetailViewController {
     func restoreChatTabItems() {
         var restoredTabsMutated = false
         chatTabs = thread.persistedChatTabs.map { persisted in
-            let reconciledMessages = persisted.agentType == .codex
-                ? CodexChatTranscriptReconciler.reconciledMessages(
+            let reconciledMessages: (messages: [PersistedChatMessage], didMutate: Bool)
+            if persisted.agentType == .codex {
+                reconciledMessages = CodexChatTranscriptReconciler.reconciledMessages(
                     existingMessages: persisted.messages,
                     codexSessionID: persisted.conversationSessionID ?? ""
                 )
-                : (persisted.messages, false)
-            let normalizedMessages = ChatBusyStateRecovery.normalizedMessagesForAppRelaunch(reconciledMessages.messages)
+            } else {
+                reconciledMessages = (messages: persisted.messages, didMutate: false)
+            }
+            let normalizedMessages: (messages: [PersistedChatMessage], didMutate: Bool)
+            if reconciledMessages.didMutate {
+                normalizedMessages = (messages: reconciledMessages.messages, didMutate: false)
+            } else {
+                normalizedMessages = ChatBusyStateRecovery.normalizedMessagesForAppRelaunch(reconciledMessages.messages)
+            }
             if normalizedMessages.didMutate {
                 restoredTabsMutated = true
             }

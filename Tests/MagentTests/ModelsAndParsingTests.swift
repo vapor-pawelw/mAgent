@@ -1072,6 +1072,33 @@ struct AgentChatRuntimeParsingTests {
         #expect(result.chatTabs == [tab])
     }
 
+    @Test("Codex transcript reconciliation restores incomplete turns as loading")
+    func codexTranscriptReconciliationRestoresIncompleteTurnAsLoading() {
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"keep working"}}
+        {"timestamp":"2026-05-22T08:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"I’ll start.","phase":"commentary"}}
+        """
+
+        let messages = CodexChatTranscriptReconciler.messages(fromCodexJSONL: jsonl)
+
+        #expect(messages.map(\.role) == [.user, .assistant, .assistant])
+        #expect(messages[2].text == "Thinking...")
+        #expect(messages[2].createdAt == messages[0].createdAt)
+    }
+
+    @Test("Codex transcript reconciliation does not restore loading for completed turns")
+    func codexTranscriptReconciliationDoesNotRestoreLoadingForCompletedTurn() {
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"finish"}}
+        {"timestamp":"2026-05-22T08:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"Done.","phase":"final_answer"}}
+        {"timestamp":"2026-05-22T08:00:02Z","type":"event_msg","payload":{"type":"task_complete"}}
+        """
+
+        let messages = CodexChatTranscriptReconciler.messages(fromCodexJSONL: jsonl)
+
+        #expect(messages.map(\.role) == [.user, .assistant])
+        #expect(messages.last?.text == "Done.")
+    }
     @Test("Claude model-change text parsing returns model label and effort")
     func claudeModelChangeParsing() {
         let output = """

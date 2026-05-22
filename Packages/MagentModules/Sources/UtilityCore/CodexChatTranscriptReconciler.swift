@@ -66,6 +66,9 @@ public enum CodexChatTranscriptReconciler {
         decoder.dateDecodingStrategy = .iso8601
         var messages: [PersistedChatMessage] = []
         var lastAppended: (role: ChatMessageRole, text: String)?
+        var latestUserMessageAt: Date?
+        var latestCompletionAt: Date?
+        var latestAbortAt: Date?
 
         func appendMessage(role: ChatMessageRole, text: String, createdAt: Date?) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -99,9 +102,14 @@ public enum CodexChatTranscriptReconciler {
 
             switch (event.type, event.payload?.type) {
             case ("event_msg", "user_message"):
+                latestUserMessageAt = event.timestamp ?? latestUserMessageAt
                 appendMessage(role: .user, text: event.payload?.message ?? "", createdAt: event.timestamp)
             case ("event_msg", "agent_message"):
                 appendMessage(role: .assistant, text: event.payload?.message ?? "", createdAt: event.timestamp)
+            case ("event_msg", "task_complete"):
+                latestCompletionAt = event.timestamp ?? latestCompletionAt
+            case ("event_msg", "turn_aborted"):
+                latestAbortAt = event.timestamp ?? latestAbortAt
             case ("response_item", "function_call"):
                 guard let payload = event.payload else { continue }
                 let name = payload.name ?? "tool"
@@ -135,6 +143,18 @@ public enum CodexChatTranscriptReconciler {
                 )
             default:
                 continue
+            }
+        }
+
+        if let latestUserMessageAt {
+            let completedAfterLatestUser = latestCompletionAt.map { $0 >= latestUserMessageAt } ?? false
+            let abortedAfterLatestUser = latestAbortAt.map { $0 >= latestUserMessageAt } ?? false
+            if !completedAfterLatestUser, !abortedAfterLatestUser {
+                appendMessage(
+                    role: .assistant,
+                    text: "Thinking...",
+                    createdAt: latestUserMessageAt
+                )
             }
         }
 
