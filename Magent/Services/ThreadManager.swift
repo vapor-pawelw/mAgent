@@ -778,6 +778,13 @@ final class ThreadManager {
         let settings = persistence.loadSettings()
         var didMigrate = false
         for i in threads.indices {
+            let reconciledChatTabs = CodexChatTranscriptReconciler.reconciledChatTabsForRestore(
+                threads[i].persistedChatTabs
+            )
+            if reconciledChatTabs.didMutate {
+                threads[i].persistedChatTabs = reconciledChatTabs.chatTabs
+                didMigrate = true
+            }
             let normalizedChatTabs = ChatBusyStateRecovery.normalizedChatTabsForAppRelaunch(
                 threads[i].persistedChatTabs
             )

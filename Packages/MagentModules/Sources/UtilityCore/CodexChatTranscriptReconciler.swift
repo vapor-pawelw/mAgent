@@ -2,6 +2,31 @@ import Foundation
 import MagentModels
 
 public enum CodexChatTranscriptReconciler {
+    public static func reconciledChatTabsForRestore(
+        _ chatTabs: [PersistedChatTab],
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> (chatTabs: [PersistedChatTab], didMutate: Bool) {
+        var updatedTabs = chatTabs
+        var didMutate = false
+
+        for index in updatedTabs.indices {
+            guard updatedTabs[index].agentType == .codex,
+                  let codexSessionID = updatedTabs[index].conversationSessionID else {
+                continue
+            }
+            let reconciled = reconciledMessages(
+                existingMessages: updatedTabs[index].messages,
+                codexSessionID: codexSessionID,
+                homeDirectory: homeDirectory
+            )
+            guard reconciled.didMutate else { continue }
+            updatedTabs[index].messages = reconciled.messages
+            didMutate = true
+        }
+
+        return (updatedTabs, didMutate)
+    }
+
     public static func reconciledMessages(
         existingMessages: [PersistedChatMessage],
         codexSessionID: String,

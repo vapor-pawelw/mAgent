@@ -1057,6 +1057,21 @@ struct AgentChatRuntimeParsingTests {
         #expect(messages[4].text == "Done.")
     }
 
+    @Test("Codex chat tab restore skips tabs without session ids")
+    func codexChatTabRestoreSkipsTabsWithoutSessionIDs() {
+        let tab = PersistedChatTab(
+            identifier: "chat:1",
+            agentType: .codex,
+            title: "Codex",
+            messages: [PersistedChatMessage(role: .assistant, text: "Done.")]
+        )
+
+        let result = CodexChatTranscriptReconciler.reconciledChatTabsForRestore([tab])
+
+        #expect(!result.didMutate)
+        #expect(result.chatTabs == [tab])
+    }
+
     @Test("Claude model-change text parsing returns model label and effort")
     func claudeModelChangeParsing() {
         let output = """
