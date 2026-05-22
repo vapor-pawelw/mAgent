@@ -136,6 +136,13 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 - Chat composer input must use a normal `NSTextView` initializer so AppKit creates the backing text system. Do not initialize the composer with `textContainer: nil`; that leaves the view editable but without text storage, which prevents normal typing.
 - Chat attachment drops are accepted both on the composer and on the main chat surface. Composer drops may show the dashed "Drop files here" overlay, but main-surface drops intentionally reuse the same attachment ingestion path without extra visual chrome.
 
+### Chat Model-Change Notices
+
+- Each persisted chat user message stores the model ID and reasoning level used for that turn.
+- Before appending a newly sent user message, compare its selected model/reasoning against the previous user message in that chat. If either value changed, insert a `system` chat message immediately before the new user message with the text `Model changed to <model name> (<reasoning>)`.
+- Render system chat messages as centered, timestamp-hidden metadata bubbles so they read like Codex/Claude status output without being confused for user or assistant content.
+- Do not insert a marker before the first user message, and do not insert duplicates when the metadata is unchanged.
+
 ### Chat Slash Commands (GUI Chat Tabs)
 
 - Chat-tab slash commands are app-handled convenience commands, not a passthrough of each agent's full interactive TUI slash surface.

@@ -108,6 +108,7 @@ public nonisolated struct PersistedDraftTab: Codable, Sendable, Equatable {
 public nonisolated enum ChatMessageRole: String, Codable, Sendable {
     case user
     case assistant
+    case system
 }
 
 public nonisolated enum PersistedChatAttachmentKind: String, Codable, Sendable {

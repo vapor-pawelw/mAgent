@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Agents
 
 #### Bug Fixes
+- Chat tabs now insert a subtle model-change marker before the next sent message when its model or reasoning effort differs from the previous user message.
 - Fixed Codex chat answers sometimes saving only the first streamed assistant message instead of the full final response.
 - Fixed switching away from a running chat tab saving its in-progress answer as "Request cancelled."
 - Codex chat tabs now replay saved Codex session logs when restored, including commentary and tool-call messages missed while the thread or app was inactive.

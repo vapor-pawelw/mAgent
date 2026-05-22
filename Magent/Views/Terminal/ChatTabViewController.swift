@@ -558,6 +558,16 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 container.alphaValue = 0.65
             }
             timestampLabel.alignment = .right
+        case .system:
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                container.layer?.backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.10).cgColor
+                container.layer?.borderWidth = 1
+                container.layer?.borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.22).cgColor
+            }
+            baseTextColor = NSColor(resource: .textSecondary)
+            codeColor = baseTextColor
+            timestampLabel.alignment = .center
+            timestampLabel.isHidden = true
         case .assistant:
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 let bubbleColor = isLoadingIndicatorBubble ? NSColor(resource: .appBackground) : appearance.agentBubbleColor
@@ -664,16 +674,28 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         bubbleSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         bubbleSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        if message.role == .user {
+        switch message.role {
+        case .user:
             timestampRow.addArrangedSubview(timestampSpacer)
             timestampRow.addArrangedSubview(timestampLabel)
             bubbleRow.addArrangedSubview(bubbleSpacer)
             bubbleRow.addArrangedSubview(container)
-        } else {
+        case .assistant:
             timestampRow.addArrangedSubview(timestampLabel)
             timestampRow.addArrangedSubview(timestampSpacer)
             bubbleRow.addArrangedSubview(container)
             bubbleRow.addArrangedSubview(bubbleSpacer)
+        case .system:
+            timestampRow.addArrangedSubview(timestampSpacer)
+            timestampRow.addArrangedSubview(timestampLabel)
+            timestampRow.addArrangedSubview(NSView())
+            bubbleRow.addArrangedSubview(bubbleSpacer)
+            bubbleRow.addArrangedSubview(container)
+            let trailingSpacer = NSView()
+            trailingSpacer.translatesAutoresizingMaskIntoConstraints = false
+            trailingSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            trailingSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            bubbleRow.addArrangedSubview(trailingSpacer)
         }
 
         let outer = NSStackView()

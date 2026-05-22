@@ -551,6 +551,12 @@ extension ThreadDetailViewController {
                !trimmedText.isEmpty,
                let steerContinuation = chatSteerInputContinuationsByIdentifier[identifier] {
                 let metadata = chatMessageMetadata(for: entryIndex)
+                chatTabs[entryIndex].messages = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
+                    into: chatTabs[entryIndex].messages,
+                    nextModelName: chatModelDisplayName(for: entryIndex, modelId: metadata.modelId),
+                    nextModelId: metadata.modelId,
+                    nextReasoningLevel: metadata.reasoningLevel
+                )
                 let steeringMessage = PersistedChatMessage(
                     role: .user,
                     text: trimmedText,
@@ -565,6 +571,12 @@ extension ThreadDetailViewController {
             }
 
             let metadata = chatMessageMetadata(for: entryIndex)
+            chatTabs[entryIndex].messages = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
+                into: chatTabs[entryIndex].messages,
+                nextModelName: chatModelDisplayName(for: entryIndex, modelId: metadata.modelId),
+                nextModelId: metadata.modelId,
+                nextReasoningLevel: metadata.reasoningLevel
+            )
             let displayText = messageTextForDisplay(promptText: trimmedText, attachments: normalizedAttachments)
             let queuedUserMessage = PersistedChatMessage(
                 role: .user,
@@ -610,6 +622,12 @@ extension ThreadDetailViewController {
 
         let metadata = chatMessageMetadata(for: chatIndex)
         let displayText = messageTextForDisplay(promptText: promptText, attachments: attachments)
+        chatTabs[chatIndex].messages = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
+            into: chatTabs[chatIndex].messages,
+            nextModelName: chatModelDisplayName(for: chatIndex, modelId: metadata.modelId),
+            nextModelId: metadata.modelId,
+            nextReasoningLevel: metadata.reasoningLevel
+        )
         if let existingQueuedUserMessageID,
            !chatTabs[chatIndex].messages.contains(where: { $0.id == existingQueuedUserMessageID }) {
             let reconstructedUser = PersistedChatMessage(
@@ -1028,6 +1046,12 @@ extension ThreadDetailViewController {
         refreshChatTabView(chatIndex: chatIndex)
     }
 
+    private func chatModelDisplayName(for chatIndex: Int, modelId: String?) -> String? {
+        guard chatTabs.indices.contains(chatIndex), let modelId, !modelId.isEmpty else { return modelId }
+        let agentType = chatTabs[chatIndex].agentType
+        return AgentModelsService.shared.config(for: agentType)?.models.first(where: { $0.id == modelId })?.label ?? modelId
+    }
+
     private func chatMessageMetadata(for chatIndex: Int) -> (modelId: String?, reasoningLevel: String?) {
         guard chatTabs.indices.contains(chatIndex) else { return (nil, nil) }
         let entry = chatTabs[chatIndex]
@@ -1236,6 +1260,7 @@ extension ThreadDetailViewController {
             let roleName: String = switch message.role {
             case .user: "User"
             case .assistant: "Assistant"
+            case .system: "System"
             }
             let timestamp = formatter.string(from: message.createdAt)
             lines.append("\(roleName) (\(timestamp)):")
