@@ -13,10 +13,15 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Chat tabs now insert a subtle model-change marker before the next sent message when its model or reasoning effort differs from the previous user message.
+- Fixed new-thread creation from the prompt sheet when selecting an agent's Chat type, preserving the typed prompt as the new chat tab draft.
+- Fixed Codex chat drag-and-drop attachments creating duplicate screenshot files.
+- Chat attachments now stay attached after sending, render as thumbnails in user messages, and are passed to the agent from a sandbox-readable worktree path.
+- Image attachments in chat can now be clicked to open a dimmed in-app preview with zoom controls, mouse-wheel zoom, and drag-to-pan while zoomed in.
 - Fixed Codex chat answers sometimes saving only the first streamed assistant message instead of the full final response.
 - Fixed switching away from a running chat tab saving its in-progress answer as "Request cancelled."
 - Codex chat tabs now replay saved Codex session logs when restored, including commentary and tool-call messages missed while the thread or app was inactive.
 - Restored Codex chat transcripts now preserve attachment thumbnails from local image prompts and skip near-duplicate replayed user turns.
+- Tool calls in restored chat transcripts now render as collapsed agent messages with readable JSON fields and highlighted diff lines.
 - Restored in-progress Codex chat turns now show the live loading indicator with elapsed time instead of a cancelled placeholder.
 - Claude chat tabs now replay saved Claude session logs when restored, including tool messages and in-progress loading state missed while the thread or app was inactive.
 

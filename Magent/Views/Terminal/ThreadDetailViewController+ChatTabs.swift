@@ -577,10 +577,10 @@ extension ThreadDetailViewController {
                 nextModelId: metadata.modelId,
                 nextReasoningLevel: metadata.reasoningLevel
             )
-            let displayText = messageTextForDisplay(promptText: trimmedText, attachments: normalizedAttachments)
             let queuedUserMessage = PersistedChatMessage(
                 role: .user,
-                text: displayText,
+                text: trimmedText,
+                attachments: normalizedAttachments,
                 modelId: metadata.modelId,
                 reasoningLevel: metadata.reasoningLevel
             )
@@ -621,7 +621,7 @@ extension ThreadDetailViewController {
         }
 
         let metadata = chatMessageMetadata(for: chatIndex)
-        let displayText = messageTextForDisplay(promptText: promptText, attachments: attachments)
+        let preparedAttachments = prepareAttachmentsForAgentSubmission(attachments, worktreePath: thread.worktreePath)
         chatTabs[chatIndex].messages = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
             into: chatTabs[chatIndex].messages,
             nextModelName: chatModelDisplayName(for: chatIndex, modelId: metadata.modelId),
@@ -633,20 +633,24 @@ extension ThreadDetailViewController {
             let reconstructedUser = PersistedChatMessage(
                 id: existingQueuedUserMessageID,
                 role: .user,
-                text: displayText,
+                text: promptText,
+                attachments: preparedAttachments,
                 modelId: metadata.modelId,
                 reasoningLevel: metadata.reasoningLevel
             )
             chatTabs[chatIndex].messages.append(reconstructedUser)
         } else if let existingQueuedUserMessageID,
                   let existingIndex = chatTabs[chatIndex].messages.firstIndex(where: { $0.id == existingQueuedUserMessageID }) {
+            chatTabs[chatIndex].messages[existingIndex].text = promptText
+            chatTabs[chatIndex].messages[existingIndex].attachments = preparedAttachments
             chatTabs[chatIndex].messages[existingIndex].modelId = metadata.modelId
             chatTabs[chatIndex].messages[existingIndex].reasoningLevel = metadata.reasoningLevel
         }
         if existingQueuedUserMessageID == nil {
             let user = PersistedChatMessage(
                 role: .user,
-                text: displayText,
+                text: promptText,
+                attachments: preparedAttachments,
                 modelId: metadata.modelId,
                 reasoningLevel: metadata.reasoningLevel
             )
@@ -684,7 +688,7 @@ extension ThreadDetailViewController {
             guard let self else { return }
             let response = await AgentChatRuntime.execute(
                 agentType: agentType,
-                prompt: displayText,
+                prompt: promptText,
                 workingDirectory: worktreePath,
                 conversationSessionID: conversationSessionID,
                 claudeSystemPrompt: includeMagentIPC ? IPCAgentDocs.claudeSystemPrompt : nil,
@@ -693,6 +697,7 @@ extension ThreadDetailViewController {
                 reasoningLevel: selectedReasoningLevel,
                 codexSkipPermissions: codexSkipPermissions,
                 codexSandboxEnabled: codexSandboxEnabled,
+                attachments: self.agentChatAttachments(from: preparedAttachments),
                 codexSteerStream: codexSteerStream,
                 onStreamingUpdate: { [weak self] update in
                     guard let self else { return }
@@ -1087,15 +1092,90 @@ extension ThreadDetailViewController {
         return normalized
     }
 
-    private func messageTextForDisplay(promptText: String, attachments: [PersistedChatAttachment]) -> String {
-        guard !attachments.isEmpty else { return promptText }
-        let lines = attachments.map { attachment in
-            "• \((attachment.filePath as NSString).lastPathComponent)"
+    private func prepareAttachmentsForAgentSubmission(
+        _ attachments: [PersistedChatAttachment],
+        worktreePath: String
+    ) -> [PersistedChatAttachment] {
+        let normalizedWorktree = URL(fileURLWithPath: worktreePath).standardizedFileURL
+        let worktreePrefix = normalizedWorktree.path.hasSuffix("/")
+            ? normalizedWorktree.path
+            : normalizedWorktree.path + "/"
+        let stagingDirectory = normalizedWorktree
+            .appendingPathComponent(".magent", isDirectory: true)
+            .appendingPathComponent("chat-attachments", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        var prepared: [PersistedChatAttachment] = []
+        for attachment in attachments {
+            let sourceURL = URL(fileURLWithPath: attachment.filePath).standardizedFileURL
+            let sourcePath = sourceURL.path
+            guard FileManager.default.fileExists(atPath: sourcePath) else { continue }
+
+            if sourcePath == normalizedWorktree.path || sourcePath.hasPrefix(worktreePrefix) {
+                prepared.append(attachment)
+                continue
+            }
+
+            do {
+                try FileManager.default.createDirectory(
+                    at: stagingDirectory,
+                    withIntermediateDirectories: true
+                )
+                let destinationURL = uniqueAttachmentDestination(
+                    in: stagingDirectory,
+                    preferredFilename: sourceURL.lastPathComponent
+                )
+                try? FileManager.default.removeItem(at: destinationURL)
+                try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+                prepared.append(
+                    PersistedChatAttachment(
+                        id: attachment.id,
+                        filePath: destinationURL.standardizedFileURL.path,
+                        kind: attachment.kind
+                    )
+                )
+            } catch {
+                prepared.append(attachment)
+            }
         }
-        if promptText.isEmpty {
-            return lines.joined(separator: "\n")
+        return normalizeAttachmentsForSubmission(prepared)
+    }
+
+    private func uniqueAttachmentDestination(in directory: URL, preferredFilename: String) -> URL {
+        let fallbackName = "attachment"
+        let rawName = preferredFilename.trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeName = (rawName.isEmpty ? fallbackName : rawName)
+            .components(separatedBy: CharacterSet(charactersIn: "/:"))
+            .joined(separator: "-")
+        let candidate = directory.appendingPathComponent(safeName)
+        guard FileManager.default.fileExists(atPath: candidate.path) else { return candidate }
+
+        let nsName = safeName as NSString
+        let base = nsName.deletingPathExtension.isEmpty ? fallbackName : nsName.deletingPathExtension
+        let ext = nsName.pathExtension
+        for index in 2...999 {
+            let filename = ext.isEmpty ? "\(base)-\(index)" : "\(base)-\(index).\(ext)"
+            let url = directory.appendingPathComponent(filename)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
         }
-        return ([promptText, ""] + lines).joined(separator: "\n")
+        return directory.appendingPathComponent("\(UUID().uuidString)-\(safeName)")
+    }
+
+    private func agentChatAttachments(from attachments: [PersistedChatAttachment]) -> [AgentChatAttachment] {
+        attachments.map { attachment in
+            let kind: AgentChatAttachment.Kind
+            switch attachment.kind {
+            case .file:
+                kind = .file
+            case .image:
+                kind = .image
+            case .video:
+                kind = .video
+            }
+            return AgentChatAttachment(path: attachment.filePath, kind: kind)
+        }
     }
 
     private func persistChatTabs() {

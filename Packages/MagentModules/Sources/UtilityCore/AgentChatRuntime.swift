@@ -1142,7 +1142,8 @@ public nonisolated enum AgentChatRuntime {
             case .file:
                 kindLabel = "file"
             }
-            return "- \(attachment.path) (\(kindLabel))"
+            let fileURL = URL(fileURLWithPath: attachment.path).absoluteString
+            return "- \(fileURL) (\(kindLabel), local path: \(attachment.path))"
         }
         let attachmentContext = "Attached files:\n" + fileLines.joined(separator: "\n")
 
