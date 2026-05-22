@@ -522,12 +522,14 @@ final class ThreadDetailViewController: NSViewController {
         scrollFABRefreshTask?.cancel()
         backgroundSessionPreparationTask?.cancel()
         sessionPreparationTasks.values.forEach { $0.cancel() }
-        chatRequestTasksByIdentifier.values.forEach { $0.cancel() }
-        chatStreamingCheckpointTasksByIdentifier.values.forEach { $0.cancel() }
+        let chatRequestTasks = chatRequestTasksByIdentifier.values
+        let chatStreamingCheckpointTasks = chatStreamingCheckpointTasksByIdentifier.values
         chatRequestTaskTokensByIdentifier.removeAll()
         chatPendingAssistantMessageIDsByIdentifier.removeAll()
         chatStreamingAssistantMessageIDsByIdentifier.removeAll()
         chatStreamingCheckpointTasksByIdentifier.removeAll()
+        chatRequestTasks.forEach { $0.cancel() }
+        chatStreamingCheckpointTasks.forEach { $0.cancel() }
         chatStreamingUIRefreshTasksByIdentifier.values.forEach { $0.cancel() }
         chatStreamingUIRefreshTasksByIdentifier.removeAll()
         chatStreamingLastUIRefreshAtByIdentifier.removeAll()

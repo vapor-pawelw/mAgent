@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Fixed Codex chat answers sometimes saving only the first streamed assistant message instead of the full final response.
+- Fixed switching away from a running chat tab saving its in-progress answer as "Request cancelled."
 
 ### Sidebar
 
