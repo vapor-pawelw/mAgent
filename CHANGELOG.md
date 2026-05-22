@@ -9,6 +9,11 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Homebrew update relaunch now shows macOS progress notifications while Magent is closed and skips a redundant tap refresh when the update was just prefetched, shortening the restart gap after **Install & Relaunch**.
 
+### Agents
+
+#### Bug Fixes
+- Fixed Codex chat answers sometimes saving only the first streamed assistant message instead of the full final response.
+
 ### Sidebar
 
 #### Features

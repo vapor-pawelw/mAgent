@@ -688,15 +688,14 @@ extension ThreadDetailViewController {
                 let finalText = self.normalizeFinalAssistantMessage(
                     response.assistantText
                 )
-                if !finalText.isEmpty, !hasRenderedStreamedMessages {
-                    let assistant = PersistedChatMessage(
-                        role: .assistant,
-                        text: finalText,
-                        modelId: metadata.modelId,
-                        reasoningLevel: metadata.reasoningLevel
-                    )
-                    self.chatTabs[currentIndex].messages.append(assistant)
-                }
+                let reconciledMessages = ChatFinalAssistantMessageReconciler.messagesByReconcilingFinalAssistantText(
+                    self.chatTabs[currentIndex].messages,
+                    streamedMessageIDs: hasRenderedStreamedMessages ? streamedMessageIDs : [],
+                    finalText: finalText,
+                    modelId: metadata.modelId,
+                    reasoningLevel: metadata.reasoningLevel
+                )
+                self.chatTabs[currentIndex].messages = reconciledMessages.messages
 
                 self.chatStreamingAssistantMessageIDsByIdentifier.removeValue(forKey: identifier)
                 self.chatTabs[currentIndex].conversationSessionID = response.conversationSessionID
