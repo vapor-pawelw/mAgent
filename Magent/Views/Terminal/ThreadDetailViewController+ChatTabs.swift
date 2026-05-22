@@ -10,10 +10,15 @@ extension ThreadDetailViewController {
         var restoredTabsMutated = false
         chatTabs = thread.persistedChatTabs.map { persisted in
             let reconciledMessages: (messages: [PersistedChatMessage], didMutate: Bool)
-            if persisted.agentType == .codex {
+            if persisted.agentType == .codex, let conversationSessionID = persisted.conversationSessionID {
                 reconciledMessages = CodexChatTranscriptReconciler.reconciledMessages(
                     existingMessages: persisted.messages,
-                    codexSessionID: persisted.conversationSessionID ?? ""
+                    codexSessionID: conversationSessionID
+                )
+            } else if persisted.agentType == .claude, let conversationSessionID = persisted.conversationSessionID {
+                reconciledMessages = ClaudeChatTranscriptReconciler.reconciledMessages(
+                    existingMessages: persisted.messages,
+                    claudeSessionID: conversationSessionID
                 )
             } else {
                 reconciledMessages = (messages: persisted.messages, didMutate: false)

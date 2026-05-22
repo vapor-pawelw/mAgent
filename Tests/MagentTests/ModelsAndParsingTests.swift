@@ -1040,6 +1040,7 @@ struct AgentChatRuntimeParsingTests {
         {"timestamp":"2026-05-22T08:00:02Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\\"cmd\\":\\"rg hello\\"}","call_id":"call_1"}}
         {"timestamp":"2026-05-22T08:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_1","output":"found"}}
         {"timestamp":"2026-05-22T08:00:04Z","type":"event_msg","payload":{"type":"agent_message","message":"Done.","phase":"final_answer"}}
+        {"timestamp":"2026-05-22T08:00:05Z","type":"event_msg","payload":{"type":"task_complete"}}
         """
 
         let messages = CodexChatTranscriptReconciler.messages(
@@ -1099,6 +1100,65 @@ struct AgentChatRuntimeParsingTests {
         #expect(messages.map(\.role) == [.user, .assistant])
         #expect(messages.last?.text == "Done.")
     }
+
+    @Test("Claude transcript reconciliation preserves user, assistant, and tool events")
+    func claudeTranscriptReconciliationPreservesClaudeEvents() {
+        let existingUser = PersistedChatMessage(
+            role: .user,
+            text: "inspect this",
+            attachments: [PersistedChatAttachment(filePath: "/tmp/b.png", kind: .image)],
+            modelId: "claude-opus-4-6"
+        )
+        let jsonl = """
+        {"type":"user","timestamp":"2026-05-22T08:00:00Z","message":{"role":"user","content":[{"type":"text","text":"inspect this"}]}}
+        {"type":"assistant","timestamp":"2026-05-22T08:00:01Z","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/file.swift"}}],"stop_reason":"tool_use"}}
+        {"type":"user","timestamp":"2026-05-22T08:00:02Z","message":{"role":"user","content":[{"type":"tool_result","content":"file contents"}]}}
+        {"type":"assistant","timestamp":"2026-05-22T08:00:03Z","message":{"role":"assistant","content":[{"type":"text","text":"Done."}],"stop_reason":"end_turn"}}
+        """
+
+        let messages = ClaudeChatTranscriptReconciler.messages(
+            fromClaudeJSONL: jsonl,
+            existingMessages: [existingUser]
+        )
+
+        #expect(messages.map(\.role) == [.user, .assistant, .assistant, .assistant])
+        #expect(messages[0].attachments == existingUser.attachments)
+        #expect(messages[0].modelId == "claude-opus-4-6")
+        #expect(messages[1].text.contains("Tool call: Read"))
+        #expect(messages[1].text.contains("file_path"))
+        #expect(messages[2].text == "Tool output:\nfile contents")
+        #expect(messages[3].text == "Done.")
+    }
+
+    @Test("Claude chat tab restore skips tabs without session ids")
+    func claudeChatTabRestoreSkipsTabsWithoutSessionIDs() {
+        let tab = PersistedChatTab(
+            identifier: "chat:1",
+            agentType: .claude,
+            title: "Claude",
+            messages: [PersistedChatMessage(role: .assistant, text: "Done.")]
+        )
+
+        let result = ClaudeChatTranscriptReconciler.reconciledChatTabsForRestore([tab])
+
+        #expect(!result.didMutate)
+        #expect(result.chatTabs == [tab])
+    }
+
+    @Test("Claude transcript reconciliation restores incomplete turns as loading")
+    func claudeTranscriptReconciliationRestoresIncompleteTurnAsLoading() {
+        let jsonl = """
+        {"type":"user","timestamp":"2026-05-22T08:00:00Z","message":{"role":"user","content":[{"type":"text","text":"keep working"}]}}
+        {"type":"assistant","timestamp":"2026-05-22T08:00:01Z","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/file.swift"}}],"stop_reason":"tool_use"}}
+        """
+
+        let messages = ClaudeChatTranscriptReconciler.messages(fromClaudeJSONL: jsonl)
+
+        #expect(messages.map(\.role) == [.user, .assistant, .assistant])
+        #expect(messages[2].text == "Thinking...")
+        #expect(messages[2].createdAt == messages[0].createdAt)
+    }
+
     @Test("Claude model-change text parsing returns model label and effort")
     func claudeModelChangeParsing() {
         let output = """
