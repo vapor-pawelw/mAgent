@@ -818,7 +818,7 @@ final class ThreadDetailViewController: NSViewController {
         let pinnedSet = Set(thread.pinnedTmuxSessions)
 
         var sessions: [String] = thread.tmuxSessionNames
-        let hasNonTerminalTabsOnly = false
+        let hasNonTerminalTabsOnly = sessions.isEmpty && (!thread.persistedWebTabs.isEmpty || !thread.persistedDraftTabs.isEmpty || !thread.persistedChatTabs.isEmpty)
 
         if sessions.isEmpty && !hasNonTerminalTabsOnly {
             // Thread has no tabs at all — create a fallback terminal session so the user
@@ -958,7 +958,21 @@ final class ThreadDetailViewController: NSViewController {
 
         // Non-terminal thread: skip terminal session setup entirely, just restore the
         // selected draft/web/chat tab instead of inventing a fallback tmux session name.
-        if hasNonTerminalTabsOnly { return }
+        if hasNonTerminalTabsOnly {
+            await MainActor.run {
+                let selectedIndex = resolveLastSelectedSlotIndex() ?? tabSlots.indices.first { index in
+                    switch tabSlots[index] {
+                    case .web, .draft, .chat: return true
+                    case .terminal, .diff: return false
+                    }
+                }
+                if let selectedIndex {
+                    selectTab(at: selectedIndex)
+                }
+                dismissLoadingOverlay()
+            }
+            return
+        }
 
         // Resolve whether the last-selected tab was a non-terminal tab (web/draft/chat).
         // If so, we still prepare terminal sessions in the background but select the

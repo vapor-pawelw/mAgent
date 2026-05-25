@@ -1,6 +1,51 @@
 import Foundation
 import MagentCore
 
+private struct IPCAgentSelection {
+    let agentType: AgentType?
+    let surface: AgentSurface?
+    let useAgentCommand: Bool
+}
+
+private struct IPCAgentSelectionError: Error, CustomStringConvertible {
+    let description: String
+}
+
+private func parseIPCAgentSelection(_ rawValue: String?) -> Result<IPCAgentSelection, IPCAgentSelectionError> {
+    guard let rawValue, !rawValue.isEmpty else {
+        return .success(IPCAgentSelection(agentType: nil, surface: nil, useAgentCommand: true))
+    }
+
+    let parts = rawValue.split(separator: ":", maxSplits: 1).map(String.init)
+    let agentRaw = parts[0]
+    let surface = parts.count == 2 ? AgentSurface(rawValue: parts[1]) : nil
+    if parts.count == 2, surface == nil {
+        return .failure(IPCAgentSelectionError(description: "Unknown agent surface: \(parts[1]). Valid surfaces: terminal, chat"))
+    }
+
+    if agentRaw == "terminal" {
+        if surface == .chat {
+            return .failure(IPCAgentSelectionError(description: "Terminal does not support the chat surface"))
+        }
+        return .success(IPCAgentSelection(agentType: nil, surface: .terminal, useAgentCommand: false))
+    }
+
+    guard let agentType = AgentType(rawValue: agentRaw) else {
+        return .failure(IPCAgentSelectionError(description: "Unknown agent type: \(agentRaw). Valid: claude, codex, custom, terminal"))
+    }
+
+    let selectedSurface = surface ?? agentType.defaultSurface
+    guard agentType.supports(selectedSurface) else {
+        return .failure(IPCAgentSelectionError(description: "Agent type \(agentType.rawValue) does not support the \(selectedSurface.rawValue) surface"))
+    }
+
+    return .success(IPCAgentSelection(
+        agentType: agentType,
+        surface: selectedSurface,
+        useAgentCommand: selectedSurface == .terminal
+    ))
+}
+
 private actor IPCChatPromptCoordinator {
     enum SubmissionAction {
         case start(steerStream: AsyncStream<String>?)
@@ -300,23 +345,15 @@ final class IPCCommandHandler {
             return .failure("Project not found: \(projectName)", id: request.id)
         }
 
-        let requestedAgent: AgentType?
-        let useAgentCommand: Bool
-        if let agentStr = request.agentType {
-            if agentStr == "terminal" {
-                requestedAgent = nil
-                useAgentCommand = false
-            } else {
-                requestedAgent = AgentType(rawValue: agentStr)
-                guard requestedAgent != nil else {
-                    return .failure("Unknown agent type: \(agentStr). Valid: claude, codex, custom, terminal", id: request.id)
-                }
-                useAgentCommand = true
-            }
-        } else {
-            requestedAgent = nil
-            useAgentCommand = true
+        let selection: IPCAgentSelection
+        switch parseIPCAgentSelection(request.agentType) {
+        case .success(let parsed):
+            selection = parsed
+        case .failure(let message):
+            return .failure(message.description, id: request.id)
         }
+        let requestedAgent = selection.agentType
+        let useAgentCommand = selection.useAgentCommand
         if let requestedAgent, !settings.availableActiveAgents.contains(requestedAgent) {
             return .failure("Agent type is not enabled: \(requestedAgent.rawValue)", id: request.id)
         }
@@ -434,6 +471,17 @@ final class IPCCommandHandler {
                 useAgentCommand: useAgentCommand,
                 initialPrompt: request.prompt,
                 shouldSubmitInitialPrompt: request.noSubmit != true,
+                initialChatTab: {
+                    guard selection.surface == .chat, let requestedAgent else { return nil }
+                    return PersistedChatTab(
+                        identifier: "chat:\(UUID().uuidString)",
+                        agentType: requestedAgent,
+                        title: "\(requestedAgent.displayName) Chat",
+                        draftInput: request.prompt ?? "",
+                        modelId: request.modelId,
+                        reasoningLevel: request.reasoningLevel
+                    )
+                }(),
                 requestedName: requestedName,
                 requestedBaseBranch: requestedBaseBranch,
                 requestedSectionId: requestedSectionId,
@@ -515,30 +563,20 @@ final class IPCCommandHandler {
             let requestedSectionId: UUID?
             let fromThread: MagentThread?
             let priority: Int?
+            let surface: AgentSurface?
         }
 
         var resolved: [ResolvedSpec] = []
         for (i, spec) in specs.enumerated() {
-            let agentType: AgentType?
-            let useAgentCommand: Bool
-            if let agentStr = spec.agentType {
-                if agentStr == "terminal" {
-                    agentType = nil
-                    useAgentCommand = false
-                } else {
-                    guard let at = AgentType(rawValue: agentStr) else {
-                        return .failure("Thread \(i): unknown agent type: \(agentStr)", id: request.id)
-                    }
-                    if !settings.availableActiveAgents.contains(at) {
-                        return .failure("Thread \(i): agent type is not enabled: \(agentStr)", id: request.id)
-                    }
-                    agentType = at
-                    useAgentCommand = true
-                }
-            } else {
-                agentType = nil
-                useAgentCommand = true
+            let selection: IPCAgentSelection
+            switch parseIPCAgentSelection(spec.agentType) {
+            case .success(let parsed):
+                selection = parsed
+            case .failure(let message):
+                return .failure("Thread \(i): \(message.description)", id: request.id)
             }
+            let agentType = selection.agentType
+            let useAgentCommand = selection.useAgentCommand
 
             // Resolve per-spec from-thread (falls back to request-level)
             let specFromThread: MagentThread?
@@ -646,7 +684,8 @@ final class IPCCommandHandler {
                 requestedBaseBranch: baseBranch,
                 requestedSectionId: sectionId,
                 fromThread: specFromThread,
-                priority: spec.priority
+                priority: spec.priority,
+                surface: selection.surface
             ))
         }
 
@@ -666,6 +705,17 @@ final class IPCCommandHandler {
                             useAgentCommand: spec.useAgentCommand,
                             initialPrompt: spec.prompt,
                             shouldSubmitInitialPrompt: !spec.noSubmit,
+                            initialChatTab: {
+                                guard spec.surface == .chat, let agentType = spec.agentType else { return nil }
+                                return PersistedChatTab(
+                                    identifier: "chat:\(UUID().uuidString)",
+                                    agentType: agentType,
+                                    title: "\(agentType.displayName) Chat",
+                                    draftInput: spec.prompt ?? "",
+                                    modelId: spec.modelId,
+                                    reasoningLevel: spec.reasoningLevel
+                                )
+                            }(),
                             requestedName: spec.requestedName,
                             requestedBaseBranch: spec.requestedBaseBranch,
                             requestedSectionId: spec.requestedSectionId,
@@ -692,7 +742,7 @@ final class IPCCommandHandler {
         for (i, result) in results {
             if case .success(let thread) = result {
                 if let ft = resolved[i].fromThread {
-                    if ft.sidebarListState == .pinned {
+                    if ft.sidebarListState == ThreadSidebarListState.pinned {
                         threadManager.bumpThreadToTopOfSection(thread.id)
                     } else {
                         threadManager.placeThreadAfterSibling(threadId: thread.id, afterThreadId: ft.id)

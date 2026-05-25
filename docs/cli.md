@@ -36,7 +36,7 @@ magent-cli create-thread --project <name> [options]
 | Option | Description |
 |--------|-------------|
 | `--project <name>` | **Required.** Project to create the thread in. |
-| `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`. Defaults to project/global setting. Errors if the requested agent is disabled in Settings. |
+| `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`; use `claude:chat` or `codex:chat` to start the thread on a chat tab. Defaults to project/global setting. Errors if the requested agent is disabled in Settings. |
 | `--model <id>` | Model ID to launch the initial tab with (e.g. `claude-opus-4-5`). Falls back to the agent's configured default when omitted. |
 | `--reasoning <level>` | Reasoning level for the initial tab: `low`, `medium`, `high`, `max` (Claude) or `low`, `medium`, `high`, `xhigh` (Codex). Omit to use the agent's default. |
 | `--prompt <text>` | Initial prompt to send to the agent after creation. |
@@ -58,7 +58,7 @@ magent-cli create-thread --project <name> [options]
 If neither `--name` nor `--description` is given, a random name is generated.
 `--base-thread` and `--base-branch` are mutually exclusive.
 
-> **Agent selection**: `--agent` determines the agent type for the thread's *initial tab*. If you want a Claude thread, pass `--agent claude` to `create-thread` — do **not** omit `--agent` and follow up with `create-tab --agent claude`. Omitting `--agent` creates the initial tab using the project/global default agent (often `codex` or `terminal`), leaving you with an unwanted extra tab.
+> **Agent selection**: `--agent` determines the agent type and surface for the thread's *initial tab*. If you want a Claude terminal thread, pass `--agent claude`; if you want a Claude chat-first thread, pass `--agent claude:chat`. Do **not** omit `--agent` and follow up with `create-tab --agent claude`. Omitting `--agent` creates the initial tab using the project/global default agent (often `codex` or `terminal`), leaving you with an unwanted extra tab.
 
 **Auto-detection**: When called from inside a Magent session (i.e. `$MAGENT_THREAD_ID` is set), `create-thread` automatically inherits the current thread's branch, section, and sidebar position — as if `--from-thread` were set to the current thread. This means agents and scripts don't need to manually resolve the current context. Use `--from-thread none` to suppress this behavior. Explicit `--base-branch`, `--base-thread`, or `--section` flags always take precedence over the inherited values.
 
@@ -87,7 +87,7 @@ Each element in the specs array is an object with optional keys:
 | `promptFile` | Path to a file whose contents are used as the initial prompt. Overrides `prompt` when both are set. Prefer this over `prompt` for long prompts — inline JSON strings with embedded newlines are fragile. |
 | `description` | Natural-language description; AI generates a slug from it for the git branch name. |
 | `name` | Exact git branch/thread name (sets the branch name directly, no AI generation). Takes precedence over `description`. |
-| `agentType` | `claude`, `codex`, `custom`, or `terminal`. Errors if the agent is disabled in Settings. |
+| `agentType` | `claude`, `codex`, `custom`, or `terminal`; use `claude:chat` or `codex:chat` to start the thread on a chat tab. Errors if the agent is disabled in Settings. |
 | `modelId` | Model ID to launch with (e.g. `claude-opus-4-5`). Falls back to the agent's configured default. |
 | `reasoningLevel` | Reasoning level: `low`, `medium`, `high`, `max` (Claude) or `low`, `medium`, `high`, `xhigh` (Codex). |
 | `sectionName` | Place thread in this section (case-insensitive). |
@@ -112,7 +112,7 @@ Example `specs.json`:
 
 The response contains a `threads` array with info for each successfully created thread, and a `warning` field if any failed.
 
-> **Agent selection**: Set `agentType` per-spec to control which agent each thread opens with. Omitting `agentType` falls back to the project/global default (often `codex`/`terminal`). If you want Claude threads, include `"agentType": "claude"` in every spec — do **not** omit it and add tabs afterwards.
+> **Agent selection**: Set `agentType` per-spec to control which agent and surface each thread opens with. Omitting `agentType` falls back to the project/global default (often `codex`/`terminal`). If you want Claude chat-first threads, include `"agentType": "claude:chat"` in every spec; for terminal threads use `"claude"`. Do **not** omit it and add tabs afterwards.
 
 The same auto-detection behavior as `create-thread` applies: when called from inside a Magent session, base branch, section, and sidebar position are inherited from the current thread unless overridden.
 
