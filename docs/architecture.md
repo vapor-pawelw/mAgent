@@ -454,7 +454,7 @@ Display order is decoupled from content arrays via `tabSlots: [TabSlot]`, an enu
 - `.terminal(sessionName:)` — content is in `terminalViews`, indexed by `thread.tmuxSessionNames`
 - `.web(identifier:)` — content is in `webTabs`, keyed by identifier
 - `.draft(identifier:)` — content is in `draftTabs`, keyed by identifier; persisted in `thread.persistedDraftTabs` including agent type, prompt, and optional model/reasoning overrides used by later `Start Agent`
-- `.chat(identifier:)` — content is in `chatTabs`, keyed by identifier; persisted in `thread.persistedChatTabs` including full message history and per-tab unsent composer draft text
+- `.chat(identifier:)` — content is in `chatTabs`, keyed by identifier; persisted in `thread.persistedChatTabs` including full message history, per-tab unsent composer draft text, draft attachments, and sent message attachments
 
 Key invariants:
 - `tabItems.count == tabSlots.count` always
@@ -463,6 +463,8 @@ Key invariants:
 - `draftTabs` stays in creation order; view controllers are created lazily on first selection
 - `chatTabs` stays in creation order; view controllers are created lazily on first selection
 - `tabSlots` + `tabItems` change order during drag/pin operations; `persistTabOrder()` syncs `terminalViews` and `thread.tmuxSessionNames` to match
+
+Chat attachments are copied into the worktree-local `.magent/chat-attachments/` directory before a prompt is sent so sandboxed agents can read them by local path. Sent image attachments render as message thumbnails and open an in-app dimmed preview with bounded default sizing, zoom controls, wheel zoom, and drag-to-pan when zoomed beyond the visible area.
 - Single unified `pinnedCount` covers all tab types
 - Content lookup uses session name / identifier keys, not positional indices (via `terminalView(forSession:)`, `currentTerminalView()`, etc.)
 - External tab-structure mutations (for example CLI `create-tab`) must be reconciled in existing thread views. `ThreadDetailViewController.handleThreadsDidChange` compares a tab-structure fingerprint (terminal sessions + pinning + persisted web/draft/chat identifiers) and reruns `setupTabs()` when structure changes are detected.

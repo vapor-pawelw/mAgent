@@ -128,6 +128,7 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 ### Chat Surface Runtime Gate
 
 - Chat surfaces are selectable directly for supported agents (currently Claude and Codex).
+- New-thread creation can start directly on a chat tab from the launch sheet or IPC/CLI by selecting the chat surface (`claude:chat` / `codex:chat` in CLI payloads). Chat-first thread creation must persist the typed prompt as the chat draft and skip fallback tmux session creation when the thread contains only non-terminal tabs.
 - No separate Pi runtime install gate is used in the launch sheet.
 - Chat message execution uses each agent's native non-interactive JSON stream path:
   - Claude: `claude -p --output-format stream-json` (resume via `--resume <session_id>`)
@@ -135,6 +136,19 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 - Each chat tab persists the latest agent conversation/session id so subsequent messages continue in the same native agent context.
 - Chat composer input must use a normal `NSTextView` initializer so AppKit creates the backing text system. Do not initialize the composer with `textContainer: nil`; that leaves the view editable but without text storage, which prevents normal typing.
 - Chat attachment drops are accepted both on the composer and on the main chat surface. Composer drops may show the dashed "Drop files here" overlay, but main-surface drops intentionally reuse the same attachment ingestion path without extra visual chrome.
+- Long chat histories must not be materialized as one synchronous AppKit layout pass when a tab is first selected. `ChatTabViewController.reloadMessages` progressively renders large full reloads in batches and cancels stale batches via `messageRenderGeneration` when a newer update arrives.
+- Streaming chat updates should preserve user scroll intent: auto-scroll only when the chat was already near the bottom before the update, and coalesce post-layout scroll/button work instead of calling `scrollToBottom` for every delta.
+- While a chat request is running, keep the pending assistant loading/working placeholder alive even after early streamed commentary or tool messages arrive. Completion cleanup removes it only when the request token finishes.
+- Final response reconciliation must preserve separately streamed assistant items. Codex app-server completion can return aggregate turn text; do not replace the first streamed item with that aggregate, or final answers appear on earlier commentary/tool bubbles.
+- Tool-call/tool-output transcript bubbles are collapsed by default. Collapsed tool calls should make the command the primary text, while collapsed tool outputs should summarize useful output content first and hide routine success metadata such as exit `0`, token count, chunk id, or wall time. Restored transcript reconciliation should pair a tool call with its matching result when the runtime exposes a call id, rendering one expanded result bubble with arguments and output instead of adjacent call/output bubbles. Expanded output may show unusual status metadata at the bottom.
+
+### Chat Model-Change Notices
+
+- Each persisted chat user message stores the model ID and reasoning level used for that turn.
+- Before appending a newly sent user message from either the GUI composer or IPC `sendPrompt` chat path, compare its selected model/reasoning against the previous user message in that chat. If either value changed, insert a `system` chat message immediately before the new user message with the text `Model changed to <model name> (<reasoning>)`.
+- Persist the inserted `system` message in the chat tab just like user and assistant messages so it survives tab switches, app relaunches, and transcript reconciliation.
+- Render system chat messages as full-width separator rows with centered, timestamp-hidden metadata text and 8 pt spacing between the label and separator lines, so they read like session metadata without being confused for user or assistant content.
+- Do not insert a marker before the first user message, and do not insert duplicates when the metadata is unchanged.
 
 ### Chat Slash Commands (GUI Chat Tabs)
 

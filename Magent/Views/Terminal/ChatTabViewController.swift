@@ -201,8 +201,7 @@ private final class ChatAttachmentDropOverlayView: NSView {
             dashLayer.strokeColor = NSColor.controlAccentColor.withAlphaComponent(0.9).cgColor
             dashLayer.fillColor = NSColor.controlAccentColor.withAlphaComponent(0.10).cgColor
             dashLayer.lineWidth = 1.5
-            dashLayer.lineDashPattern = [7, 5]
-            messageLabel.textColor = .controlAccentColor
+            dashLayer.lineDashPattern = [8, 5]
         }
     }
 }
@@ -258,10 +257,12 @@ private final class ChatAttachmentChipView: NSView {
         filename: String,
         kindBadge: String?,
         removeAccessibilityLabel: String,
-        onRemove: @escaping () -> Void
+        onOpen: (() -> Void)? = nil,
+        onRemove: (() -> Void)? = nil
     ) {
         self.attachmentID = attachmentID
         self.onRemove = onRemove
+        self.onOpen = onOpen
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
@@ -291,15 +292,17 @@ private final class ChatAttachmentChipView: NSView {
         addSubview(nameLabel)
 
         let removeButton = NSButton()
-        removeButton.translatesAutoresizingMaskIntoConstraints = false
-        removeButton.title = ""
-        removeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: removeAccessibilityLabel)
-        removeButton.imagePosition = .imageOnly
-        removeButton.isBordered = false
-        removeButton.contentTintColor = .tertiaryLabelColor
-        removeButton.target = self
-        removeButton.action = #selector(removeTapped)
-        addSubview(removeButton)
+        if onRemove != nil {
+            removeButton.translatesAutoresizingMaskIntoConstraints = false
+            removeButton.title = ""
+            removeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: removeAccessibilityLabel)
+            removeButton.imagePosition = .imageOnly
+            removeButton.isBordered = false
+            removeButton.contentTintColor = .tertiaryLabelColor
+            removeButton.target = self
+            removeButton.action = #selector(removeTapped)
+            addSubview(removeButton)
+        }
 
         var kindLabel: NSTextField?
         if let kindBadge, !kindBadge.isEmpty {
@@ -333,11 +336,16 @@ private final class ChatAttachmentChipView: NSView {
             nameLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
             nameLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
 
-            removeButton.widthAnchor.constraint(equalToConstant: 16),
-            removeButton.heightAnchor.constraint(equalToConstant: 16),
-            removeButton.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            removeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
         ])
+
+        if onRemove != nil {
+            NSLayoutConstraint.activate([
+                removeButton.widthAnchor.constraint(equalToConstant: 16),
+                removeButton.heightAnchor.constraint(equalToConstant: 16),
+                removeButton.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+                removeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            ])
+        }
 
         if let kindLabel {
             NSLayoutConstraint.activate([
@@ -354,10 +362,286 @@ private final class ChatAttachmentChipView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private let onRemove: () -> Void
+    private let onRemove: (() -> Void)?
+    private let onOpen: (() -> Void)?
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if onOpen != nil {
+            addCursorRect(bounds, cursor: .pointingHand)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if let onOpen {
+            onOpen()
+            return
+        }
+        super.mouseDown(with: event)
+    }
 
     @objc private func removeTapped() {
-        onRemove()
+        onRemove?()
+    }
+}
+
+private final class ChatImagePreviewOverlayView: NSView {
+    private let image: NSImage
+    private let imageView = NSImageView()
+    private let zoomBadge = NSTextField(labelWithString: "")
+    private let closeButton = NSButton()
+    private let zoomInButton = NSButton()
+    private let zoomOutButton = NSButton()
+    private let controlsStack = NSStackView()
+    private var zoomScale: CGFloat = 1
+    private var panOffset: CGPoint = .zero
+    private var dragStartPoint: CGPoint?
+    private var dragStartPanOffset: CGPoint = .zero
+    var onClose: (() -> Void)?
+
+    init(image: NSImage) {
+        self.image = image
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.72).cgColor
+
+        imageView.image = image
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.wantsLayer = true
+        imageView.layer?.masksToBounds = true
+        addSubview(imageView)
+
+        configureButton(
+            closeButton,
+            symbolName: "xmark",
+            accessibilityDescription: String(localized: .ThreadStrings.chatAttachmentPreviewClose),
+            action: #selector(closeTapped)
+        )
+        configureButton(
+            zoomOutButton,
+            symbolName: "minus.magnifyingglass",
+            accessibilityDescription: String(localized: .ThreadStrings.chatAttachmentPreviewZoomOut),
+            action: #selector(zoomOutTapped)
+        )
+        configureButton(
+            zoomInButton,
+            symbolName: "plus.magnifyingglass",
+            accessibilityDescription: String(localized: .ThreadStrings.chatAttachmentPreviewZoomIn),
+            action: #selector(zoomInTapped)
+        )
+
+        controlsStack.translatesAutoresizingMaskIntoConstraints = false
+        controlsStack.orientation = .horizontal
+        controlsStack.alignment = .centerY
+        controlsStack.spacing = 8
+        controlsStack.addArrangedSubview(zoomOutButton)
+        controlsStack.addArrangedSubview(zoomInButton)
+        controlsStack.addArrangedSubview(closeButton)
+        addSubview(controlsStack)
+
+        zoomBadge.translatesAutoresizingMaskIntoConstraints = false
+        zoomBadge.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        zoomBadge.textColor = .white
+        zoomBadge.alignment = .center
+        zoomBadge.wantsLayer = true
+        zoomBadge.layer?.cornerRadius = 8
+        zoomBadge.layer?.masksToBounds = true
+        zoomBadge.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.62).cgColor
+        zoomBadge.isHidden = true
+        addSubview(zoomBadge)
+
+        NSLayoutConstraint.activate([
+            controlsStack.topAnchor.constraint(equalTo: topAnchor, constant: 18),
+            controlsStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            zoomBadge.topAnchor.constraint(equalTo: controlsStack.bottomAnchor, constant: 8),
+            zoomBadge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            zoomBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: 54),
+            zoomBadge.heightAnchor.constraint(equalToConstant: 24),
+        ])
+
+        updateZoomControls()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func layout() {
+        super.layout()
+        layoutImage()
+        window?.invalidateCursorRects(for: self)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let localPoint = convert(point, from: superview)
+        guard bounds.contains(localPoint) else { return nil }
+        for view in [closeButton, zoomInButton, zoomOutButton] {
+            let buttonPoint = view.convert(localPoint, from: self)
+            if view.bounds.contains(buttonPoint) {
+                return view
+            }
+        }
+        return self
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if imageView.frame.width > 0, imageView.frame.height > 0 {
+            addCursorRect(imageView.frame, cursor: canPan ? .openHand : .pointingHand)
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            onClose?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        let delta = event.scrollingDeltaY == 0 ? -event.scrollingDeltaX : event.scrollingDeltaY
+        guard delta != 0 else {
+            super.scrollWheel(with: event)
+            return
+        }
+        setZoomScale(zoomScale * (delta > 0 ? 1.08 : 0.92))
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if !zoomBadge.isHidden, zoomBadge.frame.contains(point) {
+            setZoomScale(1)
+            return
+        }
+        guard imageView.frame.contains(point) else {
+            onClose?()
+            return
+        }
+        guard canPan else { return }
+        NSCursor.closedHand.set()
+        dragStartPoint = point
+        dragStartPanOffset = panOffset
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard canPan, let dragStartPoint else {
+            super.mouseDragged(with: event)
+            return
+        }
+        let point = convert(event.locationInWindow, from: nil)
+        panOffset = CGPoint(
+            x: dragStartPanOffset.x + point.x - dragStartPoint.x,
+            y: dragStartPanOffset.y + point.y - dragStartPoint.y
+        )
+        clampPanOffset()
+        layoutImage()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        dragStartPoint = nil
+        if canPan {
+            NSCursor.openHand.set()
+        }
+    }
+
+    private var canPan: Bool {
+        displayedImageSize.width > bounds.width || displayedImageSize.height > bounds.height
+    }
+
+    private var defaultImageScale: CGFloat {
+        let imageSize = normalizedImageSize
+        guard imageSize.width > 0, imageSize.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return 1
+        }
+        return min((bounds.width * 0.5) / imageSize.width, (bounds.height * 0.5) / imageSize.height)
+    }
+
+    private var displayedImageSize: CGSize {
+        let imageSize = normalizedImageSize
+        let scale = defaultImageScale * zoomScale
+        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+    }
+
+    private var normalizedImageSize: CGSize {
+        let size = image.size
+        guard size.width > 0, size.height > 0 else { return CGSize(width: 1, height: 1) }
+        return size
+    }
+
+    private func configureButton(
+        _ button: NSButton,
+        symbolName: String,
+        accessibilityDescription: String,
+        action: Selector
+    ) {
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.title = ""
+        button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
+        button.imagePosition = .imageOnly
+        button.bezelStyle = .rounded
+        button.contentTintColor = .white
+        button.target = self
+        button.action = action
+        button.toolTip = accessibilityDescription
+        button.widthAnchor.constraint(equalToConstant: 32).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 30).isActive = true
+    }
+
+    private func layoutImage() {
+        clampPanOffset()
+        let size = displayedImageSize
+        imageView.frame = CGRect(
+            x: bounds.midX - size.width / 2 + panOffset.x,
+            y: bounds.midY - size.height / 2 + panOffset.y,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    private func setZoomScale(_ newScale: CGFloat) {
+        zoomScale = min(max(newScale, 0.25), 6)
+        if abs(zoomScale - 1) < 0.01 {
+            zoomScale = 1
+            panOffset = .zero
+        }
+        clampPanOffset()
+        layoutImage()
+        updateZoomControls()
+        window?.invalidateCursorRects(for: self)
+    }
+
+    private func clampPanOffset() {
+        let size = displayedImageSize
+        let maxX = max(0, (size.width - bounds.width) / 2)
+        let maxY = max(0, (size.height - bounds.height) / 2)
+        panOffset.x = min(max(panOffset.x, -maxX), maxX)
+        panOffset.y = min(max(panOffset.y, -maxY), maxY)
+    }
+
+    private func updateZoomControls() {
+        let percent = Int((zoomScale * 100).rounded())
+        zoomBadge.stringValue = "\(percent)%"
+        zoomBadge.isHidden = zoomScale == 1
+        zoomOutButton.isEnabled = zoomScale > 0.25
+        zoomInButton.isEnabled = zoomScale < 6
+    }
+
+    @objc private func closeTapped() {
+        onClose?()
+    }
+
+    @objc private func zoomInTapped() {
+        setZoomScale(zoomScale * 1.25)
+    }
+
+    @objc private func zoomOutTapped() {
+        setZoomScale(zoomScale / 1.25)
     }
 }
 
@@ -480,14 +764,18 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private static var sharedLoadingBorderAnimationEpoch: CFTimeInterval = 0
 
     private let container = NSView()
+    private let contentStack = NSStackView()
     private let messageTextView = ChatMessageTextView()
+    private let toolDisclosureButton = NSButton(title: "", target: nil, action: nil)
     private let loadingStatusLabel = NSTextField(labelWithString: "")
     private let timestampLabel = ChatTimestampLabel(labelWithString: "")
     private let createdAt: Date
     private let sentModelLabel: String?
     private let sentReasoningLevel: String?
     private let onOpenLink: ((String) -> Void)?
+    private let onOpenAttachment: ((PersistedChatAttachment) -> Void)?
     private let isQueuedSubmissionPending: Bool
+    private let rendersAsSeparator: Bool
     private var bubbleHeightConstraint: NSLayoutConstraint?
     private var bubbleWidthConstraint: NSLayoutConstraint?
     private let isLoadingIndicatorBubble: Bool
@@ -500,6 +788,12 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private var bubbleHoverTrackingArea: NSTrackingArea?
     private var isPointerHoveringBubble = false
     private var timestampDisplayMode: ChatTimestampDisplayMode = .relative
+    private var messageAttachmentStripHeight: CGFloat = 0
+    private var messageTextHidden = false
+    private var toolPresentation: ChatToolTranscriptPresentation?
+    private var toolExpanded = false
+    private var toolDisclosureFontSize: CGFloat = 12
+    private var toolDisclosureTextColor: NSColor = .labelColor
 
     private enum AssistantDisplayState {
         case normal
@@ -515,16 +809,26 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         appearance: ChatAppearance,
         fontSize: CGFloat,
         queuedSubmissionPending: Bool = false,
-        onOpenLink: ((String) -> Void)? = nil
+        onOpenLink: ((String) -> Void)? = nil,
+        onOpenAttachment: ((PersistedChatAttachment) -> Void)? = nil
     ) {
         self.createdAt = message.createdAt
         self.sentModelLabel = Self.resolvedModelLabel(for: message.modelId, agentType: agentType)
         self.sentReasoningLevel = message.reasoningLevel
         self.onOpenLink = onOpenLink
+        self.onOpenAttachment = onOpenAttachment
         self.isQueuedSubmissionPending = queuedSubmissionPending
+        self.rendersAsSeparator = message.role == .system
         self.isLoadingIndicatorBubble = message.role == .assistant && Self.isThinkingPlaceholderText(message.text)
+        self.toolPresentation = ChatToolTranscriptFormatter.presentation(for: message.text)
+        self.toolExpanded = self.toolPresentation?.isExpandedByDefault ?? false
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
+        let displayRole: ChatMessageRole = toolPresentation == nil ? message.role : .assistant
+        if rendersAsSeparator {
+            configureSeparatorMessage(text: message.text, fontSize: fontSize)
+            return
+        }
 
         container.translatesAutoresizingMaskIntoConstraints = false
         container.wantsLayer = true
@@ -547,7 +851,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
         let baseTextColor: NSColor
         let codeColor: NSColor
-        switch message.role {
+        switch displayRole {
         case .user:
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 container.layer?.backgroundColor = appearance.userBubbleColor.cgColor
@@ -558,6 +862,16 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 container.alphaValue = 0.65
             }
             timestampLabel.alignment = .right
+        case .system:
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                container.layer?.backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.10).cgColor
+                container.layer?.borderWidth = 1
+                container.layer?.borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.22).cgColor
+            }
+            baseTextColor = NSColor(resource: .textSecondary)
+            codeColor = baseTextColor
+            timestampLabel.alignment = .center
+            timestampLabel.isHidden = true
         case .assistant:
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 let bubbleColor = isLoadingIndicatorBubble ? NSColor(resource: .appBackground) : appearance.agentBubbleColor
@@ -589,6 +903,12 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             ])
             configureLoadingBubbleBorderAnimation()
         } else {
+            contentStack.translatesAutoresizingMaskIntoConstraints = false
+            contentStack.orientation = .vertical
+            contentStack.alignment = .leading
+            contentStack.spacing = 8
+            container.addSubview(contentStack)
+
             messageTextView.drawsBackground = false
             messageTextView.isEditable = false
             messageTextView.isSelectable = true
@@ -608,11 +928,14 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             ]
             let queuedSuffix = Self.queuedSubmissionSuffix
             let renderedMessageText: String
-            if message.role == .user, isQueuedSubmissionPending {
+            if let toolPresentation {
+                renderedMessageText = toolPresentation.body
+            } else if displayRole == .user, isQueuedSubmissionPending {
                 renderedMessageText = "\(message.text)\(queuedSuffix)"
             } else {
                 renderedMessageText = message.text
             }
+            messageTextHidden = renderedMessageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (toolPresentation != nil && !toolExpanded)
             let attributedMessage = NSMutableAttributedString(
                 attributedString: Self.styledMarkdownText(
                     renderedMessageText,
@@ -622,7 +945,11 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                     baseFontSize: fontSize
                 )
             )
-            if message.role == .user, isQueuedSubmissionPending {
+            if toolPresentation != nil {
+                Self.applyToolTranscriptStyle(to: attributedMessage, baseColor: baseTextColor, baseFontSize: fontSize)
+                Self.applyDiffLineHighlights(to: attributedMessage, baseFontSize: fontSize)
+            }
+            if displayRole == .user, isQueuedSubmissionPending {
                 let suffixLength = (queuedSuffix as NSString).length
                 if attributedMessage.length >= suffixLength {
                     let suffixRange = NSRange(location: attributedMessage.length - suffixLength, length: suffixLength)
@@ -638,8 +965,24 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             }
             messageTextView.textStorage?.setAttributedString(attributedMessage)
 
+            if let toolPresentation {
+                configureToolDisclosureButton(presentation: toolPresentation, fontSize: fontSize, textColor: baseTextColor)
+                contentStack.addArrangedSubview(toolDisclosureButton)
+            }
+
             messageTextView.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(messageTextView)
+            messageTextView.isHidden = messageTextHidden
+            contentStack.addArrangedSubview(messageTextView)
+
+            if !message.attachments.isEmpty {
+                let attachmentScrollView = Self.makeAttachmentStrip(
+                    attachments: message.attachments,
+                    removeAccessibilityLabel: String(localized: .CommonStrings.commonClose),
+                    onOpenAttachment: onOpenAttachment
+                )
+                contentStack.addArrangedSubview(attachmentScrollView)
+                messageAttachmentStripHeight = 106
+            }
         }
 
         let timestampRow = NSStackView()
@@ -664,16 +1007,28 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         bubbleSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         bubbleSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        if message.role == .user {
+        switch displayRole {
+        case .user:
             timestampRow.addArrangedSubview(timestampSpacer)
             timestampRow.addArrangedSubview(timestampLabel)
             bubbleRow.addArrangedSubview(bubbleSpacer)
             bubbleRow.addArrangedSubview(container)
-        } else {
+        case .assistant:
             timestampRow.addArrangedSubview(timestampLabel)
             timestampRow.addArrangedSubview(timestampSpacer)
             bubbleRow.addArrangedSubview(container)
             bubbleRow.addArrangedSubview(bubbleSpacer)
+        case .system:
+            timestampRow.addArrangedSubview(timestampSpacer)
+            timestampRow.addArrangedSubview(timestampLabel)
+            timestampRow.addArrangedSubview(NSView())
+            bubbleRow.addArrangedSubview(bubbleSpacer)
+            bubbleRow.addArrangedSubview(container)
+            let trailingSpacer = NSView()
+            trailingSpacer.translatesAutoresizingMaskIntoConstraints = false
+            trailingSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            trailingSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            bubbleRow.addArrangedSubview(trailingSpacer)
         }
 
         let outer = NSStackView()
@@ -700,10 +1055,11 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             bubbleWidthConstraint = container.widthAnchor.constraint(equalToConstant: maxBubbleWidth)
             bubbleWidthConstraint?.isActive = true
             NSLayoutConstraint.activate([
-                messageTextView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-                messageTextView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-                messageTextView.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
-                messageTextView.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
+                contentStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+                contentStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+                contentStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
+                contentStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
+                messageTextView.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             ])
         }
     }
@@ -715,7 +1071,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        guard !isLoadingIndicatorBubble else { return }
+        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
         if let bubbleHoverTrackingArea {
             removeTrackingArea(bubbleHoverTrackingArea)
         }
@@ -730,19 +1086,20 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        guard !isLoadingIndicatorBubble else { return }
+        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
         isPointerHoveringBubble = true
         refreshTimestampPresentation()
     }
 
     override func mouseExited(with event: NSEvent) {
-        guard !isLoadingIndicatorBubble else { return }
+        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
         isPointerHoveringBubble = false
         refreshTimestampPresentation()
     }
 
     override func layout() {
         super.layout()
+        guard !rendersAsSeparator else { return }
         if isLoadingIndicatorBubble {
             layoutLoadingBorderAnimationLayer()
         } else {
@@ -750,12 +1107,37 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         }
     }
 
+    func scheduleMeasuredLayoutRefresh() {
+        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.refreshMeasuredLayout()
+        }
+    }
+
+    private func refreshMeasuredLayout() {
+        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
+        if let layoutManager = messageTextView.layoutManager,
+           let textStorage = messageTextView.textStorage {
+            layoutManager.invalidateLayout(
+                forCharacterRange: NSRange(location: 0, length: textStorage.length),
+                actualCharacterRange: nil
+            )
+        }
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        updateBubbleLayout()
+        superview?.needsLayout = true
+        superview?.layoutSubtreeIfNeeded()
+    }
+
     func clearSelection() {
-        guard !isLoadingIndicatorBubble else { return }
+        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
         messageTextView.setSelectedRange(NSRange(location: 0, length: 0))
     }
 
     func refreshRelativeTimestamp(now: Date = Date()) {
+        guard !rendersAsSeparator else { return }
         if isLoadingIndicatorBubble {
             let statusText = Self.loadingStatusText(startedAt: createdAt, now: now)
             guard loadingStatusLabel.stringValue != statusText else { return }
@@ -772,6 +1154,54 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         } else {
             refreshTimestampPresentation(now: now)
         }
+    }
+
+
+    private func configureSeparatorMessage(text: String, fontSize: CGFloat) {
+        let row = NSStackView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        addSubview(row)
+
+        let leadingLine = makeSeparatorLine()
+        let trailingLine = makeSeparatorLine()
+        let label = NSTextField(labelWithString: text)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = .systemFont(ofSize: max(11, fontSize - 1), weight: .medium)
+        label.textColor = NSColor(resource: .textSecondary)
+        label.alignment = .center
+        label.lineBreakMode = .byTruncatingTail
+        label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        row.addArrangedSubview(leadingLine)
+        row.addArrangedSubview(label)
+        row.addArrangedSubview(trailingLine)
+
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor),
+            row.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+
+            leadingLine.heightAnchor.constraint(equalToConstant: 1),
+            trailingLine.heightAnchor.constraint(equalToConstant: 1),
+            leadingLine.widthAnchor.constraint(equalTo: trailingLine.widthAnchor),
+            leadingLine.widthAnchor.constraint(greaterThanOrEqualToConstant: 24),
+            trailingLine.widthAnchor.constraint(greaterThanOrEqualToConstant: 24),
+        ])
+    }
+
+    private func makeSeparatorLine() -> NSView {
+        let line = NSView()
+        line.translatesAutoresizingMaskIntoConstraints = false
+        line.wantsLayer = true
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            line.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.65).cgColor
+        }
+        return line
     }
 
     private func refreshTimestampPresentation(now: Date = Date()) {
@@ -819,9 +1249,10 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         layoutManager.ensureLayout(for: textContainer)
 
         let measuredLineWidth = max(0, Self.maxLineWidth(in: layoutManager, textContainer: textContainer))
+        let measuredToolHeaderWidth = toolPresentation == nil ? 0 : ceil(toolDisclosureButton.intrinsicContentSize.width)
         let targetBubbleWidth = min(
             maxBubbleWidth,
-            max(minBubbleWidth, ceil(measuredLineWidth + bubbleHorizontalPadding))
+            max(minBubbleWidth, ceil(max(measuredLineWidth, measuredToolHeaderWidth) + bubbleHorizontalPadding))
         )
         if abs(bubbleWidthConstraint.constant - targetBubbleWidth) > 0.5 {
             bubbleWidthConstraint.constant = targetBubbleWidth
@@ -833,8 +1264,161 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             layoutManager.ensureLayout(for: textContainer)
         }
 
-        let textHeight = ceil(layoutManager.usedRect(for: textContainer).height)
-        bubbleHeightConstraint?.constant = max(20, textHeight + bubbleVerticalPadding)
+        let textHeight = messageTextHidden ? 0 : ceil(layoutManager.usedRect(for: textContainer).height)
+        let toolHeaderHeight = toolPresentation == nil ? 0 : ceil(toolDisclosureButton.intrinsicContentSize.height)
+        let visibleBlocks = [toolHeaderHeight, textHeight, messageAttachmentStripHeight].filter { $0 > 0 }
+        let contentSpacing = CGFloat(max(0, visibleBlocks.count - 1)) * contentStack.spacing
+        bubbleHeightConstraint?.constant = max(
+            20,
+            toolHeaderHeight + textHeight + messageAttachmentStripHeight + contentSpacing + bubbleVerticalPadding
+        )
+    }
+
+    private static func makeAttachmentStrip(
+        attachments: [PersistedChatAttachment],
+        removeAccessibilityLabel: String,
+        onOpenAttachment: ((PersistedChatAttachment) -> Void)?
+    ) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
+        scrollView.horizontalScrollElasticity = .allowed
+        scrollView.verticalScrollElasticity = .none
+
+        let documentView = NSView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        let stack = NSStackView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 8
+        documentView.addSubview(stack)
+        scrollView.documentView = documentView
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: documentView.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
+            documentView.heightAnchor.constraint(equalTo: stack.heightAnchor),
+            scrollView.heightAnchor.constraint(equalToConstant: 106),
+        ])
+
+        for attachment in attachments {
+            let fileURL = URL(fileURLWithPath: attachment.filePath)
+            let chip = ChatAttachmentChipView(
+                attachmentID: attachment.id,
+                previewImage: previewImage(for: attachment, fileURL: fileURL),
+                filename: fileURL.lastPathComponent,
+                kindBadge: kindBadgeText(for: attachment.kind),
+                removeAccessibilityLabel: removeAccessibilityLabel,
+                onOpen: attachment.kind == .image ? {
+                    onOpenAttachment?(attachment)
+                } : nil,
+                onRemove: nil
+            )
+            stack.addArrangedSubview(chip)
+        }
+
+        return scrollView
+    }
+
+    private static func previewImage(for attachment: PersistedChatAttachment, fileURL: URL) -> NSImage {
+        switch attachment.kind {
+        case .image:
+            if let image = NSImage(contentsOf: fileURL) {
+                return image
+            }
+        case .video:
+            if let thumbnail = videoThumbnail(for: fileURL) {
+                return thumbnail
+            }
+        case .file:
+            break
+        }
+        return NSWorkspace.shared.icon(forFile: fileURL.path)
+    }
+
+    private static func videoThumbnail(for fileURL: URL) -> NSImage? {
+        let asset = AVURLAsset(url: fileURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        do {
+            let frame = try generator.copyCGImage(at: .zero, actualTime: nil)
+            return NSImage(cgImage: frame, size: NSSize(width: frame.width, height: frame.height))
+        } catch {
+            return nil
+        }
+    }
+
+    private static func kindBadgeText(for kind: PersistedChatAttachmentKind) -> String? {
+        switch kind {
+        case .image:
+            return "IMG"
+        case .video:
+            return "VID"
+        case .file:
+            return "FILE"
+        }
+    }
+
+    @objc private func toggleToolExpanded() {
+        guard toolPresentation != nil else { return }
+        toolExpanded.toggle()
+        messageTextHidden = !toolExpanded
+        messageTextView.isHidden = messageTextHidden
+        refreshToolDisclosureTitle()
+        needsLayout = true
+        updateBubbleLayout()
+    }
+
+    private func configureToolDisclosureButton(presentation: ChatToolTranscriptPresentation, fontSize: CGFloat, textColor: NSColor) {
+        toolDisclosureFontSize = fontSize
+        toolDisclosureTextColor = textColor
+        toolDisclosureButton.translatesAutoresizingMaskIntoConstraints = false
+        toolDisclosureButton.isBordered = false
+        toolDisclosureButton.alignment = .left
+        toolDisclosureButton.font = .systemFont(ofSize: max(11, fontSize - 1), weight: .medium)
+        toolDisclosureButton.contentTintColor = textColor.withAlphaComponent(0.85)
+        toolDisclosureButton.lineBreakMode = .byWordWrapping
+        toolDisclosureButton.cell?.wraps = true
+        toolDisclosureButton.cell?.lineBreakMode = .byWordWrapping
+        toolDisclosureButton.target = self
+        toolDisclosureButton.action = #selector(toggleToolExpanded)
+        toolDisclosureButton.setButtonType(.momentaryChange)
+        toolDisclosureButton.toolTip = "Click to expand tool details"
+        refreshToolDisclosureTitle()
+    }
+
+    private func refreshToolDisclosureTitle() {
+        guard let toolPresentation else { return }
+        let chevron = toolExpanded ? "▾" : "▸"
+        let title = NSMutableAttributedString()
+        let baseFontSize = max(11, toolDisclosureFontSize - 1)
+        title.append(NSAttributedString(
+            string: "\(chevron) \(toolPresentation.title)",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: baseFontSize, weight: .semibold),
+                .foregroundColor: toolDisclosureTextColor,
+            ]
+        ))
+        let trimmedDetail = toolPresentation.detail?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let detail = trimmedDetail, !detail.isEmpty {
+            title.append(NSAttributedString(
+                string: "\n\(detail)",
+                attributes: [
+                    .font: NSFont.monospacedSystemFont(ofSize: max(10, baseFontSize - 1), weight: .regular),
+                    .foregroundColor: toolDisclosureTextColor.withAlphaComponent(0.72),
+                ]
+            ))
+        }
+        toolDisclosureButton.attributedTitle = title
     }
 
     private static func maxLineWidth(in layoutManager: NSLayoutManager, textContainer: NSTextContainer) -> CGFloat {
@@ -1013,6 +1597,60 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         return result
     }
 
+    private static func applyDiffLineHighlights(to attributed: NSMutableAttributedString, baseFontSize: CGFloat) {
+        let full = attributed.string as NSString
+        let addedColor = NSColor.systemGreen.withAlphaComponent(0.18)
+        let removedColor = NSColor.systemRed.withAlphaComponent(0.18)
+        let headerColor = NSColor.systemBlue.withAlphaComponent(0.12)
+        let patchHeaderColor = NSColor.systemPurple.withAlphaComponent(0.12)
+        full.enumerateSubstrings(in: NSRange(location: 0, length: full.length), options: [.byLines, .substringNotRequired]) { _, range, _, _ in
+            guard range.length > 0 else { return }
+            let line = full.substring(with: range)
+            let color: NSColor?
+            if line.hasPrefix("+") && !line.hasPrefix("+++") { color = addedColor }
+            else if line.hasPrefix("-") && !line.hasPrefix("---") { color = removedColor }
+            else if line.hasPrefix("@@") || line.hasPrefix("diff --git") { color = headerColor }
+            else if line.hasPrefix("*** ") || line.hasPrefix("@@") { color = patchHeaderColor }
+            else { color = nil }
+            if let color { attributed.addAttribute(.backgroundColor, value: color, range: range) }
+        }
+    }
+
+    private static func applyToolTranscriptStyle(
+        to attributed: NSMutableAttributedString,
+        baseColor: NSColor,
+        baseFontSize: CGFloat
+    ) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        guard fullRange.length > 0 else { return }
+
+        let monoFont = NSFont.monospacedSystemFont(ofSize: max(11, baseFontSize - 1), weight: .regular)
+        attributed.addAttributes(
+            [
+                .font: monoFont,
+                .foregroundColor: baseColor.withAlphaComponent(0.92),
+            ],
+            range: fullRange
+        )
+
+        let sectionFont = NSFont.systemFont(ofSize: max(11, baseFontSize - 1), weight: .semibold)
+        let sectionColor = NSColor(resource: .primaryBrand)
+        let full = attributed.string as NSString
+        full.enumerateSubstrings(in: fullRange, options: [.byLines, .substringNotRequired]) { _, range, _, _ in
+            guard range.length > 0 else { return }
+            let line = full.substring(with: range)
+            if ["Command", "Working directory", "Options", "Arguments", "Status", "Output", "Patch"].contains(line) {
+                attributed.addAttributes(
+                    [
+                        .font: sectionFont,
+                        .foregroundColor: sectionColor,
+                    ],
+                    range: range
+                )
+            }
+        }
+    }
+
     private static func formattedTimestamp(_ date: Date, now: Date = Date()) -> String {
         let age = now.timeIntervalSince(date)
         if age >= 0, age < 60 {
@@ -1142,12 +1780,18 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private var pendingQueuedUserMessageIDs: Set<UUID>
     private var draftAttachments: [PersistedChatAttachment]
     private var renderedMessages: [PersistedChatMessage] = []
+    private var messageRenderGeneration = UUID()
+    private var postMessageLayoutUpdateScheduled = false
+    private var pendingPostMessageScrollToBottom = false
+    private weak var mediaPreviewOverlayView: ChatImagePreviewOverlayView?
     private let initialDraftInput: String
 
     private let slashAutocompleteRowHeight: CGFloat = 46
     private let slashAutocompleteVisibleRowsLimit = 5
     private let slashAutocompleteVerticalPadding: CGFloat = 6
     private static let slashAutocompleteCellIdentifier = NSUserInterfaceItemIdentifier("slash-autocomplete-cell")
+    private static let progressiveFullReloadThreshold = 60
+    private static let progressiveFullReloadBatchSize = 20
 
     init(
         identifier: String,
@@ -1172,6 +1816,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         self.initialDraftInput = draftInput
         super.init(nibName: nil, bundle: nil)
     }
+
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
@@ -1320,38 +1965,28 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         ])
 
         composerContainer.addSubview(attachmentDropOverlayView)
-        NSLayoutConstraint.activate([
-            attachmentDropOverlayView.leadingAnchor.constraint(equalTo: composerContainer.leadingAnchor),
-            attachmentDropOverlayView.trailingAnchor.constraint(equalTo: composerContainer.trailingAnchor),
-            attachmentDropOverlayView.topAnchor.constraint(equalTo: composerContainer.topAnchor),
-            attachmentDropOverlayView.bottomAnchor.constraint(equalTo: composerContainer.bottomAnchor),
-        ])
-
-        setupSlashAutocompleteUI(composerContainer: composerContainer)
-
+        let attachmentsDocumentView = NSView()
+        attachmentsDocumentView.translatesAutoresizingMaskIntoConstraints = false
         attachmentsScrollView.translatesAutoresizingMaskIntoConstraints = false
-        attachmentsScrollView.drawsBackground = false
-        attachmentsScrollView.borderType = .noBorder
         attachmentsScrollView.hasVerticalScroller = false
         attachmentsScrollView.hasHorizontalScroller = true
         attachmentsScrollView.autohidesScrollers = true
-        attachmentsScrollView.scrollerStyle = .overlay
-        attachmentsScrollView.horizontalScrollElasticity = .allowed
-        attachmentsScrollView.verticalScrollElasticity = .none
-
-        let attachmentsDocumentView = NSView()
-        attachmentsDocumentView.translatesAutoresizingMaskIntoConstraints = false
+        attachmentsScrollView.drawsBackground = false
+        attachmentsScrollView.borderType = .noBorder
+        attachmentsScrollView.documentView = attachmentsDocumentView
         attachmentsStackView.translatesAutoresizingMaskIntoConstraints = false
         attachmentsStackView.orientation = .horizontal
         attachmentsStackView.alignment = .centerY
         attachmentsStackView.spacing = 8
         attachmentsDocumentView.addSubview(attachmentsStackView)
-        attachmentsScrollView.documentView = attachmentsDocumentView
-
         NSLayoutConstraint.activate([
-            attachmentsStackView.topAnchor.constraint(equalTo: attachmentsDocumentView.topAnchor),
+            attachmentDropOverlayView.leadingAnchor.constraint(equalTo: composerContainer.leadingAnchor),
+            attachmentDropOverlayView.trailingAnchor.constraint(equalTo: composerContainer.trailingAnchor),
+            attachmentDropOverlayView.topAnchor.constraint(equalTo: composerContainer.topAnchor),
+            attachmentDropOverlayView.bottomAnchor.constraint(equalTo: composerContainer.bottomAnchor),
             attachmentsStackView.leadingAnchor.constraint(equalTo: attachmentsDocumentView.leadingAnchor),
             attachmentsStackView.trailingAnchor.constraint(equalTo: attachmentsDocumentView.trailingAnchor),
+            attachmentsStackView.topAnchor.constraint(equalTo: attachmentsDocumentView.topAnchor),
             attachmentsStackView.bottomAnchor.constraint(equalTo: attachmentsDocumentView.bottomAnchor),
             attachmentsDocumentView.heightAnchor.constraint(equalTo: attachmentsStackView.heightAnchor),
         ])
@@ -1798,7 +2433,10 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             appearance: chatAppearance,
             fontSize: chatFontSize,
             queuedSubmissionPending: pendingQueuedUserMessageIDs.contains(message.id),
-            onOpenLink: onOpenMarkdownLink
+            onOpenLink: onOpenMarkdownLink,
+            onOpenAttachment: { [weak self] attachment in
+                self?.openAttachmentPreview(attachment)
+            }
         )
         return bubble
     }
@@ -1806,12 +2444,24 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private func pinMessageBubbleWidth(_ bubble: ChatMessageBubbleView) {
         // Activate only after insertion so both anchors share a common ancestor.
         bubble.widthAnchor.constraint(equalTo: messagesStack.widthAnchor).isActive = true
+        bubble.scheduleMeasuredLayoutRefresh()
     }
 
     private func removeAllRenderedBubbles() {
         for subview in messagesStack.arrangedSubviews {
             messagesStack.removeArrangedSubview(subview)
             subview.removeFromSuperview()
+        }
+    }
+
+    private func appendRenderedBubbles(
+        from snapshot: [PersistedChatMessage],
+        in range: Range<Int>
+    ) {
+        for index in range where snapshot.indices.contains(index) {
+            let bubble = makeMessageBubble(for: snapshot[index])
+            messagesStack.addArrangedSubview(bubble)
+            pinMessageBubbleWidth(bubble)
         }
     }
 
@@ -1850,6 +2500,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         shouldScrollToBottom: Bool = true,
         forceFullReload: Bool = false
     ) {
+        let shouldAutoScroll = shouldScrollToBottom && isNearBottomForAutoScroll()
+        messageRenderGeneration = UUID()
+        let renderGeneration = messageRenderGeneration
         let settings = PersistenceService.shared.loadSettings()
         chatAppearance = ChatAppearance.resolve(from: settings)
         chatFontSize = Self.resolvedChatFontSize(from: settings)
@@ -1857,22 +2510,36 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         updateComposerHeight()
 
         let plan = ChatMessageRenderPlanner.plan(previous: renderedMessages, next: messages)
+        let shouldFullReload: Bool = {
+            switch plan {
+            case .fullReload:
+                return true
+            case .incremental:
+                return forceFullReload
+            }
+        }()
+
+        if shouldFullReload && messages.count > Self.progressiveFullReloadThreshold {
+            let snapshot = messages
+            removeAllRenderedBubbles()
+            renderedMessages = []
+            renderMessageBubblesProgressively(
+                snapshot: snapshot,
+                nextIndex: 0,
+                generation: renderGeneration,
+                shouldScrollToBottom: shouldAutoScroll
+            )
+            return
+        }
+
         switch plan {
         case .fullReload:
             removeAllRenderedBubbles()
-            for message in messages {
-                let bubble = makeMessageBubble(for: message)
-                messagesStack.addArrangedSubview(bubble)
-                pinMessageBubbleWidth(bubble)
-            }
+            appendRenderedBubbles(from: messages, in: messages.indices)
         case .incremental:
             if forceFullReload {
                 removeAllRenderedBubbles()
-                for message in messages {
-                    let bubble = makeMessageBubble(for: message)
-                    messagesStack.addArrangedSubview(bubble)
-                    pinMessageBubbleWidth(bubble)
-                }
+                appendRenderedBubbles(from: messages, in: messages.indices)
             } else {
                 applyIncrementalMessageRenderPlan(plan)
             }
@@ -1880,11 +2547,65 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         renderedMessages = messages
         refreshVisibleRelativeTimestamps()
 
-        DispatchQueue.main.async { [weak self] in
-            if shouldScrollToBottom {
-                self?.scrollToBottom(animated: false)
+        schedulePostMessageLayoutUpdate(shouldScrollToBottom: shouldAutoScroll)
+    }
+
+    private func renderMessageBubblesProgressively(
+        snapshot: [PersistedChatMessage],
+        nextIndex: Int,
+        generation: UUID,
+        shouldScrollToBottom: Bool
+    ) {
+        guard messageRenderGeneration == generation else { return }
+
+        let batchEnd = min(snapshot.count, nextIndex + Self.progressiveFullReloadBatchSize)
+        appendRenderedBubbles(from: snapshot, in: nextIndex..<batchEnd)
+
+        if batchEnd < snapshot.count {
+            DispatchQueue.main.async { [weak self] in
+                self?.renderMessageBubblesProgressively(
+                    snapshot: snapshot,
+                    nextIndex: batchEnd,
+                    generation: generation,
+                    shouldScrollToBottom: shouldScrollToBottom
+                )
             }
-            self?.updateScrollToBottomButtonVisibility()
+            return
+        }
+
+        renderedMessages = snapshot
+        refreshVisibleRelativeTimestamps()
+
+        schedulePostMessageLayoutUpdate(shouldScrollToBottom: shouldScrollToBottom, generation: generation)
+    }
+
+    private func isNearBottomForAutoScroll() -> Bool {
+        guard isViewLoaded, scrollView.documentView != nil else { return true }
+        return distanceFromBottom(for: scrollView.contentView) < 80
+    }
+
+    private func schedulePostMessageLayoutUpdate(
+        shouldScrollToBottom: Bool,
+        generation: UUID? = nil
+    ) {
+        pendingPostMessageScrollToBottom = pendingPostMessageScrollToBottom || shouldScrollToBottom
+        guard !postMessageLayoutUpdateScheduled else { return }
+        postMessageLayoutUpdateScheduled = true
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.postMessageLayoutUpdateScheduled = false
+            if let generation, self.messageRenderGeneration != generation {
+                self.pendingPostMessageScrollToBottom = false
+                return
+            }
+            let shouldScroll = self.pendingPostMessageScrollToBottom
+            self.pendingPostMessageScrollToBottom = false
+            if shouldScroll {
+                self.scrollToBottom(animated: false)
+            } else {
+                self.updateScrollToBottomButtonVisibility()
+            }
         }
     }
 
@@ -2211,14 +2932,20 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     }
 
     private func handleAttachmentDrop(from pasteboard: NSPasteboard) -> Bool {
-        var attachmentURLs: [URL] = []
-        if let fileURLs = pastedFileURLs(from: pasteboard), !fileURLs.isEmpty {
-            attachmentURLs.append(contentsOf: fileURLs)
+        let fileURLs = pastedFileURLs(from: pasteboard) ?? []
+        let pasteboardImages = pastedImages(from: pasteboard)
+        let plan = ChatAttachmentDropPlanner.plan(
+            fileURLs: fileURLs,
+            hasPasteboardImages: !pasteboardImages.isEmpty
+        )
+
+        var attachmentURLs = plan.fileURLs
+        if plan.shouldImportPasteboardImages {
+            let pastedImageURLs = pasteboardImages.compactMap { image in
+                writeImageToTemporaryAttachmentFile(image)
+            }
+            attachmentURLs.append(contentsOf: pastedImageURLs)
         }
-        let pastedImageURLs = pastedImages(from: pasteboard).compactMap { image in
-            writeImageToTemporaryAttachmentFile(image)
-        }
-        attachmentURLs.append(contentsOf: pastedImageURLs)
 
         guard !attachmentURLs.isEmpty else { return false }
         appendDraftAttachments(from: attachmentURLs)
@@ -2300,6 +3027,31 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         reloadAttachmentChips()
     }
 
+    private func openAttachmentPreview(_ attachment: PersistedChatAttachment) {
+        guard attachment.kind == .image else { return }
+        let fileURL = URL(fileURLWithPath: attachment.filePath)
+        guard let image = NSImage(contentsOf: fileURL) else { return }
+        guard let hostView = view.window?.contentView ?? view.superview else { return }
+
+        mediaPreviewOverlayView?.removeFromSuperview()
+        let overlay = ChatImagePreviewOverlayView(image: image)
+        overlay.onClose = { [weak self, weak overlay] in
+            overlay?.removeFromSuperview()
+            if self?.mediaPreviewOverlayView === overlay {
+                self?.mediaPreviewOverlayView = nil
+            }
+        }
+        hostView.addSubview(overlay)
+        NSLayoutConstraint.activate([
+            overlay.leadingAnchor.constraint(equalTo: hostView.leadingAnchor),
+            overlay.trailingAnchor.constraint(equalTo: hostView.trailingAnchor),
+            overlay.topAnchor.constraint(equalTo: hostView.topAnchor),
+            overlay.bottomAnchor.constraint(equalTo: hostView.bottomAnchor),
+        ])
+        mediaPreviewOverlayView = overlay
+        view.window?.makeFirstResponder(overlay)
+    }
+
     private func reloadAttachmentChips() {
         for view in attachmentsStackView.arrangedSubviews {
             attachmentsStackView.removeArrangedSubview(view)
@@ -2322,10 +3074,14 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
                 previewImage: preview,
                 filename: url.lastPathComponent,
                 kindBadge: kindBadge,
-                removeAccessibilityLabel: closeLabel
-            ) { [weak self] in
-                self?.removeDraftAttachment(id: attachment.id)
-            }
+                removeAccessibilityLabel: closeLabel,
+                onOpen: attachment.kind == .image ? { [weak self] in
+                    self?.openAttachmentPreview(attachment)
+                } : nil,
+                onRemove: { [weak self] in
+                    self?.removeDraftAttachment(id: attachment.id)
+                }
+            )
             attachmentsStackView.addArrangedSubview(chip)
         }
 

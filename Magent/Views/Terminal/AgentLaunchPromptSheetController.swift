@@ -1901,18 +1901,6 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func performAccept(item: PickerItem, rawPrompt: String, rawDesc: String, rawBranch: String, rawBaseBranch: String, rawTitle: String) {
-        if case .agent(_, let surface, _) = item,
-           surface == .chat,
-           case .newThread = config.draftScope {
-            let alert = NSAlert()
-            alert.alertStyle = .informational
-            alert.messageText = "Chat mode for new threads is not available yet"
-            alert.informativeText = "Chat tabs are supported. Chat-first new-thread creation is still in progress in this build."
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
-            return
-        }
-
         let isDraft: Bool = {
             guard config.showDraftCheckbox, draftCheckbox.state == .on else { return false }
             if case .agent(_, let surface, _) = item {

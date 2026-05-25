@@ -897,13 +897,20 @@ struct PersistedChatMessageTests {
         let message = try decoder.decode(PersistedChatMessage.self, from: json)
         #expect(message.modelId == nil)
         #expect(message.reasoningLevel == nil)
+        #expect(message.attachments.isEmpty)
     }
 
-    @Test("Round-trip preserves model metadata")
-    func roundTripPreservesModelMetadata() throws {
+    @Test("Round-trip preserves model metadata and attachments")
+    func roundTripPreservesModelMetadataAndAttachments() throws {
+        let attachment = PersistedChatAttachment(
+            id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+            filePath: "/tmp/Screenshot 2026-05-22 at 10.49.01.png",
+            kind: .image
+        )
         let original = PersistedChatMessage(
             role: .assistant,
             text: "done",
+            attachments: [attachment],
             createdAt: Date(timeIntervalSince1970: 1_750_000_000),
             modelId: "gpt-5.5",
             reasoningLevel: "high"
@@ -917,6 +924,7 @@ struct PersistedChatMessageTests {
         let decoded = try decoder.decode(PersistedChatMessage.self, from: data)
         #expect(decoded.modelId == "gpt-5.5")
         #expect(decoded.reasoningLevel == "high")
+        #expect(decoded.attachments == [attachment])
     }
 }
 
@@ -936,7 +944,7 @@ struct PersistedChatTabTests {
         #expect(tab.conversationSessionID == nil)
     }
 
-    @Test("Round-trip preserves non-empty draftInput and conversation session id")
+    @Test("Round-trip preserves non-empty draftInput, conversation session id, and model metadata")
     func roundTripDraftInput() throws {
         let original = PersistedChatTab(
             identifier: "chat:2",
@@ -944,12 +952,16 @@ struct PersistedChatTabTests {
             title: "Chat",
             messages: [],
             draftInput: "hello draft",
-            conversationSessionID: "session-123"
+            conversationSessionID: "session-123",
+            modelId: "gpt-5.5",
+            reasoningLevel: "high"
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(PersistedChatTab.self, from: data)
         #expect(decoded.draftInput == "hello draft")
         #expect(decoded.conversationSessionID == "session-123")
+        #expect(decoded.modelId == "gpt-5.5")
+        #expect(decoded.reasoningLevel == "high")
     }
 
     @Test("Round-trip preserves draft attachments")
@@ -1023,6 +1035,240 @@ struct AgentChatRuntimeParsingTests {
         let parsed = AgentChatRuntime.parseCodexJSONL(stdout)
         #expect(parsed.conversationSessionID == "codex-thread-1")
         #expect(parsed.assistantText == "codex reply")
+    }
+
+    @Test("Codex transcript reconciliation preserves commentary and tool calls")
+    func codexTranscriptReconciliationPreservesCodexEvents() {
+        let existingUser = PersistedChatMessage(
+            role: .user,
+            text: "hello",
+            attachments: [PersistedChatAttachment(filePath: "/tmp/a.png", kind: .image)],
+            modelId: "gpt-5.5",
+            reasoningLevel: "low"
+        )
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"hello"}}
+        {"timestamp":"2026-05-22T08:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"I’ll inspect first.","phase":"commentary"}}
+        {"timestamp":"2026-05-22T08:00:02Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\\"cmd\\":\\"rg hello\\"}","call_id":"call_1"}}
+        {"timestamp":"2026-05-22T08:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_1","output":"found"}}
+        {"timestamp":"2026-05-22T08:00:04Z","type":"event_msg","payload":{"type":"agent_message","message":"Done.","phase":"final_answer"}}
+        {"timestamp":"2026-05-22T08:00:05Z","type":"event_msg","payload":{"type":"task_complete"}}
+        """
+
+        let messages = CodexChatTranscriptReconciler.messages(
+            fromCodexJSONL: jsonl,
+            existingMessages: [existingUser]
+        )
+
+        #expect(messages.map(\.role) == [.user, .assistant, .assistant, .assistant])
+        #expect(messages[0].attachments == existingUser.attachments)
+        #expect(messages[0].modelId == "gpt-5.5")
+        #expect(messages[0].reasoningLevel == "low")
+        #expect(messages[1].text == "I’ll inspect first.")
+        #expect(messages[2].text.contains("Tool result: exec_command"))
+        #expect(messages[2].text.contains("rg hello"))
+        #expect(messages[2].text.contains("Output:\nfound"))
+        #expect(messages[3].text == "Done.")
+    }
+
+
+    @Test("Tool transcript formatter parses JSON and summarizes folded headers")
+    func toolTranscriptFormatterParsesJSONAndSummarizesHeaders() {
+        let presentation = ChatToolTranscriptFormatter.presentation(
+            for: ChatToolTranscriptFormatter.toolCallText(
+                name: "exec_command",
+                arguments: "{\"cmd\":\"rg hello\",\"yield_time_ms\":1000}"
+            )
+        )
+
+        #expect(presentation?.kind == .call)
+        #expect(presentation?.title == "rg hello")
+        #expect(presentation?.detail == "exec_command")
+        #expect(presentation?.body.contains("Command\nrg hello") == true)
+        #expect(presentation?.body.contains("Yield time: 1000 ms") == true)
+    }
+
+    @Test("Tool transcript formatter summarizes command output envelopes")
+    func toolTranscriptFormatterSummarizesCommandOutputEnvelopes() {
+        let presentation = ChatToolTranscriptFormatter.presentation(
+            for: ChatToolTranscriptFormatter.toolOutputText(
+                """
+                Chunk ID: abc123
+                Wall time: 0.0801 seconds
+                Process exited with code 0
+                Original token count: 42
+                Output:
+                {"changed":true,"files":["A.swift","B.swift"]}
+                """
+            )
+        )
+
+        #expect(presentation?.kind == .output)
+        #expect(presentation?.title == "Changed: true · Files: A.swift, B.swift")
+        #expect(presentation?.detail == nil)
+        #expect(presentation?.body.contains("Status\nExit code: 0") == false)
+        #expect(presentation?.body.contains("Tokens: 42") == false)
+        #expect(presentation?.body.contains("Changed: true") == true)
+        #expect(presentation?.body.contains("Files: A.swift, B.swift") == true)
+    }
+
+    @Test("Tool transcript formatter labels paired tool output")
+    func toolTranscriptFormatterLabelsPairedToolOutput() {
+        let presentation = ChatToolTranscriptFormatter.presentation(
+            for: ChatToolTranscriptFormatter.toolOutputText("found", name: "exec_command")
+        )
+
+        #expect(presentation?.kind == .output)
+        #expect(presentation?.title == "exec_command")
+        #expect(presentation?.detail == "for exec_command")
+        #expect(presentation?.body.contains("Output\nfound") == true)
+    }
+
+    @Test("Codex chat tab restore skips tabs without session ids")
+    func codexChatTabRestoreSkipsTabsWithoutSessionIDs() {
+        let tab = PersistedChatTab(
+            identifier: "chat:1",
+            agentType: .codex,
+            title: "Codex",
+            messages: [PersistedChatMessage(role: .assistant, text: "Done.")]
+        )
+
+        let result = CodexChatTranscriptReconciler.reconciledChatTabsForRestore([tab])
+
+        #expect(!result.didMutate)
+        #expect(result.chatTabs == [tab])
+    }
+
+    @Test("Codex transcript reconciliation restores incomplete turns as loading")
+    func codexTranscriptReconciliationRestoresIncompleteTurnAsLoading() {
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"keep working"}}
+        {"timestamp":"2026-05-22T08:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"I’ll start.","phase":"commentary"}}
+        """
+
+        let messages = CodexChatTranscriptReconciler.messages(fromCodexJSONL: jsonl)
+
+        #expect(messages.map(\.role) == [.user, .assistant, .assistant])
+        #expect(messages[2].text == "Thinking...")
+        #expect(messages[2].createdAt == messages[0].createdAt)
+    }
+
+    @Test("Codex transcript reconciliation does not restore loading for completed turns")
+    func codexTranscriptReconciliationDoesNotRestoreLoadingForCompletedTurn() {
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"finish"}}
+        {"timestamp":"2026-05-22T08:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"Done.","phase":"final_answer"}}
+        {"timestamp":"2026-05-22T08:00:02Z","type":"event_msg","payload":{"type":"task_complete"}}
+        """
+
+        let messages = CodexChatTranscriptReconciler.messages(fromCodexJSONL: jsonl)
+
+        #expect(messages.map(\.role) == [.user, .assistant])
+        #expect(messages.last?.text == "Done.")
+    }
+
+    @Test("Codex transcript reconciliation preserves existing attachments across attachment footer")
+    func codexTranscriptReconciliationPreservesAttachmentsAcrossAttachmentFooter() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("magent-codex-attachment-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let imageURL = directory.appendingPathComponent("Screenshot.png")
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let existingUser = PersistedChatMessage(
+            role: .user,
+            text: "can you read whats on this image?",
+            attachments: [PersistedChatAttachment(filePath: imageURL.path, kind: .image)]
+        )
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"can you read whats on this image?\\n\\nAttached files:\\n- file://\(imageURL.path) (image, local path: \(imageURL.path))","local_images":["\(imageURL.path)"]}}
+        {"timestamp":"2026-05-22T08:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"It says Uncommitted."}}
+        {"timestamp":"2026-05-22T08:00:02Z","type":"event_msg","payload":{"type":"task_complete"}}
+        """
+
+        let messages = CodexChatTranscriptReconciler.messages(
+            fromCodexJSONL: jsonl,
+            existingMessages: [existingUser]
+        )
+
+        #expect(messages.first?.id == existingUser.id)
+        #expect(messages.first?.text == "can you read whats on this image?")
+        #expect(messages.first?.attachments == existingUser.attachments)
+    }
+
+    @Test("Codex transcript reconciliation ignores near-duplicate user replay")
+    func codexTranscriptReconciliationIgnoresNearDuplicateUserReplay() {
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"repeat me"}}
+        {"timestamp":"2026-05-22T08:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"First"}}
+        {"timestamp":"2026-05-22T08:04:00Z","type":"event_msg","payload":{"type":"user_message","message":"repeat me"}}
+        {"timestamp":"2026-05-22T08:04:01Z","type":"event_msg","payload":{"type":"agent_message","message":"Second"}}
+        {"timestamp":"2026-05-22T08:04:02Z","type":"event_msg","payload":{"type":"task_complete"}}
+        """
+
+        let messages = CodexChatTranscriptReconciler.messages(fromCodexJSONL: jsonl)
+
+        #expect(messages.filter { $0.role == .user }.map(\.text) == ["repeat me"])
+        #expect(messages.filter { $0.role == .assistant }.map(\.text) == ["First"])
+    }
+
+    @Test("Claude transcript reconciliation preserves user, assistant, and tool events")
+    func claudeTranscriptReconciliationPreservesClaudeEvents() {
+        let existingUser = PersistedChatMessage(
+            role: .user,
+            text: "inspect this",
+            attachments: [PersistedChatAttachment(filePath: "/tmp/b.png", kind: .image)],
+            modelId: "claude-opus-4-6"
+        )
+        let jsonl = """
+        {"type":"user","timestamp":"2026-05-22T08:00:00Z","message":{"role":"user","content":[{"type":"text","text":"inspect this"}]}}
+        {"type":"assistant","timestamp":"2026-05-22T08:00:01Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/tmp/file.swift"}}],"stop_reason":"tool_use"}}
+        {"type":"user","timestamp":"2026-05-22T08:00:02Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"}]}}
+        {"type":"assistant","timestamp":"2026-05-22T08:00:03Z","message":{"role":"assistant","content":[{"type":"text","text":"Done."}],"stop_reason":"end_turn"}}
+        """
+
+        let messages = ClaudeChatTranscriptReconciler.messages(
+            fromClaudeJSONL: jsonl,
+            existingMessages: [existingUser]
+        )
+
+        #expect(messages.map(\.role) == [.user, .assistant, .assistant])
+        #expect(messages[0].attachments == existingUser.attachments)
+        #expect(messages[0].modelId == "claude-opus-4-6")
+        #expect(messages[1].text.contains("Tool result: Read"))
+        #expect(messages[1].text.contains("file_path"))
+        #expect(messages[1].text.contains("Output:\nfile contents"))
+        #expect(messages[2].text == "Done.")
+    }
+
+    @Test("Claude chat tab restore skips tabs without session ids")
+    func claudeChatTabRestoreSkipsTabsWithoutSessionIDs() {
+        let tab = PersistedChatTab(
+            identifier: "chat:1",
+            agentType: .claude,
+            title: "Claude",
+            messages: [PersistedChatMessage(role: .assistant, text: "Done.")]
+        )
+
+        let result = ClaudeChatTranscriptReconciler.reconciledChatTabsForRestore([tab])
+
+        #expect(!result.didMutate)
+        #expect(result.chatTabs == [tab])
+    }
+
+    @Test("Claude transcript reconciliation restores incomplete turns as loading")
+    func claudeTranscriptReconciliationRestoresIncompleteTurnAsLoading() {
+        let jsonl = """
+        {"type":"user","timestamp":"2026-05-22T08:00:00Z","message":{"role":"user","content":[{"type":"text","text":"keep working"}]}}
+        {"type":"assistant","timestamp":"2026-05-22T08:00:01Z","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/file.swift"}}],"stop_reason":"tool_use"}}
+        """
+
+        let messages = ClaudeChatTranscriptReconciler.messages(fromClaudeJSONL: jsonl)
+
+        #expect(messages.map(\.role) == [.user, .assistant, .assistant])
+        #expect(messages[2].text == "Thinking...")
+        #expect(messages[2].createdAt == messages[0].createdAt)
     }
 
     @Test("Claude model-change text parsing returns model label and effort")

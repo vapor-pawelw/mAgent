@@ -108,6 +108,7 @@ public nonisolated struct PersistedDraftTab: Codable, Sendable, Equatable {
 public nonisolated enum ChatMessageRole: String, Codable, Sendable {
     case user
     case assistant
+    case system
 }
 
 public nonisolated enum PersistedChatAttachmentKind: String, Codable, Sendable {
@@ -136,6 +137,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
     public let id: UUID
     public let role: ChatMessageRole
     public var text: String
+    public var attachments: [PersistedChatAttachment]
     public let createdAt: Date
     public var modelId: String?
     public var reasoningLevel: String?
@@ -144,6 +146,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         case id
         case role
         case text
+        case attachments
         case createdAt
         case modelId
         case reasoningLevel
@@ -153,6 +156,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         id: UUID = UUID(),
         role: ChatMessageRole,
         text: String,
+        attachments: [PersistedChatAttachment] = [],
         createdAt: Date = Date(),
         modelId: String? = nil,
         reasoningLevel: String? = nil
@@ -160,6 +164,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         self.id = id
         self.role = role
         self.text = text
+        self.attachments = attachments
         self.createdAt = createdAt
         self.modelId = modelId
         self.reasoningLevel = reasoningLevel
@@ -170,6 +175,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         role = try container.decode(ChatMessageRole.self, forKey: .role)
         text = try container.decode(String.self, forKey: .text)
+        attachments = try container.decodeIfPresent([PersistedChatAttachment].self, forKey: .attachments) ?? []
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
         reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
@@ -180,6 +186,9 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         try container.encode(id, forKey: .id)
         try container.encode(role, forKey: .role)
         try container.encode(text, forKey: .text)
+        if !attachments.isEmpty {
+            try container.encode(attachments, forKey: .attachments)
+        }
         try container.encode(createdAt, forKey: .createdAt)
         try container.encodeIfPresent(modelId, forKey: .modelId)
         try container.encodeIfPresent(reasoningLevel, forKey: .reasoningLevel)

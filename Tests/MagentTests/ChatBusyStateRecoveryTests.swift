@@ -74,3 +74,87 @@ struct ChatBusyStateRecoveryTests {
         #expect(result.messages == [userOne, assistantDone, cancelled])
     }
 }
+
+@Suite("Chat final assistant message reconciliation")
+struct ChatFinalAssistantMessageReconcilerTests {
+    @Test("appends final text when no streamed message rendered")
+    func appendsFinalText() {
+        let user = PersistedChatMessage(role: .user, text: "hello")
+
+        let result = ChatFinalAssistantMessageReconciler.messagesByReconcilingFinalAssistantText(
+            [user],
+            streamedMessageIDs: [],
+            finalText: "final answer",
+            modelId: "gpt-5.5",
+            reasoningLevel: "low"
+        )
+
+        #expect(result.didMutate)
+        #expect(result.messages.map(\.role) == [.user, .assistant])
+        #expect(result.messages.last?.text == "final answer")
+        #expect(result.messages.last?.modelId == "gpt-5.5")
+        #expect(result.messages.last?.reasoningLevel == "low")
+    }
+
+    @Test("replaces partial streamed message with final text")
+    func replacesPartialStreamedText() {
+        let user = PersistedChatMessage(role: .user, text: "hello")
+        let streamed = PersistedChatMessage(role: .assistant, text: "first update")
+
+        let result = ChatFinalAssistantMessageReconciler.messagesByReconcilingFinalAssistantText(
+            [user, streamed],
+            streamedMessageIDs: [streamed.id],
+            finalText: "first update\n\nfinal answer",
+            modelId: "gpt-5.5",
+            reasoningLevel: "medium"
+        )
+
+        #expect(result.didMutate)
+        #expect(result.messages.count == 2)
+        #expect(result.messages[1].id == streamed.id)
+        #expect(result.messages[1].text == "first update\n\nfinal answer")
+        #expect(result.messages[1].modelId == "gpt-5.5")
+        #expect(result.messages[1].reasoningLevel == "medium")
+    }
+
+    @Test("leaves completed streamed aggregate items separate")
+    func leavesCompletedStreamedAggregateItemsSeparate() {
+        let first = PersistedChatMessage(role: .assistant, text: "commentary")
+        let second = PersistedChatMessage(role: .assistant, text: "final")
+
+        let result = ChatFinalAssistantMessageReconciler.messagesByReconcilingFinalAssistantText(
+            [first, second],
+            streamedMessageIDs: [first.id, second.id],
+            finalText: "commentary\n\nfinal",
+            modelId: nil,
+            reasoningLevel: nil
+        )
+
+        #expect(!result.didMutate)
+        #expect(result.messages.count == 2)
+        #expect(result.messages[0].id == first.id)
+        #expect(result.messages[0].text == "commentary")
+        #expect(result.messages[1].id == second.id)
+        #expect(result.messages[1].text == "final")
+    }
+
+    @Test("appends final text after multiple partial streamed items")
+    func appendsFinalTextAfterMultiplePartialStreamedItems() {
+        let first = PersistedChatMessage(role: .assistant, text: "I’ll inspect.")
+        let second = PersistedChatMessage(role: .assistant, text: "Tool output:\nfound")
+
+        let result = ChatFinalAssistantMessageReconciler.messagesByReconcilingFinalAssistantText(
+            [first, second],
+            streamedMessageIDs: [first.id, second.id],
+            finalText: "Done.",
+            modelId: nil,
+            reasoningLevel: nil
+        )
+
+        #expect(result.didMutate)
+        #expect(result.messages.count == 3)
+        #expect(result.messages[0].id == first.id)
+        #expect(result.messages[1].id == second.id)
+        #expect(result.messages[2].text == "Done.")
+    }
+}

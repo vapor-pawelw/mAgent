@@ -351,7 +351,10 @@ extension ThreadListViewController {
                         identifier: "chat:\(UUID().uuidString)",
                         agentType: agentType,
                         title: "\(agentType.displayName) Chat",
-                        messages: []
+                        messages: [],
+                        draftInput: result.prompt ?? "",
+                        modelId: result.modelId,
+                        reasoningLevel: result.reasoningLevel
                     )
                 }(),
                 draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "", result.modelId, result.reasoningLevel) } : nil,
