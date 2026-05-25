@@ -135,6 +135,11 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 - Each chat tab persists the latest agent conversation/session id so subsequent messages continue in the same native agent context.
 - Chat composer input must use a normal `NSTextView` initializer so AppKit creates the backing text system. Do not initialize the composer with `textContainer: nil`; that leaves the view editable but without text storage, which prevents normal typing.
 - Chat attachment drops are accepted both on the composer and on the main chat surface. Composer drops may show the dashed "Drop files here" overlay, but main-surface drops intentionally reuse the same attachment ingestion path without extra visual chrome.
+- Long chat histories must not be materialized as one synchronous AppKit layout pass when a tab is first selected. `ChatTabViewController.reloadMessages` progressively renders large full reloads in batches and cancels stale batches via `messageRenderGeneration` when a newer update arrives.
+- Streaming chat updates should preserve user scroll intent: auto-scroll only when the chat was already near the bottom before the update, and coalesce post-layout scroll/button work instead of calling `scrollToBottom` for every delta.
+- While a chat request is running, keep the pending assistant loading/working placeholder alive even after early streamed commentary or tool messages arrive. Completion cleanup removes it only when the request token finishes.
+- Final response reconciliation must preserve separately streamed assistant items. Codex app-server completion can return aggregate turn text; do not replace the first streamed item with that aggregate, or final answers appear on earlier commentary/tool bubbles.
+- Tool-call/tool-output transcript bubbles are collapsed by default. Collapsed tool calls should make the command the primary text, while collapsed tool outputs should summarize useful output content first and hide routine success metadata such as exit `0`, token count, chunk id, or wall time. Expanded output may show unusual status metadata at the bottom.
 
 ### Chat Model-Change Notices
 

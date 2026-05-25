@@ -139,13 +139,51 @@ extension ThreadDetailViewController {
             placeholder.isHidden = true
         }
 
-        dismissLoadingOverlay()
-
         for (i, item) in tabItems.enumerated() {
             item.isSelected = (i == displayIndex)
         }
 
-        guard let entryIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+        activeChatTabId = identifier
+        currentTabIndex = displayIndex
+        postFocusedThreadContextChangedIfKeyWindow()
+        persistChatSelection(identifier: identifier, displayIndex: displayIndex)
+
+        guard let entryIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else {
+            dismissLoadingOverlay()
+            return
+        }
+
+        if chatTabs[entryIndex].viewController == nil {
+            // Building a chat view with a long transcript can be expensive because
+            // it creates and lays out every message bubble. Commit the tab-bar
+            // selection first, then materialize the chat on the next run-loop turn
+            // so the click gives immediate visual feedback instead of looking like
+            // a frozen UI.
+            ensureLoadingOverlay()
+            loadingLabel?.stringValue = "Loading chat…"
+            loadingDetailLabel?.isHidden = true
+            revealLoadingOverlay(after: 0)
+            DispatchQueue.main.async { [weak self] in
+                guard let self,
+                      self.activeChatTabId == identifier,
+                      self.currentTabIndex == displayIndex else { return }
+                self.materializeSelectedChatTab(identifier: identifier, displayIndex: displayIndex)
+            }
+            return
+        }
+
+        materializeSelectedChatTab(identifier: identifier, displayIndex: displayIndex)
+    }
+
+    private func materializeSelectedChatTab(identifier: String, displayIndex: Int) {
+        guard activeChatTabId == identifier,
+              displayIndex < tabItems.count,
+              tabSlots.indices.contains(displayIndex),
+              case .chat(let selectedIdentifier) = tabSlots[displayIndex],
+              selectedIdentifier == identifier,
+              let entryIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else {
+            return
+        }
 
         if chatTabs[entryIndex].viewController == nil {
             let entry = chatTabs[entryIndex]
@@ -210,18 +248,8 @@ extension ThreadDetailViewController {
         terminalContainer.addSubview(vc.view, positioned: .above, relativeTo: nil)
         vc.setRelativeTimeUpdatesEnabled(true)
         vc.focusComposer()
-        activeChatTabId = identifier
-        currentTabIndex = displayIndex
-        postFocusedThreadContextChangedIfKeyWindow()
+        dismissLoadingOverlay()
 
-        if thread.lastSelectedTabIdentifier != identifier {
-            thread.lastSelectedTabIdentifier = identifier
-            threadManager.updateLastSelectedTab(for: thread.id, identifier: identifier)
-        }
-        UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
-        UserDefaults.standard.set(identifier, forKey: Self.lastOpenedTabDefaultsKey)
-        tabItems[displayIndex].hasUnreadCompletion = false
-        threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: identifier)
         refreshTabTooltips()
 
         // Chat is a GUI tab type, not a terminal surface.
@@ -229,6 +257,19 @@ extension ThreadDetailViewController {
         setScrollFABVisible(false)
         promptTOCCanShowForCurrentTab = false
         applyPromptTOCVisibility()
+    }
+
+    private func persistChatSelection(identifier: String, displayIndex: Int) {
+        if thread.lastSelectedTabIdentifier != identifier {
+            thread.lastSelectedTabIdentifier = identifier
+            threadManager.updateLastSelectedTab(for: thread.id, identifier: identifier)
+        }
+        UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
+        UserDefaults.standard.set(identifier, forKey: Self.lastOpenedTabDefaultsKey)
+        if displayIndex < tabItems.count {
+            tabItems[displayIndex].hasUnreadCompletion = false
+        }
+        threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: identifier)
     }
 
     func hideActiveChatTab() {
@@ -857,6 +898,12 @@ extension ThreadDetailViewController {
             chatStreamingAssistantMessageIDsByIdentifier[identifier] = messageIDsByItem
         }
 
+        ensurePendingAssistantPlaceholder(
+            identifier: identifier,
+            pendingAssistantID: pendingAssistantID,
+            metadata: metadata
+        )
+
         if activeChatTabId != identifier {
             // Background chat tabs still accumulate full streamed content in model state,
             // but skip per-delta UI rendering work until the tab is visible again.
@@ -864,6 +911,26 @@ extension ThreadDetailViewController {
             return
         }
         refreshChatTabView(chatIndex: chatIndex)
+    }
+
+    private func ensurePendingAssistantPlaceholder(
+        identifier: String,
+        pendingAssistantID: UUID,
+        metadata: (modelId: String?, reasoningLevel: String?)
+    ) {
+        guard chatRequestTasksByIdentifier[identifier] != nil else { return }
+        guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+        guard !chatTabs[chatIndex].messages.contains(where: { $0.id == pendingAssistantID }) else { return }
+
+        let pendingAssistant = PersistedChatMessage(
+            id: pendingAssistantID,
+            role: .assistant,
+            text: Self.chatLoadingPlaceholder,
+            modelId: metadata.modelId,
+            reasoningLevel: metadata.reasoningLevel
+        )
+        chatTabs[chatIndex].messages.append(pendingAssistant)
+        chatPendingAssistantMessageIDsByIdentifier[identifier] = pendingAssistantID
     }
 
     private func setPendingAssistantMessage(identifier: String, pendingAssistantID: UUID, text: String) {

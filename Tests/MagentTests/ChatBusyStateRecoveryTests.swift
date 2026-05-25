@@ -117,8 +117,8 @@ struct ChatFinalAssistantMessageReconcilerTests {
         #expect(result.messages[1].reasoningLevel == "medium")
     }
 
-    @Test("collapses multiple streamed items into final text")
-    func collapsesMultipleStreamedItems() {
+    @Test("leaves completed streamed aggregate items separate")
+    func leavesCompletedStreamedAggregateItemsSeparate() {
         let first = PersistedChatMessage(role: .assistant, text: "commentary")
         let second = PersistedChatMessage(role: .assistant, text: "final")
 
@@ -130,9 +130,31 @@ struct ChatFinalAssistantMessageReconcilerTests {
             reasoningLevel: nil
         )
 
-        #expect(result.didMutate)
-        #expect(result.messages.count == 1)
+        #expect(!result.didMutate)
+        #expect(result.messages.count == 2)
         #expect(result.messages[0].id == first.id)
-        #expect(result.messages[0].text == "commentary\n\nfinal")
+        #expect(result.messages[0].text == "commentary")
+        #expect(result.messages[1].id == second.id)
+        #expect(result.messages[1].text == "final")
+    }
+
+    @Test("appends final text after multiple partial streamed items")
+    func appendsFinalTextAfterMultiplePartialStreamedItems() {
+        let first = PersistedChatMessage(role: .assistant, text: "I’ll inspect.")
+        let second = PersistedChatMessage(role: .assistant, text: "Tool output:\nfound")
+
+        let result = ChatFinalAssistantMessageReconciler.messagesByReconcilingFinalAssistantText(
+            [first, second],
+            streamedMessageIDs: [first.id, second.id],
+            finalText: "Done.",
+            modelId: nil,
+            reasoningLevel: nil
+        )
+
+        #expect(result.didMutate)
+        #expect(result.messages.count == 3)
+        #expect(result.messages[0].id == first.id)
+        #expect(result.messages[1].id == second.id)
+        #expect(result.messages[2].text == "Done.")
     }
 }

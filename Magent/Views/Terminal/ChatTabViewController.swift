@@ -792,6 +792,8 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private var messageTextHidden = false
     private var toolPresentation: ChatToolTranscriptPresentation?
     private var toolExpanded = false
+    private var toolDisclosureFontSize: CGFloat = 12
+    private var toolDisclosureTextColor: NSColor = .labelColor
 
     private enum AssistantDisplayState {
         case normal
@@ -943,6 +945,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 )
             )
             if toolPresentation != nil {
+                Self.applyToolTranscriptStyle(to: attributedMessage, baseColor: baseTextColor, baseFontSize: fontSize)
                 Self.applyDiffLineHighlights(to: attributedMessage, baseFontSize: fontSize)
             }
             if displayRole == .user, isQueuedSubmissionPending {
@@ -1349,11 +1352,16 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     }
 
     private func configureToolDisclosureButton(presentation: ChatToolTranscriptPresentation, fontSize: CGFloat, textColor: NSColor) {
+        toolDisclosureFontSize = fontSize
+        toolDisclosureTextColor = textColor
         toolDisclosureButton.translatesAutoresizingMaskIntoConstraints = false
         toolDisclosureButton.isBordered = false
         toolDisclosureButton.alignment = .left
         toolDisclosureButton.font = .systemFont(ofSize: max(11, fontSize - 1), weight: .medium)
         toolDisclosureButton.contentTintColor = textColor.withAlphaComponent(0.85)
+        toolDisclosureButton.lineBreakMode = .byWordWrapping
+        toolDisclosureButton.cell?.wraps = true
+        toolDisclosureButton.cell?.lineBreakMode = .byWordWrapping
         toolDisclosureButton.target = self
         toolDisclosureButton.action = #selector(toggleToolExpanded)
         toolDisclosureButton.setButtonType(.momentaryChange)
@@ -1364,8 +1372,27 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private func refreshToolDisclosureTitle() {
         guard let toolPresentation else { return }
         let chevron = toolExpanded ? "▾" : "▸"
-        let detail = toolPresentation.detail.map { " · \($0)" } ?? ""
-        toolDisclosureButton.title = "\(chevron) \(toolPresentation.title)\(detail)"
+        let title = NSMutableAttributedString()
+        let baseFontSize = max(11, toolDisclosureFontSize - 1)
+        title.append(NSAttributedString(
+            string: "\(chevron) \(toolPresentation.title)",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: baseFontSize, weight: .semibold),
+                .foregroundColor: toolDisclosureTextColor,
+            ]
+        ))
+        if let detail = toolPresentation.detail?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty {
+            title.append(NSAttributedString(
+                string: "\n\(detail)",
+                attributes: [
+                    .font: NSFont.monospacedSystemFont(ofSize: max(10, baseFontSize - 1), weight: .regular),
+                    .foregroundColor: toolDisclosureTextColor.withAlphaComponent(0.72),
+                ]
+            ))
+        }
+        toolDisclosureButton.attributedTitle = title
     }
 
     private static func maxLineWidth(in layoutManager: NSLayoutManager, textContainer: NSTextContainer) -> CGFloat {
@@ -1561,6 +1588,41 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         }
     }
 
+    private static func applyToolTranscriptStyle(
+        to attributed: NSMutableAttributedString,
+        baseColor: NSColor,
+        baseFontSize: CGFloat
+    ) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        guard fullRange.length > 0 else { return }
+
+        let monoFont = NSFont.monospacedSystemFont(ofSize: max(11, baseFontSize - 1), weight: .regular)
+        attributed.addAttributes(
+            [
+                .font: monoFont,
+                .foregroundColor: baseColor.withAlphaComponent(0.92),
+            ],
+            range: fullRange
+        )
+
+        let sectionFont = NSFont.systemFont(ofSize: max(11, baseFontSize - 1), weight: .semibold)
+        let sectionColor = NSColor(resource: .primaryBrand)
+        let full = attributed.string as NSString
+        full.enumerateSubstrings(in: fullRange, options: [.byLines, .substringNotRequired]) { _, range, _, _ in
+            guard range.length > 0 else { return }
+            let line = full.substring(with: range)
+            if ["Command", "Working directory", "Options", "Arguments", "Status", "Output"].contains(line) {
+                attributed.addAttributes(
+                    [
+                        .font: sectionFont,
+                        .foregroundColor: sectionColor,
+                    ],
+                    range: range
+                )
+            }
+        }
+    }
+
     private static func formattedTimestamp(_ date: Date, now: Date = Date()) -> String {
         let age = now.timeIntervalSince(date)
         if age >= 0, age < 60 {
@@ -1690,6 +1752,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private var pendingQueuedUserMessageIDs: Set<UUID>
     private var draftAttachments: [PersistedChatAttachment]
     private var renderedMessages: [PersistedChatMessage] = []
+    private var messageRenderGeneration = UUID()
+    private var postMessageLayoutUpdateScheduled = false
+    private var pendingPostMessageScrollToBottom = false
     private weak var mediaPreviewOverlayView: ChatImagePreviewOverlayView?
     private let initialDraftInput: String
 
@@ -1697,6 +1762,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private let slashAutocompleteVisibleRowsLimit = 5
     private let slashAutocompleteVerticalPadding: CGFloat = 6
     private static let slashAutocompleteCellIdentifier = NSUserInterfaceItemIdentifier("slash-autocomplete-cell")
+    private static let progressiveFullReloadThreshold = 60
+    private static let progressiveFullReloadBatchSize = 20
 
     init(
         identifier: String,
@@ -2358,6 +2425,17 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         }
     }
 
+    private func appendRenderedBubbles(
+        from snapshot: [PersistedChatMessage],
+        in range: Range<Int>
+    ) {
+        for index in range where snapshot.indices.contains(index) {
+            let bubble = makeMessageBubble(for: snapshot[index])
+            messagesStack.addArrangedSubview(bubble)
+            pinMessageBubbleWidth(bubble)
+        }
+    }
+
     private func applyIncrementalMessageRenderPlan(_ plan: ChatMessageRenderPlan) {
         guard case .incremental(let removeTailCount, let appendRange, let changedIndices) = plan else { return }
 
@@ -2393,6 +2471,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         shouldScrollToBottom: Bool = true,
         forceFullReload: Bool = false
     ) {
+        let shouldAutoScroll = shouldScrollToBottom && isNearBottomForAutoScroll()
+        messageRenderGeneration = UUID()
+        let renderGeneration = messageRenderGeneration
         let settings = PersistenceService.shared.loadSettings()
         chatAppearance = ChatAppearance.resolve(from: settings)
         chatFontSize = Self.resolvedChatFontSize(from: settings)
@@ -2400,22 +2481,36 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         updateComposerHeight()
 
         let plan = ChatMessageRenderPlanner.plan(previous: renderedMessages, next: messages)
+        let shouldFullReload: Bool = {
+            switch plan {
+            case .fullReload:
+                return true
+            case .incremental:
+                return forceFullReload
+            }
+        }()
+
+        if shouldFullReload && messages.count > Self.progressiveFullReloadThreshold {
+            let snapshot = messages
+            removeAllRenderedBubbles()
+            renderedMessages = []
+            renderMessageBubblesProgressively(
+                snapshot: snapshot,
+                nextIndex: 0,
+                generation: renderGeneration,
+                shouldScrollToBottom: shouldAutoScroll
+            )
+            return
+        }
+
         switch plan {
         case .fullReload:
             removeAllRenderedBubbles()
-            for message in messages {
-                let bubble = makeMessageBubble(for: message)
-                messagesStack.addArrangedSubview(bubble)
-                pinMessageBubbleWidth(bubble)
-            }
+            appendRenderedBubbles(from: messages, in: messages.indices)
         case .incremental:
             if forceFullReload {
                 removeAllRenderedBubbles()
-                for message in messages {
-                    let bubble = makeMessageBubble(for: message)
-                    messagesStack.addArrangedSubview(bubble)
-                    pinMessageBubbleWidth(bubble)
-                }
+                appendRenderedBubbles(from: messages, in: messages.indices)
             } else {
                 applyIncrementalMessageRenderPlan(plan)
             }
@@ -2423,11 +2518,65 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         renderedMessages = messages
         refreshVisibleRelativeTimestamps()
 
-        DispatchQueue.main.async { [weak self] in
-            if shouldScrollToBottom {
-                self?.scrollToBottom(animated: false)
+        schedulePostMessageLayoutUpdate(shouldScrollToBottom: shouldAutoScroll)
+    }
+
+    private func renderMessageBubblesProgressively(
+        snapshot: [PersistedChatMessage],
+        nextIndex: Int,
+        generation: UUID,
+        shouldScrollToBottom: Bool
+    ) {
+        guard messageRenderGeneration == generation else { return }
+
+        let batchEnd = min(snapshot.count, nextIndex + Self.progressiveFullReloadBatchSize)
+        appendRenderedBubbles(from: snapshot, in: nextIndex..<batchEnd)
+
+        if batchEnd < snapshot.count {
+            DispatchQueue.main.async { [weak self] in
+                self?.renderMessageBubblesProgressively(
+                    snapshot: snapshot,
+                    nextIndex: batchEnd,
+                    generation: generation,
+                    shouldScrollToBottom: shouldScrollToBottom
+                )
             }
-            self?.updateScrollToBottomButtonVisibility()
+            return
+        }
+
+        renderedMessages = snapshot
+        refreshVisibleRelativeTimestamps()
+
+        schedulePostMessageLayoutUpdate(shouldScrollToBottom: shouldScrollToBottom, generation: generation)
+    }
+
+    private func isNearBottomForAutoScroll() -> Bool {
+        guard isViewLoaded, scrollView.documentView != nil else { return true }
+        return distanceFromBottom(for: scrollView.contentView) < 80
+    }
+
+    private func schedulePostMessageLayoutUpdate(
+        shouldScrollToBottom: Bool,
+        generation: UUID? = nil
+    ) {
+        pendingPostMessageScrollToBottom = pendingPostMessageScrollToBottom || shouldScrollToBottom
+        guard !postMessageLayoutUpdateScheduled else { return }
+        postMessageLayoutUpdateScheduled = true
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.postMessageLayoutUpdateScheduled = false
+            if let generation, self.messageRenderGeneration != generation {
+                self.pendingPostMessageScrollToBottom = false
+                return
+            }
+            let shouldScroll = self.pendingPostMessageScrollToBottom
+            self.pendingPostMessageScrollToBottom = false
+            if shouldScroll {
+                self.scrollToBottom(animated: false)
+            } else {
+                self.updateScrollToBottomButtonVisibility()
+            }
         }
     }
 

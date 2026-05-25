@@ -31,6 +31,29 @@ public enum ChatFinalAssistantMessageReconciler {
             .map { updated[$0].text.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
+        let streamedTextWithoutSeparators = streamedIndices
+            .map { updated[$0].text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined()
+
+        // Codex app-server returns the whole turn text at completion, while we
+        // may already have rendered each streamed agentMessage item as its own
+        // chat bubble. In that case, leave those bubbles alone. Replacing the
+        // first streamed item with the aggregate turn text makes the final answer
+        // appear on the previous commentary/tool bubble.
+        if streamedText == normalizedFinalText || streamedTextWithoutSeparators == normalizedFinalText {
+            return (updated, false)
+        }
+
+        guard streamedIndices.count == 1 else {
+            updated.append(PersistedChatMessage(
+                role: .assistant,
+                text: normalizedFinalText,
+                modelId: modelId,
+                reasoningLevel: reasoningLevel
+            ))
+            return (updated, true)
+        }
 
         if streamedText != normalizedFinalText || updated[firstStreamedIndex].text != normalizedFinalText {
             updated[firstStreamedIndex].text = normalizedFinalText

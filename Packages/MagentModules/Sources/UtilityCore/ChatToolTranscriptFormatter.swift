@@ -20,6 +20,16 @@ public struct ChatToolTranscriptPresentation: Sendable, Equatable {
 }
 
 public enum ChatToolTranscriptFormatter {
+    private struct ToolOutputEnvelope {
+        var chunkID: String?
+        var wallTime: String?
+        var exitCode: String?
+        var sessionID: String?
+        var tokenCount: String?
+        var outputLineCount: String?
+        var output: String
+    }
+
     public static func toolCallText(name: String, arguments: String) -> String {
         "Tool call: \(name)\n\(arguments)"
     }
@@ -35,32 +45,154 @@ public enum ChatToolTranscriptFormatter {
             let parts = remainder.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
             let name = parts.first.map(String.init)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "tool"
             let rawBody = parts.count > 1 ? String(parts[1]) : ""
-            let formatted = friendlyJSONIfPossible(rawBody) ?? rawBody.trimmingCharacters(in: .whitespacesAndNewlines)
+            let formatted = formattedToolCallArguments(rawBody)
+            let command = commandSummary(from: rawBody)
             return ChatToolTranscriptPresentation(
                 kind: .call,
-                title: "Tool call: \(name)",
-                detail: jsonSummary(from: rawBody),
+                title: command ?? name,
+                detail: command == nil ? jsonSummary(from: rawBody) : name,
                 body: formatted
             )
         }
         if trimmed.hasPrefix("Tool output:") {
             let rawBody = String(trimmed.dropFirst("Tool output:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-            let formatted = friendlyJSONIfPossible(rawBody) ?? rawBody
+            let envelope = parseToolOutputEnvelope(rawBody)
+            let formatted = formattedToolOutput(envelope)
+            let summary = outputContentSummary(from: envelope, fallbackText: rawBody)
             return ChatToolTranscriptPresentation(
                 kind: .output,
-                title: "Tool output",
-                detail: outputSummary(from: rawBody),
+                title: summary ?? "No output",
+                detail: outputSummary(from: envelope, fallbackText: rawBody),
                 body: formatted
             )
         }
         return nil
     }
 
+    private static func formattedToolCallArguments(_ text: String) -> String {
+        guard let object = jsonObject(from: text) else {
+            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let dictionary = object as? [String: Any] else {
+            return section("Arguments", friendlyValue(object))
+        }
+
+        var lines: [String] = []
+        if let command = dictionary["cmd"] as? String ?? dictionary["command"] as? String {
+            lines.append(section("Command", command))
+        }
+        if let workdir = dictionary["workdir"] as? String {
+            lines.append(section("Working directory", workdir))
+        }
+
+        let primaryKeys = Set(["cmd", "command", "workdir"])
+        let remaining = dictionary.keys
+            .filter { !primaryKeys.contains($0) }
+            .sorted()
+            .map { formattedArgumentLine(key: $0, value: dictionary[$0]) }
+
+        if !remaining.isEmpty {
+            lines.append(section("Options", remaining.joined(separator: "\n")))
+        }
+
+        return lines.joined(separator: "\n\n")
+    }
+
+    private static func parseToolOutputEnvelope(_ text: String) -> ToolOutputEnvelope {
+        var envelope = ToolOutputEnvelope(output: text)
+        var remaining: [String] = []
+        var hasEnvelope = false
+        var isOutput = false
+
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            if isOutput {
+                remaining.append(line)
+                continue
+            }
+            if line == "Output:" {
+                hasEnvelope = true
+                isOutput = true
+                continue
+            }
+            if let value = line.value(afterPrefix: "Chunk ID:") {
+                envelope.chunkID = value
+                hasEnvelope = true
+            } else if let value = line.value(afterPrefix: "Wall time:") {
+                envelope.wallTime = value
+                hasEnvelope = true
+            } else if let value = line.value(afterPrefix: "Original token count:") {
+                envelope.tokenCount = value
+                hasEnvelope = true
+            } else if let value = line.value(afterPrefix: "Process exited with code") {
+                envelope.exitCode = value
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            } else if let value = line.value(afterPrefix: "Process running with session ID") {
+                envelope.sessionID = value
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            } else if let value = line.value(afterPrefix: "Total output lines:") {
+                envelope.outputLineCount = value
+                hasEnvelope = true
+            } else {
+                remaining.append(line)
+            }
+        }
+
+        guard hasEnvelope else { return envelope }
+        envelope.output = remaining.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        if let firstLine = envelope.output.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first,
+           let value = String(firstLine).value(afterPrefix: "Total output lines:") {
+            envelope.outputLineCount = value
+            envelope.output = envelope.output
+                .split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+                .dropFirst()
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return envelope
+    }
+
+    private static func formattedToolOutput(_ envelope: ToolOutputEnvelope) -> String {
+        var sections: [String] = []
+        var statusLines: [String] = []
+        if let exitCode = envelope.exitCode, exitCode != "0" {
+            statusLines.append("Exit code: \(exitCode)")
+        }
+        if let sessionID = envelope.sessionID {
+            statusLines.append("Running session: \(sessionID)")
+        }
+
+        let output = envelope.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let formattedOutput = friendlyJSONIfPossible(output) ?? output.nilIfEmpty {
+            sections.append(section("Output", formattedOutput))
+        }
+
+        if !statusLines.isEmpty {
+            sections.append(section("Status", statusLines.joined(separator: "\n")))
+        }
+
+        if sections.isEmpty {
+            sections.append(section("Output", "(No output)"))
+        }
+        return sections.joined(separator: "\n\n")
+    }
+
+    private static func section(_ title: String, _ body: String) -> String {
+        "\(title)\n\(body)"
+    }
+
+    private static func formattedArgumentLine(key: String, value: Any?) -> String {
+        var formattedValue = friendlyValue(value)
+        if key == "yield_time_ms", !formattedValue.hasSuffix("ms") {
+            formattedValue += " ms"
+        }
+        return "\(humanizedKey(key)): \(formattedValue)"
+    }
+
     private static func friendlyJSONIfPossible(_ text: String) -> String? {
         guard let object = jsonObject(from: text) else { return nil }
         if let dictionary = object as? [String: Any] {
             let fields = dictionary.keys.sorted().map { key in
-                "\(key): \(friendlyValue(dictionary[key]))"
+                "\(humanizedKey(key)): \(friendlyValue(dictionary[key]))"
             }
             return fields.joined(separator: "\n")
         }
@@ -91,12 +223,14 @@ public enum ChatToolTranscriptFormatter {
         switch value {
         case let string as String:
             return string
+        case let bool as Bool:
+            return bool ? "true" : "false"
         case let number as NSNumber:
             return number.stringValue
         case let dictionary as [String: Any]:
             guard !dictionary.isEmpty else { return "{}" }
             return dictionary.keys.sorted().map { key in
-                "\(key)=\(friendlyValue(dictionary[key]))"
+                "\(humanizedKey(key))=\(friendlyValue(dictionary[key]))"
             }.joined(separator: ", ")
         case let array as [Any]:
             guard !array.isEmpty else { return "[]" }
@@ -120,13 +254,95 @@ public enum ChatToolTranscriptFormatter {
         return nil
     }
 
-    private static func outputSummary(from text: String) -> String? {
-        let lineCount = text.split(separator: "\n", omittingEmptySubsequences: false).count
-        guard lineCount > 1 else { return nil }
-        return "\(lineCount) lines"
+    private static func commandSummary(from text: String) -> String? {
+        guard let dictionary = jsonObject(from: text) as? [String: Any] else { return nil }
+        if let command = dictionary["cmd"] as? String ?? dictionary["command"] as? String {
+            return command.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        }
+        return nil
+    }
+
+    private static func outputContentSummary(from envelope: ToolOutputEnvelope, fallbackText: String) -> String? {
+        let output = (envelope.output.nilIfEmpty ?? fallbackText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !output.isEmpty else { return nil }
+
+        if let dictionary = jsonObject(from: output) as? [String: Any] {
+            let preferredKeys = ["changed", "files", "file", "path", "message", "error", "stdout", "stderr", "result"]
+            let parts = preferredKeys.compactMap { key -> String? in
+                guard let value = dictionary[key] else { return nil }
+                return "\(humanizedKey(key)): \(friendlyValue(value))"
+            }
+            if !parts.isEmpty {
+                return abbreviated(parts.joined(separator: " · "), maxLength: 120)
+            }
+            let allParts = dictionary.keys.sorted().prefix(2).compactMap { key -> String? in
+                guard let value = dictionary[key] else { return nil }
+                return "\(humanizedKey(key)): \(friendlyValue(value))"
+            }
+            if !allParts.isEmpty {
+                return abbreviated(allParts.joined(separator: " · "), maxLength: 120)
+            }
+        }
+
+        let firstLine = output
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return firstLine.flatMap { abbreviated($0, maxLength: 120).nilIfEmpty }
+    }
+
+    private static func outputSummary(from envelope: ToolOutputEnvelope, fallbackText: String) -> String? {
+        var parts: [String] = []
+        if let exitCode = envelope.exitCode, exitCode != "0" {
+            parts.append("exit \(exitCode)")
+        } else if let sessionID = envelope.sessionID {
+            parts.append("running \(sessionID)")
+        }
+        if !parts.isEmpty, let wallTime = envelope.wallTime {
+            parts.append(wallTime)
+        }
+        if !parts.isEmpty, let outputLineCount = envelope.outputLineCount {
+            parts.append("\(outputLineCount) lines")
+        } else {
+            let textToCount = envelope.output.nilIfEmpty ?? fallbackText
+            let lineCount = textToCount.split(separator: "\n", omittingEmptySubsequences: false).count
+            if !parts.isEmpty, lineCount > 1 {
+                parts.append("\(lineCount) lines")
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private static func abbreviated(_ text: String, maxLength: Int) -> String {
+        guard text.count > maxLength else { return text }
+        let end = text.index(text.startIndex, offsetBy: max(0, maxLength - 1))
+        return String(text[..<end]) + "…"
+    }
+
+    private static func humanizedKey(_ key: String) -> String {
+        switch key {
+        case "cmd": return "Command"
+        case "max_output_tokens": return "Max output tokens"
+        case "yield_time_ms": return "Yield time"
+        case "workdir": return "Working directory"
+        case "file_path": return "File path"
+        default: break
+        }
+        let spaced = key
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+        guard let first = spaced.first else { return key }
+        return first.uppercased() + spaced.dropFirst()
     }
 }
 
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
+
+    func value(afterPrefix prefix: String) -> String? {
+        guard hasPrefix(prefix) else { return nil }
+        return String(dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
