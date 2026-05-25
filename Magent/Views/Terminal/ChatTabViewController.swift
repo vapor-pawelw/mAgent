@@ -821,6 +821,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         self.rendersAsSeparator = message.role == .system
         self.isLoadingIndicatorBubble = message.role == .assistant && Self.isThinkingPlaceholderText(message.text)
         self.toolPresentation = ChatToolTranscriptFormatter.presentation(for: message.text)
+        self.toolExpanded = self.toolPresentation?.isExpandedByDefault ?? false
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         let displayRole: ChatMessageRole = toolPresentation == nil ? message.role : .assistant
@@ -934,7 +935,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             } else {
                 renderedMessageText = message.text
             }
-            messageTextHidden = renderedMessageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || toolPresentation != nil
+            messageTextHidden = renderedMessageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (toolPresentation != nil && !toolExpanded)
             let attributedMessage = NSMutableAttributedString(
                 attributedString: Self.styledMarkdownText(
                     renderedMessageText,
@@ -1106,6 +1107,30 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         }
     }
 
+    func scheduleMeasuredLayoutRefresh() {
+        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.refreshMeasuredLayout()
+        }
+    }
+
+    private func refreshMeasuredLayout() {
+        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
+        if let layoutManager = messageTextView.layoutManager,
+           let textStorage = messageTextView.textStorage {
+            layoutManager.invalidateLayout(
+                forCharacterRange: NSRange(location: 0, length: textStorage.length),
+                actualCharacterRange: nil
+            )
+        }
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        updateBubbleLayout()
+        superview?.needsLayout = true
+        superview?.layoutSubtreeIfNeeded()
+    }
+
     func clearSelection() {
         guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
         messageTextView.setSelectedRange(NSRange(location: 0, length: 0))
@@ -1224,9 +1249,10 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         layoutManager.ensureLayout(for: textContainer)
 
         let measuredLineWidth = max(0, Self.maxLineWidth(in: layoutManager, textContainer: textContainer))
+        let measuredToolHeaderWidth = toolPresentation == nil ? 0 : ceil(toolDisclosureButton.intrinsicContentSize.width)
         let targetBubbleWidth = min(
             maxBubbleWidth,
-            max(minBubbleWidth, ceil(measuredLineWidth + bubbleHorizontalPadding))
+            max(minBubbleWidth, ceil(max(measuredLineWidth, measuredToolHeaderWidth) + bubbleHorizontalPadding))
         )
         if abs(bubbleWidthConstraint.constant - targetBubbleWidth) > 0.5 {
             bubbleWidthConstraint.constant = targetBubbleWidth
@@ -1381,9 +1407,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 .foregroundColor: toolDisclosureTextColor,
             ]
         ))
-        if let detail = toolPresentation.detail?
+        let trimmedDetail = toolPresentation.detail?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty {
+        if let detail = trimmedDetail, !detail.isEmpty {
             title.append(NSAttributedString(
                 string: "\n\(detail)",
                 attributes: [
@@ -1576,6 +1602,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         let addedColor = NSColor.systemGreen.withAlphaComponent(0.18)
         let removedColor = NSColor.systemRed.withAlphaComponent(0.18)
         let headerColor = NSColor.systemBlue.withAlphaComponent(0.12)
+        let patchHeaderColor = NSColor.systemPurple.withAlphaComponent(0.12)
         full.enumerateSubstrings(in: NSRange(location: 0, length: full.length), options: [.byLines, .substringNotRequired]) { _, range, _, _ in
             guard range.length > 0 else { return }
             let line = full.substring(with: range)
@@ -1583,6 +1610,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             if line.hasPrefix("+") && !line.hasPrefix("+++") { color = addedColor }
             else if line.hasPrefix("-") && !line.hasPrefix("---") { color = removedColor }
             else if line.hasPrefix("@@") || line.hasPrefix("diff --git") { color = headerColor }
+            else if line.hasPrefix("*** ") || line.hasPrefix("@@") { color = patchHeaderColor }
             else { color = nil }
             if let color { attributed.addAttribute(.backgroundColor, value: color, range: range) }
         }
@@ -1611,7 +1639,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         full.enumerateSubstrings(in: fullRange, options: [.byLines, .substringNotRequired]) { _, range, _, _ in
             guard range.length > 0 else { return }
             let line = full.substring(with: range)
-            if ["Command", "Working directory", "Options", "Arguments", "Status", "Output"].contains(line) {
+            if ["Command", "Working directory", "Options", "Arguments", "Status", "Output", "Patch"].contains(line) {
                 attributed.addAttributes(
                     [
                         .font: sectionFont,
@@ -2416,6 +2444,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private func pinMessageBubbleWidth(_ bubble: ChatMessageBubbleView) {
         // Activate only after insertion so both anchors share a common ancestor.
         bubble.widthAnchor.constraint(equalTo: messagesStack.widthAnchor).isActive = true
+        bubble.scheduleMeasuredLayoutRefresh()
     }
 
     private func removeAllRenderedBubbles() {

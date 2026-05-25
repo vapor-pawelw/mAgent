@@ -3,6 +3,7 @@ import Foundation
 public enum ChatToolTranscriptKind: String, Sendable, Equatable {
     case call
     case output
+    case result
 }
 
 public struct ChatToolTranscriptPresentation: Sendable, Equatable {
@@ -10,12 +11,20 @@ public struct ChatToolTranscriptPresentation: Sendable, Equatable {
     public var title: String
     public var detail: String?
     public var body: String
+    public var isExpandedByDefault: Bool
 
-    public init(kind: ChatToolTranscriptKind, title: String, detail: String?, body: String) {
+    public init(
+        kind: ChatToolTranscriptKind,
+        title: String,
+        detail: String?,
+        body: String,
+        isExpandedByDefault: Bool = false
+    ) {
         self.kind = kind
         self.title = title
         self.detail = detail
         self.body = body
+        self.isExpandedByDefault = isExpandedByDefault
     }
 }
 
@@ -34,8 +43,21 @@ public enum ChatToolTranscriptFormatter {
         "Tool call: \(name)\n\(arguments)"
     }
 
-    public static func toolOutputText(_ output: String) -> String {
-        "Tool output:\n\(output)"
+    public static func toolOutputText(_ output: String, name: String? = nil) -> String {
+        if let cleanName = name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
+            return "Tool output: \(cleanName)\n\(output)"
+        }
+        return "Tool output:\n\(output)"
+    }
+
+    public static func toolResultText(name: String, arguments: String, output: String) -> String {
+        """
+        Tool result: \(name)
+        Arguments:
+        \(arguments)
+        Output:
+        \(output)
+        """
     }
 
     public static func presentation(for text: String) -> ChatToolTranscriptPresentation? {
@@ -54,19 +76,75 @@ public enum ChatToolTranscriptFormatter {
                 body: formatted
             )
         }
+        if trimmed.hasPrefix("Tool result:") {
+            let remainder = String(trimmed.dropFirst("Tool result:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let parts = remainder.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+            let name = parts.first.map(String.init)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "tool"
+            let rawBody = parts.count > 1 ? String(parts[1]) : ""
+            let split = splitToolResultBody(rawBody)
+            let envelope = parseToolOutputEnvelope(split.output)
+            let outputBody = formattedToolOutput(envelope)
+            let argumentsBody = formattedToolResultArguments(split.arguments, toolName: name)
+            let summary = outputContentSummary(from: envelope, fallbackText: split.output)
+            return ChatToolTranscriptPresentation(
+                kind: .result,
+                title: summary ?? name,
+                detail: outputSummary(from: envelope, fallbackText: split.output, prefix: "from \(name)") ?? "from \(name)",
+                body: [outputBody, argumentsBody].filter { !$0.isEmpty }.joined(separator: "\n\n"),
+                isExpandedByDefault: true
+            )
+        }
         if trimmed.hasPrefix("Tool output:") {
-            let rawBody = String(trimmed.dropFirst("Tool output:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawRemainder = String(trimmed.dropFirst("Tool output:".count))
+            let remainder = rawRemainder.trimmingCharacters(in: .whitespacesAndNewlines)
+            let parts = remainder.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+            let outputName: String?
+            let rawBody: String
+            if !rawRemainder.hasPrefix("\n"),
+               !rawRemainder.hasPrefix("\r\n"),
+               parts.count > 1,
+               let firstLine = parts.first.map(String.init)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty {
+                outputName = firstLine
+                rawBody = String(parts[1])
+            } else {
+                outputName = nil
+                rawBody = remainder
+            }
             let envelope = parseToolOutputEnvelope(rawBody)
             let formatted = formattedToolOutput(envelope)
             let summary = outputContentSummary(from: envelope, fallbackText: rawBody)
             return ChatToolTranscriptPresentation(
                 kind: .output,
-                title: summary ?? "No output",
-                detail: outputSummary(from: envelope, fallbackText: rawBody),
-                body: formatted
+                title: outputName ?? summary ?? "No output",
+                detail: outputSummary(from: envelope, fallbackText: rawBody, prefix: outputName.map { "for \($0)" }),
+                body: formatted,
+                isExpandedByDefault: true
             )
         }
         return nil
+    }
+
+    private static func splitToolResultBody(_ text: String) -> (arguments: String, output: String) {
+        guard let outputRange = text.range(of: "\nOutput:\n") else {
+            return ("", text)
+        }
+        var arguments = String(text[..<outputRange.lowerBound])
+        if arguments.hasPrefix("Arguments:\n") {
+            arguments = String(arguments.dropFirst("Arguments:\n".count))
+        }
+        let output = String(text[outputRange.upperBound...])
+        return (arguments.trimmingCharacters(in: .whitespacesAndNewlines), output)
+    }
+
+    private static func formattedToolResultArguments(_ arguments: String, toolName: String) -> String {
+        let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        if toolName == "apply_patch" {
+            return section("Patch", trimmed)
+        }
+        return formattedToolCallArguments(trimmed)
     }
 
     private static func formattedToolCallArguments(_ text: String) -> String {
@@ -293,8 +371,15 @@ public enum ChatToolTranscriptFormatter {
         return firstLine.flatMap { abbreviated($0, maxLength: 120).nilIfEmpty }
     }
 
-    private static func outputSummary(from envelope: ToolOutputEnvelope, fallbackText: String) -> String? {
+    private static func outputSummary(
+        from envelope: ToolOutputEnvelope,
+        fallbackText: String,
+        prefix: String? = nil
+    ) -> String? {
         var parts: [String] = []
+        if let prefix {
+            parts.append(prefix)
+        }
         if let exitCode = envelope.exitCode, exitCode != "0" {
             parts.append("exit \(exitCode)")
         } else if let sessionID = envelope.sessionID {

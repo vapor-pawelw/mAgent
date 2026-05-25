@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Tool calls in restored chat transcripts now render as collapsed agent messages with readable JSON fields and highlighted diff lines.
 - Chat tabs with long histories now switch faster, keep the in-progress working bubble visible during streamed replies, avoid jumping the scroll position unless already near the bottom, and keep final answers in their own bubble instead of merging them into earlier streamed/tool messages.
 - Chat tool-call and tool-output bubbles now use cleaner collapsed summaries, highlighting the command or output content first while hiding routine success metadata.
+- Restored chat transcripts now pair tool calls with their matching outputs, showing one expandable result bubble with the command, arguments, and output.
 - Restored in-progress Codex chat turns now show the live loading indicator with elapsed time instead of a cancelled placeholder.
 - Claude chat tabs now replay saved Claude session logs when restored, including tool messages and in-progress loading state missed while the thread or app was inactive.
 

@@ -73,6 +73,8 @@ public enum CodexChatTranscriptReconciler {
         var latestUserMessageAt: Date?
         var latestCompletionAt: Date?
         var latestAbortAt: Date?
+        var pendingToolsByCallID: [String: (name: String, arguments: String, messageIndex: Int)] = [:]
+        var pendingToolsInOrder: [(name: String, arguments: String, messageIndex: Int)] = []
         var seenUserMessagesByCanonicalText: [String: Date] = [:]
         var suppressMessagesForDuplicateUserReplay = false
 
@@ -98,6 +100,46 @@ public enum CodexChatTranscriptReconciler {
                 modelId: existing?.modelId,
                 reasoningLevel: existing?.reasoningLevel
             ))
+        }
+
+        func appendToolCall(name: String, arguments: String, callID: String?, createdAt: Date?) {
+            appendMessage(
+                role: .assistant,
+                text: ChatToolTranscriptFormatter.toolCallText(name: name, arguments: arguments),
+                createdAt: createdAt
+            )
+            guard let messageIndex = messages.indices.last else { return }
+            if let callID, !callID.isEmpty {
+                pendingToolsByCallID[callID] = (name, arguments, messageIndex)
+            } else {
+                pendingToolsInOrder.append((name, arguments, messageIndex))
+            }
+        }
+
+        func appendOrMergeToolOutput(output: String, callID: String?, createdAt: Date?) {
+            let pending: (name: String, arguments: String, messageIndex: Int)?
+            if let callID, !callID.isEmpty {
+                pending = pendingToolsByCallID.removeValue(forKey: callID)
+            } else if !pendingToolsInOrder.isEmpty {
+                pending = pendingToolsInOrder.removeFirst()
+            } else {
+                pending = nil
+            }
+
+            if let pending, messages.indices.contains(pending.messageIndex) {
+                messages[pending.messageIndex].text = ChatToolTranscriptFormatter.toolResultText(
+                    name: pending.name,
+                    arguments: pending.arguments,
+                    output: output
+                )
+                lastAppended = (messages[pending.messageIndex].role, messages[pending.messageIndex].text)
+            } else {
+                appendMessage(
+                    role: .assistant,
+                    text: ChatToolTranscriptFormatter.toolOutputText(output),
+                    createdAt: createdAt
+                )
+            }
         }
 
         for line in jsonl.split(separator: "\n", omittingEmptySubsequences: true) {
@@ -139,36 +181,21 @@ public enum CodexChatTranscriptReconciler {
                 guard let payload = event.payload else { continue }
                 let name = payload.name ?? "tool"
                 let arguments = payload.arguments ?? ""
-                appendMessage(
-                    role: .assistant,
-                    text: ChatToolTranscriptFormatter.toolCallText(name: name, arguments: arguments),
-                    createdAt: event.timestamp
-                )
+                appendToolCall(name: name, arguments: arguments, callID: payload.callID, createdAt: event.timestamp)
             case ("response_item", "function_call_output"):
                 guard !suppressMessagesForDuplicateUserReplay else { continue }
                 guard let payload = event.payload else { continue }
                 let output = payload.output ?? ""
-                appendMessage(
-                    role: .assistant,
-                    text: ChatToolTranscriptFormatter.toolOutputText(output),
-                    createdAt: event.timestamp
-                )
+                appendOrMergeToolOutput(output: output, callID: payload.callID, createdAt: event.timestamp)
             case ("response_item", "custom_tool_call"):
                 guard !suppressMessagesForDuplicateUserReplay else { continue }
                 guard let payload = event.payload else { continue }
-                appendMessage(
-                    role: .assistant,
-                    text: ChatToolTranscriptFormatter.toolCallText(name: payload.name ?? "custom", arguments: payload.input ?? ""),
-                    createdAt: event.timestamp
-                )
+                let name = payload.name ?? "custom"
+                appendToolCall(name: name, arguments: payload.input ?? "", callID: payload.callID, createdAt: event.timestamp)
             case ("response_item", "custom_tool_call_output"):
                 guard !suppressMessagesForDuplicateUserReplay else { continue }
                 guard let payload = event.payload else { continue }
-                appendMessage(
-                    role: .assistant,
-                    text: ChatToolTranscriptFormatter.toolOutputText(payload.output ?? ""),
-                    createdAt: event.timestamp
-                )
+                appendOrMergeToolOutput(output: payload.output ?? "", callID: payload.callID, createdAt: event.timestamp)
             default:
                 continue
             }
@@ -239,6 +266,7 @@ private struct CodexSessionLine: Decodable {
         var arguments: String?
         var output: String?
         var input: String?
+        var callID: String?
         var localImages: [String]
 
         enum CodingKeys: String, CodingKey {
@@ -248,6 +276,7 @@ private struct CodexSessionLine: Decodable {
             case arguments
             case output
             case input
+            case callID = "call_id"
             case localImages = "local_images"
         }
 
@@ -259,6 +288,7 @@ private struct CodexSessionLine: Decodable {
             arguments = try container.decodeIfPresent(String.self, forKey: .arguments)
             output = try container.decodeIfPresent(String.self, forKey: .output)
             input = try container.decodeIfPresent(String.self, forKey: .input)
+            callID = try container.decodeIfPresent(String.self, forKey: .callID)
             localImages = try container.decodeIfPresent([String].self, forKey: .localImages) ?? []
         }
     }

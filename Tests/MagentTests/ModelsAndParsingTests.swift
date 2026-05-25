@@ -1060,14 +1060,15 @@ struct AgentChatRuntimeParsingTests {
             existingMessages: [existingUser]
         )
 
-        #expect(messages.map(\.role) == [.user, .assistant, .assistant, .assistant, .assistant])
+        #expect(messages.map(\.role) == [.user, .assistant, .assistant, .assistant])
         #expect(messages[0].attachments == existingUser.attachments)
         #expect(messages[0].modelId == "gpt-5.5")
         #expect(messages[0].reasoningLevel == "low")
         #expect(messages[1].text == "I’ll inspect first.")
-        #expect(messages[2].text.contains("Tool call: exec_command"))
-        #expect(messages[3].text == "Tool output:\nfound")
-        #expect(messages[4].text == "Done.")
+        #expect(messages[2].text.contains("Tool result: exec_command"))
+        #expect(messages[2].text.contains("rg hello"))
+        #expect(messages[2].text.contains("Output:\nfound"))
+        #expect(messages[3].text == "Done.")
     }
 
 
@@ -1109,6 +1110,18 @@ struct AgentChatRuntimeParsingTests {
         #expect(presentation?.body.contains("Tokens: 42") == false)
         #expect(presentation?.body.contains("Changed: true") == true)
         #expect(presentation?.body.contains("Files: A.swift, B.swift") == true)
+    }
+
+    @Test("Tool transcript formatter labels paired tool output")
+    func toolTranscriptFormatterLabelsPairedToolOutput() {
+        let presentation = ChatToolTranscriptFormatter.presentation(
+            for: ChatToolTranscriptFormatter.toolOutputText("found", name: "exec_command")
+        )
+
+        #expect(presentation?.kind == .output)
+        #expect(presentation?.title == "exec_command")
+        #expect(presentation?.detail == "for exec_command")
+        #expect(presentation?.body.contains("Output\nfound") == true)
     }
 
     @Test("Codex chat tab restore skips tabs without session ids")
@@ -1210,8 +1223,8 @@ struct AgentChatRuntimeParsingTests {
         )
         let jsonl = """
         {"type":"user","timestamp":"2026-05-22T08:00:00Z","message":{"role":"user","content":[{"type":"text","text":"inspect this"}]}}
-        {"type":"assistant","timestamp":"2026-05-22T08:00:01Z","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/file.swift"}}],"stop_reason":"tool_use"}}
-        {"type":"user","timestamp":"2026-05-22T08:00:02Z","message":{"role":"user","content":[{"type":"tool_result","content":"file contents"}]}}
+        {"type":"assistant","timestamp":"2026-05-22T08:00:01Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/tmp/file.swift"}}],"stop_reason":"tool_use"}}
+        {"type":"user","timestamp":"2026-05-22T08:00:02Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"}]}}
         {"type":"assistant","timestamp":"2026-05-22T08:00:03Z","message":{"role":"assistant","content":[{"type":"text","text":"Done."}],"stop_reason":"end_turn"}}
         """
 
@@ -1220,13 +1233,13 @@ struct AgentChatRuntimeParsingTests {
             existingMessages: [existingUser]
         )
 
-        #expect(messages.map(\.role) == [.user, .assistant, .assistant, .assistant])
+        #expect(messages.map(\.role) == [.user, .assistant, .assistant])
         #expect(messages[0].attachments == existingUser.attachments)
         #expect(messages[0].modelId == "claude-opus-4-6")
-        #expect(messages[1].text.contains("Tool call: Read"))
+        #expect(messages[1].text.contains("Tool result: Read"))
         #expect(messages[1].text.contains("file_path"))
-        #expect(messages[2].text == "Tool output:\nfile contents")
-        #expect(messages[3].text == "Done.")
+        #expect(messages[1].text.contains("Output:\nfile contents"))
+        #expect(messages[2].text == "Done.")
     }
 
     @Test("Claude chat tab restore skips tabs without session ids")

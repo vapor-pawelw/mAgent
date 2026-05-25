@@ -128,6 +128,7 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 ### Chat Surface Runtime Gate
 
 - Chat surfaces are selectable directly for supported agents (currently Claude and Codex).
+- New-thread creation can start directly on a chat tab from the launch sheet or IPC/CLI by selecting the chat surface (`claude:chat` / `codex:chat` in CLI payloads). Chat-first thread creation must persist the typed prompt as the chat draft and skip fallback tmux session creation when the thread contains only non-terminal tabs.
 - No separate Pi runtime install gate is used in the launch sheet.
 - Chat message execution uses each agent's native non-interactive JSON stream path:
   - Claude: `claude -p --output-format stream-json` (resume via `--resume <session_id>`)
@@ -139,7 +140,7 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 - Streaming chat updates should preserve user scroll intent: auto-scroll only when the chat was already near the bottom before the update, and coalesce post-layout scroll/button work instead of calling `scrollToBottom` for every delta.
 - While a chat request is running, keep the pending assistant loading/working placeholder alive even after early streamed commentary or tool messages arrive. Completion cleanup removes it only when the request token finishes.
 - Final response reconciliation must preserve separately streamed assistant items. Codex app-server completion can return aggregate turn text; do not replace the first streamed item with that aggregate, or final answers appear on earlier commentary/tool bubbles.
-- Tool-call/tool-output transcript bubbles are collapsed by default. Collapsed tool calls should make the command the primary text, while collapsed tool outputs should summarize useful output content first and hide routine success metadata such as exit `0`, token count, chunk id, or wall time. Expanded output may show unusual status metadata at the bottom.
+- Tool-call/tool-output transcript bubbles are collapsed by default. Collapsed tool calls should make the command the primary text, while collapsed tool outputs should summarize useful output content first and hide routine success metadata such as exit `0`, token count, chunk id, or wall time. Restored transcript reconciliation should pair a tool call with its matching result when the runtime exposes a call id, rendering one expanded result bubble with arguments and output instead of adjacent call/output bubbles. Expanded output may show unusual status metadata at the bottom.
 
 ### Chat Model-Change Notices
 

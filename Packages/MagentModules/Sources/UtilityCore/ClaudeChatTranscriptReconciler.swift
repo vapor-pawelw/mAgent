@@ -69,6 +69,8 @@ public enum ClaudeChatTranscriptReconciler {
         var latestHumanUserMessageAt: Date?
         var latestAssistantTextAt: Date?
         var latestResultAt: Date?
+        var pendingToolsByID: [String: (name: String, arguments: String, messageIndex: Int)] = [:]
+        var pendingToolsInOrder: [(name: String, arguments: String, messageIndex: Int)] = []
 
         func appendMessage(role: ChatMessageRole, text: String, createdAt: Date?) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -94,6 +96,46 @@ public enum ClaudeChatTranscriptReconciler {
             ))
         }
 
+        func appendToolCall(name: String, arguments: String, id: String?, createdAt: Date?) {
+            appendMessage(
+                role: .assistant,
+                text: ChatToolTranscriptFormatter.toolCallText(name: name, arguments: arguments),
+                createdAt: createdAt
+            )
+            guard let messageIndex = messages.indices.last else { return }
+            if let id, !id.isEmpty {
+                pendingToolsByID[id] = (name, arguments, messageIndex)
+            } else {
+                pendingToolsInOrder.append((name, arguments, messageIndex))
+            }
+        }
+
+        func appendOrMergeToolResult(content: String, toolUseID: String?, createdAt: Date?) {
+            let pending: (name: String, arguments: String, messageIndex: Int)?
+            if let toolUseID, !toolUseID.isEmpty {
+                pending = pendingToolsByID.removeValue(forKey: toolUseID)
+            } else if !pendingToolsInOrder.isEmpty {
+                pending = pendingToolsInOrder.removeFirst()
+            } else {
+                pending = nil
+            }
+
+            if let pending, messages.indices.contains(pending.messageIndex) {
+                messages[pending.messageIndex].text = ChatToolTranscriptFormatter.toolResultText(
+                    name: pending.name,
+                    arguments: pending.arguments,
+                    output: content
+                )
+                lastAppended = (messages[pending.messageIndex].role, messages[pending.messageIndex].text)
+            } else {
+                appendMessage(
+                    role: .assistant,
+                    text: ChatToolTranscriptFormatter.toolOutputText(content),
+                    createdAt: createdAt
+                )
+            }
+        }
+
         for line in jsonl.split(separator: "\n", omittingEmptySubsequences: true) {
             guard let data = String(line).data(using: .utf8),
                   let event = try? decoder.decode(ClaudeSessionLine.self, from: data) else {
@@ -108,11 +150,20 @@ public enum ClaudeChatTranscriptReconciler {
                     appendMessage(role: .user, text: userText, createdAt: event.timestamp)
                 }
                 for toolResult in event.message?.content.toolResults ?? [] {
-                    appendMessage(role: .assistant, text: toolResult, createdAt: event.timestamp)
+                    appendOrMergeToolResult(
+                        content: toolResult.content,
+                        toolUseID: toolResult.toolUseID,
+                        createdAt: event.timestamp
+                    )
                 }
             case "assistant":
                 for toolUse in event.message?.content.toolUses ?? [] {
-                    appendMessage(role: .assistant, text: toolUse, createdAt: event.timestamp)
+                    appendToolCall(
+                        name: toolUse.name ?? "tool",
+                        arguments: toolUse.arguments,
+                        id: toolUse.id,
+                        createdAt: event.timestamp
+                    )
                 }
                 let assistantText = event.message?.content.text ?? ""
                 if !assistantText.isEmpty {
@@ -217,20 +268,20 @@ private enum ClaudeContent: Decodable {
         }
     }
 
-    var toolUses: [String] {
+    var toolUses: [(id: String?, name: String?, arguments: String)] {
         guard case let .blocks(blocks) = self else { return [] }
         return blocks.compactMap { block in
-            guard case let .toolUse(name, input) = block else { return nil }
+            guard case let .toolUse(id, name, input) = block else { return nil }
             let renderedInput = input?.rendered ?? ""
-            return ChatToolTranscriptFormatter.toolCallText(name: name ?? "tool", arguments: renderedInput)
+            return (id, name, renderedInput)
         }
     }
 
-    var toolResults: [String] {
+    var toolResults: [(toolUseID: String?, content: String)] {
         guard case let .blocks(blocks) = self else { return [] }
         return blocks.compactMap { block in
-            guard case let .toolResult(content) = block else { return nil }
-            return ChatToolTranscriptFormatter.toolOutputText(content)
+            guard case let .toolResult(toolUseID, content) = block else { return nil }
+            return (toolUseID, content)
         }
     }
 
@@ -246,8 +297,8 @@ private enum ClaudeContent: Decodable {
 
 private enum ClaudeContentBlock: Decodable {
     case text(String)
-    case toolUse(name: String?, input: ClaudeJSONValue?)
-    case toolResult(content: String)
+    case toolUse(id: String?, name: String?, input: ClaudeJSONValue?)
+    case toolResult(toolUseID: String?, content: String)
     case other
 
     var text: String? {
@@ -258,9 +309,11 @@ private enum ClaudeContentBlock: Decodable {
     private enum CodingKeys: String, CodingKey {
         case type
         case text
+        case id
         case name
         case input
         case content
+        case toolUseID = "tool_use_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -270,6 +323,7 @@ private enum ClaudeContentBlock: Decodable {
             self = .text(try container.decodeIfPresent(String.self, forKey: .text) ?? "")
         case "tool_use":
             self = .toolUse(
+                id: try container.decodeIfPresent(String.self, forKey: .id),
                 name: try container.decodeIfPresent(String.self, forKey: .name),
                 input: try container.decodeIfPresent(ClaudeJSONValue.self, forKey: .input)
             )
@@ -277,7 +331,10 @@ private enum ClaudeContentBlock: Decodable {
             let content = (try? container.decode(String.self, forKey: .content))
                 ?? (try? container.decode([ClaudeContentBlock].self, forKey: .content).compactMap(\.text).joined(separator: "\n\n"))
                 ?? ""
-            self = .toolResult(content: content)
+            self = .toolResult(
+                toolUseID: try container.decodeIfPresent(String.self, forKey: .toolUseID),
+                content: content
+            )
         default:
             self = .other
         }
