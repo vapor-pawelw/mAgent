@@ -41,9 +41,11 @@ All notable changes to this project will be documented in this file.
 - Empty diffs now show a centered no-content state with title and description, and no longer mark the Diff tab as unread.
 - Selecting files or commits from the changes panel now updates the fixed Diff tab in the background without switching away from the active tab.
 - Commit-review status in the fixed Diff tab now sits beside the file-change summary instead of overlapping it.
+- The fixed Diff tab now labels whether it is showing uncommitted changes or the branch-to-base range, and falls back to uncommitted changes when the current branch is its own base.
 - Right-clicking inside the Diff renderer now shows only diff text actions instead of WebKit reload/navigation options.
 - Right-clicking a diff line now includes the same file-open action as the file header menu; supported editors jump to the clicked line, while unsupported default apps open the file normally.
 - Diff tab review counts now reset stale checked files when changed files are removed, and empty diffs show plain `Diff` instead of `Diff (0/0)`.
+- Diff tabs now keep probing the bundled renderer after WebKit navigation finishes, avoiding false `Diff renderer timed out` failures on small diffs when the ready callback is missed.
 - Refreshed git state and PR/Jira status when Magent returns to the foreground, resetting the normal refresh cadence so stale indicators do not linger after switching back to the app.
 - Diff file review state now only resets and expands files whose actual added/deleted code changed, and preserves collapsed file sections across app launches.
 - Gave sticky sidebar headers more top breathing room while scrolling.

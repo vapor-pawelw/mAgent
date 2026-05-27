@@ -524,7 +524,21 @@ extension ThreadDetailViewController {
         currentDiffForceWorkingTree = forceWorkingTreeDiff
 
         let worktreePath = thread.worktreePath
-        let baseBranch = thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread)
+        let currentBranch = normalizedDiffBranchName(thread.actualBranch ?? thread.branchName)
+        let resolvedBaseBranch = thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread)
+        let baseBranch = normalizedDiffBranchName(resolvedBaseBranch)
+        let showsBranchDiff = !forceWorkingTreeDiff
+            && commitHash == nil
+            && baseBranch != nil
+            && baseBranch != currentBranch
+        let contextTitle = diffContextTitle(
+            commitHash: commitHash,
+            commitTitle: commitTitle,
+            forceWorkingTreeDiff: forceWorkingTreeDiff,
+            currentBranch: currentBranch,
+            baseBranch: baseBranch,
+            showsBranchDiff: showsBranchDiff
+        )
         NSLog("[DiffViewer] starting async load, baseBranch=%@, worktreePath=%@, commitHash=%@",
               baseBranch ?? "HEAD", worktreePath, commitHash ?? "nil")
         Task {
@@ -556,7 +570,7 @@ extension ThreadDetailViewController {
                         tooLargeMessage = nil
                     }
                 }
-            } else if let baseBranch, !forceWorkingTreeDiff {
+            } else if let baseBranch, showsBranchDiff {
                 async let mergeBaseTask = GitService.shared.mergeBase(
                     worktreePath: worktreePath,
                     baseBranch: baseBranch
@@ -687,7 +701,10 @@ extension ThreadDetailViewController {
                 ])
                 NSLog("[DiffViewer] constraints activated")
 
-                vc.setCommitReviewContext(commitHash == nil ? nil : (commitTitle ?? commitHash))
+                vc.setDiffContext(
+                    contextTitle,
+                    showsCurrentChangesButton: commitHash != nil || forceWorkingTreeDiff
+                )
                 if let message = tooLargeMessage {
                     vc.setDiffUnavailableMessage(message)
                 } else if diffContent == nil {
@@ -750,15 +767,27 @@ extension ThreadDetailViewController {
         // Don't refresh when viewing a specific commit's diff — it doesn't change
         guard diffVC != nil, currentDiffCommitHash == nil else { return }
         let worktreePath = thread.worktreePath
-        let baseBranch = thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread)
+        let currentBranch = normalizedDiffBranchName(thread.actualBranch ?? thread.branchName)
+        let baseBranch = normalizedDiffBranchName(thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread))
         let forceWorkingTree = currentDiffForceWorkingTree
+        let showsBranchDiff = !forceWorkingTree
+            && baseBranch != nil
+            && baseBranch != currentBranch
+        let contextTitle = diffContextTitle(
+            commitHash: nil,
+            commitTitle: nil,
+            forceWorkingTreeDiff: forceWorkingTree,
+            currentBranch: currentBranch,
+            baseBranch: baseBranch,
+            showsBranchDiff: showsBranchDiff
+        )
         Task {
             let diffContent: String?
             let mergeBase: String?
             let entries: [FileDiffEntry]
             let tooLargeMessage: String?
 
-            if let baseBranch, !forceWorkingTree {
+            if let baseBranch, showsBranchDiff {
                 async let mergeBaseTask = GitService.shared.mergeBase(
                     worktreePath: worktreePath,
                     baseBranch: baseBranch
@@ -803,6 +832,7 @@ extension ThreadDetailViewController {
             }
 
             await MainActor.run {
+                self.diffVC?.setDiffContext(contextTitle, showsCurrentChangesButton: forceWorkingTree)
                 if let message = tooLargeMessage {
                     self.diffVC?.setDiffUnavailableMessage(message)
                 } else if let content = diffContent {
@@ -895,5 +925,39 @@ extension ThreadDetailViewController {
 
     func dismissDiffImageOverlay(animated: Bool) {
         diffImageOverlay?.dismiss(animated: animated)
+    }
+
+    private func normalizedDiffBranchName(_ branch: String?) -> String? {
+        let trimmed = branch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty, trimmed != "HEAD" else { return nil }
+        if trimmed.hasPrefix("refs/heads/") {
+            return String(trimmed.dropFirst("refs/heads/".count))
+        }
+        if trimmed.hasPrefix("refs/remotes/") {
+            return String(trimmed.dropFirst("refs/remotes/".count))
+        }
+        return trimmed
+    }
+
+    private func diffContextTitle(
+        commitHash: String?,
+        commitTitle: String?,
+        forceWorkingTreeDiff: Bool,
+        currentBranch: String?,
+        baseBranch: String?,
+        showsBranchDiff: Bool
+    ) -> String {
+        if let commitHash {
+            let title = commitTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayTitle = title?.isEmpty == false ? title ?? commitHash : commitHash
+            return String(localized: .ThreadStrings.diffCommitReviewViewingCommit(displayTitle))
+        }
+        if forceWorkingTreeDiff || !showsBranchDiff {
+            return String(localized: .ThreadStrings.diffViewingUncommittedChanges)
+        }
+        if let currentBranch, let baseBranch {
+            return String(localized: .ThreadStrings.diffViewingBranchRange(currentBranch, baseBranch))
+        }
+        return String(localized: .ThreadStrings.diffViewingUncommittedChanges)
     }
 }

@@ -106,6 +106,9 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     private var headerBar: NSView?
     private var resizeHandleHeightConstraint: NSLayoutConstraint?
     private var headerBarHeightConstraint: NSLayoutConstraint?
+    private var commitReviewLabelTrailingConstraint: NSLayoutConstraint?
+    private var currentChangesButtonLeadingConstraint: NSLayoutConstraint?
+    private var currentChangesButtonTrailingConstraint: NSLayoutConstraint?
     private var showsInlineChrome = true
 
     private var isRendererReady = false
@@ -116,6 +119,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     private var currentFileCountSummary: Int = 0
     private var currentReviewedFileCountSummary: Int = 0
     private var loadingWatchdog: Timer?
+    private var rendererReadinessTask: Task<Void, Never>?
     private var searchDebounceTimer: Timer?
     private var searchMode: DiffSearchMode = .persisted
     private var loadingGeneration = 0
@@ -275,6 +279,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         commitReviewLabel.lineBreakMode = .byTruncatingMiddle
         commitReviewLabel.translatesAutoresizingMaskIntoConstraints = false
         commitReviewLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        commitReviewLabel.setContentHuggingPriority(.required, for: .horizontal)
         commitReviewBannerView.addSubview(commitReviewLabel)
 
         currentChangesButton.bezelStyle = .rounded
@@ -383,6 +388,19 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         view.addSubview(webView)
         view.addSubview(loadingOverlay)
 
+        commitReviewLabelTrailingConstraint = commitReviewLabel.trailingAnchor.constraint(
+            equalTo: commitReviewBannerView.trailingAnchor,
+            constant: -8
+        )
+        currentChangesButtonLeadingConstraint = currentChangesButton.leadingAnchor.constraint(
+            equalTo: commitReviewLabel.trailingAnchor,
+            constant: 10
+        )
+        currentChangesButtonTrailingConstraint = currentChangesButton.trailingAnchor.constraint(
+            equalTo: commitReviewBannerView.trailingAnchor,
+            constant: -6
+        )
+
         NSLayoutConstraint.activate([
             resizeHandle.topAnchor.constraint(equalTo: view.topAnchor),
             resizeHandle.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -447,8 +465,6 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             commitReviewLabel.leadingAnchor.constraint(equalTo: commitReviewIconView.trailingAnchor, constant: 6),
             commitReviewLabel.centerYAnchor.constraint(equalTo: commitReviewBannerView.centerYAnchor),
 
-            currentChangesButton.leadingAnchor.constraint(equalTo: commitReviewLabel.trailingAnchor, constant: 10),
-            currentChangesButton.trailingAnchor.constraint(equalTo: commitReviewBannerView.trailingAnchor, constant: -6),
             currentChangesButton.centerYAnchor.constraint(equalTo: commitReviewBannerView.centerYAnchor),
 
             findBar.centerYAnchor.constraint(equalTo: headerBar.centerYAnchor),
@@ -478,6 +494,8 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             loadingStack.leadingAnchor.constraint(greaterThanOrEqualTo: loadingOverlay.leadingAnchor, constant: 24),
             loadingStack.trailingAnchor.constraint(lessThanOrEqualTo: loadingOverlay.trailingAnchor, constant: -24),
         ])
+
+        commitReviewLabelTrailingConstraint?.isActive = true
     }
 
     private func applyChromeMode() {
@@ -513,6 +531,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         }
 
         configureDocumentStartThemeScript()
+        startRendererReadinessPolling()
         webView.loadFileURL(indexURL, allowingReadAccessTo: indexURL.deletingLastPathComponent())
     }
 
@@ -896,12 +915,22 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         }
     }
 
+    func setDiffContext(_ title: String?, showsCurrentChangesButton: Bool) {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        commitReviewLabel.stringValue = trimmed
+        currentChangesButton.isHidden = !showsCurrentChangesButton
+        commitReviewLabelTrailingConstraint?.isActive = !showsCurrentChangesButton
+        currentChangesButtonLeadingConstraint?.isActive = showsCurrentChangesButton
+        currentChangesButtonTrailingConstraint?.isActive = showsCurrentChangesButton
+        applySearchMode()
+    }
+
     func setCommitReviewContext(_ title: String?) {
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        commitReviewLabel.stringValue = trimmed.isEmpty
-            ? ""
-            : String(localized: .ThreadStrings.diffCommitReviewViewingCommit(trimmed))
-        applySearchMode()
+        setDiffContext(
+            trimmed.isEmpty ? nil : String(localized: .ThreadStrings.diffCommitReviewViewingCommit(trimmed)),
+            showsCurrentChangesButton: true
+        )
     }
 
     func setDiffSummary(fileCount: Int, additions: Int, deletions: Int) {
@@ -1223,9 +1252,23 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         }
     }
 
+    private func startRendererReadinessPolling() {
+        rendererReadinessTask?.cancel()
+        rendererReadinessTask = Task { @MainActor [weak self] in
+            for _ in 0..<48 {
+                guard let self, !Task.isCancelled else { return }
+                if self.isRendererReady { return }
+                self.flushRendererCallsIfReady()
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+        }
+    }
+
     private func markRendererReady() {
         guard !isRendererReady else { return }
         isRendererReady = true
+        rendererReadinessTask?.cancel()
+        rendererReadinessTask = nil
         applyAppearance()
         flushPendingJavaScriptCalls()
     }

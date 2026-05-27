@@ -1915,6 +1915,28 @@
         }
       }
     },
+    "diffViewingBranchRange": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All changes (%@ → %@)"
+          }
+        }
+      }
+    },
+    "diffViewingUncommittedChanges": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uncommitted changes"
+          }
+        }
+      }
+    },
     "chatSlashCommandTerminalSetupDescription": {
       "extractionState": "manual",
       "localizations": {

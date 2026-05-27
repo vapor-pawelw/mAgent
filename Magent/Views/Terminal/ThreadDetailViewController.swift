@@ -1717,7 +1717,6 @@ final class ThreadDetailViewController: NSViewController {
         let commitTitle = notification.userInfo?["commitTitle"] as? String
         let forceWorkingTree = (notification.userInfo?["mode"] as? String) == "uncommitted"
         showDiffViewer(scrollToFile: filePath, commitHash: commitHash, commitTitle: commitTitle, forceWorkingTreeDiff: forceWorkingTree)
-        diffVC?.setCommitReviewContext(commitHash == nil ? nil : (commitTitle ?? commitHash))
     }
 
     @objc private func handleHideDiffViewerNotification(_ notification: Notification) {
