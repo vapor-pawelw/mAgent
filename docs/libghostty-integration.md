@@ -16,6 +16,8 @@ When upgrading Ghostty to a new version, update **all three** of these in the sa
 
 The release workflow (`.github/workflows/release.yml`) calls `bootstrap-ghosttykit.sh` without a `--ref` argument, so it automatically picks up the default. No changes needed there unless the build flags change.
 
+CI sets `GHOSTTY_USE_NIX=1` so `bootstrap-ghosttykit.sh` builds inside Ghostty's own Nix environment. This matches Ghostty's upstream macOS release jobs and avoids host-toolchain drift in GitHub runner images.
+
 After bumping, rebuild locally and verify that `Libraries/GhosttyKit.xcframework/.ghostty-ref` matches the new version:
 ```bash
 ./scripts/bootstrap-ghosttykit.sh
@@ -51,6 +53,8 @@ is trimmed back to the macOS slice only. Ghostty 1.3.0's upstream "universal"
 xcframework includes iOS slices too, but Magent does not consume or track them.
 
 Note: for older refs that still point `iterm2_themes` at removed GitHub release assets, `./scripts/bootstrap-ghosttykit.sh` retries automatically: it first runs a normal build, and if it fails with the known `ghostty-themes.tgz` `404`, it rewrites that dependency to the maintained Ghostty mirror URL/hash and rebuilds once.
+
+Ghostty also publishes an official `ghostty-vt.xcframework.zip` on the continuous `tip` release, but that artifact contains only the VT parser library (`libghostty-vt.a` and `ghostty/vt/*` headers). Magent currently consumes the full embedding API (`GhosttyKit`, `ghostty_app_t`, `ghostty_surface_t`, Metal-backed surfaces), so the VT artifact is not a drop-in replacement for `Libraries/GhosttyKit.xcframework`.
 
 **Full build (all platforms):**
 ```bash

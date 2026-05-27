@@ -184,8 +184,17 @@ promote_unreleased_changelog() {
 
   if version_section_exists "$changelog_file" "$version"; then
     if ! awk -v version="$version" \
+      -v placeholder="$CHANGELOG_UNRELEASED_PLACEHOLDER" \
       -v notes_file="$notes_file" '
-        BEGIN { inserted = 0; in_target = 0 }
+        BEGIN { inserted = 0; in_target = 0; in_unreleased = 0 }
+        /^## Unreleased[[:space:]]*$/ {
+          print
+          print ""
+          print placeholder
+          print ""
+          in_unreleased = 1
+          next
+        }
         $0 ~ ("^## " version " - ") && inserted == 0 {
           print
           print ""
@@ -199,11 +208,19 @@ promote_unreleased_changelog() {
           next
         }
         /^## / {
+          if (in_unreleased == 1) {
+            in_unreleased = 0
+          }
           if (in_target == 1) {
             in_target = 0
           }
         }
-        { print }
+        {
+          if (in_unreleased == 1) {
+            next
+          }
+          print
+        }
         END {
           if (inserted == 0) {
             exit 2
@@ -502,18 +519,29 @@ main() {
     exit 1
   fi
 
+  local reuse_existing_version_notes=false
   if ! has_meaningful_changelog_notes "$release_notes_file"; then
-    echo "${CHANGELOG_FILE} has no release notes under '## Unreleased'." >&2
-    echo "Add at least one bullet before releasing."
-    exit 1
+    if version_section_exists "$CHANGELOG_FILE" "$version" &&
+      extract_version_notes "$CHANGELOG_FILE" "$version" >"$release_notes_file"; then
+      reuse_existing_version_notes=true
+    else
+      echo "${CHANGELOG_FILE} has no release notes under '## Unreleased'." >&2
+      echo "Add at least one bullet before releasing."
+      exit 1
+    fi
   fi
 
   local commit
   commit="$(git rev-parse --short HEAD)"
   echo
   echo "Release plan:"
-  echo "- Promote ${CHANGELOG_FILE} '## Unreleased' notes into '## ${version} - ${release_date}'"
-  echo "- Create and push changelog commit on branch '${branch}'"
+  if [[ "$reuse_existing_version_notes" == "true" ]]; then
+    echo "- Reuse existing ${CHANGELOG_FILE} '## ${version} - <date>' notes"
+    echo "- Push current branch '${branch}'"
+  else
+    echo "- Promote ${CHANGELOG_FILE} '## Unreleased' notes into '## ${version} - ${release_date}'"
+    echo "- Create and push changelog commit on branch '${branch}'"
+  fi
   echo "- Create and push annotated tag: $tag"
   echo "- Current source commit: $commit"
   echo "- Watch workflow in ${source_repo}: $RELEASE_WORKFLOW_NAME"
@@ -531,20 +559,24 @@ main() {
     exit 0
   fi
 
-  if ! promote_unreleased_changelog "$CHANGELOG_FILE" "$version" "$release_date" "$release_notes_file"; then
-    echo "Failed to update ${CHANGELOG_FILE} for ${version}." >&2
-    exit 1
-  fi
-
-  git add "$CHANGELOG_FILE"
-  if git diff --cached --quiet -- "$CHANGELOG_FILE"; then
-    echo "No changelog changes were staged for release ${version}." >&2
-    exit 1
-  fi
-
   local changelog_commit
-  git commit -m "Update changelog for ${tag}" -- "$CHANGELOG_FILE"
-  changelog_commit="$(git rev-parse --short HEAD)"
+  if [[ "$reuse_existing_version_notes" == "true" ]]; then
+    changelog_commit="$(git rev-parse --short HEAD)"
+  else
+    if ! promote_unreleased_changelog "$CHANGELOG_FILE" "$version" "$release_date" "$release_notes_file"; then
+      echo "Failed to update ${CHANGELOG_FILE} for ${version}." >&2
+      exit 1
+    fi
+
+    git add "$CHANGELOG_FILE"
+    if git diff --cached --quiet -- "$CHANGELOG_FILE"; then
+      echo "No changelog changes were staged for release ${version}." >&2
+      exit 1
+    fi
+
+    git commit -m "Update changelog for ${tag}" -- "$CHANGELOG_FILE"
+    changelog_commit="$(git rev-parse --short HEAD)"
+  fi
 
   if ! git push origin "$branch"; then
     echo "Failed to push branch '${branch}'. Tag was not created." >&2

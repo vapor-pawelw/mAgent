@@ -12,6 +12,7 @@ Builds GhosttyKit.xcframework from ghostty-org/ghostty and installs it into:
 Environment overrides:
   GHOSTTY_REF       Ghostty git ref to build (default: v1.3.1)
   GHOSTTY_WORK_DIR  Working directory for ghostty checkout (default: .build/ghostty-src)
+  GHOSTTY_USE_NIX   Set to 1 to build inside Ghostty's Nix environment
 EOF
 }
 
@@ -48,7 +49,10 @@ require_cmd() {
 }
 
 run_zig() {
-  if command -v mise >/dev/null 2>&1; then
+  if [[ "${GHOSTTY_USE_NIX:-}" == "1" ]]; then
+    require_cmd nix
+    nix develop -c zig "$@"
+  elif command -v mise >/dev/null 2>&1; then
     mise x -- zig "$@"
   else
     zig "$@"

@@ -48,8 +48,20 @@ jobs:
       - name: Install dependencies
         run: mise x -- tuist install
 
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+        with:
+          determinate: true
+
+      - name: Configure Ghostty Cachix
+        uses: cachix/cachix-action@v17
+        with:
+          name: ghostty
+
       - name: Build GhosttyKit.xcframework
-        run: mise x -- ./scripts/bootstrap-ghosttykit.sh
+        env:
+          GHOSTTY_USE_NIX: "1"
+        run: ./scripts/bootstrap-ghosttykit.sh
 
       - name: Generate Xcode project
         run: mise x -- tuist generate --no-open

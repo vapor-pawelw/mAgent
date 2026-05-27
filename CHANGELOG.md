@@ -4,10 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-### Updates
-
-#### Bug Fixes
-- Release builds now bootstrap the bundled Ghostty binary more reliably in CI and clean shells.
+- _No notable changes yet._
 
 ## 1.6.3 - 2026-05-27
 
@@ -16,21 +13,6 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Release builds now bootstrap the bundled Ghostty binary more reliably in CI and clean shells.
-
-
-
-
-### Updates
-
-#### Bug Fixes
-- Release builds now bootstrap the bundled Ghostty binary more reliably in CI and clean shells.
-
-
-
-
-### Updates
-
-#### Bug Fixes
 - Homebrew update relaunch now shows macOS progress notifications while Magent is closed and skips a redundant tap refresh when the update was just prefetched, shortening the restart gap after **Install & Relaunch**.
 
 ### Agents
