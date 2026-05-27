@@ -16,7 +16,7 @@ When upgrading Ghostty to a new version, update **all three** of these in the sa
 
 The release workflow (`.github/workflows/release.yml`) calls `bootstrap-ghosttykit.sh` without a `--ref` argument, so it automatically picks up the default. No changes needed there unless the build flags change.
 
-CI sets `GHOSTTY_USE_NIX=1` so `bootstrap-ghosttykit.sh` builds inside Ghostty's own Nix environment. This matches Ghostty's upstream macOS release jobs and avoids host-toolchain drift in GitHub runner images.
+CI sets `GHOSTTY_USE_NIX=1` so `bootstrap-ghosttykit.sh` builds inside Ghostty's own Nix environment. The release job intentionally runs on GitHub's `macos-15` image while selecting Xcode 26.3: that image still provides the macOS 26 SDK, but its Darwin 24 host avoids a Zig 0.15.2 build-runner linker failure seen on the native `macos-26` image (`undefined symbol: __availability_version_check` and related libSystem symbols).
 
 After bumping, rebuild locally and verify that `Libraries/GhosttyKit.xcframework/.ghostty-ref` matches the new version:
 ```bash
