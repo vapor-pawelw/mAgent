@@ -278,16 +278,24 @@ confirm() {
 wait_for_release_run_id() {
   local owner_repo="$1"
   local tag="$2"
+  local not_before="${3:-}"
   local run_id=""
   local attempt
 
   for attempt in $(seq 1 36); do
+    local jq_filter
+    jq_filter=".[] | select(.event == \"push\" and .headBranch == \"$tag\")"
+    if [[ -n "$not_before" ]]; then
+      jq_filter+=" | select(.createdAt > \"$not_before\")"
+    fi
+    jq_filter+=" | .databaseId"
+
     run_id="$(gh run list \
       --repo "$owner_repo" \
       --workflow "$RELEASE_WORKFLOW_NAME" \
       --limit 40 \
       --json databaseId,event,headBranch,createdAt \
-      --jq ".[] | select(.event == \"push\" and .headBranch == \"$tag\") | .databaseId" | head -n1 || true)"
+      --jq "$jq_filter" | head -n1 || true)"
 
     if [[ -n "$run_id" ]]; then
       echo "$run_id"
@@ -578,9 +586,12 @@ main() {
     esac
   fi
 
+  local release_request_started_at
+  release_request_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
   echo "Changelog commit ${changelog_commit} pushed. Waiting for GitHub Actions run..."
   local run_id
-  run_id="$(wait_for_release_run_id "$source_repo" "$tag" || true)"
+  run_id="$(wait_for_release_run_id "$source_repo" "$tag" "$release_request_started_at" || true)"
   if [[ -z "$run_id" ]]; then
     echo "Could not find the '${RELEASE_WORKFLOW_NAME}' run for tag ${tag}." >&2
     echo "Check manually with: gh run list --workflow \"${RELEASE_WORKFLOW_NAME}\" --repo ${source_repo}" >&2
