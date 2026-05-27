@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  ghosttykit:
     runs-on: macos-15
     steps:
       - name: Checkout
@@ -22,6 +22,40 @@ jobs:
 
       - name: Select Xcode 26
         run: sudo xcode-select -s /Applications/Xcode_26.3.app
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+        with:
+          determinate: true
+
+      - name: Configure Ghostty Cachix
+        uses: cachix/cachix-action@v17
+        with:
+          name: ghostty
+
+      - name: Build GhosttyKit.xcframework
+        env:
+          GHOSTTY_USE_NIX: "1"
+        run: ./scripts/bootstrap-ghosttykit.sh
+
+      - name: Upload GhosttyKit.xcframework
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhosttyKit.xcframework
+          path: Libraries/GhosttyKit.xcframework
+          if-no-files-found: error
+
+  build:
+    needs: ghosttykit
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Show Xcode version
+        run: xcodebuild -version
 
       - name: Install mise
         uses: jdx/mise-action@v2
@@ -48,23 +82,14 @@ jobs:
           echo "Project.swift after version injection:"
           grep -A1 CFBundle Project.swift
 
+      - name: Download GhosttyKit.xcframework
+        uses: actions/download-artifact@v4
+        with:
+          name: GhosttyKit.xcframework
+          path: Libraries/GhosttyKit.xcframework
+
       - name: Install dependencies
         run: mise x -- tuist install
-
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
-        with:
-          determinate: true
-
-      - name: Configure Ghostty Cachix
-        uses: cachix/cachix-action@v17
-        with:
-          name: ghostty
-
-      - name: Build GhosttyKit.xcframework
-        env:
-          GHOSTTY_USE_NIX: "1"
-        run: ./scripts/bootstrap-ghosttykit.sh
 
       - name: Generate Xcode project
         run: mise x -- tuist generate --no-open

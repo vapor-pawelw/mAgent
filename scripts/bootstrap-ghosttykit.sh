@@ -105,7 +105,9 @@ DEST_REF_FILE="$DEST_XCFRAMEWORK/.ghostty-ref"
 require_cmd git
 require_cmd rsync
 require_cmd plutil
-if ! command -v mise >/dev/null 2>&1; then
+if [[ "${GHOSTTY_USE_NIX:-}" == "1" ]]; then
+  require_cmd nix
+elif ! command -v mise >/dev/null 2>&1; then
   require_cmd zig
 fi
 
