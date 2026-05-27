@@ -22,6 +22,7 @@ Guidelines:
 - Keep bullets short and specific.
 - Within each subsection, order bullets by user impact (broad/high-impact first, niche/smaller later).
 - **Prune superseded entries within the same unreleased cycle**: if a change is introduced and then fully reverted before any release, remove the original entry rather than adding a "removed" or "reverted" note. If a change introduces a regression that is fixed before any release, update or remove the original bullet rather than adding a separate "fix" entry — users will never see the broken state, so the changelog should reflect only the net outcome.
+- **Release helper merges into an existing version section when present**: if a release has already created `## <version> - <date>` and you need to add a late changelog item before re-running the helper, keep the note under `## Unreleased` and rerun `./scripts/release-interactive.sh`. The helper now inserts the unreleased notes into the existing version section instead of creating a duplicate section for the same version.
 
 ## During release
 

@@ -143,6 +143,15 @@ extract_version_notes() {
   ' "$file"
 }
 
+version_section_exists() {
+  local file="$1"
+  local version="$2"
+  awk -v version="$version" '
+    $0 ~ ("^## " version " - ") { found = 1; exit }
+    END { exit(found ? 0 : 2) }
+  ' "$file"
+}
+
 has_meaningful_changelog_notes() {
   local notes_file="$1"
   local count
@@ -173,45 +182,78 @@ promote_unreleased_changelog() {
   local tmp_file
   tmp_file="$(mktemp)"
 
-  if ! awk -v version="$version" \
-    -v release_date="$release_date" \
-    -v placeholder="$CHANGELOG_UNRELEASED_PLACEHOLDER" \
-    -v notes_file="$notes_file" '
-      BEGIN { in_unreleased = 0; inserted = 0 }
-      /^## Unreleased[[:space:]]*$/ && inserted == 0 {
-        print
-        print ""
-        print placeholder
-        print ""
-        printf "## %s - %s\n\n", version, release_date
-        while ((getline line < notes_file) > 0) {
-          print line
-        }
-        close(notes_file)
-        print ""
-        in_unreleased = 1
-        inserted = 1
-        next
-      }
-      /^## / {
-        if (in_unreleased == 1) {
-          in_unreleased = 0
-        }
-      }
-      {
-        if (in_unreleased == 1) {
+  if version_section_exists "$changelog_file" "$version"; then
+    if ! awk -v version="$version" \
+      -v notes_file="$notes_file" '
+        BEGIN { inserted = 0; in_target = 0 }
+        $0 ~ ("^## " version " - ") && inserted == 0 {
+          print
+          print ""
+          while ((getline line < notes_file) > 0) {
+            print line
+          }
+          close(notes_file)
+          print ""
+          inserted = 1
+          in_target = 1
           next
         }
-        print
-      }
-      END {
-        if (inserted == 0) {
-          exit 2
+        /^## / {
+          if (in_target == 1) {
+            in_target = 0
+          }
         }
-      }
-    ' "$changelog_file" >"$tmp_file"; then
-    rm -f "$tmp_file"
-    return 1
+        { print }
+        END {
+          if (inserted == 0) {
+            exit 2
+          }
+        }
+      ' "$changelog_file" >"$tmp_file"; then
+      rm -f "$tmp_file"
+      return 1
+    fi
+  else
+    if ! awk -v version="$version" \
+      -v release_date="$release_date" \
+      -v placeholder="$CHANGELOG_UNRELEASED_PLACEHOLDER" \
+      -v notes_file="$notes_file" '
+        BEGIN { in_unreleased = 0; inserted = 0 }
+        /^## Unreleased[[:space:]]*$/ && inserted == 0 {
+          print
+          print ""
+          print placeholder
+          print ""
+          printf "## %s - %s\n\n", version, release_date
+          while ((getline line < notes_file) > 0) {
+            print line
+          }
+          close(notes_file)
+          print ""
+          in_unreleased = 1
+          inserted = 1
+          next
+        }
+        /^## / {
+          if (in_unreleased == 1) {
+            in_unreleased = 0
+          }
+        }
+        {
+          if (in_unreleased == 1) {
+            next
+          }
+          print
+        }
+        END {
+          if (inserted == 0) {
+            exit 2
+          }
+        }
+      ' "$changelog_file" >"$tmp_file"; then
+      rm -f "$tmp_file"
+      return 1
+    fi
   fi
 
   mv "$tmp_file" "$changelog_file"
