@@ -43,7 +43,7 @@ GHOSTTY_REF=v1.3.1 ./scripts/bootstrap-ghosttykit.sh
 
 **Build command used by bootstrap script:**
 ```bash
-zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Dxcframework-target=universal
+zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Demit-macos-app=false -Dxcframework-target=universal
 ```
 
 Output: `macos/GhosttyKit.xcframework` (includes `macos-arm64_x86_64/libghostty.a`).
@@ -53,6 +53,8 @@ is trimmed back to the macOS slice only. Ghostty 1.3.0's upstream "universal"
 xcframework includes iOS slices too, but Magent does not consume or track them.
 
 Note: for older refs that still point `iterm2_themes` at removed GitHub release assets, `./scripts/bootstrap-ghosttykit.sh` retries automatically: it first runs a normal build, and if it fails with the known `ghostty-themes.tgz` `404`, it rewrites that dependency to the maintained Ghostty mirror URL/hash and rebuilds once.
+
+`-Demit-macos-app=false` is required even when `-Dapp-runtime=none` and `-Demit-xcframework` are set. Ghostty 1.3.1 defaults `emit-macos-app` to the same value as `emit-xcframework`, so omitting it makes the bootstrap run Ghostty's Xcode app build and asset catalog compilation even though Magent only needs `GhosttyKit.xcframework`.
 
 Ghostty also publishes an official `ghostty-vt.xcframework.zip` on the continuous `tip` release, but that artifact contains only the VT parser library (`libghostty-vt.a` and `ghostty/vt/*` headers). Magent currently consumes the full embedding API (`GhosttyKit`, `ghostty_app_t`, `ghostty_surface_t`, Metal-backed surfaces), so the VT artifact is not a drop-in replacement for `Libraries/GhosttyKit.xcframework`.
 

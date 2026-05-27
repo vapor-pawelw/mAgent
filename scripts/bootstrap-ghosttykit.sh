@@ -132,14 +132,14 @@ echo "Building GhosttyKit.xcframework"
 build_log="$(mktemp "${TMPDIR%/}/ghostty-build.XXXXXX")"
 if ! (
   cd "$SOURCE_DIR"
-  run_zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Dxcframework-target=universal 2>&1 | tee "$build_log"
+  run_zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Demit-macos-app=false -Dxcframework-target=universal 2>&1 | tee "$build_log"
 ); then
   if grep -q "ghostty-themes.tgz" "$build_log" && grep -q "404 Not Found" "$build_log"; then
     if patch_stale_iterm2_themes_dependency "$SOURCE_DIR/build.zig.zon"; then
       echo "Retrying build after patching stale iTerm2 themes dependency"
       (
         cd "$SOURCE_DIR"
-        run_zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Dxcframework-target=universal
+        run_zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework -Demit-macos-app=false -Dxcframework-target=universal
       )
     else
       echo "Build failed with stale themes 404, but automatic dependency patch was not applicable." >&2
