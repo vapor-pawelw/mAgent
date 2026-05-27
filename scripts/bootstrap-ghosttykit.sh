@@ -105,6 +105,13 @@ if ! command -v mise >/dev/null 2>&1; then
   require_cmd zig
 fi
 
+if [[ -z "${SDKROOT:-}" ]]; then
+  if command -v xcrun >/dev/null 2>&1; then
+    SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+    export SDKROOT
+  fi
+fi
+
 mkdir -p "$WORK_DIR"
 
 if [[ ! -d "$SOURCE_DIR/.git" ]]; then
