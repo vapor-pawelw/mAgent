@@ -4,7 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Updates
+
+#### Bug Fixes
+- Release builds now bootstrap the bundled Ghostty binary more reliably in CI and clean shells.
 
 ## 1.6.3 - 2026-05-27
 
