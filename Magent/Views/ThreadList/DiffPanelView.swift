@@ -1592,10 +1592,31 @@ final class DiffPanelView: NSView {
                 truncatedDir = "…" + truncatedDir.suffix(max(0, maxDirChars - 1))
             }
             attributed.append(NSAttributedString(
-                string: "  " + truncatedDir,
+                string: "  ",
                 attributes: [
                     .font: NSFont.systemFont(ofSize: 10),
                     .foregroundColor: NSColor(resource: .textSecondary).withAlphaComponent(0.7),
+                ]
+            ))
+            if entry.workingStatus == .untracked,
+               let folderIcon = NSImage(
+                systemSymbolName: "folder.badge.plus",
+                accessibilityDescription: "Added directory"
+               )?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .regular)) {
+                folderIcon.isTemplate = true
+                let attachment = NSTextAttachment()
+                attachment.image = folderIcon
+                attachment.bounds = NSRect(x: 0, y: -1.5, width: 12, height: 10)
+                attributed.append(NSAttributedString(attachment: attachment))
+                attributed.append(NSAttributedString(string: " "))
+            }
+            attributed.append(NSAttributedString(
+                string: truncatedDir,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 10),
+                    .foregroundColor: entry.workingStatus == .untracked
+                        ? colorForStatus(.untracked)
+                        : NSColor(resource: .textSecondary).withAlphaComponent(0.7),
                 ]
             ))
         }

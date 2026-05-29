@@ -43,6 +43,42 @@ struct GitServiceUntrackedDirectoryTests {
     }
 
     @Test
+    func workingTreeDiffExpandsUntrackedDirectoriesIntoNestedFiles() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("magent-git-service-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        _ = await ShellExecutor.execute("git init -b main", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.name Magent Tests", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.email magent-tests@example.com", workingDirectory: root.path)
+
+        try "tracked\n".write(to: root.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
+        _ = await ShellExecutor.execute("git add tracked.txt && git commit -m initial", workingDirectory: root.path)
+
+        let nestedDirectory = root.appendingPathComponent("Sources/Feature", isDirectory: true)
+        try FileManager.default.createDirectory(at: nestedDirectory, withIntermediateDirectories: true)
+        let deeperDirectory = nestedDirectory.appendingPathComponent("Presentation", isDirectory: true)
+        try FileManager.default.createDirectory(at: deeperDirectory, withIntermediateDirectories: true)
+        try "view\n".write(to: nestedDirectory.appendingPathComponent("View.swift"), atomically: true, encoding: .utf8)
+        try "model\n".write(to: nestedDirectory.appendingPathComponent("Model.swift"), atomically: true, encoding: .utf8)
+        try "screen\n".write(to: deeperDirectory.appendingPathComponent("Screen.swift"), atomically: true, encoding: .utf8)
+
+        let stats = await GitService.shared.workingTreeDiffStats(worktreePath: root.path)
+        let content = await GitService.shared.workingTreeDiffContent(worktreePath: root.path)
+
+        #expect(stats.map(\.relativePath) == [
+            "Sources/Feature/Model.swift",
+            "Sources/Feature/Presentation/Screen.swift",
+            "Sources/Feature/View.swift",
+        ])
+        #expect(content?.contains("diff --git a/Sources/Feature/Model.swift b/Sources/Feature/Model.swift") == true)
+        #expect(content?.contains("diff --git a/Sources/Feature/Presentation/Screen.swift b/Sources/Feature/Presentation/Screen.swift") == true)
+        #expect(content?.contains("diff --git a/Sources/Feature/View.swift b/Sources/Feature/View.swift") == true)
+        #expect(content?.contains("diff --git a/Sources/ b/Sources/") == false)
+    }
+
+    @Test
     func threadDiffTabStatsCountsCommittedBranchChanges() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("magent-git-service-\(UUID().uuidString)", isDirectory: true)

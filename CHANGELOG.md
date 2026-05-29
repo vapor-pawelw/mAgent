@@ -13,6 +13,11 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Removed incorrect validation that rejected branch names with slashes.
 
+### Sidebar
+
+#### Bug Fixes
+- The CHANGES panel and Diff tab now show files inside newly added nested directories, with the parent path highlighted as a new folder instead of hiding those files behind a non-diffable directory row.
+
 ## 1.6.3 - 2026-05-27
 
 

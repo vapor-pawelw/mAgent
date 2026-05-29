@@ -806,6 +806,51 @@ public final class GitService: Sendable {
         return statusMap
     }
 
+    private func statusMapExpandingUntrackedDirectories(
+        _ statusMap: [String: FileWorkingStatus],
+        worktreePath: String
+    ) async -> [String: FileWorkingStatus] {
+        var expanded: [String: FileWorkingStatus] = [:]
+
+        for (path, status) in statusMap {
+            guard status == .untracked, path.hasSuffix("/") else {
+                expanded[path] = status
+                continue
+            }
+
+            let children = await untrackedFiles(worktreePath: worktreePath, under: path)
+            if children.isEmpty {
+                expanded[path] = status
+            } else {
+                for child in children {
+                    expanded[child] = .untracked
+                }
+            }
+        }
+
+        return expanded
+    }
+
+    private func untrackedStatusPaths(from statusOutput: String, worktreePath: String) async -> [String] {
+        var paths: [String] = []
+        var seen = Set<String>()
+
+        for line in statusOutput.components(separatedBy: "\n") where line.hasPrefix("?? ") {
+            let path = normalizedStatusPath(String(line.dropFirst(3)))
+            guard !path.isEmpty else { continue }
+
+            let resolvedPaths = path.hasSuffix("/")
+                ? await untrackedFiles(worktreePath: worktreePath, under: path)
+                : [path]
+
+            for resolvedPath in resolvedPaths where !resolvedPath.isEmpty && seen.insert(resolvedPath).inserted {
+                paths.append(resolvedPath)
+            }
+        }
+
+        return paths.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     private func parseDiffEntries(
         numstatOutput: String,
         statusMap: [String: FileWorkingStatus]
@@ -867,7 +912,8 @@ public final class GitService: Sendable {
         )
 
         guard numstatResult.exitCode == 0 || statusResult.exitCode == 0 else { return [] }
-        let statusMap = statusResult.exitCode == 0 ? parseStatusMap(statusResult.stdout) : [:]
+        let rawStatusMap = statusResult.exitCode == 0 ? parseStatusMap(statusResult.stdout) : [:]
+        let statusMap = await statusMapExpandingUntrackedDirectories(rawStatusMap, worktreePath: worktreePath)
         let numstatOutput = numstatResult.exitCode == 0 ? numstatResult.stdout : ""
         return parseDiffEntries(numstatOutput: numstatOutput, statusMap: statusMap)
     }
@@ -885,7 +931,8 @@ public final class GitService: Sendable {
         )
 
         guard numstatResult.exitCode == 0 || statusResult.exitCode == 0 else { return [] }
-        let statusMap = statusResult.exitCode == 0 ? parseStatusMap(statusResult.stdout) : [:]
+        let rawStatusMap = statusResult.exitCode == 0 ? parseStatusMap(statusResult.stdout) : [:]
+        let statusMap = await statusMapExpandingUntrackedDirectories(rawStatusMap, worktreePath: worktreePath)
         let numstatOutput = numstatResult.exitCode == 0 ? numstatResult.stdout : ""
         return parseDiffEntries(numstatOutput: numstatOutput, statusMap: statusMap)
     }
@@ -933,9 +980,7 @@ public final class GitService: Sendable {
         )
         var untrackedDiff = ""
         if statusResult.exitCode == 0 {
-            for line in statusResult.stdout.components(separatedBy: "\n") where line.hasPrefix("?? ") {
-                let path = String(line.dropFirst(3))
-                guard !path.isEmpty, !path.hasSuffix("/") else { continue }
+            for path in await untrackedStatusPaths(from: statusResult.stdout, worktreePath: worktreePath) {
                 let catResult = await ShellExecutor.execute(
                     "cat \(shellQuote(path))",
                     workingDirectory: worktreePath
@@ -968,9 +1013,7 @@ public final class GitService: Sendable {
         )
         var untrackedDiff = ""
         if statusResult.exitCode == 0 {
-            for line in statusResult.stdout.components(separatedBy: "\n") where line.hasPrefix("?? ") {
-                let path = String(line.dropFirst(3))
-                guard !path.isEmpty, !path.hasSuffix("/") else { continue }
+            for path in await untrackedStatusPaths(from: statusResult.stdout, worktreePath: worktreePath) {
                 let catResult = await ShellExecutor.execute(
                     "cat \(shellQuote(path))",
                     workingDirectory: worktreePath
