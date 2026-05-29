@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Updates
+
+#### Bug Fixes
+- Homebrew update relaunch now skips the slow reinstall fallback when the target version is already installed.
+
 ### Thread
 
 #### Features
