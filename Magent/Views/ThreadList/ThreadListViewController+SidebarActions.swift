@@ -568,6 +568,20 @@ extension ThreadListViewController {
                 await MainActor.run {
                     self.isCreatingThread = false
                     self.refreshVisibleProjectAddButtonsEnabledState()
+
+                    // Expand the section if it's collapsed
+                    let settings = self.persistence.loadSettings()
+                    let effectiveSectionId = requestedSectionId ?? settings.defaultSection(for: project.id)?.id
+                    if let sectionId = effectiveSectionId {
+                        let section = self.sidebarProjects
+                            .flatMap { $0.children }
+                            .compactMap { $0 as? SidebarSection }
+                            .first { $0.sectionId == sectionId }
+                        if let section, self.isSectionCollapsed(section) {
+                            self.setSectionCollapsed(section, isCollapsed: false)
+                            self.reloadData()
+                        }
+                    }
                 }
                 // Trigger auto-rename from the draft prompt text after the draft-only
                 // thread has been created and persisted.
