@@ -538,7 +538,7 @@ final class RenameService {
         }
 
         let trimmed = newName.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, !trimmed.contains("/") else {
+        guard !trimmed.isEmpty else {
             throw ThreadManagerError.invalidName
         }
         let currentThread = store.threads[index]

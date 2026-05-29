@@ -548,7 +548,7 @@ extension ThreadListViewController {
                         )
                     },
                     initialChatTab: initialChatTab,
-                    requestedName: requestedBranchName,
+                    requestedBranchName: requestedBranchName,
                     requestedBaseBranch: baseBranch,
                     pendingPromptFileURL: pendingPromptFileURL,
                     requestedSectionId: requestedSectionId,

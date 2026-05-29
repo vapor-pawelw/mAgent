@@ -15,7 +15,7 @@ extension ThreadManager {
         await jiraIntegrationService.runJiraSyncTick(
             createThread: { [weak self] project, name in
                 guard let self else { throw CancellationError() }
-                return try await self.createThread(project: project, requestedName: name)
+                return try await self.createThread(project: project, requestedBranchName: name)
             },
             injectPrompt: { [weak self] sessionName, prompt in
                 self?.injectPromptWithoutSubmitting(sessionName: sessionName, prompt: prompt)

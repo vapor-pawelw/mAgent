@@ -482,7 +482,7 @@ final class IPCCommandHandler {
                         reasoningLevel: request.reasoningLevel
                     )
                 }(),
-                requestedName: requestedName,
+                requestedBranchName: requestedName,
                 requestedBaseBranch: requestedBaseBranch,
                 requestedSectionId: requestedSectionId,
                 insertAfterThreadId: isPinnedSource ? nil : fromThread?.id,
@@ -716,7 +716,7 @@ final class IPCCommandHandler {
                                     reasoningLevel: spec.reasoningLevel
                                 )
                             }(),
-                            requestedName: spec.requestedName,
+                            requestedBranchName: spec.requestedName,
                             requestedBaseBranch: spec.requestedBaseBranch,
                             requestedSectionId: spec.requestedSectionId,
                             skipAutoSelect: true,

@@ -7,7 +7,7 @@ struct ThreadManagerErrorTests {
 
     @Test
     func invalidNameUsesStandardMessage() {
-        #expect(ThreadManagerError.invalidName.errorDescription == "Invalid name. Name must not be empty or contain slashes.")
+        #expect(ThreadManagerError.invalidName.errorDescription == "Name must not be empty.")
     }
 
     @Test

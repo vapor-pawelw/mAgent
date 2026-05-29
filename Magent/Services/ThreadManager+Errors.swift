@@ -26,7 +26,7 @@ enum ThreadManagerError: LocalizedError {
         case .threadNotFound:
             return "Thread not found"
         case .invalidName:
-            return "Invalid name. Name must not be empty or contain slashes."
+            return "Name must not be empty."
         case .invalidPrompt:
             return "Prompt must not be empty."
         case .invalidDescription:

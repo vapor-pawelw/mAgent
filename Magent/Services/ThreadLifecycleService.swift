@@ -123,6 +123,7 @@ final class ThreadLifecycleService {
         initialDraftTab: PersistedDraftTab? = nil,
         initialChatTab: PersistedChatTab? = nil,
         requestedName: String? = nil,
+        requestedBranchName: String? = nil,
         requestedBaseBranch: String? = nil,
         pendingPromptFileURL: URL? = nil,
         requestedSectionId: UUID? = nil,
@@ -188,7 +189,12 @@ final class ThreadLifecycleService {
             throw ThreadManagerError.nameGenerationFailed(diagnostic: nil)
         }
 
-        let branchName = name
+        let branchName: String
+        if let requested = requestedBranchName?.trimmingCharacters(in: .whitespacesAndNewlines), !requested.isEmpty {
+            branchName = requested
+        } else {
+            branchName = name
+        }
         let worktreePath = "\(project.resolvedWorktreesBasePath())/\(name)"
         let repoSlug = ThreadManager.repoSlug(from: project.name)
 
