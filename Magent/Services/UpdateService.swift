@@ -905,7 +905,11 @@ final class UpdateService {
         setBundleUpdatePhase(.installing)
         do {
             let updaterScriptPath = "/tmp/magent-self-update-\(UUID().uuidString).sh"
-            try writeHomebrewUpdaterScript(at: updaterScriptPath, shouldRefreshTap: shouldRefreshHomebrewTapBeforeUpgrade())
+            try writeHomebrewUpdaterScript(
+                at: updaterScriptPath,
+                shouldRefreshTap: shouldRefreshHomebrewTapBeforeUpgrade(),
+                targetVersion: update.version.displayString
+            )
             let q = ShellExecutor.shellQuote
             let command = "/usr/bin/nohup /bin/zsh \(q(updaterScriptPath)) \(q(String(ProcessInfo.processInfo.processIdentifier))) \(q(updaterLogPath)) \(q(updaterStatusPath)) >/dev/null 2>&1 &"
             let result = await ShellExecutor.execute(command)
@@ -936,82 +940,18 @@ final class UpdateService {
         return Date().timeIntervalSince(homebrewPrefetchedAt) > 600
     }
 
-    private func writeHomebrewUpdaterScript(at path: String, shouldRefreshTap: Bool) throws {
-        let q = ShellExecutor.shellQuote
-        let waitingMessage = String(localized: .UpdateStrings.updateHomebrewWaitingNotification)
-        let refreshMessage = String(localized: .UpdateStrings.updateHomebrewRefreshNotification)
-        let upgradeMessage = String(localized: .UpdateStrings.updateHomebrewUpgradeNotification)
-        let cleanupMessage = String(localized: .UpdateStrings.updateHomebrewCleanupNotification)
-        let relaunchMessage = String(localized: .UpdateStrings.updateHomebrewRelaunchNotification)
-        let shouldRefreshTapValue = shouldRefreshTap ? "1" : "0"
-        let script = """
-        #!/bin/zsh
-        set -euo pipefail
-
-        pid="$1"
-        log_path="$2"
-        status_path="$3"
-        PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        should_refresh_tap="\(shouldRefreshTapValue)"
-
-        exec >>"$log_path" 2>&1
-
-        echo "[magent-updater] homebrew flow started at $(date)"
-
-        update_status() {
-          phase="$1"
-          message="$2"
-          printf "%s\\t%s\\t%s\\n" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$phase" "$message" > "$status_path"
-          /usr/bin/osascript \\
-            -e 'on run argv' \\
-            -e 'display notification (item 1 of argv) with title "Magent Update"' \\
-            -e 'end run' \\
-            "$message" >/dev/null 2>&1 || true
-          echo "[magent-updater] $phase: $message"
-        }
-
-        update_status "waiting" \(q(waitingMessage))
-        while /bin/kill -0 "$pid" 2>/dev/null; do
-          /bin/sleep 0.1
-        done
-
-        if ! command -v brew >/dev/null 2>&1; then
-          echo "[magent-updater] brew not found"
-          exit 40
-        fi
-
-        if ! brew list --cask magent >/dev/null 2>&1; then
-          echo "[magent-updater] magent cask is not installed"
-          exit 41
-        fi
-
-        if [[ "$should_refresh_tap" == "1" ]]; then
-          # Refresh the tap so `brew upgrade` sees the newest cask version.
-          # The in-app prefetch normally did this moments ago, so skip it for
-          # the common path to keep the relaunch gap short.
-          update_status "refreshing-tap" \(q(refreshMessage))
-          if ! brew update --quiet; then
-            echo "[magent-updater] brew update failed (continuing anyway)"
-          fi
-        fi
-
-        update_status "upgrading" \(q(upgradeMessage))
-        if ! brew upgrade --cask magent; then
-          echo "[magent-updater] brew upgrade failed, trying reinstall"
-          brew reinstall --cask magent
-        fi
-
-        update_status "cleaning" \(q(cleanupMessage))
-        if [[ -d "/Applications/Magent.app" ]]; then
-          /usr/bin/xattr -dr com.apple.quarantine "/Applications/Magent.app" >/dev/null 2>&1 || true
-          /usr/bin/xattr -dr com.apple.provenance "/Applications/Magent.app" >/dev/null 2>&1 || true
-        fi
-
-        update_status "relaunching" \(q(relaunchMessage))
-        /usr/bin/open -a Magent
-        /bin/rm -f "$0"
-        echo "[magent-updater] homebrew flow completed"
-        """
+    private func writeHomebrewUpdaterScript(at path: String, shouldRefreshTap: Bool, targetVersion: String) throws {
+        let script = HomebrewUpdateScriptBuilder.script(
+            shouldRefreshTap: shouldRefreshTap,
+            targetVersion: targetVersion,
+            messages: HomebrewUpdateScriptMessages(
+                waiting: String(localized: .UpdateStrings.updateHomebrewWaitingNotification),
+                refresh: String(localized: .UpdateStrings.updateHomebrewRefreshNotification),
+                upgrade: String(localized: .UpdateStrings.updateHomebrewUpgradeNotification),
+                cleanup: String(localized: .UpdateStrings.updateHomebrewCleanupNotification),
+                relaunch: String(localized: .UpdateStrings.updateHomebrewRelaunchNotification)
+            )
+        )
 
         try script.write(toFile: path, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
