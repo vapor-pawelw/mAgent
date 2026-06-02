@@ -20,6 +20,8 @@ extension PRFetchError: LocalizedError {
 public final class GitService: Sendable {
 
     public static let shared = GitService()
+    private static let maxUntrackedPseudoDiffBytes = 1_000_000
+    private static let binaryProbeByteCount = 8_192
 
     // Normalize git diff/status path formats (especially rename syntax) to the
     // actual "new/current" path used by file operations and diff sections.
@@ -59,6 +61,55 @@ public final class GitService: Sendable {
             return String(trimmed[range.upperBound...])
         }
         return trimmed
+    }
+
+    private func untrackedPseudoDiff(path: String, worktreePath: String) -> String? {
+        let worktreeURL = URL(fileURLWithPath: worktreePath, isDirectory: true)
+        let fileURL = worktreeURL.appendingPathComponent(path).standardizedFileURL
+        guard fileURL.path.hasPrefix(worktreeURL.standardizedFileURL.path + "/") else {
+            return nil
+        }
+
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              attributes[.type] as? FileAttributeType == .typeRegular else {
+            return binaryUntrackedPseudoDiff(path: path)
+        }
+
+        let fileSize = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
+        if fileSize > Self.maxUntrackedPseudoDiffBytes {
+            return binaryUntrackedPseudoDiff(path: path)
+        }
+
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else {
+            return binaryUntrackedPseudoDiff(path: path)
+        }
+        defer { try? handle.close() }
+
+        let probe = handle.readData(ofLength: Self.binaryProbeByteCount)
+        if probe.contains(0) {
+            return binaryUntrackedPseudoDiff(path: path)
+        }
+
+        try? handle.seek(toOffset: 0)
+        let data = handle.readDataToEndOfFile()
+        guard let contents = String(data: data, encoding: .utf8) else {
+            return binaryUntrackedPseudoDiff(path: path)
+        }
+
+        let lines = contents.components(separatedBy: "\n")
+        var result = untrackedPseudoDiffHeader(path: path, lineCount: lines.count)
+        for line in lines {
+            result += "+\(line)\n"
+        }
+        return result
+    }
+
+    private func untrackedPseudoDiffHeader(path: String, lineCount: Int) -> String {
+        "\ndiff --git a/\(path) b/\(path)\nnew file mode 100644\n--- /dev/null\n+++ b/\(path)\n@@ -0,0 +1,\(lineCount) @@\n"
+    }
+
+    private func binaryUntrackedPseudoDiff(path: String) -> String {
+        "\ndiff --git a/\(path) b/\(path)\nnew file mode 100644\nBinary files /dev/null and b/\(path) differ\n"
     }
 
     // MARK: - Worktree Operations
@@ -981,16 +1032,8 @@ public final class GitService: Sendable {
         var untrackedDiff = ""
         if statusResult.exitCode == 0 {
             for path in await untrackedStatusPaths(from: statusResult.stdout, worktreePath: worktreePath) {
-                let catResult = await ShellExecutor.execute(
-                    "cat \(shellQuote(path))",
-                    workingDirectory: worktreePath
-                )
-                if catResult.exitCode == 0 {
-                    let lines = catResult.stdout.components(separatedBy: "\n")
-                    untrackedDiff += "\ndiff --git a/\(path) b/\(path)\nnew file mode 100644\n--- /dev/null\n+++ b/\(path)\n@@ -0,0 +1,\(lines.count) @@\n"
-                    for l in lines {
-                        untrackedDiff += "+\(l)\n"
-                    }
+                if let pseudoDiff = untrackedPseudoDiff(path: path, worktreePath: worktreePath) {
+                    untrackedDiff += pseudoDiff
                 }
             }
         }
@@ -1014,16 +1057,8 @@ public final class GitService: Sendable {
         var untrackedDiff = ""
         if statusResult.exitCode == 0 {
             for path in await untrackedStatusPaths(from: statusResult.stdout, worktreePath: worktreePath) {
-                let catResult = await ShellExecutor.execute(
-                    "cat \(shellQuote(path))",
-                    workingDirectory: worktreePath
-                )
-                if catResult.exitCode == 0 {
-                    let lines = catResult.stdout.components(separatedBy: "\n")
-                    untrackedDiff += "\ndiff --git a/\(path) b/\(path)\nnew file mode 100644\n--- /dev/null\n+++ b/\(path)\n@@ -0,0 +1,\(lines.count) @@\n"
-                    for l in lines {
-                        untrackedDiff += "+\(l)\n"
-                    }
+                if let pseudoDiff = untrackedPseudoDiff(path: path, worktreePath: worktreePath) {
+                    untrackedDiff += pseudoDiff
                 }
             }
         }
@@ -1121,18 +1156,7 @@ public final class GitService: Sendable {
             workingDirectory: worktreePath
         )
         if statusResult.exitCode == 0 && statusResult.stdout.hasPrefix("?? ") {
-            let catResult = await ShellExecutor.execute(
-                "cat \(shellQuote(relativePath))",
-                workingDirectory: worktreePath
-            )
-            if catResult.exitCode == 0 {
-                let lines = catResult.stdout.components(separatedBy: "\n")
-                var result = "diff --git a/\(relativePath) b/\(relativePath)\nnew file mode 100644\n--- /dev/null\n+++ b/\(relativePath)\n@@ -0,0 +1,\(lines.count) @@\n"
-                for l in lines {
-                    result += "+\(l)\n"
-                }
-                return result
-            }
+            return untrackedPseudoDiff(path: relativePath, worktreePath: worktreePath)
         }
 
         return nil

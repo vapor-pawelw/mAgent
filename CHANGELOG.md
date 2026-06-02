@@ -4,7 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Sidebar
+
+#### Bug Fixes
+- Fixed Diff tabs timing out when a worktree contains large or binary untracked files.
 
 ## 1.6.4 - 2026-05-29
 

@@ -164,4 +164,51 @@ struct GitServiceUntrackedDirectoryTests {
         #expect(!text.isBinary)
         #expect(text.additions == 1)
     }
+
+    @Test
+    func workingTreeDiffContentSummarizesUntrackedBinaryFiles() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("magent-git-service-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        _ = await ShellExecutor.execute("git init -b main", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.name Magent Tests", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.email magent-tests@example.com", workingDirectory: root.path)
+
+        try "tracked\n".write(to: root.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
+        _ = await ShellExecutor.execute("git add tracked.txt && git commit -m initial", workingDirectory: root.path)
+
+        try Data([0, 1, 2, 3, 4, 5]).write(to: root.appendingPathComponent("untracked.bin"))
+
+        let content = try #require(await GitService.shared.workingTreeDiffContent(worktreePath: root.path))
+
+        #expect(content.contains("diff --git a/untracked.bin b/untracked.bin"))
+        #expect(content.contains("Binary files /dev/null and b/untracked.bin differ"))
+        #expect(!content.contains("@@ -0,0"))
+    }
+
+    @Test
+    func workingTreeDiffContentSummarizesOversizedUntrackedTextFiles() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("magent-git-service-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        _ = await ShellExecutor.execute("git init -b main", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.name Magent Tests", workingDirectory: root.path)
+        _ = await ShellExecutor.execute("git config user.email magent-tests@example.com", workingDirectory: root.path)
+
+        try "tracked\n".write(to: root.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
+        _ = await ShellExecutor.execute("git add tracked.txt && git commit -m initial", workingDirectory: root.path)
+
+        let largeText = String(repeating: "0123456789abcdef\n", count: 70_000)
+        try largeText.write(to: root.appendingPathComponent("large.txt"), atomically: true, encoding: .utf8)
+
+        let content = try #require(await GitService.shared.workingTreeDiffContent(worktreePath: root.path))
+
+        #expect(content.contains("diff --git a/large.txt b/large.txt"))
+        #expect(content.contains("Binary files /dev/null and b/large.txt differ"))
+        #expect(!content.contains(String(repeating: "0123456789abcdef\n", count: 100)))
+    }
 }
