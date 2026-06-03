@@ -46,7 +46,7 @@ Archiving or deleting a thread must free every `ghostty_surface_t` owned by the 
 2. The main-window `ThreadDetailViewController` (in-view surfaces of the currently selected thread).
 3. Pop-out windows owned by `PopoutWindowManager` — both thread-level (`ThreadPopoutWindowController`) and tab-level (`TabPopoutWindowController`).
 
-Required sequence (sync, main actor) before the detached cleanup task spawns: evict cache → return pop-outs → evict cache again → swap detail VC to empty state → post `.magentArchivedThreadsDidChange` → THEN `Task.detached { tmux.killSession(...) }`. The notification is load-bearing: `PopoutWindowManager` only learns the thread is gone via that observer. `deleteThread` must post it too — `didDeleteThread` alone is not enough.
+Required sequence before any tmux kill: evict cache -> return pop-outs -> evict cache again -> swap detail VC to empty state. Archive may then continue cleanup in a detached task because it is the soft action and keeps an archived record. Delete is the hard action: it must await worktree removal and branch deletion, verify the worktree path is gone, and only then remove the thread from persistence/UI. Both archive and delete must post `.magentArchivedThreadsDidChange`; the notification is load-bearing because `PopoutWindowManager` only learns the thread is gone via that observer. `deleteThread` must post it too — `didDeleteThread` alone is not enough.
 
 See `docs/libghostty-integration.md` → "Surface Lifecycle: Thread Archive/Delete Contract" for the full rationale, code sketch, and the `preserveSurfaceOnDetach` gotcha that makes the second cache eviction mandatory.
 

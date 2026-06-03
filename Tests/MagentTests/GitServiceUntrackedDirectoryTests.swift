@@ -5,6 +5,37 @@ import Testing
 @Suite
 struct GitServiceUntrackedDirectoryTests {
     @Test
+    func removeWorktreeAndDeleteBranchRemoveDirectoryAndRef() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("magent-git-service-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repo = root.appendingPathComponent("repo", isDirectory: true)
+        let worktree = root.appendingPathComponent("feature-worktree", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        _ = await ShellExecutor.execute("git init -b main", workingDirectory: repo.path)
+        _ = await ShellExecutor.execute("git config user.name Magent Tests", workingDirectory: repo.path)
+        _ = await ShellExecutor.execute("git config user.email magent-tests@example.com", workingDirectory: repo.path)
+        try "tracked\n".write(to: repo.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
+        _ = await ShellExecutor.execute("git add tracked.txt && git commit -m initial", workingDirectory: repo.path)
+
+        _ = try await GitService.shared.createWorktree(
+            repoPath: repo.path,
+            branchName: "feature/delete-hard",
+            worktreePath: worktree.path,
+            baseBranch: "main"
+        )
+        try "dirty\n".write(to: worktree.appendingPathComponent("dirty.txt"), atomically: true, encoding: .utf8)
+
+        try await GitService.shared.removeWorktree(repoPath: repo.path, worktreePath: worktree.path)
+        try await GitService.shared.deleteBranch(repoPath: repo.path, branchName: "feature/delete-hard")
+
+        var isDir: ObjCBool = false
+        #expect(!FileManager.default.fileExists(atPath: worktree.path, isDirectory: &isDir))
+        #expect(await GitService.shared.branchExists(repoPath: repo.path, branchName: "feature/delete-hard") == false)
+    }
+
+    @Test
     func untrackedFilesUnderDirectoryListsNonIgnoredChildren() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("magent-git-service-\(UUID().uuidString)", isDirectory: true)

@@ -7,6 +7,7 @@ enum ThreadManagerError: LocalizedError {
     case invalidDescription
     case duplicateName
     case invalidTabIndex
+    case projectNotFound
     case cannotDeleteMainThread
     case cannotRenameMainThread
     case nameGenerationFailed(diagnostic: String?)
@@ -35,6 +36,8 @@ enum ThreadManagerError: LocalizedError {
             return "A thread with that name already exists."
         case .invalidTabIndex:
             return "Invalid tab index."
+        case .projectNotFound:
+            return "Project not found."
         case .cannotDeleteMainThread:
             return "Main threads cannot be deleted."
         case .cannotRenameMainThread:

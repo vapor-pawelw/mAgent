@@ -185,6 +185,11 @@ public final class GitService: Sendable {
             "git worktree remove --force \(shellQuote(worktreePath))",
             workingDirectory: repoPath
         )
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: worktreePath, isDirectory: &isDir) {
+            let kind = isDir.boolValue ? "directory" : "file"
+            throw GitError.commandFailed("Worktree \(kind) still exists at \(worktreePath).")
+        }
         _ = try await ShellExecutor.run(
             "git worktree prune",
             workingDirectory: repoPath

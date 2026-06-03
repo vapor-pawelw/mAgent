@@ -359,6 +359,8 @@ magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]
 
 Delete a thread (removes worktree and git branch).
 
+Delete is the hard removal path. The thread is removed from Magent persistence only after the git worktree path is gone and the branch deletion has completed or the branch is already absent. If worktree removal fails, the command returns an error and the thread remains visible.
+
 ```bash
 magent-cli delete-thread --thread <name>
 ```
