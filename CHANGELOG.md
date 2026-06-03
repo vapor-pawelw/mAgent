@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Fixed Diff tabs timing out when a worktree contains large or binary untracked files.
+- Fixed Delete hiding threads before their worktree and branch were actually removed, which could let the worktree reappear after restart.
 
 ## 1.6.4 - 2026-05-29
 

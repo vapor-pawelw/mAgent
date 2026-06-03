@@ -42,6 +42,11 @@ struct ThreadManagerErrorTests {
     }
 
     @Test
+    func projectNotFoundUsesStandardMessage() {
+        #expect(ThreadManagerError.projectNotFound.errorDescription == "Project not found.")
+    }
+
+    @Test
     func localSyncAgenticOperationCasesAreDistinct() {
         let a: LocalSyncAgenticOperation = .syncSourceToDestination
         let b: LocalSyncAgenticOperation = .reconcileBothWays
