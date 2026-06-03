@@ -202,15 +202,52 @@ extension ThreadDetailViewController {
         thread.persistedWebTabs = newPersistedWebTabs
         threadManager.updatePersistedWebTabs(for: thread.id, webTabs: thread.persistedWebTabs)
 
-        // Persist chat tab order.
+        // Persist draft tab order and pin state.
+        var newPersistedDraftTabs: [PersistedDraftTab] = []
+        for (i, slot) in tabSlots.enumerated() {
+            if case .draft(let identifier) = slot,
+               var persisted = thread.persistedDraftTabs.first(where: { $0.identifier == identifier }) {
+                persisted.isPinned = TabPinningState.isPinnedMovableIndex(
+                    i,
+                    pinnedBoundary: pinnedCount,
+                    fixedCount: Self.fixedTabCount
+                )
+                newPersistedDraftTabs.append(persisted)
+            }
+        }
+        thread.persistedDraftTabs = newPersistedDraftTabs
+        let oldDraftTabs = draftTabs
+        draftTabs = newPersistedDraftTabs.compactMap { persisted in
+            if var entry = oldDraftTabs.first(where: { $0.identifier == persisted.identifier }) {
+                entry.isPinned = persisted.isPinned
+                return entry
+            }
+            return nil
+        }
+        threadManager.updatePersistedDraftTabs(for: thread.id, draftTabs: thread.persistedDraftTabs)
+
+        // Persist chat tab order and pin state.
         var newPersistedChatTabs: [PersistedChatTab] = []
-        for slot in tabSlots {
+        for (i, slot) in tabSlots.enumerated() {
             if case .chat(let identifier) = slot,
-               let persisted = thread.persistedChatTabs.first(where: { $0.identifier == identifier }) {
+               var persisted = thread.persistedChatTabs.first(where: { $0.identifier == identifier }) {
+                persisted.isPinned = TabPinningState.isPinnedMovableIndex(
+                    i,
+                    pinnedBoundary: pinnedCount,
+                    fixedCount: Self.fixedTabCount
+                )
                 newPersistedChatTabs.append(persisted)
             }
         }
         thread.persistedChatTabs = newPersistedChatTabs
+        let oldChatTabs = chatTabs
+        chatTabs = newPersistedChatTabs.compactMap { persisted in
+            if var entry = oldChatTabs.first(where: { $0.identifier == persisted.identifier }) {
+                entry.isPinned = persisted.isPinned
+                return entry
+            }
+            return nil
+        }
         threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)
     }
 }

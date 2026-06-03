@@ -4,7 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### CLI
+
+#### Features
+- Added `magent-cli pin-tab` and `unpin-tab` for pinning or unpinning any movable tab by tab index or session name, with pinned state now persisted for draft and chat tabs.
 
 ## 1.6.4 - 2026-05-29
 

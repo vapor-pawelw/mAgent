@@ -138,6 +138,10 @@ final class IPCCommandHandler {
             return await closeTab(request)
         case "rename-tab":
             return await renameTab(request)
+        case "pin-tab":
+            return setTabPinned(request, pinned: request.remove != true)
+        case "unpin-tab":
+            return setTabPinned(request, pinned: false)
         case "auto-rename-thread", "rename-thread":
             return await autoRenameThread(request)
         case "rename-branch", "rename-thread-exact":
@@ -1205,10 +1209,24 @@ final class IPCCommandHandler {
         }
 
         for persisted in thread.persistedDraftTabs {
-            slots.append(.draft(identifier: persisted.identifier))
+            let draftKind: ResolvedTabKind = .draft(identifier: persisted.identifier)
+            if persisted.isPinned {
+                let insertAt = min(pinnedInsertIndex, slots.count)
+                slots.insert(draftKind, at: insertAt)
+                pinnedInsertIndex += 1
+            } else {
+                slots.append(draftKind)
+            }
         }
         for persisted in thread.persistedChatTabs {
-            slots.append(.chat(identifier: persisted.identifier))
+            let chatKind: ResolvedTabKind = .chat(identifier: persisted.identifier)
+            if persisted.isPinned {
+                let insertAt = min(pinnedInsertIndex, slots.count)
+                slots.insert(chatKind, at: insertAt)
+                pinnedInsertIndex += 1
+            } else {
+                slots.append(chatKind)
+            }
         }
 
         return slots.enumerated().map { ResolvedTab(index: $0.offset, kind: $0.element) }
@@ -1227,6 +1245,7 @@ final class IPCCommandHandler {
                     tabType: "terminal"
                 )
                 tab.displayName = thread.displayName(for: sessionName, at: terminalDisplayIndex)
+                tab.isPinned = thread.pinnedTmuxSessions.contains(sessionName)
                 if isAgent {
                     tab.agentType = threadManager.agentType(for: thread, sessionName: sessionName)?.rawValue
                     tab.isBusy = thread.busySessions.contains(sessionName) || thread.magentBusySessions.contains(sessionName)
@@ -1244,8 +1263,10 @@ final class IPCCommandHandler {
                     tabType: "web"
                 )
                 tab.displayName = persisted?.displayTitle ?? "Web"
+                tab.isPinned = persisted?.isPinned ?? false
                 return tab
             case .draft(let identifier):
+                let persisted = thread.persistedDraftTabs.first(where: { $0.identifier == identifier })
                 var tab = IPCTabInfo(
                     index: entry.index,
                     sessionName: identifier,
@@ -1253,6 +1274,7 @@ final class IPCCommandHandler {
                     tabType: "draft"
                 )
                 tab.displayName = "Draft"
+                tab.isPinned = persisted?.isPinned ?? false
                 return tab
             case .chat(let identifier):
                 let persisted = thread.persistedChatTabs.first(where: { $0.identifier == identifier })
@@ -1264,6 +1286,7 @@ final class IPCCommandHandler {
                 )
                 tab.displayName = persisted?.title ?? "Chat"
                 tab.agentType = persisted?.agentType.rawValue
+                tab.isPinned = persisted?.isPinned ?? false
                 return tab
             }
         }
@@ -1851,6 +1874,97 @@ final class IPCCommandHandler {
         }
         let info = IPCThreadInfo(thread: updated, projectName: projectName)
         return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
+    private func setTabPinned(_ request: IPCRequest, pinned: Bool) -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        let selected: ResolvedTab
+        switch resolveTabSelection(request, in: thread) {
+        case .resolved(let tab):
+            selected = tab
+        case .error(let err):
+            return err
+        }
+
+        let updatedIdentifier: String
+        switch selected.kind {
+        case .terminal(let sessionName, let terminalDisplayIndex):
+            guard terminalDisplayIndex > 0 else {
+                return .failure("Cannot pin the fixed Terminal tab", id: request.id)
+            }
+            guard thread.tmuxSessionNames.contains(sessionName) else {
+                return .failure("Session not found in thread: \(sessionName)", id: request.id)
+            }
+
+            var pinnedSessions = thread.pinnedTmuxSessions.filter { thread.tmuxSessionNames.contains($0) }
+            let alreadyPinned = pinnedSessions.contains(sessionName)
+            if pinned, !alreadyPinned {
+                pinnedSessions.append(sessionName)
+            } else if !pinned, alreadyPinned {
+                pinnedSessions.removeAll { $0 == sessionName }
+            }
+
+            if pinnedSessions != thread.pinnedTmuxSessions {
+                threadManager.updatePinnedTabs(for: thread.id, pinnedSessions: pinnedSessions)
+            }
+            updatedIdentifier = sessionName
+        case .web(let identifier):
+            guard let threadIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
+                return .failure("Thread not found: \(thread.name)", id: request.id)
+            }
+            var webTabs = threadManager.threads[threadIndex].persistedWebTabs
+            guard let webIndex = webTabs.firstIndex(where: { $0.identifier == identifier }) else {
+                return .failure("Tab not found: \(identifier)", id: request.id)
+            }
+            if webTabs[webIndex].isPinned != pinned {
+                webTabs[webIndex].isPinned = pinned
+                threadManager.updatePersistedWebTabs(for: thread.id, webTabs: webTabs)
+            }
+            updatedIdentifier = identifier
+        case .draft(let identifier):
+            guard let threadIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
+                return .failure("Thread not found: \(thread.name)", id: request.id)
+            }
+            var draftTabs = threadManager.threads[threadIndex].persistedDraftTabs
+            guard let draftIndex = draftTabs.firstIndex(where: { $0.identifier == identifier }) else {
+                return .failure("Tab not found: \(identifier)", id: request.id)
+            }
+            if draftTabs[draftIndex].isPinned != pinned {
+                draftTabs[draftIndex].isPinned = pinned
+                threadManager.updatePersistedDraftTabs(for: thread.id, draftTabs: draftTabs)
+            }
+            updatedIdentifier = identifier
+        case .chat(let identifier):
+            guard let threadIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
+                return .failure("Thread not found: \(thread.name)", id: request.id)
+            }
+            var chatTabs = threadManager.threads[threadIndex].persistedChatTabs
+            guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else {
+                return .failure("Tab not found: \(identifier)", id: request.id)
+            }
+            if chatTabs[chatIndex].isPinned != pinned {
+                chatTabs[chatIndex].isPinned = pinned
+                threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
+            }
+            updatedIdentifier = identifier
+        }
+
+        DispatchQueue.main.async {
+            self.threadManager.delegate?.threadManager(self.threadManager, didUpdateThreads: self.threadManager.threads)
+        }
+
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        let tabInfo = buildIPCTabs(for: updated).first { tab in
+            tab.sessionName == updatedIdentifier
+        }
+        return IPCResponse(ok: true, id: request.id, tab: tabInfo)
     }
 
     private func setSectionKeepAlive(_ request: IPCRequest, enabled: Bool) -> IPCResponse {

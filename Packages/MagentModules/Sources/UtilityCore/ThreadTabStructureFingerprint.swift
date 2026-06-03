@@ -7,7 +7,7 @@ import MagentModels
 /// This intentionally ignores transient state (busy, waiting, unread markers) and
 /// tracks only tab identity/order/pinning across terminal, web, draft, and chat tabs.
 public struct ThreadTabStructureFingerprint: Equatable, Sendable {
-    public struct WebTab: Equatable, Sendable {
+    public struct PersistedTab: Equatable, Sendable {
         public let identifier: String
         public let isPinned: Bool
 
@@ -19,17 +19,21 @@ public struct ThreadTabStructureFingerprint: Equatable, Sendable {
 
     public let terminalSessionNames: [String]
     public let pinnedTerminalSessions: [String]
-    public let webTabs: [WebTab]
-    public let draftTabIdentifiers: [String]
-    public let chatTabIdentifiers: [String]
+    public let webTabs: [PersistedTab]
+    public let draftTabs: [PersistedTab]
+    public let chatTabs: [PersistedTab]
 
     public init(thread: MagentThread) {
         self.terminalSessionNames = thread.tmuxSessionNames
         self.pinnedTerminalSessions = thread.pinnedTmuxSessions.sorted()
         self.webTabs = thread.persistedWebTabs.map { persisted in
-            WebTab(identifier: persisted.identifier, isPinned: persisted.isPinned)
+            PersistedTab(identifier: persisted.identifier, isPinned: persisted.isPinned)
         }
-        self.draftTabIdentifiers = thread.persistedDraftTabs.map(\.identifier)
-        self.chatTabIdentifiers = thread.persistedChatTabs.map(\.identifier)
+        self.draftTabs = thread.persistedDraftTabs.map { persisted in
+            PersistedTab(identifier: persisted.identifier, isPinned: persisted.isPinned)
+        }
+        self.chatTabs = thread.persistedChatTabs.map { persisted in
+            PersistedTab(identifier: persisted.identifier, isPinned: persisted.isPinned)
+        }
     }
 }

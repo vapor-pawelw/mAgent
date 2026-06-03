@@ -268,6 +268,7 @@ public nonisolated struct IPCTabInfo: Encodable, Sendable {
     public var isWaitingForInput: Bool?
     public var hasUnreadCompletion: Bool?
     public var isBlockedByRateLimit: Bool?
+    public var isPinned: Bool?
 
     public init(index: Int, sessionName: String, isAgent: Bool, tabType: String? = nil) {
         self.index = index

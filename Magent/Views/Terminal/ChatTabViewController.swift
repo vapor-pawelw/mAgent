@@ -13,6 +13,7 @@ struct ChatTabEntry {
     var conversationSessionID: String?
     var modelId: String?
     var reasoningLevel: String?
+    var isPinned: Bool
     var viewController: ChatTabViewController?
 }
 

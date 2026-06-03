@@ -6,6 +6,7 @@ extension ThreadDetailViewController {
     // MARK: - Restore from Persistence
 
     /// Recreates tab items for persisted draft tabs.
+    /// Pinned draft tabs are inserted into the pinned section; unpinned are appended.
     func restoreDraftTabItems() {
         for persisted in thread.persistedDraftTabs {
             let entry = DraftTabEntry(
@@ -14,6 +15,7 @@ extension ThreadDetailViewController {
                 prompt: persisted.prompt,
                 modelId: persisted.modelId,
                 reasoningLevel: persisted.reasoningLevel,
+                isPinned: persisted.isPinned,
                 viewController: nil
             )
             draftTabs.append(entry)
@@ -23,8 +25,14 @@ extension ThreadDetailViewController {
             attachDragGesture(to: item)
             applyDraftTabIcon(to: item)
 
-            tabItems.append(item)
-            tabSlots.append(.draft(identifier: persisted.identifier))
+            if persisted.isPinned {
+                tabItems.insert(item, at: pinnedCount)
+                tabSlots.insert(.draft(identifier: persisted.identifier), at: pinnedCount)
+                pinnedCount += 1
+            } else {
+                tabItems.append(item)
+                tabSlots.append(.draft(identifier: persisted.identifier))
+            }
         }
     }
 
@@ -57,6 +65,7 @@ extension ThreadDetailViewController {
             prompt: prompt,
             modelId: modelId,
             reasoningLevel: reasoningLevel,
+            isPinned: false,
             viewController: nil
         )
         draftTabs.append(entry)
@@ -203,7 +212,8 @@ extension ThreadDetailViewController {
                 agentType: entry.agentType,
                 prompt: entry.prompt,
                 modelId: entry.modelId,
-                reasoningLevel: entry.reasoningLevel
+                reasoningLevel: entry.reasoningLevel,
+                isPinned: entry.isPinned
             )
             draftTabs[entryIndex].viewController?.view.removeFromSuperview()
             draftTabs.remove(at: entryIndex)
