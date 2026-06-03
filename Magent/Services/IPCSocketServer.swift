@@ -6,7 +6,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v32"
+    private static let cliVersion = "magent-cli-v33"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -1209,6 +1209,34 @@ actor IPCSocketServer {
             json="$json}"
             send_request "$json"
             ;;
+        pin-tab|unpin-tab)
+            thread=""; tab_index=""; session=""; remove=""
+            command_name="$cmd"
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread)  thread="$2"; shift 2 ;;
+                    --index)   tab_index="$2"; shift 2 ;;
+                    --session) session="$2"; shift 2 ;;
+                    --remove)  remove="1"; shift ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli pin-tab --thread <name> (--index <n> | --session <name>) [--remove]"
+            [ -z "$session" ] || [ -z "$tab_index" ] || die "Use either --session or --index, not both"
+            [ -n "$session" ] || [ -n "$tab_index" ] || die "Specify --index <n> or --session <name>"
+            json="{$(json_kv command "$command_name"),$(json_kv threadName "$thread")"
+            if [ -n "$tab_index" ]; then
+                case "$tab_index" in
+                    ''|*[!0-9]*) die "--index must be an integer" ;;
+                esac
+                json="$json,\"tabIndex\":$tab_index"
+            else
+                json="$json,$(json_kv sessionName "$session")"
+            fi
+            [ -n "$remove" ] && json="$json,\"remove\":true"
+            json="$json}"
+            send_request "$json"
+            ;;
         current-thread)
             session=$(tmux display-message -p '#{session_name}' 2>/dev/null)
             [ -n "$session" ] || die "Not running inside a tmux session"
@@ -1570,6 +1598,8 @@ actor IPCSocketServer {
             echo "  create-web-tab       --thread <name> --url <http(s)-url> [--name <text>|--title <text>]    (opens an in-app web tab at the given URL)"
             echo "  close-tab            --thread <name> (--index <n> | --session <name>)"
             echo "  rename-tab           --thread <name> (--index <n> | --session <name>) --name <text>"
+            echo "  pin-tab              --thread <name> (--index <n> | --session <name>) [--remove]"
+            echo "  unpin-tab            --thread <name> (--index <n> | --session <name>)"
             echo "  current-thread                                               (returns current thread info)"
             echo "  auto-rename-thread   --thread <name> --prompt <text>       (AI-generated branch + description)"
             echo "  rename-thread        --thread <name> --prompt <text>       (alias for auto-rename-thread)"

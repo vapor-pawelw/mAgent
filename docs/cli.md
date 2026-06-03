@@ -424,7 +424,7 @@ Spaces and other non-RFC characters must be percent-encoded (`%20`, etc.) — `U
 ### list-tabs
 
 List all tabs in a thread, in the same order as the GUI tab strip (terminal, web, draft, chat).
-Each row includes `tabType` (`terminal`, `web`, `draft`, `chat`) and `sessionName` (for web/draft/chat this is the tab identifier).
+Each row includes `tabType` (`terminal`, `web`, `draft`, `chat`), `sessionName` (for web/draft/chat this is the tab identifier), and `isPinned`.
 
 ```bash
 magent-cli list-tabs --thread <name>
@@ -468,6 +468,19 @@ Draft tabs cannot be renamed.
 magent-cli rename-tab --thread <name> --index <n> --name <text>
 magent-cli rename-tab --thread <name> --session <session-or-web-id> --name <text>
 ```
+
+### pin-tab
+
+Pin or unpin any movable tab by GUI tab index or session/tab identifier. The fixed Terminal and Diff tabs cannot be pinned. Pinned tabs move before unpinned tabs in the GUI order; pinned terminal tabs are also protected by the pinned-tab eviction setting.
+
+```bash
+magent-cli pin-tab --thread <name> --index <n>
+magent-cli pin-tab --thread <name> --session <session-or-web-id>
+magent-cli pin-tab --thread <name> --session <session-or-web-id> --remove
+magent-cli unpin-tab --thread <name> --session <session-or-web-id>
+```
+
+Use `list-tabs` to find the tab index or identifier for terminal, web, draft, and chat tabs.
 
 ## Section Commands
 

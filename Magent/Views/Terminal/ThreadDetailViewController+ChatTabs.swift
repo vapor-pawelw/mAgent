@@ -45,6 +45,7 @@ extension ThreadDetailViewController {
                 conversationSessionID: persisted.conversationSessionID,
                 modelId: persisted.modelId,
                 reasoningLevel: persisted.reasoningLevel,
+                isPinned: persisted.isPinned,
                 viewController: nil
             )
         }
@@ -59,8 +60,14 @@ extension ThreadDetailViewController {
             attachDragGesture(to: item)
             applyChatTabIcon(to: item)
 
-            tabItems.append(item)
-            tabSlots.append(.chat(identifier: entry.identifier))
+            if entry.isPinned {
+                tabItems.insert(item, at: pinnedCount)
+                tabSlots.insert(.chat(identifier: entry.identifier), at: pinnedCount)
+                pinnedCount += 1
+            } else {
+                tabItems.append(item)
+                tabSlots.append(.chat(identifier: entry.identifier))
+            }
         }
     }
 
@@ -104,6 +111,7 @@ extension ThreadDetailViewController {
             conversationSessionID: conversationSessionID,
             modelId: modelId,
             reasoningLevel: reasoningLevel,
+            isPinned: false,
             viewController: nil
         )
         chatTabs.append(entry)
@@ -1256,7 +1264,8 @@ extension ThreadDetailViewController {
                 draftAttachments: entry.draftAttachments,
                 conversationSessionID: entry.conversationSessionID,
                 modelId: entry.modelId,
-                reasoningLevel: entry.reasoningLevel
+                reasoningLevel: entry.reasoningLevel,
+                isPinned: entry.isPinned
             )
         }
         threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)

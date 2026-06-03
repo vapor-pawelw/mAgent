@@ -87,19 +87,41 @@ public nonisolated struct PersistedDraftTab: Codable, Sendable, Equatable {
     public var prompt: String
     public var modelId: String?
     public var reasoningLevel: String?
+    public var isPinned: Bool
 
     public init(
         identifier: String,
         agentType: AgentType,
         prompt: String,
         modelId: String? = nil,
-        reasoningLevel: String? = nil
+        reasoningLevel: String? = nil,
+        isPinned: Bool = false
     ) {
         self.identifier = identifier
         self.agentType = agentType
         self.prompt = prompt
         self.modelId = modelId
         self.reasoningLevel = reasoningLevel
+        self.isPinned = isPinned
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case identifier
+        case agentType
+        case prompt
+        case modelId
+        case reasoningLevel
+        case isPinned
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        identifier = try container.decode(String.self, forKey: .identifier)
+        agentType = try container.decode(AgentType.self, forKey: .agentType)
+        prompt = try container.decode(String.self, forKey: .prompt)
+        modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
+        reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
     }
 }
 
@@ -205,6 +227,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
     public var conversationSessionID: String?
     public var modelId: String?
     public var reasoningLevel: String?
+    public var isPinned: Bool
 
     private enum CodingKeys: String, CodingKey {
         case identifier
@@ -216,6 +239,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         case conversationSessionID
         case modelId
         case reasoningLevel
+        case isPinned
     }
 
     public init(
@@ -227,7 +251,8 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         draftAttachments: [PersistedChatAttachment] = [],
         conversationSessionID: String? = nil,
         modelId: String? = nil,
-        reasoningLevel: String? = nil
+        reasoningLevel: String? = nil,
+        isPinned: Bool = false
     ) {
         self.identifier = identifier
         self.agentType = agentType
@@ -238,6 +263,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         self.conversationSessionID = conversationSessionID
         self.modelId = modelId
         self.reasoningLevel = reasoningLevel
+        self.isPinned = isPinned
     }
 
     public init(from decoder: Decoder) throws {
@@ -251,6 +277,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         conversationSessionID = try container.decodeIfPresent(String.self, forKey: .conversationSessionID)
         modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
         reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -273,6 +300,9 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         }
         if let reasoningLevel, !reasoningLevel.isEmpty {
             try container.encode(reasoningLevel, forKey: .reasoningLevel)
+        }
+        if isPinned {
+            try container.encode(isPinned, forKey: .isPinned)
         }
     }
 }

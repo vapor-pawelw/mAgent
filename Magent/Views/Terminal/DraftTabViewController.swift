@@ -8,6 +8,7 @@ struct DraftTabEntry {
     var prompt: String
     var modelId: String?
     var reasoningLevel: String?
+    var isPinned: Bool
     var viewController: DraftTabViewController?
 }
 

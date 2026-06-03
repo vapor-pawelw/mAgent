@@ -928,6 +928,34 @@ struct PersistedChatMessageTests {
     }
 }
 
+// MARK: - PersistedDraftTab
+
+@Suite("PersistedDraftTab")
+struct PersistedDraftTabTests {
+
+    @Test("Legacy decode defaults isPinned to false")
+    func legacyDecodeDefaultsPinnedState() throws {
+        let json = """
+        {"identifier":"draft:1","agentType":"codex","prompt":"Prompt"}
+        """.data(using: .utf8)!
+        let tab = try JSONDecoder().decode(PersistedDraftTab.self, from: json)
+        #expect(tab.isPinned == false)
+    }
+
+    @Test("Round-trip preserves pinned state")
+    func roundTripPinnedState() throws {
+        let original = PersistedDraftTab(
+            identifier: "draft:pinned",
+            agentType: .codex,
+            prompt: "Prompt",
+            isPinned: true
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(PersistedDraftTab.self, from: data)
+        #expect(decoded.isPinned == true)
+    }
+}
+
 // MARK: - PersistedChatTab
 
 @Suite("PersistedChatTab")
@@ -942,6 +970,7 @@ struct PersistedChatTabTests {
         #expect(tab.draftInput == "")
         #expect(tab.draftAttachments.isEmpty)
         #expect(tab.conversationSessionID == nil)
+        #expect(tab.isPinned == false)
     }
 
     @Test("Round-trip preserves non-empty draftInput, conversation session id, and model metadata")
@@ -954,7 +983,8 @@ struct PersistedChatTabTests {
             draftInput: "hello draft",
             conversationSessionID: "session-123",
             modelId: "gpt-5.5",
-            reasoningLevel: "high"
+            reasoningLevel: "high",
+            isPinned: true
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(PersistedChatTab.self, from: data)
@@ -962,6 +992,7 @@ struct PersistedChatTabTests {
         #expect(decoded.conversationSessionID == "session-123")
         #expect(decoded.modelId == "gpt-5.5")
         #expect(decoded.reasoningLevel == "high")
+        #expect(decoded.isPinned == true)
     }
 
     @Test("Round-trip preserves draft attachments")
@@ -1374,9 +1405,11 @@ struct IPCTabInfoTests {
     func tabTypeInitBehavior() {
         let terminal = IPCTabInfo(index: 0, sessionName: "ma-repo-thread", isAgent: true, tabType: "terminal")
         #expect(terminal.tabType == "terminal")
+        #expect(terminal.isPinned == nil)
 
         let legacy = IPCTabInfo(index: 1, sessionName: "ma-repo-thread-2", isAgent: false)
         #expect(legacy.tabType == nil)
+        #expect(legacy.isPinned == nil)
     }
 }
 
@@ -1481,6 +1514,38 @@ struct ThreadTabStructureFingerprintTests {
         let updated = makeThread(
             draftTabs: [
                 PersistedDraftTab(identifier: "draft:2", agentType: .codex, prompt: "A"),
+            ]
+        )
+
+        #expect(ThreadTabStructureFingerprint(thread: base) != ThreadTabStructureFingerprint(thread: updated))
+    }
+
+    @Test("Changes when draft tab pinning changes")
+    func changesOnDraftTabPinning() {
+        let base = makeThread(
+            draftTabs: [
+                PersistedDraftTab(identifier: "draft:1", agentType: .codex, prompt: "A", isPinned: false),
+            ]
+        )
+        let updated = makeThread(
+            draftTabs: [
+                PersistedDraftTab(identifier: "draft:1", agentType: .codex, prompt: "A", isPinned: true),
+            ]
+        )
+
+        #expect(ThreadTabStructureFingerprint(thread: base) != ThreadTabStructureFingerprint(thread: updated))
+    }
+
+    @Test("Changes when chat tab pinning changes")
+    func changesOnChatTabPinning() {
+        let base = makeThread(
+            chatTabs: [
+                PersistedChatTab(identifier: "chat:1", agentType: .codex, title: "Chat", isPinned: false),
+            ]
+        )
+        let updated = makeThread(
+            chatTabs: [
+                PersistedChatTab(identifier: "chat:1", agentType: .codex, title: "Chat", isPinned: true),
             ]
         )
 
