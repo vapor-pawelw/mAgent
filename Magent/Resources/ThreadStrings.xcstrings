@@ -694,6 +694,17 @@
         }
       }
     },
+    "threadPullRequestStaleTooltipPrefix": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last confirmed; sync currently unavailable"
+          }
+        }
+      }
+    },
     "threadCreateMergeRequest": {
       "extractionState": "manual",
       "localizations": {

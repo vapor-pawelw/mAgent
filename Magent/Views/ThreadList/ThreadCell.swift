@@ -743,9 +743,14 @@ final class ThreadCell: NSTableCellView {
         prDotSeparator?.isHidden = !(hasTicket && hasPR)
 
         if let pr = thread.pullRequestInfo {
+            let prAlpha: CGFloat = thread.hasStalePullRequestInfo ? 0.5 : 1.0
             prNumberLabel?.stringValue = pr.displayLabel
             prNumberLabel?.isHidden = false
-            prNumberLabel?.toolTip = "Pull request: \(pr.displayLabel)"
+            prNumberLabel?.alphaValue = prAlpha
+            let stalePrefix = thread.hasStalePullRequestInfo
+                ? String(localized: .ThreadStrings.threadPullRequestStaleTooltipPrefix) + "\n"
+                : ""
+            prNumberLabel?.toolTip = "\(stalePrefix)Pull request: \(pr.displayLabel)"
             if showPRBadges {
                 prStatusBadge?.configure(
                     text: pr.statusText,
@@ -753,16 +758,20 @@ final class ThreadCell: NSTableCellView {
                     fontSize: badgeFontSize
                 )
                 prStatusBadge?.isHidden = false
-                prStatusBadge?.toolTip = "PR status: \(pr.statusText)"
+                prStatusBadge?.alphaValue = prAlpha
+                prStatusBadge?.toolTip = "\(stalePrefix)PR status: \(pr.statusText)"
             } else {
                 prStatusBadge?.isHidden = true
+                prStatusBadge?.alphaValue = 1.0
                 prStatusBadge?.toolTip = nil
             }
         } else {
             prNumberLabel?.stringValue = ""
             prNumberLabel?.isHidden = true
+            prNumberLabel?.alphaValue = 1.0
             prNumberLabel?.toolTip = nil
             prStatusBadge?.isHidden = true
+            prStatusBadge?.alphaValue = 1.0
             prStatusBadge?.toolTip = nil
         }
 

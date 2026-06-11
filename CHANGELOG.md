@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 
 #### Bug Fixes
+- PR/MR badges now keep the last confirmed link through failed syncs and app relaunches, dimming stale metadata instead of removing it until a later successful sync confirms the current state.
 - Diff file headers now show rename-only changes with a `RENAMED` badge, keep binary-only changes visible with a `BINARY` label and centered unavailable placeholder, and expose hidden context at the start and end of displayed hunks.
 - Agent completion now refreshes the active thread's changes panel and Diff tab state immediately instead of waiting for the next git-status polling tick.
 - Fixed Diff tabs timing out when a worktree contains large or binary untracked files.

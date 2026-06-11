@@ -193,6 +193,65 @@ struct CodexAppServerRecoveryTests {
     }
 }
 
+// MARK: - PullRequestLookupState
+
+@Suite("PullRequestLookupState")
+struct PullRequestLookupStateTests {
+
+    @Test("Unavailable lookup drops PR info when confirmed branch is unknown")
+    func unavailableDropsInfoWhenConfirmedBranchIsUnknown() throws {
+        let url = try #require(URL(string: "https://example.com/pulls/42"))
+        let info = PullRequestInfo(number: 42, url: url, provider: .github)
+        let state = PullRequestLookupState(info: info, status: .found)
+
+        let next = state.applying(.unavailable, branch: "feature")
+
+        #expect(next.info == nil)
+        #expect(next.status == .unavailable)
+    }
+
+    @Test("Unavailable lookup preserves info for the same confirmed branch")
+    func unavailablePreservesInfoForSameBranch() throws {
+        let url = try #require(URL(string: "https://example.com/pulls/42"))
+        let info = PullRequestInfo(number: 42, url: url, provider: .github)
+        let state = PullRequestLookupState(info: info, status: .found, confirmedBranch: "feature")
+
+        let next = state.applying(.unavailable, branch: "feature")
+
+        #expect(next.info == info)
+        #expect(next.confirmedBranch == "feature")
+        #expect(next.status == .unavailable)
+    }
+
+    @Test("Confirmed not found clears PR info")
+    func notFoundClearsInfo() throws {
+        let url = try #require(URL(string: "https://example.com/pulls/42"))
+        let info = PullRequestInfo(number: 42, url: url, provider: .github)
+        let state = PullRequestLookupState(info: info, status: .found, confirmedBranch: "feature")
+
+        let next = state.applying(.notFound, branch: "feature")
+
+        #expect(next.info == nil)
+        #expect(next.confirmedBranch == nil)
+        #expect(next.status == .notFound)
+    }
+
+    @Test("Successful lookup replaces stale info and clears stale status")
+    func foundReplacesStaleInfo() throws {
+        let oldURL = try #require(URL(string: "https://example.com/pulls/42"))
+        let newURL = try #require(URL(string: "https://example.com/pulls/43"))
+        let oldInfo = PullRequestInfo(number: 42, url: oldURL, provider: .github)
+        let newInfo = PullRequestInfo(number: 43, url: newURL, provider: .github, reviewDecision: .approved)
+        let state = PullRequestLookupState(info: oldInfo, status: .unavailable)
+
+        let next = state.applying(.found(newInfo), branch: "feature")
+
+        #expect(next.info == newInfo)
+        #expect(next.confirmedBranch == "feature")
+        #expect(next.status == .found)
+    }
+}
+
 // MARK: - TmuxSessionNaming
 
 @Suite("TmuxSessionNaming")

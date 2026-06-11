@@ -924,6 +924,7 @@ final class ThreadLifecycleService {
         restoredThread.hasBranchMismatch = false
         restoredThread.rateLimitedSessions = [:]
         restoredThread.pullRequestInfo = nil
+        restoredThread.pullRequestInfoBranch = nil
         restoredThread.pullRequestLookupStatus = .unknown
         restoredThread.busySessions.removeAll()
         restoredThread.waitingForInputSessions.removeAll()

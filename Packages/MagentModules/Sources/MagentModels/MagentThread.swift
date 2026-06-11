@@ -370,6 +370,34 @@ public nonisolated enum PullRequestLookupStatus: String, Sendable, Equatable {
     }
 }
 
+public nonisolated struct PullRequestLookupState: Sendable, Equatable {
+    public var info: PullRequestInfo?
+    public var status: PullRequestLookupStatus
+    public var confirmedBranch: String?
+
+    public init(info: PullRequestInfo?, status: PullRequestLookupStatus, confirmedBranch: String? = nil) {
+        self.info = info
+        self.status = status
+        self.confirmedBranch = confirmedBranch
+    }
+
+    public func applying(_ result: PullRequestLookupResult, branch: String) -> PullRequestLookupState {
+        switch result {
+        case .found(let foundInfo):
+            return PullRequestLookupState(info: foundInfo, status: .found, confirmedBranch: branch)
+        case .notFound:
+            return PullRequestLookupState(info: nil, status: .notFound, confirmedBranch: nil)
+        case .unavailable:
+            let shouldPreserve = info != nil && confirmedBranch == branch
+            return PullRequestLookupState(
+                info: shouldPreserve ? info : nil,
+                status: .unavailable,
+                confirmedBranch: shouldPreserve ? confirmedBranch : nil
+            )
+        }
+    }
+}
+
 public nonisolated struct PullRequestInfo: Sendable, Equatable {
     public let number: Int
     public let url: URL
@@ -617,8 +645,13 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var unreadRateLimitSessions: Set<String> = []
     // Transient (not persisted) — detected open PR/MR for this branch.
     public var pullRequestInfo: PullRequestInfo? = nil
+    // Transient (not persisted) — branch that produced the current confirmed PR/MR info.
+    public var pullRequestInfoBranch: String? = nil
     // Transient (not persisted) — whether PR/MR lookup succeeded, failed, or confirmed no PR exists.
     public var pullRequestLookupStatus: PullRequestLookupStatus = .unknown
+    public var hasStalePullRequestInfo: Bool {
+        pullRequestInfo != nil && pullRequestLookupStatus == .unavailable
+    }
     // Transient (not persisted) — set while an archive operation is in progress.
     public var isArchiving: Bool = false
     // Transient (not persisted) — cached verification of the detected Jira ticket key.
@@ -1061,6 +1094,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         copy.hasBranchMismatch = hasBranchMismatch
         copy.rateLimitedSessions = rateLimitedSessions
         copy.pullRequestInfo = pullRequestInfo
+        copy.pullRequestInfoBranch = pullRequestInfoBranch
         copy.pullRequestLookupStatus = pullRequestLookupStatus
         copy.isArchiving = isArchiving
         copy.verifiedJiraTicket = verifiedJiraTicket

@@ -49,30 +49,31 @@ final class PullRequestService {
 
     // MARK: - Lookup Helpers
 
-    private func updatePullRequestLookup(_ result: PullRequestLookupResult, forThreadId threadId: UUID) async {
-        let info: PullRequestInfo?
-        let status: PullRequestLookupStatus
+    private func prCacheKey(projectId: UUID, branch: String) -> String {
+        "\(projectId.uuidString)::\(branch)"
+    }
 
-        switch result {
-        case .found(let foundInfo):
-            info = foundInfo
-            status = .found
-        case .notFound:
-            info = nil
-            status = .notFound
-        case .unavailable:
-            info = nil
-            status = .unavailable
-        }
-
-        guard let index = store.threads.firstIndex(where: { $0.id == threadId }),
-              store.threads[index].pullRequestInfo != info || store.threads[index].pullRequestLookupStatus != status else {
+    private func updatePullRequestLookup(_ result: PullRequestLookupResult, branch: String, forThreadId threadId: UUID) async {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else {
             return
         }
 
-        store.threads[index].pullRequestInfo = info
-        store.threads[index].pullRequestLookupStatus = status
-        savePRInfoToCache(info: info, thread: store.threads[index])
+        let nextState = PullRequestLookupState(
+            info: store.threads[index].pullRequestInfo,
+            status: store.threads[index].pullRequestLookupStatus,
+            confirmedBranch: store.threads[index].pullRequestInfoBranch
+        ).applying(result, branch: branch)
+
+        guard store.threads[index].pullRequestInfo != nextState.info
+                || store.threads[index].pullRequestLookupStatus != nextState.status
+                || store.threads[index].pullRequestInfoBranch != nextState.confirmedBranch else {
+            return
+        }
+
+        store.threads[index].pullRequestInfo = nextState.info
+        store.threads[index].pullRequestInfoBranch = nextState.confirmedBranch
+        store.threads[index].pullRequestLookupStatus = nextState.status
+        savePRInfoToCache(info: nextState.info, status: nextState.status, thread: store.threads[index])
         await MainActor.run {
             onThreadsChanged?()
             NotificationCenter.default.post(name: .magentPullRequestInfoChanged, object: nil)
@@ -158,8 +159,17 @@ final class PullRequestService {
                 guard let i = store.threads.firstIndex(where: { $0.id == thread.id }) else {
                     continue
                 }
-                if store.threads[i].pullRequestInfo != nil || store.threads[i].pullRequestLookupStatus != .unavailable {
-                    store.threads[i].pullRequestInfo = nil
+                let branch = store.threads[i].actualBranch ?? store.threads[i].branchName
+                let nextState = PullRequestLookupState(
+                    info: store.threads[i].pullRequestInfo,
+                    status: store.threads[i].pullRequestLookupStatus,
+                    confirmedBranch: store.threads[i].pullRequestInfoBranch
+                ).applying(.unavailable, branch: branch)
+                if store.threads[i].pullRequestInfo != nextState.info
+                    || store.threads[i].pullRequestLookupStatus != nextState.status
+                    || store.threads[i].pullRequestInfoBranch != nextState.confirmedBranch {
+                    store.threads[i].pullRequestInfo = nextState.info
+                    store.threads[i].pullRequestInfoBranch = nextState.confirmedBranch
                     store.threads[i].pullRequestLookupStatus = .unavailable
                     changed = true
                 }
@@ -167,21 +177,9 @@ final class PullRequestService {
             }
 
             let branch = thread.actualBranch ?? thread.branchName
-            let info: PullRequestInfo?
-            let status: PullRequestLookupStatus
+            let lookupResult: PullRequestLookupResult
             do {
-                let lookupResult = try await git.lookupPullRequest(remote: remote, branch: branch)
-                switch lookupResult {
-                case .found(let foundInfo):
-                    info = foundInfo
-                    status = .found
-                case .notFound:
-                    info = nil
-                    status = .notFound
-                case .unavailable:
-                    info = nil
-                    status = .unavailable
-                }
+                lookupResult = try await git.lookupPullRequest(remote: remote, branch: branch)
             } catch {
                 hadErrors = true
                 errorCount += 1
@@ -190,14 +188,21 @@ final class PullRequestService {
                     let message = trimmedMessage.isEmpty ? "Unknown error." : trimmedMessage
                     failureDetails.append("\(project.name) / \(branch): \(message)")
                 }
-                info = nil
-                status = .unavailable
+                lookupResult = .unavailable
             }
             guard let i = store.threads.firstIndex(where: { $0.id == thread.id }) else { continue }
-            if store.threads[i].pullRequestInfo != info || store.threads[i].pullRequestLookupStatus != status {
-                store.threads[i].pullRequestInfo = info
-                store.threads[i].pullRequestLookupStatus = status
-                savePRInfoToCache(info: info, thread: store.threads[i])
+            let nextState = PullRequestLookupState(
+                info: store.threads[i].pullRequestInfo,
+                status: store.threads[i].pullRequestLookupStatus,
+                confirmedBranch: store.threads[i].pullRequestInfoBranch
+            ).applying(lookupResult, branch: branch)
+            if store.threads[i].pullRequestInfo != nextState.info
+                || store.threads[i].pullRequestLookupStatus != nextState.status
+                || store.threads[i].pullRequestInfoBranch != nextState.confirmedBranch {
+                store.threads[i].pullRequestInfo = nextState.info
+                store.threads[i].pullRequestInfoBranch = nextState.confirmedBranch
+                store.threads[i].pullRequestLookupStatus = nextState.status
+                savePRInfoToCache(info: nextState.info, status: nextState.status, thread: store.threads[i])
                 changed = true
             }
 
@@ -229,16 +234,17 @@ final class PullRequestService {
             let settings = persistence.loadSettings()
             guard let project = settings.projects.first(where: { $0.id == thread.projectId }),
                   let remote = await cachedRemoteResolver?(project.id, project.repoPath) else {
-                await updatePullRequestLookup(.unavailable, forThreadId: thread.id)
+                let branch = thread.actualBranch ?? thread.branchName
+                await updatePullRequestLookup(.unavailable, branch: branch, forThreadId: thread.id)
                 return
             }
 
             let branch = thread.actualBranch ?? thread.branchName
             do {
                 let lookupResult = try await git.lookupPullRequest(remote: remote, branch: branch)
-                await updatePullRequestLookup(lookupResult, forThreadId: thread.id)
+                await updatePullRequestLookup(lookupResult, branch: branch, forThreadId: thread.id)
             } catch {
-                await updatePullRequestLookup(.unavailable, forThreadId: thread.id)
+                await updatePullRequestLookup(.unavailable, branch: branch, forThreadId: thread.id)
             }
         }
     }
@@ -257,14 +263,30 @@ final class PullRequestService {
         loadPRCacheIfNeeded()
         guard !prCache.isEmpty else { return }
 
+        let branchReferenceCounts = Dictionary(
+            grouping: store.threads.filter { !$0.isArchived },
+            by: { $0.actualBranch ?? $0.branchName }
+        ).mapValues(\.count)
         var changed = false
+        var migratedLegacyCache = false
         for i in store.threads.indices where !store.threads[i].isArchived && store.threads[i].pullRequestInfo == nil {
             let branch = store.threads[i].actualBranch ?? store.threads[i].branchName
-            if let cached = prCache[branch] {
+            let scopedKey = prCacheKey(projectId: store.threads[i].projectId, branch: branch)
+            let legacyCached = branchReferenceCounts[branch] == 1 ? prCache[branch] : nil
+            let cached = prCache[scopedKey] ?? legacyCached
+            if let cached {
                 store.threads[i].pullRequestInfo = cached.toPullRequestInfo()
+                store.threads[i].pullRequestInfoBranch = branch
                 store.threads[i].pullRequestLookupStatus = .found
                 changed = true
+                if prCache[scopedKey] == nil, legacyCached != nil {
+                    prCache[scopedKey] = cached
+                    migratedLegacyCache = true
+                }
             }
+        }
+        if migratedLegacyCache {
+            persistence.savePRCache(prCache)
         }
         if changed {
             Task { @MainActor in
@@ -274,26 +296,30 @@ final class PullRequestService {
         }
     }
 
-    private func savePRInfoToCache(info: PullRequestInfo?, thread: MagentThread) {
+    private func savePRInfoToCache(info: PullRequestInfo?, status: PullRequestLookupStatus, thread: MagentThread) {
         loadPRCacheIfNeeded()
         let branch = thread.actualBranch ?? thread.branchName
-        if let info {
-            prCache[branch] = PullRequestCacheEntry(from: info)
-        } else {
+        let key = prCacheKey(projectId: thread.projectId, branch: branch)
+        if let info, status == .found {
+            prCache[key] = PullRequestCacheEntry(from: info)
+        } else if status == .notFound {
+            prCache.removeValue(forKey: key)
             prCache.removeValue(forKey: branch)
+        } else {
+            return
         }
         persistence.savePRCache(prCache)
     }
 
     private func prunePRCache() {
         loadPRCacheIfNeeded()
-        let activeBranches = Set(
+        let activeKeys = Set(
             store.threads
                 .filter { !$0.isArchived }
-                .map { $0.actualBranch ?? $0.branchName }
+                .map { prCacheKey(projectId: $0.projectId, branch: $0.actualBranch ?? $0.branchName) }
         )
         let before = prCache.count
-        prCache = prCache.filter { activeBranches.contains($0.key) }
+        prCache = prCache.filter { activeKeys.contains($0.key) }
         if prCache.count != before {
             persistence.savePRCache(prCache)
         }

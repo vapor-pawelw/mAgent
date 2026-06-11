@@ -107,9 +107,19 @@ extension ThreadDetailViewController {
             let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
             let provider = self.preferredHostingProvider(from: remotes)
             if remotes.isEmpty || provider == .unknown {
-                self.openPRButton.isHidden = true
+                if self.thread.hasStalePullRequestInfo {
+                    self.openPRButton.image = NSImage(
+                        systemSymbolName: "network.slash",
+                        accessibilityDescription: nil
+                    )
+                    self.applyPRButtonTitle()
+                } else {
+                    self.openPRButton.isHidden = true
+                }
             } else {
-                self.openPRButton.image = self.openPRButtonImage(for: provider)
+                self.openPRButton.image = self.thread.hasStalePullRequestInfo
+                    ? NSImage(systemSymbolName: "network.slash", accessibilityDescription: nil)
+                    : self.openPRButtonImage(for: provider)
                 self.applyPRButtonTitle()
             }
             self.refreshPRJiraSeparator()
@@ -118,11 +128,18 @@ extension ThreadDetailViewController {
 
     private func applyPRButtonTitle() {
         let provider = threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown
+        openPRButton.alphaValue = thread.hasStalePullRequestInfo ? 0.65 : 1.0
         if let pr = thread.pullRequestInfo {
             openPRButton.isHidden = false
             openPRButton.title = pr.shortLabel
+            openPRButton.image = thread.hasStalePullRequestInfo
+                ? NSImage(systemSymbolName: "network.slash", accessibilityDescription: nil)
+                : openPRButtonImage(for: pr.provider)
             openPRButton.imagePosition = .imageLeading
-            openPRButton.toolTip = "\(pr.displayLabel) (\(pr.statusText))\n\(externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks()))"
+            let stalePrefix = thread.hasStalePullRequestInfo
+                ? String(localized: .ThreadStrings.threadPullRequestStaleTooltipPrefix) + "\n"
+                : ""
+            openPRButton.toolTip = "\(stalePrefix)\(pr.displayLabel) (\(pr.statusText))\n\(externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks()))"
         } else if !thread.isMain, thread.pullRequestLookupStatus == .notFound, provider != .unknown {
             openPRButton.isHidden = false
             openPRButton.title = createPullRequestShortTitle(for: provider)
@@ -395,8 +412,10 @@ extension ThreadDetailViewController {
         thread.isFullyDelivered = latest.isFullyDelivered
         thread.isDirty = latest.isDirty
         let prChanged = thread.pullRequestInfo != latest.pullRequestInfo
+            || thread.pullRequestInfoBranch != latest.pullRequestInfoBranch
             || thread.pullRequestLookupStatus != latest.pullRequestLookupStatus
         thread.pullRequestInfo = latest.pullRequestInfo
+        thread.pullRequestInfoBranch = latest.pullRequestInfoBranch
         thread.pullRequestLookupStatus = latest.pullRequestLookupStatus
         refreshReviewButtonVisibility()
         if prChanged {
