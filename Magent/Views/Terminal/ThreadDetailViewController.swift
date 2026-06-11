@@ -273,6 +273,7 @@ final class ThreadDetailViewController: NSViewController {
     var diffImageOverlay: DiffImageOverlayView?
     var isDiffDragging = false
     var diffDragStartHeight: CGFloat = 0
+    var diffTabTitleRefreshGeneration = 0
     static let diffMinHeight: CGFloat = 100
     static let diffDefaultRatio: CGFloat = 0.7
     static let diffHeightKey = "InlineDiffViewController.height"
@@ -1557,7 +1558,8 @@ final class ThreadDetailViewController: NSViewController {
         thread.unreadCompletionSessions = unreadSessions
         refreshTabStatusIndicators()
         refreshTabTooltips()
-        refreshDiffViewerIfVisible()
+        threadManager.refreshGitStateAfterAgentCompletion()
+        refreshDiffForAgentCompletion()
         syncTransientState()
         schedulePromptTOCRefresh()
         refreshHeaderInfoStrip()

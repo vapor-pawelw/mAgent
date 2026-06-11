@@ -79,6 +79,9 @@ private enum DiffSearchMode: String, CaseIterable {
 }
 
 final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHandler {
+    nonisolated private static let maxLineCountedFileBytes = 5 * 1024 * 1024
+    nonisolated private static let lineCountChunkSize = 64 * 1024
+
     private let closeButton = NSButton()
     private let expandCollapseButton = NSButton()
     private let headerLabel = NSTextField(labelWithString: "")
@@ -123,6 +126,8 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
     private var searchDebounceTimer: Timer?
     private var searchMode: DiffSearchMode = .persisted
     private var loadingGeneration = 0
+    private var fileLineCountsGeneration = 0
+    private var fileLineCountsTask: Task<Void, Never>?
     private var currentRenderDiagnosticSummary = "no render requested"
 
     private static let rendererLoadTimeout: TimeInterval = 12
@@ -864,7 +869,8 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         reviewedFileSignatures: [String: String] = [:],
         collapsedFileStates: [String: Bool] = [:],
         allowsReviewMarkers: Bool = true,
-        showsSpinner: Bool = true
+        showsSpinner: Bool = true,
+        allowsTrailingFileContext: Bool = true
     ) {
         currentWorktreePath = worktreePath
         currentRenderDiagnosticSummary = renderDiagnosticSummary(
@@ -896,6 +902,7 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             "themeType": isDark ? "dark" : "light",
             "reviewedFileSignatures": reviewedFileSignatures,
             "collapsedFileStates": collapsedFileStates,
+            "fileLineCounts": [:],
             "allowsReviewMarkers": allowsReviewMarkers,
         ])
         evaluateRendererCall("window.magentDiffRenderer?.setDiff(\(payload))") { [weak self] _, error in
@@ -913,6 +920,11 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
                 self.hideLoadingOverlay()
             }
         }
+        scheduleFileLineCountUpdate(
+            rawDiff: rawDiff,
+            worktreePath: worktreePath,
+            enabled: allowsTrailingFileContext
+        )
     }
 
     func setDiffContext(_ title: String?, showsCurrentChangesButton: Bool) {
@@ -1308,6 +1320,80 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             "lines": context
         ])
         evaluateRendererCall("window.magentDiffRenderer?.showHunkContext(\(payload))")
+    }
+
+    private func scheduleFileLineCountUpdate(rawDiff: String, worktreePath: String?, enabled: Bool) {
+        fileLineCountsTask?.cancel()
+        fileLineCountsGeneration += 1
+        let generation = fileLineCountsGeneration
+        guard enabled else { return }
+
+        fileLineCountsTask = Task.detached(priority: .utility) { [rawDiff, worktreePath] in
+            let counts = Self.fileLineCounts(rawDiff: rawDiff, worktreePath: worktreePath)
+            guard !Task.isCancelled, !counts.isEmpty else { return }
+            await MainActor.run { [weak self] in
+                guard let self,
+                      self.fileLineCountsGeneration == generation else { return }
+                let payload = jsonPayload(counts)
+                self.evaluateRendererCall("window.magentDiffRenderer?.setFileLineCounts(\(payload))")
+            }
+        }
+    }
+
+    nonisolated private static func fileLineCounts(rawDiff: String, worktreePath: String?) -> [String: Int] {
+        guard let worktreePath else { return [:] }
+
+        let rootURL = URL(fileURLWithPath: worktreePath)
+        var counts: [String: Int] = [:]
+        for line in rawDiff.components(separatedBy: .newlines) where line.hasPrefix("+++ ") {
+            let path = normalizedDiffPath(String(line.dropFirst(4)))
+            guard !path.isEmpty,
+                  path != "/dev/null",
+                  counts[path] == nil else { continue }
+
+            let url = rootURL.appendingPathComponent(path)
+            guard let lineCount = Self.lineCountIfReasonable(url: url) else { continue }
+            counts[path] = lineCount
+        }
+        return counts
+    }
+
+    nonisolated private static func lineCountIfReasonable(url: URL) -> Int? {
+        guard let resourceValues = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              resourceValues.isRegularFile == true,
+              let byteCount = resourceValues.fileSize,
+              byteCount <= Self.maxLineCountedFileBytes else {
+            return nil
+        }
+
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+
+        var newlineCount = 0
+        var lastByte: UInt8?
+        while true {
+            let data = handle.readData(ofLength: Self.lineCountChunkSize)
+            if data.isEmpty { break }
+            for byte in data {
+                if byte == 10 { newlineCount += 1 }
+                lastByte = byte
+            }
+        }
+
+        guard let lastByte else { return 0 }
+        return newlineCount + (lastByte == 10 ? 0 : 1)
+    }
+
+    nonisolated private static func normalizedDiffPath(_ rawPath: String) -> String {
+        var path = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        if path.hasPrefix("\""), path.hasSuffix("\""), path.count >= 2 {
+            path.removeFirst()
+            path.removeLast()
+        }
+        if path.hasPrefix("a/") || path.hasPrefix("b/") {
+            path.removeFirst(2)
+        }
+        return path
     }
 }
 

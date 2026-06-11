@@ -211,6 +211,22 @@ extension ThreadManager {
         }
     }
 
+    /// Refreshes git-derived state immediately after an agent finishes work, then
+    /// restarts the normal git-state cadence so the next monitor tick does not
+    /// repeat the same work right away.
+    func refreshGitStateAfterAgentCompletion() {
+        resetSessionMonitorFireDate()
+
+        Task {
+            await refreshDirtyStates()
+            await refreshDeliveredStates()
+            await refreshBranchStates()
+            await syncTabNamesFromModelChanges()
+            SessionMonitorRefreshCadence.resetGitStateCounter(&dirtyCheckTickCounter)
+            resetSessionMonitorFireDate()
+        }
+    }
+
     private func resetSessionMonitorFireDate() {
         sessionMonitorTimer?.fireDate = Date().addingTimeInterval(SessionMonitorRefreshCadence.monitorIntervalSeconds)
     }

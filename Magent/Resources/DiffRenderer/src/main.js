@@ -12,6 +12,7 @@ let scrollFrameRequested = false;
 let allowsReviewMarkers = true;
 let reviewedFileSignatures = {};
 let collapsedFileStates = {};
+let fileLineCounts = {};
 let highlightCorePromise = null;
 let searchQuery = "";
 let searchMode = "caseInsensitive";
@@ -20,6 +21,7 @@ let activeSearchIndex = -1;
 const languagePromises = new Map();
 const loadedLanguages = new Set();
 const expandedContextByHunk = new Set();
+const expandedContextPayloadsByHunk = new Map();
 
 const languageByExtension = new Map(
   Object.entries({
@@ -297,6 +299,24 @@ function parseFileChunk(lines, fileIndex) {
 
   const path = newPath || oldPath || "Unknown file";
   let finalRows = rows;
+  if (finalRows.length > 0) {
+    const fileLineCount = Number(fileLineCounts[path]);
+    const hiddenStartLine = Math.max(1, previousHunkNewEnd);
+    if (Number.isFinite(fileLineCount) && fileLineCount >= hiddenStartLine) {
+      const hiddenLineCount = fileLineCount - hiddenStartLine + 1;
+      finalRows.push({
+        type: "hunk",
+        title: hiddenLineTitle(hiddenLineCount),
+        subtitle: "End of file",
+        rawText: "",
+        lineNumber: "",
+        hunkId: `file-${fileIndex}-hunk-${hunkIndex++}`,
+        filePath: null,
+        hiddenStartLine,
+        hiddenEndLine: fileLineCount,
+      });
+    }
+  }
   for (const row of finalRows) {
     if (row.type === "hunk") row.filePath = path;
     if (row.type !== "hunk" && row.type !== "notice") {
@@ -398,6 +418,32 @@ function createStat(className, value) {
   return stat;
 }
 
+function fileStatusLabel(status) {
+  switch (status) {
+    case "added":
+      return "ADDED";
+    case "deleted":
+      return "REMOVED";
+    case "renamed":
+      return "RENAMED";
+    default:
+      return null;
+  }
+}
+
+function fileStatusTitle(status) {
+  switch (status) {
+    case "added":
+      return "Added file";
+    case "deleted":
+      return "Deleted file";
+    case "renamed":
+      return "Renamed file";
+    default:
+      return "";
+  }
+}
+
 function createCodeChangeSignature(file) {
   const parts = ["code-v2", `status:${file.status}`];
   for (const row of file.rows) {
@@ -449,6 +495,17 @@ function normalizeCollapsedState(state) {
   for (const [path, collapsed] of Object.entries(state)) {
     if (typeof path !== "string" || typeof collapsed !== "boolean") continue;
     normalized[normalizePath(path)] = collapsed;
+  }
+  return normalized;
+}
+
+function normalizeFileLineCounts(state) {
+  if (!state || typeof state !== "object") return {};
+  const normalized = {};
+  for (const [path, lineCount] of Object.entries(state)) {
+    if (typeof path !== "string" || typeof lineCount !== "number") continue;
+    if (!Number.isFinite(lineCount) || lineCount < 0) continue;
+    normalized[normalizePath(path)] = lineCount;
   }
   return normalized;
 }
@@ -521,13 +578,10 @@ function renderFileHeader(file, initiallyCollapsed) {
     leading.append(checkbox);
   }
   leading.append(chevron);
-  if (file.status === "added" || file.status === "deleted") {
-    const badge = createElement(
-      "span",
-      `file-status-badge ${file.status}`,
-      file.status === "added" ? "ADDED" : "REMOVED"
-    );
-    badge.title = file.status === "added" ? "Added file" : "Deleted file";
+  const statusLabel = fileStatusLabel(file.status);
+  if (statusLabel) {
+    const badge = createElement("span", `file-status-badge ${file.status}`, statusLabel);
+    badge.title = fileStatusTitle(file.status);
     leading.append(badge);
   }
 
@@ -538,7 +592,7 @@ function renderFileHeader(file, initiallyCollapsed) {
     titleWrap.append(createElement("span", "file-subtitle", `renamed from ${file.oldPath}`));
   }
   if (file.isBinary) {
-    titleWrap.append(createElement("span", "file-badge", "Binary"));
+    titleWrap.append(createElement("span", "file-badge", "BINARY"));
   }
 
   const stats = createElement("span", "file-stats");
@@ -653,6 +707,12 @@ root.addEventListener("keydown", (event) => {
 function showHunkContext(payload) {
   const hunkId = payload?.hunkId;
   if (!hunkId || expandedContextByHunk.has(hunkId)) return;
+  expandedContextPayloadsByHunk.set(hunkId, payload);
+  renderExpandedHunkContext(hunkId, payload);
+  applySyntaxHighlighting();
+}
+
+function renderExpandedHunkContext(hunkId, payload) {
   const header = root.querySelector(`.diff-row.hunk[data-hunk-id="${CSS.escape(hunkId)}"]`);
   if (!header) return;
   header.classList.remove("loading");
@@ -688,7 +748,14 @@ function showHunkContext(payload) {
   }
   expandedContextByHunk.add(hunkId);
   header.replaceWith(fragment);
-  applySyntaxHighlighting();
+}
+
+function restoreExpandedHunkContexts() {
+  if (expandedContextPayloadsByHunk.size === 0) return;
+  expandedContextByHunk.clear();
+  for (const [hunkId, payload] of expandedContextPayloadsByHunk) {
+    renderExpandedHunkContext(hunkId, payload);
+  }
 }
 
 function renderFile(file) {
@@ -699,12 +766,22 @@ function renderFile(file) {
   section.append(renderFileHeader(file, initiallyCollapsed));
 
   const body = createElement("div", "file-body");
-  for (const row of file.rows) {
-    row.language = file.language;
-    body.append(renderRow(row));
+  if (file.isBinary && file.rows.length === 0) {
+    body.append(createPlaceholder("Diff unavailable for binary files"));
+  } else if (file.status === "renamed" && file.rows.length === 0) {
+    body.append(createPlaceholder("No content changes"));
+  } else {
+    for (const row of file.rows) {
+      row.language = file.language;
+      body.append(renderRow(row));
+    }
   }
   section.append(body);
   return section;
+}
+
+function createPlaceholder(message) {
+  return createElement("div", "file-placeholder", message);
 }
 
 function loadHighlightCore() {
@@ -981,6 +1058,7 @@ function renderCurrent() {
   const fragment = document.createDocumentFragment();
   for (const file of files) fragment.append(renderFile(file));
   root.append(fragment);
+  restoreExpandedHunkContexts();
   for (const path of changedReviewedPaths) {
     const section = Array.from(root.querySelectorAll(".file")).find((node) => (node.dataset.path ?? "") === path);
     if (!section) continue;
@@ -1082,9 +1160,11 @@ window.magentDiffRenderer = {
     allowsReviewMarkers = payload.allowsReviewMarkers !== false;
     reviewedFileSignatures = normalizeReviewedState(payload.reviewedFileSignatures);
     collapsedFileStates = normalizeCollapsedState(payload.collapsedFileStates);
+    fileLineCounts = normalizeFileLineCounts(payload.fileLineCounts);
     document.documentElement.dataset.theme = lastThemeType;
     allCollapsed = false;
     expandedContextByHunk.clear();
+    expandedContextPayloadsByHunk.clear();
     clearSearch();
     renderSafely(renderCurrent);
   },
@@ -1110,6 +1190,10 @@ window.magentDiffRenderer = {
   setAllReviewed,
   showHunkContext,
   scrollToFile,
+  setFileLineCounts(payload) {
+    fileLineCounts = normalizeFileLineCounts(payload);
+    renderSafely(renderCurrent);
+  },
   setSearch(payload) {
     if (typeof payload === "string") {
       applySearch(payload, searchMode, 0, true);

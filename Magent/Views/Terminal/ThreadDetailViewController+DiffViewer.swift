@@ -732,7 +732,8 @@ extension ThreadDetailViewController {
                         reviewedFileSignatures: commitHash == nil ? self.thread.diffReviewedFileSignatures : [:],
                         collapsedFileStates: commitHash == nil ? self.thread.diffCollapsedFileStates : [:],
                         allowsReviewMarkers: commitHash == nil,
-                        showsSpinner: true
+                        showsSpinner: true,
+                        allowsTrailingFileContext: commitHash == nil
                     )
                 }
                 diffVC = vc
@@ -859,6 +860,46 @@ extension ThreadDetailViewController {
                     self.diffVC?.setDiffSummary(fileCount: 0, additions: 0, deletions: 0)
                     self.diffVC?.setDiffUnavailableMessage(String(localized: .ThreadStrings.diffCommitReviewNoChanges))
                 }
+            }
+        }
+    }
+
+    func refreshDiffForAgentCompletion() {
+        if diffVC != nil {
+            refreshDiffViewerIfVisible()
+        } else {
+            refreshDiffTabTitleFromStats()
+        }
+    }
+
+    private func refreshDiffTabTitleFromStats() {
+        diffTabTitleRefreshGeneration += 1
+        let generation = diffTabTitleRefreshGeneration
+        let worktreePath = thread.worktreePath
+        let currentBranch = normalizedDiffBranchName(thread.actualBranch ?? thread.branchName)
+        let baseBranch = normalizedDiffBranchName(thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread))
+        let showsBranchDiff = baseBranch != nil && baseBranch != currentBranch
+
+        Task {
+            let entries: [FileDiffEntry]
+            if let baseBranch, showsBranchDiff {
+                entries = await GitService.shared.threadDiffTabStats(
+                    worktreePath: worktreePath,
+                    baseBranch: baseBranch
+                )
+            } else {
+                entries = await GitService.shared.workingTreeDiffStats(worktreePath: worktreePath)
+            }
+
+            await MainActor.run {
+                guard self.diffTabTitleRefreshGeneration == generation else { return }
+                if entries.isEmpty {
+                    self.clearCurrentDiffReviewStateIfNeeded()
+                }
+                self.updateDiffTabTitle(
+                    fileCount: entries.count,
+                    reviewedCount: self.thread.diffReviewedFileSignatures.count
+                )
             }
         }
     }
