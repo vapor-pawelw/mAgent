@@ -286,6 +286,10 @@ final class ThreadDetailViewController: NSViewController {
     let pinSeparator = VerticalSeparatorView()
     let fixedTabsSeparator = VerticalSeparatorView()
 
+    private var usesMainWindowToolbarThreadBar: Bool {
+        showsHeaderInfoStrip && !isPopoutContext
+    }
+
     init(thread: MagentThread, showsHeaderInfoStrip: Bool = true, isPopoutContext: Bool = false) {
         self.isPopoutContext = isPopoutContext
         self.showsHeaderInfoStrip = showsHeaderInfoStrip
@@ -735,7 +739,7 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         view.addSubview(topBar)
-        if showsHeaderInfoStrip {
+        if showsHeaderInfoStrip, !usesMainWindowToolbarThreadBar {
             headerInfoStrip.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(headerInfoStrip)
             headerInfoStrip.installActionButtons([openPRButton, openInJiraButton])
@@ -745,7 +749,19 @@ final class ThreadDetailViewController: NSViewController {
 
         terminalBottomToView = terminalContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
 
-        if showsHeaderInfoStrip {
+        if usesMainWindowToolbarThreadBar {
+            NSLayoutConstraint.activate([
+                topBar.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
+                topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+                topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+                topBar.heightAnchor.constraint(equalToConstant: 32),
+
+                terminalContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4),
+                terminalContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                terminalBottomToView!,
+            ])
+        } else if showsHeaderInfoStrip {
             NSLayoutConstraint.activate([
                 headerInfoStrip.topAnchor.constraint(equalTo: view.topAnchor),
                 headerInfoStrip.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -782,6 +798,11 @@ final class ThreadDetailViewController: NSViewController {
         refreshOverlayVisibilitySettings()
         refreshTerminalChromeAppearance()
         refreshHeaderInfoStrip()
+    }
+
+    func mainWindowThreadBarToolbarActions() -> [NSView] {
+        guard usesMainWindowToolbarThreadBar else { return [] }
+        return [openPRButton, openInJiraButton]
     }
 
     func setupTerminalBannerOverlay() {
