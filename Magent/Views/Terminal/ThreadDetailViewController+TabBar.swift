@@ -29,8 +29,8 @@ extension ThreadDetailViewController {
             tabBarScrollView.heightAnchor.constraint(equalToConstant: 30),
         ])
 
-        // Take leftover horizontal space inside whichever host owns the tab strip
-        // (main-window toolbar or pop-out top bar) before other buttons compress.
+        // Take all leftover horizontal space inside topBar so the scroll region
+        // grows/shrinks with window width before other buttons compress.
         tabBarScrollView.setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
         tabBarScrollView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 

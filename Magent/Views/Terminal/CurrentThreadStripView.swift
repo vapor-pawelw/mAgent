@@ -140,38 +140,13 @@ final class CurrentThreadStripView: NSView {
     private func updateAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.62).cgColor
-            layer?.borderColor = Self.borderColor(for: currentThread, sectionColor: sectionColor, appearance: effectiveAppearance).cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.70).cgColor
             iconView.contentTintColor = sectionColor ?? NSColor.secondaryLabelColor
             titleLabel.textColor = NSColor.labelColor
             metadataLabel.textColor = NSColor.secondaryLabelColor
             separatorLabel.textColor = NSColor.tertiaryLabelColor
             dirtyDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
         }
-    }
-
-    private static func borderColor(for thread: MagentThread?, sectionColor: NSColor?, appearance: NSAppearance) -> NSColor {
-        if let thread {
-            if thread.isBlockedByRateLimit {
-                return thread.isRateLimitPropagatedOnly
-                    ? NSColor.systemOrange.withAlphaComponent(0.5)
-                    : NSColor.systemRed.withAlphaComponent(0.5)
-            }
-            if thread.hasWaitingForInput {
-                return NSColor.systemOrange.withAlphaComponent(0.5)
-            }
-            if thread.isAnyBusy || thread.hasUnreadAgentCompletion {
-                return NSColor.systemGreen.withAlphaComponent(0.5)
-            }
-        }
-
-        if let sectionColor {
-            return sectionColor.withAlphaComponent(0.28)
-        }
-
-        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return isDark
-            ? NSColor.white.withAlphaComponent(0.12)
-            : NSColor.black.withAlphaComponent(0.08)
     }
 
     private static func summary(for thread: MagentThread) -> (title: String, metadata: String, tooltip: String) {
