@@ -172,6 +172,7 @@ private final class InlineThreadStatusBadgeButton: NSButton {
         setButtonType(.momentaryChange)
         imagePosition = .imageLeading
         imageHugsTitle = true
+        alignment = .center
         updateBadgeLayer()
     }
 
@@ -1473,11 +1474,17 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             if didAddGroup {
                 let separator = makeVerticalStatusSeparator()
                 threadStatusStack.addArrangedSubview(separator)
+                threadStatusStack.setCustomSpacing(12, after: separator)
             }
 
-            for descriptor in group.badges {
+            for (index, descriptor) in group.badges.enumerated() {
                 let button = makeInlineThreadStatusBadge(for: descriptor)
                 threadStatusStack.addArrangedSubview(button)
+                if index < group.badges.count - 1 {
+                    threadStatusStack.setCustomSpacing(6, after: button)
+                } else {
+                    threadStatusStack.setCustomSpacing(12, after: button)
+                }
             }
             didAddGroup = true
         }
@@ -1568,10 +1575,10 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private func inlineBadgeGroupsWidth(_ groups: [InlineThreadStatusBadgeGroup]) -> CGFloat {
         var width: CGFloat = 0
         var groupCount = 0
-        let badgeGap: CGFloat = 4
+        let badgeGap: CGFloat = 6
         for group in groups where !group.badges.isEmpty {
             if groupCount > 0 {
-                width += 17 // separator plus custom side spacing
+                width += 25 // separator plus custom side spacing
             }
             for (index, badge) in group.badges.enumerated() {
                 if index > 0 {
@@ -1587,7 +1594,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private func inlineBadgeWidth(for descriptor: InlineThreadStatusBadgeDescriptor) -> CGFloat {
         let font = NSFont.systemFont(ofSize: 11, weight: .medium)
         let textWidth = ceil((descriptor.title as NSString).size(withAttributes: [.font: font]).width)
-        let iconAndPadding: CGFloat = 34
+        let iconAndPadding: CGFloat = 46
         return min(Self.maximumInlineBadgeWidth, max(Self.minimumInlineBadgeWidth, textWidth + iconAndPadding))
     }
 
@@ -1608,7 +1615,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             threadId: thread.id,
             title: title,
             tooltip: tooltipParts.joined(separator: "\n"),
-            tintColor: inlineBadgeTintColor(for: thread, kind: kind)
+            tintColor: inlineBadgeTintColor(for: kind)
         )
     }
 
@@ -1631,14 +1638,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         Self.fullInlineBadgeTitle(for: thread)
     }
 
-    private func inlineBadgeTintColor(for thread: MagentThread, kind: ThreadStatusSummaryKind) -> NSColor {
+    private func inlineBadgeTintColor(for kind: ThreadStatusSummaryKind) -> NSColor {
         if kind == .favorites {
             return NSColor(resource: .primaryBrand)
-        }
-
-        let settings = PersistenceService.shared.loadSettings()
-        if let sectionColor = sectionColor(for: thread, settings: settings) {
-            return sectionColor
         }
         return kind.color
     }
@@ -1650,7 +1652,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         button.image = Self.statusSymbolImage(for: descriptor.kind, count: 1)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .medium))
         button.attributedTitle = NSAttributedString(
-            string: descriptor.title,
+            string: "  \(descriptor.title)  ",
             attributes: [
                 .font: NSFont.systemFont(ofSize: 11, weight: .medium),
                 .foregroundColor: NSColor(resource: .textPrimary),
@@ -1662,10 +1664,12 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         button.action = #selector(inlineThreadStatusBadgeTapped(_:))
         button.translatesAutoresizingMaskIntoConstraints = false
         button.cell?.lineBreakMode = .byTruncatingTail
+        let minWidth = button.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumInlineBadgeWidth)
         let maxWidth = button.widthAnchor.constraint(lessThanOrEqualToConstant: Self.maximumInlineBadgeWidth)
         maxWidth.priority = .required
         NSLayoutConstraint.activate([
             button.heightAnchor.constraint(equalToConstant: 22),
+            minWidth,
             maxWidth,
         ])
         return button

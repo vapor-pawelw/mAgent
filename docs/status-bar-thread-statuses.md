@@ -6,7 +6,7 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 
 - The left side of the bottom status bar shows aggregate thread counts for `busy`, `waiting`, `done`, and `rate-limited` when any threads currently match those states.
 - When the bar has enough horizontal space, favorite, waiting, done, busy, and separate-window statuses expand into one-line clickable thread badges instead of aggregate count labels.
-- Inline thread badges show the thread description when present, otherwise the thread name, capped at 40 characters. They do not show status words; color, icon, and tooltip provide the context.
+- Inline thread badges show the thread description when present, otherwise the thread name, capped at 40 characters. They do not show status words; status glyph color, matching border color, and tooltip provide the context.
 - Inline badges are grouped by logical status with subtle vertical separators between groups. Rate-limited threads do not expand inline; when any rate-limited status is active, the left side stays in aggregate mode so the existing rate-limit count and popover remain visible.
 - If the inline groups do not fit cleanly, the status bar falls back to the aggregate count controls and existing popovers.
 - When at least one thread is favorited, a dedicated `X favorites` control appears immediately after the session-count control, using a primary-color heart icon.
