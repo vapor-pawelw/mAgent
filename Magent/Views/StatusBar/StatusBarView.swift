@@ -2584,24 +2584,39 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         guard let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) else { return nil }
 
         let orderedTerminalSessions = thread.tmuxSessionNames + thread.agentTmuxSessions.filter { !thread.tmuxSessionNames.contains($0) }
+        func navigableStatusSession(where matchesStatus: (String) -> Bool) -> String? {
+            if let detachedSession = orderedTerminalSessions.first(where: {
+                matchesStatus($0) && PopoutWindowManager.shared.isTabDetached(sessionName: $0)
+            }) {
+                return detachedSession
+            }
+            return orderedTerminalSessions.first {
+                matchesStatus($0) && !thread.deadSessions.contains($0)
+            }
+        }
 
         switch status {
         case .busy:
-            return orderedTerminalSessions.first {
+            return navigableStatusSession {
                 thread.busySessions.contains($0) || thread.magentBusySessions.contains($0)
             }
         case .waiting:
-            return orderedTerminalSessions.first {
+            return navigableStatusSession {
                 thread.waitingForInputSessions.contains($0)
             }
         case .done:
-            return orderedTerminalSessions.first {
+            if let detachedSession = thread.unreadCompletionSessions.first(where: {
+                PopoutWindowManager.shared.isTabDetached(sessionName: $0)
+            }) {
+                return detachedSession
+            }
+            return navigableStatusSession {
                 thread.unreadCompletionSessions.contains($0)
-            } ?? thread.unreadCompletionSessions.first
+            }
         case .separateWindows:
             return nil
         case .rateLimited:
-            return orderedTerminalSessions.first {
+            return navigableStatusSession {
                 thread.rateLimitedSessions[$0] != nil
             }
         case .favorites:
