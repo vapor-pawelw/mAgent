@@ -283,8 +283,13 @@ final class ThreadDetailViewController: NSViewController {
     static let terminalTabTitle = "Terminal"
 
     let prJiraSeparator = VerticalSeparatorView()
+    let archiveSeparator = VerticalSeparatorView()
     let pinSeparator = VerticalSeparatorView()
     let fixedTabsSeparator = VerticalSeparatorView()
+
+    private var usesMainWindowToolbarChrome: Bool {
+        showsHeaderInfoStrip && !isPopoutContext
+    }
 
     init(thread: MagentThread, showsHeaderInfoStrip: Bool = true, isPopoutContext: Bool = false) {
         self.isPopoutContext = isPopoutContext
@@ -565,10 +570,9 @@ final class ThreadDetailViewController: NSViewController {
 
         configureTabBarScrollView()
 
-        // PR/Jira buttons live in a `PopoutInfoStripView`'s capsule action row when
-        // either our own header strip is shown (main window) OR the embedding pop-out
-        // window installs them into its own info strip. They only fall back to the
-        // top bar with textured chrome when neither host exists.
+        // PR/Jira buttons use compact inline chrome when hosted by the main-window
+        // toolbar or a pop-out info strip. They only fall back to textured chrome
+        // when the detail controller owns the whole in-content top bar.
         let prJiraHostedInInfoStrip = showsHeaderInfoStrip || isPopoutContext
         let prJiraBezelStyle: NSButton.BezelStyle = prJiraHostedInInfoStrip ? .inline : .texturedRounded
         let prJiraControlSize: NSControl.ControlSize = prJiraHostedInInfoStrip ? .small : .regular
@@ -693,7 +697,6 @@ final class ThreadDetailViewController: NSViewController {
         prJiraSeparator.setContentHuggingPriority(.required, for: .vertical)
         prJiraSeparator.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        let archiveSeparator = VerticalSeparatorView()
         archiveSeparator.translatesAutoresizingMaskIntoConstraints = false
         archiveSeparator.isHidden = thread.isMain
         archiveSeparator.setContentHuggingPriority(.required, for: .horizontal)
@@ -734,8 +737,10 @@ final class ThreadDetailViewController: NSViewController {
             self?.refreshTerminalChromeAppearance()
         }
 
-        view.addSubview(topBar)
-        if showsHeaderInfoStrip {
+        if !usesMainWindowToolbarChrome {
+            view.addSubview(topBar)
+        }
+        if showsHeaderInfoStrip, !usesMainWindowToolbarChrome {
             headerInfoStrip.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(headerInfoStrip)
             headerInfoStrip.installActionButtons([openPRButton, openInJiraButton])
@@ -745,7 +750,14 @@ final class ThreadDetailViewController: NSViewController {
 
         terminalBottomToView = terminalContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
 
-        if showsHeaderInfoStrip {
+        if usesMainWindowToolbarChrome {
+            NSLayoutConstraint.activate([
+                terminalContainer.topAnchor.constraint(equalTo: view.topAnchor),
+                terminalContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                terminalBottomToView!,
+            ])
+        } else if showsHeaderInfoStrip {
             NSLayoutConstraint.activate([
                 headerInfoStrip.topAnchor.constraint(equalTo: view.topAnchor),
                 headerInfoStrip.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -782,6 +794,28 @@ final class ThreadDetailViewController: NSViewController {
         refreshOverlayVisibilitySettings()
         refreshTerminalChromeAppearance()
         refreshHeaderInfoStrip()
+    }
+
+    func mainWindowToolbarControls() -> [NSView] {
+        guard usesMainWindowToolbarChrome else { return [] }
+        return [
+            addTabButton,
+            reviewButton,
+            continueInButton,
+            tabScrollLeftButton,
+            tabBarScrollView,
+            tabScrollRightButton,
+            openPRButton,
+            openInJiraButton,
+            prJiraSeparator,
+            openInXcodeButton,
+            openInFinderButton,
+            exportContextButton,
+            resyncLocalPathsButton,
+            archiveSeparator,
+            popOutThreadButton,
+            archiveThreadButton,
+        ]
     }
 
     func setupTerminalBannerOverlay() {

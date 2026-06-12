@@ -59,6 +59,9 @@ final class SplitViewController: NSSplitViewController {
     private var cachedKeyBindings: KeyBindingSettings = KeyBindingSettings()
     private weak var observedWindowForFocusNotifications: NSWindow?
     private let currentThreadToolbarStrip = CurrentThreadStripView()
+    private let currentThreadToolbarStack = NSStackView()
+    private var didConfigureCurrentThreadToolbarStack = false
+    private var didInstallCurrentThreadToolbarSizingConstraints = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -593,8 +596,10 @@ final class SplitViewController: NSSplitViewController {
     private func presentThread(_ thread: MagentThread) {
         currentDetailVC?.cacheTerminalViewsForReuse()
         let detailVC = ThreadDetailViewController(thread: thread)
+        detailVC.loadViewIfNeeded()
         currentDetailVC = detailVC
         refreshCurrentThreadToolbarStrip(with: thread)
+        refreshCurrentThreadToolbarControls()
 
         preserveSidebarWidthDuringContentChange {
             contentContainerVC.setContent(detailVC)
@@ -628,15 +633,67 @@ final class SplitViewController: NSSplitViewController {
             ThreadManager.shared.threads.first(where: { $0.id == candidate.id }) ?? candidate
         }) else {
             currentThreadToolbarStrip.isHidden = true
+            currentThreadToolbarStack.isHidden = true
             return
         }
 
+        currentThreadToolbarStack.isHidden = false
         currentThreadToolbarStrip.isHidden = false
         currentThreadToolbarStrip.configure(with: thread, sectionColor: currentThreadSectionColor(for: thread))
     }
 
     private func clearCurrentThreadToolbarStrip() {
         currentThreadToolbarStrip.isHidden = true
+        currentThreadToolbarStack.isHidden = true
+        refreshCurrentThreadToolbarControls()
+    }
+
+    private func configureCurrentThreadToolbarStackIfNeeded() {
+        guard !didConfigureCurrentThreadToolbarStack else { return }
+        didConfigureCurrentThreadToolbarStack = true
+
+        currentThreadToolbarStack.orientation = .horizontal
+        currentThreadToolbarStack.alignment = .centerY
+        currentThreadToolbarStack.spacing = 4
+        currentThreadToolbarStack.detachesHiddenViews = true
+        currentThreadToolbarStack.translatesAutoresizingMaskIntoConstraints = false
+        currentThreadToolbarStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        currentThreadToolbarStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        currentThreadToolbarStack.addArrangedSubview(currentThreadToolbarStrip)
+        currentThreadToolbarStack.setCustomSpacing(8, after: currentThreadToolbarStrip)
+    }
+
+    private func refreshCurrentThreadToolbarControls() {
+        configureCurrentThreadToolbarStackIfNeeded()
+
+        for view in currentThreadToolbarStack.arrangedSubviews where view !== currentThreadToolbarStrip {
+            currentThreadToolbarStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+
+        let controls = currentDetailVC?.mainWindowToolbarControls() ?? []
+        guard !controls.isEmpty else {
+            currentThreadToolbarStack.isHidden = currentThreadToolbarStrip.isHidden
+            return
+        }
+
+        currentThreadToolbarStack.isHidden = false
+
+        for control in controls {
+            if let previousStack = control.superview as? NSStackView {
+                previousStack.removeArrangedSubview(control)
+            }
+            control.removeFromSuperview()
+            control.translatesAutoresizingMaskIntoConstraints = false
+            currentThreadToolbarStack.addArrangedSubview(control)
+        }
+
+        if let detailVC = currentDetailVC {
+            currentThreadToolbarStack.setCustomSpacing(8, after: detailVC.tabBarScrollView)
+            currentThreadToolbarStack.setCustomSpacing(8, after: detailVC.openInJiraButton)
+            currentThreadToolbarStack.setCustomSpacing(8, after: detailVC.resyncLocalPathsButton)
+            currentThreadToolbarStack.setCustomSpacing(8, after: detailVC.archiveSeparator)
+        }
     }
 
     private func recoverAndShowThread(_ thread: MagentThread) {
@@ -1100,11 +1157,18 @@ extension SplitViewController: NSToolbarDelegate {
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = String(localized: .ThreadStrings.threadInfoMainWorktree)
             item.paletteLabel = item.label
+            configureCurrentThreadToolbarStackIfNeeded()
             currentThreadToolbarStrip.translatesAutoresizingMaskIntoConstraints = false
-            currentThreadToolbarStrip.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
-            currentThreadToolbarStrip.widthAnchor.constraint(lessThanOrEqualToConstant: 480).isActive = true
-            item.view = currentThreadToolbarStrip
+            if !didInstallCurrentThreadToolbarSizingConstraints {
+                didInstallCurrentThreadToolbarSizingConstraints = true
+                currentThreadToolbarStrip.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
+                currentThreadToolbarStrip.widthAnchor.constraint(lessThanOrEqualToConstant: 480).isActive = true
+                currentThreadToolbarStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 720).isActive = true
+                currentThreadToolbarStack.widthAnchor.constraint(lessThanOrEqualToConstant: 1080).isActive = true
+            }
+            item.view = currentThreadToolbarStack
             refreshCurrentThreadToolbarStrip()
+            refreshCurrentThreadToolbarControls()
             return item
         }
         if itemIdentifier == Self.recentlyArchivedToolbarItemId {

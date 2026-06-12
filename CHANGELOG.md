@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 
 #### Features
-- Added a compact current-thread strip to the window toolbar, showing the active thread's icon, description, branch/worktree metadata, and dirty state while leaving Settings and Recently Archived in place.
+- Moved the main-window thread tabs and actions into the window toolbar beside the current-thread tile, removing the extra in-content top bar while keeping pop-out windows unchanged.
 
 #### Bug Fixes
 - PR/MR badges now keep the last confirmed link through failed syncs and app relaunches, dimming stale metadata instead of removing it until a later successful sync confirms the current state.
