@@ -72,9 +72,9 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
     var symbolName: String {
         switch self {
         case .busy:
-            return "circle.dotted"
+            return "progress.indicator"
         case .waiting:
-            return "exclamationmark.bubble"
+            return "questionmark.bubble.fill"
         case .done:
             return "checkmark.circle.fill"
         case .separateWindows:
@@ -83,6 +83,15 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return "hourglass"
         case .favorites:
             return "heart.fill"
+        }
+    }
+
+    var fallbackSymbolName: String? {
+        switch self {
+        case .busy:
+            return "circle.dotted"
+        case .waiting, .done, .separateWindows, .rateLimited, .favorites:
+            return nil
         }
     }
 
@@ -1231,10 +1240,8 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private func makeStatusButton(for summary: ThreadStatusSummaryDescriptor) -> NSButton {
         let button = StatusSummaryButton()
         button.isBordered = false
-        button.image = NSImage(
-            systemSymbolName: summary.kind.symbolName,
-            accessibilityDescription: summary.kind.buttonTitle(for: summary.count)
-        )?.withSymbolConfiguration(
+        let image = Self.statusSymbolImage(for: summary.kind, count: summary.count)
+        button.image = image?.withSymbolConfiguration(
             NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
         )
         button.imagePosition = .imageLeading
@@ -1254,6 +1261,15 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             }
         }
         return button
+    }
+
+    private static func statusSymbolImage(for kind: ThreadStatusSummaryKind, count: Int) -> NSImage? {
+        let accessibilityDescription = kind.buttonTitle(for: count)
+        if let image = NSImage(systemSymbolName: kind.symbolName, accessibilityDescription: accessibilityDescription) {
+            return image
+        }
+        guard let fallback = kind.fallbackSymbolName else { return nil }
+        return NSImage(systemSymbolName: fallback, accessibilityDescription: accessibilityDescription)
     }
 
     private func configureStatusButton(_ button: NSButton, summary: ThreadStatusSummaryDescriptor) {
