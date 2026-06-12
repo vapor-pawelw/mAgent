@@ -268,7 +268,9 @@ final class PopoutWindowManager: PopoutStateProviding {
     }
 
     func bringToFront(sessionName: String) {
-        tabWindows[sessionName]?.window?.makeKeyAndOrderFront(nil)
+        guard let controller = tabWindows[sessionName] else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        controller.window?.makeKeyAndOrderFront(nil)
     }
 
     func revealAllWindowsWithoutFocus() {

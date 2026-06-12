@@ -765,6 +765,7 @@ final class ThreadManager {
     func primePersistedThreadsForLaunch() {
         loadThreads()
         delegate?.threadManager(self, didUpdateThreads: threads)
+        NotificationCenter.default.post(name: .magentThreadsDidChange, object: nil)
     }
 
     func restoreThreads() async {

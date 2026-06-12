@@ -101,7 +101,7 @@ private final class StatusSummaryButton: NSButton {
     }
 }
 
-private final class InlineThreadStatusBadgeButton: NSControl {
+private final class InlineThreadStatusBadgeButton: NSButton {
     private static let horizontalPadding: CGFloat = 8
     private static let labelSpacing: CGFloat = 8
     private static let height: CGFloat = 21
@@ -135,7 +135,7 @@ private final class InlineThreadStatusBadgeButton: NSControl {
         fatalError("init(coder:) has not been implemented")
     }
 
-    var title: NSAttributedString {
+    var badgeTitle: NSAttributedString {
         get { titleLabel.attributedStringValue }
         set {
             titleLabel.attributedStringValue = newValue
@@ -203,21 +203,6 @@ private final class InlineThreadStatusBadgeButton: NSControl {
         updateBadgeLayer()
     }
 
-    override func mouseDown(with event: NSEvent) {
-        guard isEnabled else { return }
-        performPress()
-    }
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 36 || event.keyCode == 49 {
-            performPress()
-        } else {
-            super.keyDown(with: event)
-        }
-    }
-
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHidden, alphaValue > 0, bounds.contains(point) else {
             return nil
@@ -225,25 +210,16 @@ private final class InlineThreadStatusBadgeButton: NSControl {
         return self
     }
 
-    override func accessibilityRole() -> NSAccessibility.Role? {
-        .button
-    }
-
-    override func accessibilityPerformPress() -> Bool {
-        performPress()
-        return true
-    }
-
-    private func performPress() {
-        sendAction(action, to: target)
-    }
-
     private func setupBadgeLayer() {
         wantsLayer = true
         layer?.cornerRadius = 7
         layer?.borderWidth = 1
         layer?.masksToBounds = true
+        isBordered = false
+        bezelStyle = .inline
         focusRingType = .none
+        setButtonType(.momentaryChange)
+        alignment = .center
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.lineBreakMode = .byTruncatingTail
@@ -1215,6 +1191,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
     private let threadStatusStack = NSStackView()
     private let sessionCountButton = NSButton()
+    private let sessionStatusSeparator = VerticalSeparatorView()
     private let favoritesButton = StatusSummaryButton()
     private let rateLimitLabel = NSTextField(labelWithString: "")
     private let syncStatusLabel = NSTextField(labelWithString: "")
@@ -1318,6 +1295,12 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         threadStatusStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
         threadStatusStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
+        sessionStatusSeparator.translatesAutoresizingMaskIntoConstraints = false
+        sessionStatusSeparator.setContentHuggingPriority(.required, for: .horizontal)
+        sessionStatusSeparator.setContentCompressionResistancePriority(.required, for: .horizontal)
+        sessionStatusSeparator.setContentHuggingPriority(.required, for: .vertical)
+        sessionStatusSeparator.setContentCompressionResistancePriority(.required, for: .vertical)
+
         sessionCountButton.isBordered = false
         sessionCountButton.bezelStyle = .inline
         sessionCountButton.focusRingType = .none
@@ -1357,10 +1340,10 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         syncRefreshButton.toolTip = "Refresh PR and Jira statuses"
         syncRefreshButton.translatesAutoresizingMaskIntoConstraints = false
 
-        leftStack.setViews([sessionCountButton, favoritesButton, threadStatusStack], in: .leading)
+        leftStack.setViews([sessionCountButton, sessionStatusSeparator, favoritesButton, threadStatusStack], in: .leading)
         leftStack.orientation = .horizontal
         leftStack.alignment = .centerY
-        leftStack.spacing = 12
+        leftStack.spacing = 10
         leftStack.translatesAutoresizingMaskIntoConstraints = false
 
         rightStack.setViews([rateLimitLabel, syncStatusLabel, syncRefreshButton], in: .leading)
@@ -1412,6 +1395,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         nc.addObserver(self, selector: sel, name: .magentAgentBusySessionsChanged, object: nil)
         nc.addObserver(self, selector: sel, name: .magentAgentWaitingForInput, object: nil)
         nc.addObserver(self, selector: sel, name: .magentThreadCreationFinished, object: nil)
+        nc.addObserver(self, selector: sel, name: .magentThreadsDidChange, object: nil)
         nc.addObserver(self, selector: sel, name: .magentSessionCleanupCompleted, object: nil)
         nc.addObserver(self, selector: sel, name: .magentDeadSessionsDetected, object: nil)
         nc.addObserver(self, selector: sel, name: .magentTmuxHealthChanged, object: nil)
@@ -1582,9 +1566,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         for group in groups {
             guard !group.badges.isEmpty else { continue }
             if didAddGroup {
-                let separator = makeVerticalStatusSeparator()
-                threadStatusStack.addArrangedSubview(separator)
-                threadStatusStack.setCustomSpacing(8, after: separator)
+                if let previousView = threadStatusStack.arrangedSubviews.last {
+                    threadStatusStack.setCustomSpacing(12, after: previousView)
+                }
             }
 
             let groupGlyph = makeInlineStatusGroupGlyph(for: group.kind)
@@ -1692,7 +1676,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let badgeGap: CGFloat = 6
         for group in groups where !group.badges.isEmpty {
             if groupCount > 0 {
-                width += 21 // separator plus custom side spacing
+                width += 12 // inter-group spacing before the next shared glyph
             }
             width += 19 // shared group glyph plus badge-sized spacing before badges
             for (index, badge) in group.badges.enumerated() {
@@ -1778,7 +1762,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private func makeInlineThreadStatusBadge(for descriptor: InlineThreadStatusBadgeDescriptor) -> InlineThreadStatusBadgeButton {
         let button = InlineThreadStatusBadgeButton(threadId: descriptor.threadId, statusKind: descriptor.kind)
         button.badgeTintColor = descriptor.tintColor
-        button.title = inlineBadgeTitle(for: descriptor)
+        button.badgeTitle = inlineBadgeTitle(for: descriptor)
         button.repositoryTitle = inlineBadgeRepositoryTitle(for: descriptor)
         button.toolTip = descriptor.tooltip
         button.setAccessibilityLabel(descriptor.tooltip.replacingOccurrences(of: "\n", with: ", "))
@@ -2159,7 +2143,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         } else {
             sessionCountButton.toolTip = "Active tmux sessions — click to manage"
         }
-        sessionCountButton.isHidden = total == 0 && zombieCount == 0 && !isRecoveringTmux
+        let shouldHideSessionCount = total == 0 && zombieCount == 0 && !isRecoveringTmux
+        sessionCountButton.isHidden = shouldHideSessionCount
+        sessionStatusSeparator.isHidden = shouldHideSessionCount
     }
 
     @objc private func sessionCountTapped() {
@@ -2362,12 +2348,13 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         showPopover(for: .favorites)
     }
 
-    @objc private func inlineThreadStatusBadgeTapped(_ sender: NSControl) {
+    @objc private func inlineThreadStatusBadgeTapped(_ sender: NSButton) {
         guard let badge = sender as? InlineThreadStatusBadgeButton else { return }
         navigateToThread(
             threadId: badge.threadId,
             sessionName: navigationSessionName(for: badge.statusKind, threadId: badge.threadId),
-            centerInSidebar: shouldCenterSidebarOnNavigation(for: badge.statusKind)
+            centerInSidebar: shouldCenterSidebarOnNavigation(for: badge.statusKind),
+            status: badge.statusKind
         )
     }
 
@@ -2453,7 +2440,8 @@ final class StatusBarView: NSView, NSPopoverDelegate {
                 self?.navigateToThread(
                     threadId: threadId,
                     sessionName: sessionName,
-                    centerInSidebar: self?.shouldCenterSidebarOnNavigation(for: status) ?? false
+                    centerInSidebar: self?.shouldCenterSidebarOnNavigation(for: status) ?? false,
+                    status: status
                 )
             }
         )
@@ -2467,7 +2455,47 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         status == .favorites || status == .separateWindows
     }
 
-    private func navigateToThread(threadId: UUID, sessionName: String?, centerInSidebar: Bool) {
+    private func navigateToThread(
+        threadId: UUID,
+        sessionName: String?,
+        centerInSidebar: Bool,
+        status: ThreadStatusSummaryKind
+    ) {
+        if let sessionName,
+           PopoutWindowManager.shared.isTabDetached(sessionName: sessionName) {
+            PopoutWindowManager.shared.bringToFront(sessionName: sessionName)
+            if status == .done {
+                ThreadManager.shared.markSessionCompletionSeen(threadId: threadId, sessionName: sessionName)
+            }
+            refresh()
+            return
+        }
+
+        if PopoutWindowManager.shared.isThreadPoppedOut(threadId) {
+            if let sessionName,
+               let popout = PopoutWindowManager.shared.threadWindows[threadId],
+               let tabIndex = popout.detailVC.displayIndex(forIdentifier: sessionName) {
+                popout.detailVC.selectTab(at: tabIndex)
+            }
+            PopoutWindowManager.shared.bringToFront(threadId: threadId)
+            if status == .done {
+                ThreadManager.shared.markThreadCompletionSeen(threadId: threadId)
+            }
+            refresh()
+            if centerInSidebar {
+                NotificationCenter.default.post(
+                    name: .magentNavigateToThread,
+                    object: self,
+                    userInfo: [
+                        "threadId": threadId,
+                        "sessionName": sessionName as Any,
+                        "centerInSidebar": true,
+                    ]
+                )
+            }
+            return
+        }
+
         var userInfo: [String: Any] = [
             "threadId": threadId,
             "sessionName": sessionName as Any,
@@ -2540,7 +2568,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
                 thread.waitingForInputSessions.contains($0)
             }
         case .done:
-            return nil
+            return orderedTerminalSessions.first {
+                thread.unreadCompletionSessions.contains($0)
+            } ?? thread.unreadCompletionSessions.first
         case .separateWindows:
             return nil
         case .rateLimited:
