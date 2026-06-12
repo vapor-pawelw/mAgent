@@ -5,6 +5,10 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 ## User-facing behavior
 
 - The left side of the bottom status bar shows aggregate thread counts for `busy`, `waiting`, `done`, and `rate-limited` when any threads currently match those states.
+- When the bar has enough horizontal space, favorite, waiting, done, busy, and separate-window statuses expand into one-line clickable thread badges instead of aggregate count labels.
+- Inline thread badges show the thread description when present, otherwise the thread name, capped at 40 characters. They do not show status words; color, icon, and tooltip provide the context.
+- Inline badges are grouped by logical status with subtle vertical separators between groups. Rate-limited threads do not expand inline; when any rate-limited status is active, the left side stays in aggregate mode so the existing rate-limit count and popover remain visible.
+- If the inline groups do not fit cleanly, the status bar falls back to the aggregate count controls and existing popovers.
 - When at least one thread is favorited, a dedicated `X favorites` control appears immediately after the session-count control, using a primary-color heart icon.
 - Each aggregate status is clickable. Clicking one opens a compact popover that looks like a tooltip and shows up to the 3 most recently added matching threads.
 - Clicking a thread row in that popover dismisses it and navigates directly to that thread.
@@ -46,6 +50,8 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - Separate-window close actions should still route through `PopoutWindowManager` so the same persistence, duplicate-window guards, and sidebar/status notifications fire as they do for context-menu or keyboard-triggered returns.
 - While a status popover is visible, `StatusBarView` avoids rebuilding the status-button stack (to preserve the popover anchor) and updates existing button counts in place.
 - If a read action clears the currently open status entirely (for example, `done` goes to zero after `Mark All as Read`), `StatusBarView` must close that popover and rebuild the status-button stack immediately so stale `done` UI does not linger.
+- Inline badge mode is opportunistic. `StatusBarView` measures the space left after the protected session count and right-side rate-limit/sync controls, then drops lower-priority inline groups before falling back to aggregate mode.
+- Inline badge group priority is favorites, waiting, done, busy, then separate windows. A group is rendered as a full group or not at all; the status bar does not mix inline badges with `+more` overflow controls.
 
 ## Gotchas
 
@@ -53,6 +59,7 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - When choosing the 3 rows to show, sort by newest-added first, take the latest 3, then reverse them for display so the newest row ends up bottom-most near the status-bar anchor.
 - Keep the popover scoped to the left-side aggregate status items. The right-side sync/rate-limit controls already use menus and manual actions and should not be converted to the thread-row tooltip behavior.
 - Keep favorites as a separate left-side control (not part of the `ThreadStatusSummaryKind` button stack) so opening/refreshing status popovers does not accidentally remove the favorites anchor view.
+- Inline mode hides the separate favorites aggregate button and renders favorites inside the inline badge strip. Aggregate fallback must restore the favorites button even when only the window width changed.
 - Keep sync failure details sourced from the most recent sync runner output rather than inventing independent UI-only error state, so hover text and the sync context menu stay in sync.
 - For the `done` popover row-level mark-read button, suppress row navigation when the click lands inside the button hit area. Otherwise the click can both mark as read and navigate, which is surprising and can race popover refresh.
 - Keep popover content rows at a fixed width. The popover width is constant; description text may wrap up to two lines, but content must never change the popover width while rows are being marked read.

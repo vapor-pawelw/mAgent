@@ -23,6 +23,9 @@ All notable changes to this project will be documented in this file.
 
 ### Status Bar
 
+#### Features
+- The bottom status bar now expands favorite, waiting, completed, busy, and popped-out thread statuses into compact clickable thread badges when there is enough room, then falls back to the existing count badges when space gets tight.
+
 #### Bug Fixes
 - Busy and waiting status badges now use clearer filled glyphs in the bottom status bar.
 

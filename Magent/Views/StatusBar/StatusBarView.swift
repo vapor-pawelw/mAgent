@@ -17,6 +17,27 @@ private extension NSImage {
 
 private final class StatusSummaryButton: NSButton {
     var contextMenuProvider: (() -> NSMenu?)?
+    var badgeTintColor: NSColor = .tertiaryLabelColor {
+        didSet {
+            updateBadgeLayer()
+        }
+    }
+    private var trackingArea: NSTrackingArea?
+    private var isHovered = false {
+        didSet {
+            updateBadgeLayer()
+        }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupBadgeLayer()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func rightMouseDown(with event: NSEvent) {
         guard let menu = contextMenuProvider?() else {
@@ -24,6 +45,145 @@ private final class StatusSummaryButton: NSButton {
             return
         }
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateBadgeLayer()
+    }
+
+    override func updateLayer() {
+        super.updateLayer()
+        updateBadgeLayer()
+    }
+
+    private func setupBadgeLayer() {
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        layer?.borderWidth = 1
+        layer?.masksToBounds = true
+        contentTintColor = badgeTintColor
+        updateBadgeLayer()
+    }
+
+    private func updateBadgeLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let background = NSColor.controlBackgroundColor
+            layer?.backgroundColor = (isHovered
+                ? badgeTintColor.withAlphaComponent(0.10)
+                : background.withAlphaComponent(0.82)
+            ).cgColor
+            layer?.borderColor = badgeTintColor.withAlphaComponent(isHovered ? 0.58 : 0.34).cgColor
+        }
+    }
+}
+
+private final class InlineThreadStatusBadgeButton: NSButton {
+    let threadId: UUID
+    let statusKind: ThreadStatusSummaryKind
+    var badgeTintColor: NSColor = .tertiaryLabelColor {
+        didSet {
+            updateBadgeLayer()
+        }
+    }
+    private var trackingArea: NSTrackingArea?
+    private var isHovered = false {
+        didSet {
+            updateBadgeLayer()
+        }
+    }
+
+    init(threadId: UUID, statusKind: ThreadStatusSummaryKind) {
+        self.threadId = threadId
+        self.statusKind = statusKind
+        super.init(frame: .zero)
+        setupBadgeLayer()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateBadgeLayer()
+    }
+
+    override func updateLayer() {
+        super.updateLayer()
+        updateBadgeLayer()
+    }
+
+    private func setupBadgeLayer() {
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        layer?.borderWidth = 1
+        layer?.masksToBounds = true
+        isBordered = false
+        bezelStyle = .inline
+        focusRingType = .none
+        setButtonType(.momentaryChange)
+        imagePosition = .imageLeading
+        imageHugsTitle = true
+        updateBadgeLayer()
+    }
+
+    private func updateBadgeLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let background = NSColor.controlBackgroundColor
+            layer?.backgroundColor = (isHovered
+                ? badgeTintColor.withAlphaComponent(0.10)
+                : background.withAlphaComponent(0.82)
+            ).cgColor
+            layer?.borderColor = badgeTintColor.withAlphaComponent(isHovered ? 0.62 : 0.38).cgColor
+        }
     }
 }
 
@@ -141,6 +301,27 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
 private struct ThreadStatusSummaryDescriptor: Equatable {
     let kind: ThreadStatusSummaryKind
     let count: Int
+}
+
+private struct InlineThreadStatusBadgeDescriptor: Equatable {
+    let kind: ThreadStatusSummaryKind
+    let threadId: UUID
+    let title: String
+    let tooltip: String
+    let tintColor: NSColor
+
+    static func == (lhs: InlineThreadStatusBadgeDescriptor, rhs: InlineThreadStatusBadgeDescriptor) -> Bool {
+        lhs.kind == rhs.kind
+            && lhs.threadId == rhs.threadId
+            && lhs.title == rhs.title
+            && lhs.tooltip == rhs.tooltip
+            && lhs.tintColor == rhs.tintColor
+    }
+}
+
+private struct InlineThreadStatusBadgeGroup: Equatable {
+    let kind: ThreadStatusSummaryKind
+    let badges: [InlineThreadStatusBadgeDescriptor]
 }
 
 private struct ThreadStatusPopoverEntry {
@@ -917,23 +1098,30 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     static let barHeight: CGFloat = 30
 
     private static let horizontalPadding: CGFloat = 20
+    private static let minimumInlineBadgeWidth: CGFloat = 46
+    private static let maximumInlineBadgeWidth: CGFloat = 210
 
     // MARK: - Subviews
 
     private let threadStatusStack = NSStackView()
     private let sessionCountButton = NSButton()
-    private let favoritesButton = NSButton()
+    private let favoritesButton = StatusSummaryButton()
     private let rateLimitLabel = NSTextField(labelWithString: "")
     private let syncStatusLabel = NSTextField(labelWithString: "")
     private let syncRefreshButton = NSButton()
     private let separator = NSBox()
+    private let leftStack = NSStackView()
+    private let rightStack = NSStackView()
 
     // MARK: - State
 
     private nonisolated(unsafe) var statusTimer: Timer?
     private var statusButtonsByKind: [ThreadStatusSummaryKind: NSButton] = [:]
     private var lastRenderedThreadSummaries: [ThreadStatusSummaryDescriptor] = []
+    private var lastRenderedInlineBadgeGroups: [InlineThreadStatusBadgeGroup] = []
+    private var isRenderingInlineThreadBadges = false
     private var lastRenderedThreadCount: Int = -1
+    private var lastLayoutWidth: CGFloat = 0
     private var lastRenderedFavoriteCount: Int = -1
     private var transientStatusThreadIds: [ThreadStatusSummaryKind: Set<UUID>] = [:]
     private var transientStatusAddedAt: [ThreadStatusSummaryKind: [UUID: Date]] = [:]
@@ -976,6 +1164,14 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     override func updateLayer() {
         super.updateLayer()
         updateLayerColors()
+    }
+
+    override func layout() {
+        super.layout()
+        let roundedWidth = bounds.width.rounded(.down)
+        guard roundedWidth > 0, roundedWidth != lastLayoutWidth else { return }
+        lastLayoutWidth = roundedWidth
+        updateThreadStatus()
     }
 
     private func updateLayerColors() {
@@ -1051,13 +1247,13 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         syncRefreshButton.toolTip = "Refresh PR and Jira statuses"
         syncRefreshButton.translatesAutoresizingMaskIntoConstraints = false
 
-        let leftStack = NSStackView(views: [sessionCountButton, favoritesButton, threadStatusStack])
+        leftStack.setViews([sessionCountButton, favoritesButton, threadStatusStack], in: .leading)
         leftStack.orientation = .horizontal
         leftStack.alignment = .centerY
         leftStack.spacing = 12
         leftStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let rightStack = NSStackView(views: [rateLimitLabel, syncStatusLabel, syncRefreshButton])
+        rightStack.setViews([rateLimitLabel, syncStatusLabel, syncRefreshButton], in: .leading)
         rightStack.orientation = .horizontal
         rightStack.alignment = .centerY
         rightStack.spacing = 12
@@ -1150,8 +1346,34 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             return ThreadStatusSummaryDescriptor(kind: kind, count: count)
         }
 
-        let shouldRebuild = summaries != lastRenderedThreadSummaries || threads.count != lastRenderedThreadCount
         let isStatusPopoverVisible = activePopover?.isShown == true
+        let inlineGroups = inlineBadgeGroups(from: threads)
+        if !isStatusPopoverVisible,
+           !summaries.contains(where: { $0.kind == .rateLimited }),
+           let fittingGroups = fittingInlineBadgeGroups(from: inlineGroups),
+           !fittingGroups.isEmpty {
+            favoritesButton.isHidden = true
+            let shouldRebuildInline = !isRenderingInlineThreadBadges
+                || fittingGroups != lastRenderedInlineBadgeGroups
+                || threads.count != lastRenderedThreadCount
+            if shouldRebuildInline {
+                rebuildInlineThreadStatusBadges(groups: fittingGroups)
+                isRenderingInlineThreadBadges = true
+                lastRenderedInlineBadgeGroups = fittingGroups
+                lastRenderedThreadSummaries = summaries
+                lastRenderedThreadCount = threads.count
+            }
+            refreshActivePopover()
+            return
+        }
+
+        if isRenderingInlineThreadBadges {
+            lastRenderedInlineBadgeGroups = []
+            isRenderingInlineThreadBadges = false
+            updateFavoritesStatus(force: true)
+        }
+
+        let shouldRebuild = summaries != lastRenderedThreadSummaries || threads.count != lastRenderedThreadCount
         let activeStatusStillPresent = activePopoverStatus.map { status in
             summaries.contains { $0.kind == status }
         } ?? false
@@ -1180,9 +1402,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         refreshActivePopover()
     }
 
-    private func updateFavoritesStatus() {
+    private func updateFavoritesStatus(force: Bool = false) {
         let count = ThreadManager.shared.favoriteThreadCount
-        guard count != lastRenderedFavoriteCount else { return }
+        guard force || count != lastRenderedFavoriteCount else { return }
         lastRenderedFavoriteCount = count
 
         guard count > 0 else {
@@ -1197,6 +1419,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         )?.withSymbolConfiguration(symbolConfig)
         favoritesButton.imagePosition = .imageLeading
         favoritesButton.imageHugsTitle = true
+        favoritesButton.badgeTintColor = NSColor(resource: .primaryBrand)
         favoritesButton.contentTintColor = NSColor(resource: .primaryBrand)
         favoritesButton.attributedTitle = NSAttributedString(
             string: "\(count) favorite\(count == 1 ? "" : "s")",
@@ -1237,6 +1460,217 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         }
     }
 
+    private func rebuildInlineThreadStatusBadges(groups: [InlineThreadStatusBadgeGroup]) {
+        statusButtonsByKind.removeAll()
+        threadStatusStack.arrangedSubviews.forEach { subview in
+            threadStatusStack.removeArrangedSubview(subview)
+            subview.removeFromSuperview()
+        }
+
+        var didAddGroup = false
+        for group in groups {
+            guard !group.badges.isEmpty else { continue }
+            if didAddGroup {
+                let separator = makeVerticalStatusSeparator()
+                threadStatusStack.addArrangedSubview(separator)
+            }
+
+            for descriptor in group.badges {
+                let button = makeInlineThreadStatusBadge(for: descriptor)
+                threadStatusStack.addArrangedSubview(button)
+            }
+            didAddGroup = true
+        }
+    }
+
+    private func inlineBadgeGroups(from threads: [MagentThread]) -> [InlineThreadStatusBadgeGroup] {
+        let priority: [ThreadStatusSummaryKind] = [.favorites, .waiting, .done, .busy, .separateWindows]
+        return priority.compactMap { kind in
+            let entries = inlineBadgeEntries(for: kind, threads: threads)
+            guard !entries.isEmpty else { return nil }
+            let badges = entries.map { entry in
+                inlineBadgeDescriptor(for: entry.thread, kind: kind)
+            }
+            return InlineThreadStatusBadgeGroup(kind: kind, badges: badges)
+        }
+    }
+
+    private func inlineBadgeEntries(
+        for status: ThreadStatusSummaryKind,
+        threads: [MagentThread]
+    ) -> [ThreadStatusPopoverEntry] {
+        if status == .favorites {
+            return ThreadManager.shared.favoriteThreadsChronological.map { thread in
+                ThreadStatusPopoverEntry(
+                    thread: thread,
+                    addedAt: thread.favoritedAt ?? thread.createdAt
+                )
+            }
+        }
+
+        let matchingThreads = threads.filter { status.matches($0) }
+        guard !matchingThreads.isEmpty else { return [] }
+
+        if status.usesPersistentAddedAt {
+            return matchingThreads.map { thread in
+                ThreadStatusPopoverEntry(
+                    thread: thread,
+                    addedAt: thread.lastAgentCompletionAt ?? thread.createdAt
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.addedAt != rhs.addedAt { return lhs.addedAt > rhs.addedAt }
+                return lhs.thread.createdAt > rhs.thread.createdAt
+            }
+        }
+
+        let addedAtById = transientStatusAddedAt[status] ?? [:]
+        return matchingThreads.map { thread in
+            ThreadStatusPopoverEntry(
+                thread: thread,
+                addedAt: addedAtById[thread.id] ?? thread.createdAt,
+                isPropagatedOnly: status == .rateLimited && thread.isRateLimitPropagatedOnly
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.addedAt != rhs.addedAt { return lhs.addedAt > rhs.addedAt }
+            return lhs.thread.createdAt > rhs.thread.createdAt
+        }
+    }
+
+    private func fittingInlineBadgeGroups(
+        from groups: [InlineThreadStatusBadgeGroup]
+    ) -> [InlineThreadStatusBadgeGroup]? {
+        guard !groups.isEmpty else { return nil }
+        let availableWidth = availableInlineBadgeWidth()
+        guard availableWidth >= Self.minimumInlineBadgeWidth else { return nil }
+
+        var candidate = groups
+        while !candidate.isEmpty {
+            if inlineBadgeGroupsWidth(candidate) <= availableWidth {
+                return candidate
+            }
+            candidate.removeLast()
+        }
+        return nil
+    }
+
+    private func availableInlineBadgeWidth() -> CGFloat {
+        guard bounds.width > 0 else { return 0 }
+
+        let fixedWidth = Self.horizontalPadding * 2
+            + rightStack.fittingSize.width
+            + sessionCountButton.fittingSize.width
+            + 36 // left stack gaps plus reserved breathing room near the right side
+        return max(0, bounds.width - fixedWidth)
+    }
+
+    private func inlineBadgeGroupsWidth(_ groups: [InlineThreadStatusBadgeGroup]) -> CGFloat {
+        var width: CGFloat = 0
+        var groupCount = 0
+        let badgeGap: CGFloat = 4
+        for group in groups where !group.badges.isEmpty {
+            if groupCount > 0 {
+                width += 17 // separator plus custom side spacing
+            }
+            for (index, badge) in group.badges.enumerated() {
+                if index > 0 {
+                    width += badgeGap
+                }
+                width += inlineBadgeWidth(for: badge)
+            }
+            groupCount += 1
+        }
+        return width
+    }
+
+    private func inlineBadgeWidth(for descriptor: InlineThreadStatusBadgeDescriptor) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        let textWidth = ceil((descriptor.title as NSString).size(withAttributes: [.font: font]).width)
+        let iconAndPadding: CGFloat = 34
+        return min(Self.maximumInlineBadgeWidth, max(Self.minimumInlineBadgeWidth, textWidth + iconAndPadding))
+    }
+
+    private func inlineBadgeDescriptor(
+        for thread: MagentThread,
+        kind: ThreadStatusSummaryKind
+    ) -> InlineThreadStatusBadgeDescriptor {
+        let title = Self.truncatedInlineBadgeTitle(for: thread)
+        let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
+        let worktreeName = (thread.worktreePath as NSString).lastPathComponent
+        var tooltipParts = [kind.popoverTitle, fullInlineBadgeTitle(for: thread), resolvedBranchName]
+        if resolvedBranchName != worktreeName {
+            tooltipParts.append(worktreeName)
+        }
+        return InlineThreadStatusBadgeDescriptor(
+            kind: kind,
+            threadId: thread.id,
+            title: title,
+            tooltip: tooltipParts.joined(separator: "\n"),
+            tintColor: inlineBadgeTintColor(for: thread, kind: kind)
+        )
+    }
+
+    private static func truncatedInlineBadgeTitle(for thread: MagentThread) -> String {
+        let title = fullInlineBadgeTitle(for: thread)
+        guard title.count > 40 else { return title }
+        let end = title.index(title.startIndex, offsetBy: 37)
+        return "\(title[..<end])..."
+    }
+
+    private static func fullInlineBadgeTitle(for thread: MagentThread) -> String {
+        if let description = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !description.isEmpty {
+            return description
+        }
+        return thread.name
+    }
+
+    private func fullInlineBadgeTitle(for thread: MagentThread) -> String {
+        Self.fullInlineBadgeTitle(for: thread)
+    }
+
+    private func inlineBadgeTintColor(for thread: MagentThread, kind: ThreadStatusSummaryKind) -> NSColor {
+        if kind == .favorites {
+            return NSColor(resource: .primaryBrand)
+        }
+
+        let settings = PersistenceService.shared.loadSettings()
+        if let sectionColor = sectionColor(for: thread, settings: settings) {
+            return sectionColor
+        }
+        return kind.color
+    }
+
+    private func makeInlineThreadStatusBadge(for descriptor: InlineThreadStatusBadgeDescriptor) -> NSButton {
+        let button = InlineThreadStatusBadgeButton(threadId: descriptor.threadId, statusKind: descriptor.kind)
+        button.badgeTintColor = descriptor.tintColor
+        button.contentTintColor = descriptor.tintColor
+        button.image = Self.statusSymbolImage(for: descriptor.kind, count: 1)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .medium))
+        button.attributedTitle = NSAttributedString(
+            string: descriptor.title,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+                .foregroundColor: NSColor(resource: .textPrimary),
+            ]
+        )
+        button.toolTip = descriptor.tooltip
+        button.setAccessibilityLabel(descriptor.tooltip.replacingOccurrences(of: "\n", with: ", "))
+        button.target = self
+        button.action = #selector(inlineThreadStatusBadgeTapped(_:))
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.cell?.lineBreakMode = .byTruncatingTail
+        let maxWidth = button.widthAnchor.constraint(lessThanOrEqualToConstant: Self.maximumInlineBadgeWidth)
+        maxWidth.priority = .required
+        NSLayoutConstraint.activate([
+            button.heightAnchor.constraint(equalToConstant: 22),
+            maxWidth,
+        ])
+        return button
+    }
+
     private func makeStatusButton(for summary: ThreadStatusSummaryDescriptor) -> NSButton {
         let button = StatusSummaryButton()
         button.isBordered = false
@@ -1246,6 +1680,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         )
         button.imagePosition = .imageLeading
         button.imageHugsTitle = true
+        button.badgeTintColor = summary.kind.color
         button.contentTintColor = summary.kind.color
         button.target = self
         button.action = #selector(threadStatusTapped(_:))
@@ -1292,8 +1727,18 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         }
     }
 
-    private func makeSeparatorLabel() -> NSTextField {
-        makeStaticStatusLabel(text: "  ·  ", color: .tertiaryLabelColor)
+    private func makeSeparatorLabel() -> NSView {
+        makeVerticalStatusSeparator()
+    }
+
+    private func makeVerticalStatusSeparator() -> NSView {
+        let separator = VerticalSeparatorView()
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        separator.setContentHuggingPriority(.required, for: .horizontal)
+        separator.setContentCompressionResistancePriority(.required, for: .horizontal)
+        separator.setContentHuggingPriority(.required, for: .vertical)
+        separator.setContentCompressionResistancePriority(.required, for: .vertical)
+        return separator
     }
 
     private func makeStaticStatusLabel(text: String, color: NSColor) -> NSTextField {
@@ -1303,6 +1748,13 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
         return label
+    }
+
+    private func sectionColor(for thread: MagentThread, settings: AppSettings) -> NSColor? {
+        guard settings.shouldUseThreadSections(for: thread.projectId) else { return nil }
+        let sections = settings.sections(for: thread.projectId)
+        let effectiveSectionId = ThreadManager.shared.effectiveSectionId(for: thread, settings: settings)
+        return sections.first(where: { $0.id == effectiveSectionId })?.color
     }
 
     private func syncTransientStatusAddedAt(with threads: [MagentThread]) {
@@ -1745,6 +2197,15 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             return
         }
         showPopover(for: .favorites)
+    }
+
+    @objc private func inlineThreadStatusBadgeTapped(_ sender: NSButton) {
+        guard let badge = sender as? InlineThreadStatusBadgeButton else { return }
+        navigateToThread(
+            threadId: badge.threadId,
+            sessionName: navigationSessionName(for: badge.statusKind, threadId: badge.threadId),
+            centerInSidebar: shouldCenterSidebarOnNavigation(for: badge.statusKind)
+        )
     }
 
     private func showPopover(for status: ThreadStatusSummaryKind) {
