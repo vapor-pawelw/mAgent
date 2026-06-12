@@ -134,6 +134,7 @@ final class ThreadDetailViewController: NSViewController {
     let tabScrollRightButton = NSButton()
     let terminalContainer: NSView = AppBackgroundView()
     let topBar = NSStackView()
+    let currentThreadStrip = CurrentThreadStripView()
     let openPRButton = MiddleClickButton()
     let openInJiraButton = MiddleClickButton()
     let openInXcodeButton = NSButton()
@@ -706,10 +707,11 @@ final class ThreadDetailViewController: NSViewController {
         topBar.alignment = .centerY
         topBar.detachesHiddenViews = true
         topBar.translatesAutoresizingMaskIntoConstraints = false
+        currentThreadStrip.configure(with: thread, sectionColor: currentThreadSectionColor())
         // Review button next to add-tab, then tab bar scroll view, then (optionally) PR/Jira,
         // then utility buttons, then pop-out/archive. PR/Jira move into the header info strip
         // when it's shown; otherwise fall back to the top bar position.
-        var topBarViews: [NSView] = [addTabButton, reviewButton, continueInButton, tabScrollLeftButton, tabBarScrollView, tabScrollRightButton]
+        var topBarViews: [NSView] = [currentThreadStrip, addTabButton, reviewButton, continueInButton, tabScrollLeftButton, tabBarScrollView, tabScrollRightButton]
         if !prJiraHostedInInfoStrip {
             topBarViews.append(contentsOf: [openPRButton, openInJiraButton, prJiraSeparator])
         }
@@ -717,8 +719,10 @@ final class ThreadDetailViewController: NSViewController {
         for view in topBarViews {
             topBar.addArrangedSubview(view)
         }
+        currentThreadStrip.widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
+        currentThreadStrip.widthAnchor.constraint(lessThanOrEqualToConstant: 420).isActive = true
         let trailingTopBarSpacing: CGFloat = 8
-        var customSpacingAfter: [NSView] = [tabBarScrollView]
+        var customSpacingAfter: [NSView] = [currentThreadStrip, tabBarScrollView]
         if !prJiraHostedInInfoStrip {
             customSpacingAfter.append(contentsOf: [openPRButton, openInJiraButton, prJiraSeparator])
         }
@@ -1871,6 +1875,7 @@ final class ThreadDetailViewController: NSViewController {
                 button.needsDisplay = true
             }
 
+            currentThreadStrip.needsDisplay = true
             topBar.needsDisplay = true
             pinSeparator.needsDisplay = true
             fixedTabsSeparator.needsDisplay = true
@@ -1878,9 +1883,20 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func refreshHeaderInfoStrip() {
-        guard isViewLoaded, showsHeaderInfoStrip else { return }
+        guard isViewLoaded else { return }
         let latest = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        currentThreadStrip.configure(with: latest, sectionColor: currentThreadSectionColor(for: latest))
+        guard showsHeaderInfoStrip else { return }
         headerInfoStrip.refresh(from: latest)
+    }
+
+    private func currentThreadSectionColor(for thread: MagentThread? = nil) -> NSColor? {
+        let resolvedThread = thread ?? self.thread
+        let settings = PersistenceService.shared.loadSettings()
+        guard settings.shouldUseThreadSections(for: resolvedThread.projectId) else { return nil }
+        let sections = settings.sections(for: resolvedThread.projectId)
+        let effectiveSectionId = threadManager.effectiveSectionId(for: resolvedThread, settings: settings)
+        return sections.first(where: { $0.id == effectiveSectionId })?.color
     }
 
     private func shouldShowTopBarPopOutButton() -> Bool {

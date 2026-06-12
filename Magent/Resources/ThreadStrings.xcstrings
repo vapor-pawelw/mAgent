@@ -540,6 +540,39 @@
         }
       }
     },
+    "threadInfoBranchTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch: %@"
+          }
+        }
+      }
+    },
+    "threadInfoMainWorktree": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Main worktree"
+          }
+        }
+      }
+    },
+    "threadInfoWorktreeTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Worktree: %@"
+          }
+        }
+      }
+    },
     "threadMarkAsRead": {
       "extractionState": "manual",
       "localizations": {

@@ -11,6 +11,9 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 
+#### Features
+- Added a compact current-thread strip to the terminal top bar, showing the active thread's icon, description, branch/worktree metadata, and dirty state while leaving existing action buttons in place.
+
 #### Bug Fixes
 - PR/MR badges now keep the last confirmed link through failed syncs and app relaunches, dimming stale metadata instead of removing it until a later successful sync confirms the current state.
 - Diff file headers now show rename-only changes with a `RENAMED` badge, keep binary-only changes visible with a `BINARY` label and centered unavailable placeholder, and expose hidden context at the start and end of displayed hunks.
