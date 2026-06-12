@@ -101,14 +101,18 @@ private final class StatusSummaryButton: NSButton {
     }
 }
 
-private final class InlineThreadStatusBadgeButton: NSButton {
+private final class InlineThreadStatusBadgeButton: NSControl {
     let threadId: UUID
     let statusKind: ThreadStatusSummaryKind
     var badgeTintColor: NSColor = .tertiaryLabelColor {
         didSet {
+            iconView.contentTintColor = badgeTintColor
             updateBadgeLayer()
         }
     }
+    private let iconView = NSImageView()
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let contentStack = NSStackView()
     private var trackingArea: NSTrackingArea?
     private var isHovered = false {
         didSet {
@@ -126,6 +130,25 @@ private final class InlineThreadStatusBadgeButton: NSButton {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    var image: NSImage? {
+        get { iconView.image }
+        set { iconView.image = newValue }
+    }
+
+    var attributedTitle: NSAttributedString {
+        get { titleLabel.attributedStringValue }
+        set { titleLabel.attributedStringValue = newValue }
+    }
+
+    override var toolTip: String? {
+        get { super.toolTip }
+        set {
+            super.toolTip = newValue
+            titleLabel.toolTip = newValue
+            iconView.toolTip = newValue
+        }
     }
 
     override func updateTrackingAreas() {
@@ -161,18 +184,81 @@ private final class InlineThreadStatusBadgeButton: NSButton {
         updateBadgeLayer()
     }
 
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }
+        performPress()
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 36 || event.keyCode == 49 {
+            performPress()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, alphaValue > 0, bounds.contains(point) else {
+            return nil
+        }
+        return self
+    }
+
+    override func accessibilityRole() -> NSAccessibility.Role? {
+        .button
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        performPress()
+        return true
+    }
+
+    private func performPress() {
+        sendAction(action, to: target)
+    }
+
     private func setupBadgeLayer() {
         wantsLayer = true
         layer?.cornerRadius = 7
         layer?.borderWidth = 1
         layer?.masksToBounds = true
-        isBordered = false
-        bezelStyle = .inline
         focusRingType = .none
-        setButtonType(.momentaryChange)
-        imagePosition = .imageLeading
-        imageHugsTitle = true
-        alignment = .center
+
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.contentTintColor = badgeTintColor
+        iconView.imageScaling = .scaleProportionallyDown
+        iconView.setContentHuggingPriority(.required, for: .horizontal)
+        iconView.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.maximumNumberOfLines = 1
+        titleLabel.backgroundColor = .clear
+        titleLabel.isBordered = false
+        titleLabel.isEditable = false
+        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.orientation = .horizontal
+        contentStack.alignment = .centerY
+        contentStack.spacing = 4
+        contentStack.addArrangedSubview(iconView)
+        contentStack.addArrangedSubview(titleLabel)
+        addSubview(contentStack)
+
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 11),
+            iconView.heightAnchor.constraint(equalToConstant: 11),
+            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            contentStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            contentStack.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 2),
+            contentStack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -2),
+        ])
+
         updateBadgeLayer()
     }
 
@@ -1645,14 +1731,13 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         return kind.color
     }
 
-    private func makeInlineThreadStatusBadge(for descriptor: InlineThreadStatusBadgeDescriptor) -> NSButton {
+    private func makeInlineThreadStatusBadge(for descriptor: InlineThreadStatusBadgeDescriptor) -> InlineThreadStatusBadgeButton {
         let button = InlineThreadStatusBadgeButton(threadId: descriptor.threadId, statusKind: descriptor.kind)
         button.badgeTintColor = descriptor.tintColor
-        button.contentTintColor = descriptor.tintColor
         button.image = Self.statusSymbolImage(for: descriptor.kind, count: 1)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .medium))
         button.attributedTitle = NSAttributedString(
-            string: "  \(descriptor.title)  ",
+            string: descriptor.title,
             attributes: [
                 .font: NSFont.systemFont(ofSize: 11, weight: .medium),
                 .foregroundColor: NSColor(resource: .textPrimary),
@@ -1663,7 +1748,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         button.target = self
         button.action = #selector(inlineThreadStatusBadgeTapped(_:))
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.cell?.lineBreakMode = .byTruncatingTail
         let minWidth = button.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumInlineBadgeWidth)
         let maxWidth = button.widthAnchor.constraint(lessThanOrEqualToConstant: Self.maximumInlineBadgeWidth)
         maxWidth.priority = .required
@@ -2203,7 +2287,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         showPopover(for: .favorites)
     }
 
-    @objc private func inlineThreadStatusBadgeTapped(_ sender: NSButton) {
+    @objc private func inlineThreadStatusBadgeTapped(_ sender: NSControl) {
         guard let badge = sender as? InlineThreadStatusBadgeButton else { return }
         navigateToThread(
             threadId: badge.threadId,
