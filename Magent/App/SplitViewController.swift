@@ -58,6 +58,7 @@ final class SplitViewController: NSSplitViewController {
     private var keyEventMonitor: Any?
     private var cachedKeyBindings: KeyBindingSettings = KeyBindingSettings()
     private weak var observedWindowForFocusNotifications: NSWindow?
+    private let currentThreadToolbarStrip = CurrentThreadStripView()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -165,6 +166,24 @@ final class SplitViewController: NSSplitViewController {
             name: .magentProjectVisibilityDidChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCurrentThreadToolbarRefreshNeeded),
+            name: .magentThreadsDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCurrentThreadToolbarRefreshNeeded),
+            name: .magentSettingsDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCurrentThreadToolbarRefreshNeeded),
+            name: .magentSectionsDidChange,
+            object: nil
+        )
     }
 
     /// Forwarded from the main menu's "New Thread" item (⌘N).
@@ -203,6 +222,10 @@ final class SplitViewController: NSSplitViewController {
 
     @objc private func keyBindingsDidChange() {
         reloadKeyBindings()
+    }
+
+    @objc private func handleCurrentThreadToolbarRefreshNeeded() {
+        refreshCurrentThreadToolbarStrip()
     }
 
     private func reloadKeyBindings() {
@@ -510,7 +533,10 @@ final class SplitViewController: NSSplitViewController {
         ThreadManager.shared.refreshPRForSelectedThread(resolvedThread)
 
         // Skip if already showing this thread (preserves terminal scrollback)
-        if currentDetailVC?.thread.id == resolvedThread.id { return }
+        if currentDetailVC?.thread.id == resolvedThread.id {
+            refreshCurrentThreadToolbarStrip(with: resolvedThread)
+            return
+        }
 
         // Pending threads have no worktree yet — show directly so the detail view
         // can display the creation progress overlay while setup completes in background.
@@ -568,6 +594,7 @@ final class SplitViewController: NSSplitViewController {
         currentDetailVC?.cacheTerminalViewsForReuse()
         let detailVC = ThreadDetailViewController(thread: thread)
         currentDetailVC = detailVC
+        refreshCurrentThreadToolbarStrip(with: thread)
 
         preserveSidebarWidthDuringContentChange {
             contentContainerVC.setContent(detailVC)
@@ -580,6 +607,36 @@ final class SplitViewController: NSSplitViewController {
                 duration: 5.0
             )
         }
+    }
+
+    private func currentThreadSectionColor(for thread: MagentThread) -> NSColor? {
+        let settings = PersistenceService.shared.loadSettings()
+        guard settings.shouldUseThreadSections(for: thread.projectId) else { return nil }
+        let sections = settings.sections(for: thread.projectId)
+        let effectiveSectionId = ThreadManager.shared.effectiveSectionId(for: thread, settings: settings)
+        return sections.first(where: { $0.id == effectiveSectionId })?.color
+    }
+
+    private func refreshCurrentThreadToolbarStrip(with selectedThread: MagentThread? = nil) {
+        guard isViewLoaded else { return }
+
+        let resolvedThread = selectedThread
+            ?? currentDetailVC?.thread
+            ?? threadListVC.selectedThreadFromState()
+
+        guard let thread = resolvedThread.flatMap({ candidate in
+            ThreadManager.shared.threads.first(where: { $0.id == candidate.id }) ?? candidate
+        }) else {
+            currentThreadToolbarStrip.isHidden = true
+            return
+        }
+
+        currentThreadToolbarStrip.isHidden = false
+        currentThreadToolbarStrip.configure(with: thread, sectionColor: currentThreadSectionColor(for: thread))
+    }
+
+    private func clearCurrentThreadToolbarStrip() {
+        currentThreadToolbarStrip.isHidden = true
     }
 
     private func recoverAndShowThread(_ thread: MagentThread) {
@@ -641,6 +698,7 @@ final class SplitViewController: NSSplitViewController {
 
     private static let settingsToolbarItemId = NSToolbarItem.Identifier("settings")
     private static let recentlyArchivedToolbarItemId = NSToolbarItem.Identifier("recentlyArchived")
+    private static let currentThreadToolbarItemId = NSToolbarItem.Identifier("currentThread")
 
     private var recentlyArchivedPopover: NSPopover?
 
@@ -650,6 +708,7 @@ final class SplitViewController: NSSplitViewController {
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         window.toolbar = toolbar
+        refreshCurrentThreadToolbarStrip()
     }
 
     @objc private func openSettingsFromNotification(_ notification: Notification) {
@@ -833,6 +892,7 @@ final class SplitViewController: NSSplitViewController {
         }
         currentDetailVC = nil
         ThreadManager.shared.setActiveThread(nil)
+        clearCurrentThreadToolbarStrip()
         preserveSidebarWidthDuringContentChange {
             contentContainerVC.setContent(emptyStateVC)
         }
@@ -861,6 +921,7 @@ final class SplitViewController: NSSplitViewController {
 
         detailVC.cacheTerminalViewsForReuse()
         currentDetailVC = nil
+        clearCurrentThreadToolbarStrip()
         PopoutWindowManager.shared.popOutThread(thread, from: view.window)
         selectFallbackMainThread(afterPoppingOut: thread.id)
         threadListVC.refreshThreadRowInPlace(threadId: thread.id)
@@ -1035,6 +1096,17 @@ extension SplitViewController: ThreadListDelegate {
 
 extension SplitViewController: NSToolbarDelegate {
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        if itemIdentifier == Self.currentThreadToolbarItemId {
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = String(localized: .ThreadStrings.threadInfoMainWorktree)
+            item.paletteLabel = item.label
+            currentThreadToolbarStrip.translatesAutoresizingMaskIntoConstraints = false
+            currentThreadToolbarStrip.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
+            currentThreadToolbarStrip.widthAnchor.constraint(lessThanOrEqualToConstant: 480).isActive = true
+            item.view = currentThreadToolbarStrip
+            refreshCurrentThreadToolbarStrip()
+            return item
+        }
         if itemIdentifier == Self.recentlyArchivedToolbarItemId {
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             let title = "Recently Archived"
@@ -1063,11 +1135,11 @@ extension SplitViewController: NSToolbarDelegate {
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
+        [Self.currentThreadToolbarItemId, .flexibleSpace, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
+        [Self.currentThreadToolbarItemId, .flexibleSpace, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
     }
 }
 
