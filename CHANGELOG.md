@@ -25,6 +25,7 @@ All notable changes to this project will be documented in this file.
 
 #### Features
 - The bottom status bar now expands favorite, waiting, completed, busy, and popped-out thread statuses into compact clickable thread badges when there is enough room, then falls back to the existing count badges when space gets tight.
+- Inline completed-thread badges now support right-click actions to mark work as read or archive the thread, while status glyphs keep the collapsed status item click and context-menu behavior.
 
 #### Bug Fixes
 - The bottom status bar now separates session counts from thread status badges and refreshes persisted thread statuses immediately on launch.
