@@ -210,11 +210,38 @@ private final class InlineThreadStatusBadgeButton: NSButton {
         return self
     }
 
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }
+        isHighlighted = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        defer { isHighlighted = false }
+        guard isEnabled else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(point) else { return }
+        sendAction(action, to: target)
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 36 || event.keyCode == 49 {
+            sendAction(action, to: target)
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
     private func setupBadgeLayer() {
         wantsLayer = true
         layer?.cornerRadius = 7
         layer?.borderWidth = 1
         layer?.masksToBounds = true
+        title = ""
+        attributedTitle = NSAttributedString()
+        alternateTitle = ""
+        attributedAlternateTitle = NSAttributedString()
         isBordered = false
         bezelStyle = .inline
         focusRingType = .none
