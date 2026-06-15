@@ -872,6 +872,8 @@ final class SplitViewController: NSSplitViewController {
             if let tabIndex = detailVC.displayIndex(forIdentifier: tabIdentifier) {
                 detailVC.selectTab(at: tabIndex)
             }
+        } else if alreadyShowing, tabIdentifier == nil {
+            currentDetailVC?.focusCurrentTabForNavigation()
         }
 
         markFocusedThreadCompletionSeenIfNeeded()

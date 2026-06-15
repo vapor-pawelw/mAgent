@@ -128,7 +128,6 @@ private final class StatusSummaryButton: NSButton {
 
 private final class InlineThreadStatusBadgeButton: NSButton {
     private static let horizontalPadding: CGFloat = 8
-    private static let labelSpacing: CGFloat = 8
     private static let height: CGFloat = 21
 
     let threadId: UUID
@@ -139,9 +138,6 @@ private final class InlineThreadStatusBadgeButton: NSButton {
             updateBadgeLayer()
         }
     }
-    private let titleLabel = NSTextField(labelWithString: "")
-    private let repositoryLabel = NSTextField(labelWithString: "")
-    private let contentStack = NSStackView()
     private var trackingArea: NSTrackingArea?
     private var isHovered = false {
         didSet {
@@ -162,38 +158,16 @@ private final class InlineThreadStatusBadgeButton: NSButton {
     }
 
     var badgeTitle: NSAttributedString {
-        get { titleLabel.attributedStringValue }
+        get { attributedTitle }
         set {
-            titleLabel.attributedStringValue = newValue
-            invalidateIntrinsicContentSize()
-        }
-    }
-
-    var repositoryTitle: NSAttributedString {
-        get { repositoryLabel.attributedStringValue }
-        set {
-            repositoryLabel.attributedStringValue = newValue
-            repositoryLabel.isHidden = newValue.string.isEmpty
+            attributedTitle = newValue
             invalidateIntrinsicContentSize()
         }
     }
 
     override var intrinsicContentSize: NSSize {
-        let textWidth = ceil(titleLabel.attributedStringValue.size().width)
-        let repositoryWidth = repositoryLabel.isHidden
-            ? 0
-            : ceil(repositoryLabel.attributedStringValue.size().width) + Self.labelSpacing
-        let width = Self.horizontalPadding * 2 + textWidth + repositoryWidth
+        let width = Self.horizontalPadding * 2 + ceil(attributedTitle.size().width)
         return NSSize(width: width, height: Self.height)
-    }
-
-    override var toolTip: String? {
-        get { super.toolTip }
-        set {
-            super.toolTip = newValue
-            titleLabel.toolTip = newValue
-            repositoryLabel.toolTip = newValue
-        }
     }
 
     override func updateTrackingAreas() {
@@ -281,41 +255,6 @@ private final class InlineThreadStatusBadgeButton: NSButton {
         focusRingType = .none
         setButtonType(.momentaryChange)
         alignment = .center
-
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.maximumNumberOfLines = 1
-        titleLabel.backgroundColor = .clear
-        titleLabel.isBordered = false
-        titleLabel.isEditable = false
-        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        repositoryLabel.translatesAutoresizingMaskIntoConstraints = false
-        repositoryLabel.lineBreakMode = .byTruncatingTail
-        repositoryLabel.maximumNumberOfLines = 1
-        repositoryLabel.backgroundColor = .clear
-        repositoryLabel.isBordered = false
-        repositoryLabel.isEditable = false
-        repositoryLabel.isHidden = true
-        repositoryLabel.setContentHuggingPriority(.required, for: .horizontal)
-        repositoryLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-        contentStack.orientation = .horizontal
-        contentStack.alignment = .centerY
-        contentStack.spacing = Self.labelSpacing
-        contentStack.addArrangedSubview(titleLabel)
-        contentStack.addArrangedSubview(repositoryLabel)
-        addSubview(contentStack)
-
-        NSLayoutConstraint.activate([
-            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.horizontalPadding),
-            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.horizontalPadding),
-            contentStack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            contentStack.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 2),
-            contentStack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -2),
-        ])
 
         updateBadgeLayer()
     }
@@ -1886,7 +1825,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let button = InlineThreadStatusBadgeButton(threadId: descriptor.threadId, statusKind: descriptor.kind)
         button.badgeTintColor = descriptor.tintColor
         button.badgeTitle = inlineBadgeTitle(for: descriptor)
-        button.repositoryTitle = inlineBadgeRepositoryTitle(for: descriptor)
         button.toolTip = descriptor.tooltip
         button.setAccessibilityLabel(descriptor.tooltip.replacingOccurrences(of: "\n", with: ", "))
         button.target = self
@@ -1909,23 +1847,23 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     }
 
     private func inlineBadgeTitle(for descriptor: InlineThreadStatusBadgeDescriptor) -> NSAttributedString {
-        NSAttributedString(
+        let result = NSMutableAttributedString(
             string: descriptor.title,
             attributes: [
                 .font: NSFont.systemFont(ofSize: 10.5, weight: .regular),
                 .foregroundColor: NSColor(resource: .textPrimary),
             ]
         )
-    }
-
-    private func inlineBadgeRepositoryTitle(for descriptor: InlineThreadStatusBadgeDescriptor) -> NSAttributedString {
-        NSAttributedString(
-            string: descriptor.repositoryName ?? "",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 8, weight: .regular),
-                .foregroundColor: NSColor(resource: .textPrimary).withAlphaComponent(0.6),
-            ]
-        )
+        if let repositoryName = descriptor.repositoryName, !repositoryName.isEmpty {
+            result.append(NSAttributedString(
+                string: "  \(repositoryName)",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 8, weight: .regular),
+                    .foregroundColor: NSColor(resource: .textPrimary).withAlphaComponent(0.6),
+                ]
+            ))
+        }
+        return result
     }
 
     private func makeInlineStatusGroupGlyphButton(for kind: ThreadStatusSummaryKind) -> StatusSummaryButton {
