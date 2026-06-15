@@ -38,6 +38,45 @@ private final class SplitContentContainerViewController: NSViewController {
     }
 }
 
+private final class ThreadToolbarCapsuleView: NSStackView {
+    var onClick: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.62).cgColor
+            layer?.borderColor = NSColor.controlAccentColor.cgColor
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        onClick?()
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    private func setup() {
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.borderWidth = 1
+    }
+}
+
 final class SplitViewController: NSSplitViewController {
 
     private static let sidebarWidthDefaultsKey = "MagentSidebarWidth"
@@ -59,7 +98,7 @@ final class SplitViewController: NSSplitViewController {
     private var cachedKeyBindings: KeyBindingSettings = KeyBindingSettings()
     private weak var observedWindowForFocusNotifications: NSWindow?
     private let currentThreadToolbarStrip = CurrentThreadStripView()
-    private let currentThreadToolbarStack = NSStackView()
+    private let currentThreadToolbarStack = ThreadToolbarCapsuleView()
     private var didConfigureCurrentThreadToolbarStack = false
     private var didInstallCurrentThreadToolbarSizingConstraints = false
 
@@ -657,8 +696,27 @@ final class SplitViewController: NSSplitViewController {
         currentThreadToolbarStack.translatesAutoresizingMaskIntoConstraints = false
         currentThreadToolbarStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
         currentThreadToolbarStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        currentThreadToolbarStack.onClick = { [weak self] in
+            self?.navigateToCurrentThreadFromToolbar()
+        }
         currentThreadToolbarStack.addArrangedSubview(currentThreadToolbarStrip)
         currentThreadToolbarStack.setCustomSpacing(8, after: currentThreadToolbarStrip)
+    }
+
+    private func navigateToCurrentThreadFromToolbar() {
+        guard let threadId = currentDetailVC?.thread.id
+            ?? threadListVC.selectedThreadFromState()?.id
+        else { return }
+
+        NotificationCenter.default.post(
+            name: .magentNavigateToThread,
+            object: self,
+            userInfo: [
+                "threadId": threadId,
+                "centerInSidebar": true,
+                "revealSidebarIfHidden": true,
+            ]
+        )
     }
 
     private func refreshCurrentThreadToolbarActions() {
@@ -1149,9 +1207,9 @@ extension SplitViewController: NSToolbarDelegate {
             if !didInstallCurrentThreadToolbarSizingConstraints {
                 didInstallCurrentThreadToolbarSizingConstraints = true
                 currentThreadToolbarStrip.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
-                currentThreadToolbarStrip.widthAnchor.constraint(lessThanOrEqualToConstant: 480).isActive = true
+                currentThreadToolbarStrip.widthAnchor.constraint(lessThanOrEqualToConstant: 1400).isActive = true
                 currentThreadToolbarStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
-                currentThreadToolbarStack.widthAnchor.constraint(lessThanOrEqualToConstant: 620).isActive = true
+                currentThreadToolbarStack.widthAnchor.constraint(lessThanOrEqualToConstant: 1600).isActive = true
             }
             item.view = currentThreadToolbarStack
             refreshCurrentThreadToolbarStrip()

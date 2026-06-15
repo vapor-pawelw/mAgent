@@ -4,9 +4,7 @@ import MagentCore
 final class CurrentThreadStripView: NSView {
     private enum Layout {
         static let height: CGFloat = 28
-        static let cornerRadius: CGFloat = 8
-        static let borderWidth: CGFloat = 1
-        static let horizontalPadding: CGFloat = 10
+        static let horizontalPadding: CGFloat = 0
         static let iconSize: CGFloat = 15
         static let dirtyDotSize: CGFloat = 7
         static let labelSpacing: CGFloat = 6
@@ -34,7 +32,10 @@ final class CurrentThreadStripView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: NSView.noIntrinsicMetric, height: Layout.height)
+        NSSize(
+            width: contentStack.fittingSize.width + (Layout.horizontalPadding * 2),
+            height: Layout.height
+        )
     }
 
     func configure(with thread: MagentThread, sectionColor: NSColor?) {
@@ -54,6 +55,7 @@ final class CurrentThreadStripView: NSView {
         dirtyDot.isHidden = !thread.isDirty
         toolTip = summary.tooltip
 
+        invalidateIntrinsicContentSize()
         updateAppearance()
     }
 
@@ -83,10 +85,6 @@ final class CurrentThreadStripView: NSView {
     }
 
     private func setup() {
-        wantsLayer = true
-        layer?.cornerRadius = Layout.cornerRadius
-        layer?.borderWidth = Layout.borderWidth
-
         translatesAutoresizingMaskIntoConstraints = false
         setContentHuggingPriority(.defaultLow, for: .horizontal)
         setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -102,7 +100,7 @@ final class CurrentThreadStripView: NSView {
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.maximumNumberOfLines = 1
         titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
 
         dirtyDot.translatesAutoresizingMaskIntoConstraints = false
         dirtyDot.wantsLayer = true
@@ -120,7 +118,7 @@ final class CurrentThreadStripView: NSView {
         metadataLabel.lineBreakMode = .byTruncatingTail
         metadataLabel.maximumNumberOfLines = 1
         metadataLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        metadataLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        metadataLabel.setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
 
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         contentStack.orientation = .horizontal
@@ -159,8 +157,6 @@ final class CurrentThreadStripView: NSView {
 
     private func updateAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.62).cgColor
-            layer?.borderColor = NSColor.controlAccentColor.cgColor
             iconView.contentTintColor = sectionColor ?? NSColor.secondaryLabelColor
             titleLabel.textColor = NSColor.labelColor
             metadataLabel.textColor = NSColor.secondaryLabelColor
