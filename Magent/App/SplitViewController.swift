@@ -704,7 +704,7 @@ final class SplitViewController: NSSplitViewController {
             self?.navigateToCurrentThreadFromToolbar()
         }
         currentThreadToolbarStack.addArrangedSubview(currentThreadToolbarStrip)
-        currentThreadToolbarStack.setCustomSpacing(8, after: currentThreadToolbarStrip)
+        currentThreadToolbarStack.setCustomSpacing(16, after: currentThreadToolbarStrip)
     }
 
     private func navigateToCurrentThreadFromToolbar() {
