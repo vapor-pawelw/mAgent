@@ -114,18 +114,6 @@ private final class StatusSummaryButton: NSButton {
     }
 }
 
-private final class StatusBarArchiveCommitMessageTextFieldDelegate: NSObject, NSTextFieldDelegate {
-    let onChange: () -> Void
-
-    init(onChange: @escaping () -> Void) {
-        self.onChange = onChange
-    }
-
-    func controlTextDidChange(_ obj: Notification) {
-        onChange()
-    }
-}
-
 private final class InlineThreadStatusBadgeButton: NSButton {
     private static let horizontalPadding: CGFloat = 8
     private static let labelSpacing: CGFloat = 8
@@ -1739,7 +1727,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             if groupCount > 0 {
                 width += 12 // inter-group spacing before the next shared glyph
             }
-            width += 19 // shared group glyph plus badge-sized spacing before badges
+            width += 23 // shared group glyph plus spacing before badges
             for (index, badge) in group.badges.enumerated() {
                 if index > 0 {
                     width += badgeGap
@@ -2431,7 +2419,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         guard let badge = sender as? InlineThreadStatusBadgeButton else { return }
         navigateToThread(
             threadId: badge.threadId,
-            sessionName: navigationSessionName(for: badge.statusKind, threadId: badge.threadId),
+            sessionName: nil,
             centerInSidebar: shouldCenterSidebarOnNavigation(for: badge.statusKind),
             status: badge.statusKind
         )
@@ -2638,18 +2626,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             markReadItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
             markReadItem.representedObject = threadId
             menu.addItem(markReadItem)
-
-            let markAllReadItem = NSMenuItem(
-                title: String(localized: .ThreadStrings.threadMarkAllAsRead),
-                action: #selector(markAllCompletedThreadsAsRead(_:)),
-                keyEquivalent: ""
-            )
-            markAllReadItem.target = self
-            markAllReadItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
-            markAllReadItem.representedObject = threadId
-            markAllReadItem.isAlternate = true
-            markAllReadItem.keyEquivalentModifierMask = [.option]
-            menu.addItem(markAllReadItem)
         case .favorites:
             let removeFavoriteItem = NSMenuItem(
                 title: String(localized: .ThreadStrings.threadRemoveFromFavorites),
@@ -2661,44 +2637,10 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             removeFavoriteItem.representedObject = threadId
             menu.addItem(removeFavoriteItem)
         default:
-            let markDoneItem = NSMenuItem(
-                title: String(localized: .ThreadStrings.threadMarkAsDone),
-                action: #selector(markThreadAsDoneFromMenu(_:)),
-                keyEquivalent: ""
-            )
-            markDoneItem.target = self
-            markDoneItem.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
-            markDoneItem.representedObject = [
-                "threadId": threadId,
-                "status": status.rawValue,
-            ] as [String: Any]
-            markDoneItem.isEnabled = completionTargetSessionName(for: thread, status: status) != nil
-            menu.addItem(markDoneItem)
-        }
-
-        if status == .done, !thread.isMain {
-            if menu.items.isEmpty == false {
-                menu.addItem(NSMenuItem.separator())
-            }
-
-            let archiveItem = NSMenuItem(
-                title: String(localized: .ThreadStrings.threadArchiveMenuTitle),
-                action: #selector(archiveInlineThreadFromMenu(_:)),
-                keyEquivalent: ""
-            )
-            archiveItem.target = self
-            archiveItem.image = NSImage(systemSymbolName: "archivebox", accessibilityDescription: nil)
-            archiveItem.representedObject = threadId
-            archiveItem.isEnabled = !thread.isArchiving
-            menu.addItem(archiveItem)
+            break
         }
 
         return menu.items.isEmpty ? nil : menu
-    }
-
-    private func completionTargetSessionName(for thread: MagentThread, status: ThreadStatusSummaryKind) -> String? {
-        navigationSessionName(for: status, threadId: thread.id)
-            ?? (thread.tmuxSessionNames + thread.agentTmuxSessions).first
     }
 
     private func markDoneThreadAsRead(_ threadId: UUID) {
@@ -2711,23 +2653,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         markDoneThreadAsRead(threadId)
     }
 
-    @objc private func markThreadAsDoneFromMenu(_ sender: NSMenuItem) {
-        guard let info = sender.representedObject as? [String: Any],
-              let threadId = info["threadId"] as? UUID,
-              let statusRawValue = info["status"] as? String,
-              let status = ThreadStatusSummaryKind(rawValue: statusRawValue),
-              let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }),
-              let sessionName = completionTargetSessionName(for: thread, status: status)
-        else { return }
-
-        ThreadManager.shared.markSessionCompletionDetected(
-            threadId: threadId,
-            sessionName: sessionName,
-            isActiveTab: false
-        )
-        refresh()
-    }
-
     @objc private func removeFavoriteThreadFromMenu(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         removeFavoriteThread(threadId)
@@ -2737,140 +2662,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let changed = ThreadManager.shared.markAllThreadCompletionsSeen()
         guard changed > 0 else { return }
         refresh()
-    }
-
-    @objc private func archiveInlineThreadFromMenu(_ sender: NSMenuItem) {
-        guard let threadId = sender.representedObject as? UUID,
-              let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId })
-        else { return }
-        triggerArchive(for: thread)
-    }
-
-    private func triggerArchive(for thread: MagentThread) {
-        let threadManager = ThreadManager.shared
-        let liveThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
-        guard !liveThread.isMain, !liveThread.isArchiving else { return }
-
-        threadManager.markThreadArchiving(id: liveThread.id)
-        Task {
-            do {
-                _ = try await threadManager.archiveThread(
-                    liveThread,
-                    promptForLocalSyncConflicts: true,
-                    force: false
-                )
-            } catch ThreadManagerError.dirtyWorktree(let worktreePath) {
-                await MainActor.run {
-                    guard self.confirmDestructiveArchive(
-                        worktreePath: worktreePath,
-                        threadName: liveThread.name
-                    ) else { return }
-                    self.promptForArchiveCommitMessageAndRetry(
-                        threadManager: threadManager,
-                        thread: liveThread
-                    )
-                }
-            } catch ThreadManagerError.archiveCancelled {
-                // User cancelled a local-sync conflict prompt; leave the worktree alone.
-            } catch {
-                await MainActor.run {
-                    BannerManager.shared.show(
-                        message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
-                        style: .error
-                    )
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private func promptForArchiveCommitMessageAndRetry(threadManager: ThreadManager, thread: MagentThread) {
-        Task {
-            let defaultCommitMessage = await threadManager.suggestedArchiveCommitMessage(for: thread)
-            await MainActor.run {
-                guard let commitMessage = self.promptForArchiveCommitMessage(defaultValue: defaultCommitMessage) else {
-                    threadManager.clearThreadArchivingState(id: thread.id)
-                    return
-                }
-                self.retryArchiveForced(
-                    threadManager: threadManager,
-                    thread: thread,
-                    commitMessage: commitMessage
-                )
-            }
-        }
-    }
-
-    @MainActor
-    private func retryArchiveForced(
-        threadManager: ThreadManager,
-        thread: MagentThread,
-        commitMessage: String
-    ) {
-        threadManager.markThreadArchiving(id: thread.id)
-        Task {
-            do {
-                _ = try await threadManager.archiveThread(
-                    thread,
-                    promptForLocalSyncConflicts: true,
-                    force: true,
-                    forceCommitMessage: commitMessage
-                )
-            } catch ThreadManagerError.archiveCancelled {
-                // User cancelled a local-sync conflict prompt during the forced retry.
-            } catch {
-                await MainActor.run {
-                    BannerManager.shared.show(
-                        message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
-                        style: .error
-                    )
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private func confirmDestructiveArchive(worktreePath: String, threadName: String) -> Bool {
-        let alert = NSAlert()
-        alert.alertStyle = .critical
-        alert.messageText = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyTitle(threadName))
-        alert.informativeText = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyInfo(worktreePath))
-        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveDestructiveDirtyConfirm))
-        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
-        alert.buttons.first?.hasDestructiveAction = true
-        return alert.runModal() == .alertFirstButtonReturn
-    }
-
-    @MainActor
-    private func promptForArchiveCommitMessage(defaultValue: String) -> String? {
-        let alert = NSAlert()
-        alert.alertStyle = .critical
-        alert.messageText = String(localized: .ThreadStrings.threadArchiveCommitMessageTitle)
-        alert.informativeText = String(localized: .ThreadStrings.threadArchiveCommitMessageInfo)
-        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveCommitAndArchiveButton))
-        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
-        let commitButton = alert.buttons.first
-
-        let textField = NSTextField(string: defaultValue)
-        textField.placeholderString = String(localized: .ThreadStrings.threadArchiveCommitMessagePlaceholder)
-        textField.frame = NSRect(x: 0, y: 0, width: 360, height: 24)
-        let delegate = StatusBarArchiveCommitMessageTextFieldDelegate {
-            commitButton?.isEnabled = !textField.stringValue
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .isEmpty
-        }
-        textField.delegate = delegate
-        alert.accessoryView = textField
-
-        commitButton?.isEnabled = !textField.stringValue
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty
-
-        alert.window.initialFirstResponder = textField
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-        let message = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return message.isEmpty ? nil : message
     }
 
     private func navigationSessionName(for status: ThreadStatusSummaryKind, threadId: UUID) -> String? {

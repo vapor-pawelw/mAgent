@@ -595,17 +595,6 @@
         }
       }
     },
-    "threadMarkAsDone": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mark as Done"
-          }
-        }
-      }
-    },
     "threadRemoveFromFavorites": {
       "extractionState": "manual",
       "localizations": {
