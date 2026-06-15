@@ -4,6 +4,7 @@ set -euo pipefail
 
 DEFAULT_REPO="vapor-pawelw/mAgent"
 CHANGELOG_FILE="CHANGELOG.md"
+CHANGELOG_ARCHIVE_DIR="docs/changelog/archive"
 FROM_VERSION=""
 DRY_RUN=0
 REPO="$DEFAULT_REPO"
@@ -13,7 +14,7 @@ usage() {
 Usage: $0 [--repo <owner/repo>] [--from-version <x.y.z>] [--dry-run]
 
 Rewrites GitHub release notes so each release body matches the corresponding
-version section in CHANGELOG.md.
+version section in CHANGELOG.md or docs/changelog/archive/<version>.md.
 USAGE
 }
 
@@ -27,9 +28,14 @@ require_cmd() {
 version_gte() {
   local a="$1"
   local b="$2"
-  local smallest
-  smallest="$(printf '%s\n%s\n' "$a" "$b" | sort -V | head -n1)"
-  [[ "$smallest" == "$b" ]]
+  local a_major a_minor a_patch b_major b_minor b_patch
+  IFS=. read -r a_major a_minor a_patch <<<"$a"
+  IFS=. read -r b_major b_minor b_patch <<<"$b"
+  (( a_major > b_major )) && return 0
+  (( a_major < b_major )) && return 1
+  (( a_minor > b_minor )) && return 0
+  (( a_minor < b_minor )) && return 1
+  (( a_patch >= b_patch ))
 }
 
 extract_version_section() {
@@ -57,6 +63,20 @@ extract_version_section() {
       }
     }
   ' "$file"
+}
+
+changelog_file_for_version() {
+  local version="$1"
+  local archive_file="${CHANGELOG_ARCHIVE_DIR}/${version}.md"
+  if [[ -f "$CHANGELOG_FILE" ]] && extract_version_section "$CHANGELOG_FILE" "$version" >/dev/null; then
+    printf '%s\n' "$CHANGELOG_FILE"
+    return 0
+  fi
+  if [[ -f "$archive_file" ]] && extract_version_section "$archive_file" "$version" >/dev/null; then
+    printf '%s\n' "$archive_file"
+    return 0
+  fi
+  return 1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -104,7 +124,15 @@ trap 'rm -f "$temp_notes"' EXIT
 versions=()
 while IFS= read -r version; do
   versions+=("$version")
-done < <(awk '/^## [0-9]+\.[0-9]+\.[0-9]+ - / { print $2 }' "$CHANGELOG_FILE")
+done < <(
+  {
+    awk '/^## [0-9]+\.[0-9]+\.[0-9]+ - / { print $2 }' "$CHANGELOG_FILE"
+    if [[ -d "$CHANGELOG_ARCHIVE_DIR" ]]; then
+      find "$CHANGELOG_ARCHIVE_DIR" -type f -name '*.md' -print0 |
+        xargs -0 awk '/^## [0-9]+\.[0-9]+\.[0-9]+ - / { print $2 }'
+    fi
+  } | awk '!seen[$0]++'
+)
 
 if [[ "${#versions[@]}" -eq 0 ]]; then
   echo "No version sections found in ${CHANGELOG_FILE}." >&2
@@ -127,8 +155,10 @@ for version in "${versions[@]}"; do
     continue
   fi
 
-  if ! extract_version_section "$CHANGELOG_FILE" "$version" >"$temp_notes"; then
-    echo "skip ${tag}: no matching section in ${CHANGELOG_FILE}"
+  changelog_source=""
+  changelog_source="$(changelog_file_for_version "$version" || true)"
+  if [[ -z "$changelog_source" ]] || ! extract_version_section "$changelog_source" "$version" >"$temp_notes"; then
+    echo "skip ${tag}: no matching section in ${CHANGELOG_FILE} or ${CHANGELOG_ARCHIVE_DIR}"
     skipped=$((skipped + 1))
     continue
   fi

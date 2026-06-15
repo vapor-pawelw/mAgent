@@ -1,5 +1,5 @@
 #!/bin/bash
-# Embeds CHANGELOG.md, git commit hash, and incremental build number at build time.
+# Embeds the latest released CHANGELOG.md, git commit hash, and incremental build number at build time.
 # Called as an Xcode post-build script phase.
 
 set -euo pipefail
@@ -8,7 +8,7 @@ OUTPUT_DIR="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
 REPO_ROOT="${SRCROOT}"
 PLIST="${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}"
 
-# Copy CHANGELOG.md
+# Copy root CHANGELOG.md, which intentionally contains only the latest released version.
 cp "${REPO_ROOT}/CHANGELOG.md" "${OUTPUT_DIR}/CHANGELOG.md"
 
 # Write build metadata (commit hash)

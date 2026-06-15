@@ -6,6 +6,8 @@ RELEASE_WORKFLOW_NAME="Release"
 DEFAULT_RELEASE_REPO="vapor-pawelw/mAgent"
 DEFAULT_HOMEBREW_TAP_REPO="vapor-pawelw/homebrew-tap"
 CHANGELOG_FILE="CHANGELOG.md"
+CHANGELOG_UNRELEASED_FILE="docs/changelog/unreleased.md"
+CHANGELOG_ARCHIVE_DIR="docs/changelog/archive"
 CHANGELOG_UNRELEASED_PLACEHOLDER="- _No notable changes yet._"
 
 require_cmd() {
@@ -143,6 +145,16 @@ extract_version_notes() {
   ' "$file"
 }
 
+latest_changelog_version() {
+  local file="$1"
+  awk '
+    /^## [0-9]+\.[0-9]+\.[0-9]+ - / {
+      print $2
+      exit
+    }
+  ' "$file"
+}
+
 version_section_exists() {
   local file="$1"
   local version="$2"
@@ -179,101 +191,49 @@ promote_unreleased_changelog() {
   local version="$2"
   local release_date="$3"
   local notes_file="$4"
+  local archive_dir="$5"
   local tmp_file
   tmp_file="$(mktemp)"
 
-  if version_section_exists "$changelog_file" "$version"; then
-    if ! awk -v version="$version" \
-      -v placeholder="$CHANGELOG_UNRELEASED_PLACEHOLDER" \
-      -v notes_file="$notes_file" '
-        BEGIN { inserted = 0; in_target = 0; in_unreleased = 0 }
-        /^## Unreleased[[:space:]]*$/ {
-          print
-          print ""
-          print placeholder
-          print ""
-          in_unreleased = 1
-          next
-        }
-        $0 ~ ("^## " version " - ") && inserted == 0 {
-          print
-          print ""
-          while ((getline line < notes_file) > 0) {
-            print line
-          }
-          close(notes_file)
-          print ""
-          inserted = 1
-          in_target = 1
-          next
-        }
-        /^## / {
-          if (in_unreleased == 1) {
-            in_unreleased = 0
-          }
-          if (in_target == 1) {
-            in_target = 0
-          }
-        }
-        {
-          if (in_unreleased == 1) {
-            next
-          }
-          print
-        }
-        END {
-          if (inserted == 0) {
-            exit 2
-          }
-        }
-      ' "$changelog_file" >"$tmp_file"; then
+  local previous_version
+  previous_version="$(latest_changelog_version "$changelog_file" || true)"
+  if [[ -n "$previous_version" && "$previous_version" != "$version" ]]; then
+    mkdir -p "$archive_dir"
+    local archive_file="${archive_dir}/${previous_version}.md"
+    if [[ -e "$archive_file" ]]; then
+      echo "Archive file already exists: ${archive_file}" >&2
       rm -f "$tmp_file"
       return 1
     fi
+    cp "$changelog_file" "$archive_file"
+  fi
+
+  if [[ "$previous_version" == "$version" ]]; then
+    local existing_notes_file
+    existing_notes_file="$(mktemp)"
+    if ! extract_version_notes "$changelog_file" "$version" >"$existing_notes_file"; then
+      rm -f "$tmp_file" "$existing_notes_file"
+      return 1
+    fi
+    {
+      printf '# Changelog\n\n'
+      cat "$existing_notes_file"
+      printf '\n'
+      awk -v placeholder="$CHANGELOG_UNRELEASED_PLACEHOLDER" '$0 != placeholder { print }' "$notes_file"
+      printf '\n'
+    } >"$tmp_file"
+    rm -f "$existing_notes_file"
   else
-    if ! awk -v version="$version" \
-      -v release_date="$release_date" \
-      -v placeholder="$CHANGELOG_UNRELEASED_PLACEHOLDER" \
-      -v notes_file="$notes_file" '
-        BEGIN { in_unreleased = 0; inserted = 0 }
-        /^## Unreleased[[:space:]]*$/ && inserted == 0 {
-          print
-          print ""
-          print placeholder
-          print ""
-          printf "## %s - %s\n\n", version, release_date
-          while ((getline line < notes_file) > 0) {
-            print line
-          }
-          close(notes_file)
-          print ""
-          in_unreleased = 1
-          inserted = 1
-          next
-        }
-        /^## / {
-          if (in_unreleased == 1) {
-            in_unreleased = 0
-          }
-        }
-        {
-          if (in_unreleased == 1) {
-            next
-          }
-          print
-        }
-        END {
-          if (inserted == 0) {
-            exit 2
-          }
-        }
-      ' "$changelog_file" >"$tmp_file"; then
-      rm -f "$tmp_file"
-      return 1
-    fi
+    {
+      printf '# Changelog\n\n'
+      printf '## %s - %s\n\n' "$version" "$release_date"
+      awk -v placeholder="$CHANGELOG_UNRELEASED_PLACEHOLDER" '$0 != placeholder { print }' "$notes_file"
+      printf '\n'
+    } >"$tmp_file"
   fi
 
   mv "$tmp_file" "$changelog_file"
+  rm -f "$CHANGELOG_UNRELEASED_FILE"
 }
 
 NON_INTERACTIVE=0
@@ -510,13 +470,17 @@ main() {
   tag_notes_file="$(mktemp)"
   trap 'rm -f "'"$release_notes_file"'" "'"$tag_notes_file"'"' EXIT
 
-  if ! extract_unreleased_notes "$CHANGELOG_FILE" >"$release_notes_file"; then
-    echo "Could not read '## Unreleased' from ${CHANGELOG_FILE}." >&2
-    echo "Expected format:"
-    echo "## Unreleased"
-    echo
-    echo "- Bullet describing a user-visible change"
-    exit 1
+  if [[ -f "$CHANGELOG_UNRELEASED_FILE" ]]; then
+    if ! extract_unreleased_notes "$CHANGELOG_UNRELEASED_FILE" >"$release_notes_file"; then
+      echo "Could not read '## Unreleased' from ${CHANGELOG_UNRELEASED_FILE}." >&2
+      echo "Expected format:"
+      echo "## Unreleased"
+      echo
+      echo "- Bullet describing a user-visible change"
+      exit 1
+    fi
+  else
+    : >"$release_notes_file"
   fi
 
   local reuse_existing_version_notes=false
@@ -525,7 +489,7 @@ main() {
       extract_version_notes "$CHANGELOG_FILE" "$version" >"$release_notes_file"; then
       reuse_existing_version_notes=true
     else
-      echo "${CHANGELOG_FILE} has no release notes under '## Unreleased'." >&2
+      echo "${CHANGELOG_UNRELEASED_FILE} has no release notes under '## Unreleased'." >&2
       echo "Add at least one bullet before releasing."
       exit 1
     fi
@@ -539,8 +503,10 @@ main() {
     echo "- Reuse existing ${CHANGELOG_FILE} '## ${version} - <date>' notes"
     echo "- Push current branch '${branch}'"
   else
-    echo "- Promote ${CHANGELOG_FILE} '## Unreleased' notes into '## ${version} - ${release_date}'"
-    echo "- Create and push changelog commit on branch '${branch}'"
+    echo "- Archive existing ${CHANGELOG_FILE} into ${CHANGELOG_ARCHIVE_DIR}/<old-version>.md"
+    echo "- Promote ${CHANGELOG_UNRELEASED_FILE} notes into ${CHANGELOG_FILE} '## ${version} - ${release_date}'"
+    echo "- Remove ${CHANGELOG_UNRELEASED_FILE}"
+    echo "- Create and push changelog/archive commit on branch '${branch}'"
   fi
   echo "- Create and push annotated tag: $tag"
   echo "- Current source commit: $commit"
@@ -563,18 +529,30 @@ main() {
   if [[ "$reuse_existing_version_notes" == "true" ]]; then
     changelog_commit="$(git rev-parse --short HEAD)"
   else
-    if ! promote_unreleased_changelog "$CHANGELOG_FILE" "$version" "$release_date" "$release_notes_file"; then
+    local unreleased_was_tracked=false
+    if git ls-files --error-unmatch "$CHANGELOG_UNRELEASED_FILE" >/dev/null 2>&1; then
+      unreleased_was_tracked=true
+    fi
+
+    if ! promote_unreleased_changelog "$CHANGELOG_FILE" "$version" "$release_date" "$release_notes_file" "$CHANGELOG_ARCHIVE_DIR"; then
       echo "Failed to update ${CHANGELOG_FILE} for ${version}." >&2
       exit 1
     fi
 
-    git add "$CHANGELOG_FILE"
-    if git diff --cached --quiet -- "$CHANGELOG_FILE"; then
+    git add "$CHANGELOG_FILE" "$CHANGELOG_ARCHIVE_DIR"
+    if [[ "$unreleased_was_tracked" == "true" ]]; then
+      git add "$CHANGELOG_UNRELEASED_FILE"
+    fi
+    if git diff --cached --quiet -- "$CHANGELOG_FILE" "$CHANGELOG_UNRELEASED_FILE" "$CHANGELOG_ARCHIVE_DIR"; then
       echo "No changelog changes were staged for release ${version}." >&2
       exit 1
     fi
 
-    git commit -m "Update changelog for ${tag}" -- "$CHANGELOG_FILE"
+    if [[ "$unreleased_was_tracked" == "true" ]]; then
+      git commit -m "Update changelog for ${tag}" -- "$CHANGELOG_FILE" "$CHANGELOG_UNRELEASED_FILE" "$CHANGELOG_ARCHIVE_DIR"
+    else
+      git commit -m "Update changelog for ${tag}" -- "$CHANGELOG_FILE" "$CHANGELOG_ARCHIVE_DIR"
+    fi
     changelog_commit="$(git rev-parse --short HEAD)"
   fi
 
