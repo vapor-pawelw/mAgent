@@ -55,8 +55,12 @@ private final class ThreadToolbarCapsuleView: NSStackView {
 
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
+            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            let borderColor = isDark
+                ? NSColor.white.withAlphaComponent(0.12)
+                : NSColor.black.withAlphaComponent(0.08)
             layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.62).cgColor
-            layer?.borderColor = NSColor.controlAccentColor.cgColor
+            layer?.borderColor = borderColor.cgColor
         }
     }
 
