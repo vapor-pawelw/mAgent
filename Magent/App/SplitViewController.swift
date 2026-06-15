@@ -845,7 +845,11 @@ final class SplitViewController: NSSplitViewController {
         }
 
         // Select the thread in the sidebar (creates ThreadDetailViewController if needed)
-        threadListVC.selectThread(byId: threadId, scrollRowToVisible: !centerInSidebar)
+        threadListVC.selectThread(
+            byId: threadId,
+            scrollRowToVisible: !centerInSidebar,
+            forceNotifyDelegate: true
+        )
         if centerInSidebar {
             threadListVC.centerAndPulseThreadRow(byId: threadId)
         }

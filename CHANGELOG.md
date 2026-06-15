@@ -32,6 +32,7 @@ All notable changes to this project will be documented in this file.
 - The bottom status bar now separates session counts from thread status badges and refreshes persisted thread statuses immediately on launch.
 - Inline status-bar thread badges now respond to clicks reliably and focus popped-out thread or tab windows directly when their status is selected.
 - Inline status-bar thread badges now stay expanded until the measured fixed status-bar controls actually leave too little room.
+- Thread navigation now reopens already-selected dead-session threads and forces dead terminal sessions through the lazy recreation path.
 - Busy and waiting status badges now use clearer filled glyphs in the bottom status bar.
 
 ## 1.6.4 - 2026-05-29

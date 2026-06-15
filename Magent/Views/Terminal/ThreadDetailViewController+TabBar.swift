@@ -259,8 +259,12 @@ extension ThreadDetailViewController {
         // If this session was evicted by idle eviction, clear the eviction marker
         // and force through the slow path so the session is recreated.
         let wasEvicted = threadManager.evictedIdleSessions.contains(sessionName)
+        let latestThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let wasDead = latestThread.deadSessions.contains(sessionName)
         if wasEvicted {
             threadManager.evictedIdleSessions.remove(sessionName)
+        }
+        if wasEvicted || wasDead {
             preparedSessions.remove(sessionName)
         }
 
@@ -315,7 +319,7 @@ extension ThreadDetailViewController {
                 // selectPreparedTab can capture an empty pane (showing 0 entries).
                 // Schedule a second refresh with a short delay to pick up content
                 // once the pane has settled.
-                if recreated || wasEvicted {
+                if recreated || wasEvicted || wasDead {
                     self.schedulePromptTOCRefresh(after: 0.5)
                 }
                 let keepStartupOverlay = sessionAgentType != nil

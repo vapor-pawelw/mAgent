@@ -1374,7 +1374,7 @@ final class ThreadListViewController: NSViewController {
     }
 
     @discardableResult
-    func selectThread(byId threadId: UUID, scrollRowToVisible: Bool = true) -> Bool {
+    func selectThread(byId threadId: UUID, scrollRowToVisible: Bool = true, forceNotifyDelegate: Bool = false) -> Bool {
         revealThreadIfHiddenOrCollapsed(byId: threadId)
         if PopoutWindowManager.shared.isThreadPoppedOut(threadId) {
             PopoutWindowManager.shared.bringToFront(threadId: threadId)
@@ -1387,7 +1387,9 @@ final class ThreadListViewController: NSViewController {
             if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
                 let isNewThread = selectedThreadID != thread.id
                 let resolved = recordSelectedThread(thread)
-                if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
+                if isNewThread || forceNotifyDelegate {
+                    delegate?.threadList(self, didSelectThread: resolved)
+                }
                 // `selectRowIndexes` also triggers NSOutlineView's internal
                 // `scrollRowToVisible(_:)` path — the explicit call below is not the
                 // only source of scrolling. When the caller opted out of scrolling
