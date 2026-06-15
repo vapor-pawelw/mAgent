@@ -6,7 +6,7 @@ final class CurrentThreadStripView: NSView {
         static let height: CGFloat = 36
         static let cornerRadius: CGFloat = 10
         static let borderWidth: CGFloat = 1
-        static let horizontalPadding: CGFloat = 14
+        static let horizontalPadding: CGFloat = 20
         static let iconSize: CGFloat = 15
         static let dirtyDotSize: CGFloat = 7
         static let labelSpacing: CGFloat = 6
