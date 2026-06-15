@@ -17,6 +17,11 @@ private extension NSImage {
 
 private final class StatusSummaryButton: NSButton {
     var contextMenuProvider: (() -> NSMenu?)?
+    var showsBadgeChrome = true {
+        didSet {
+            updateBadgeLayer()
+        }
+    }
     var badgeTintColor: NSColor = .tertiaryLabelColor {
         didSet {
             updateBadgeLayer()
@@ -90,6 +95,14 @@ private final class StatusSummaryButton: NSButton {
     }
 
     private func updateBadgeLayer() {
+        guard showsBadgeChrome else {
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                layer?.backgroundColor = NSColor.clear.cgColor
+                layer?.borderColor = NSColor.clear.cgColor
+            }
+            return
+        }
+
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let background = NSColor.controlBackgroundColor
             layer?.backgroundColor = (isHovered
@@ -1856,6 +1869,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private func makeInlineStatusGroupGlyphButton(for kind: ThreadStatusSummaryKind) -> StatusSummaryButton {
         let button = StatusSummaryButton()
         button.isBordered = false
+        button.showsBadgeChrome = false
         button.image = Self.statusSymbolImage(for: kind, count: 1)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .medium))
         button.imagePosition = .imageOnly
