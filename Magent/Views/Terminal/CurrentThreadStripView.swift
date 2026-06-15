@@ -3,8 +3,8 @@ import MagentCore
 
 final class CurrentThreadStripView: NSView {
     private enum Layout {
-        static let height: CGFloat = 30
-        static let cornerRadius: CGFloat = 8
+        static let height: CGFloat = 36
+        static let cornerRadius: CGFloat = 10
         static let borderWidth: CGFloat = 1
         static let horizontalPadding: CGFloat = 14
         static let iconSize: CGFloat = 15
