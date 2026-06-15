@@ -3,10 +3,10 @@ import MagentCore
 
 final class CurrentThreadStripView: NSView {
     private enum Layout {
-        static let height: CGFloat = 28
+        static let height: CGFloat = 30
         static let cornerRadius: CGFloat = 8
         static let borderWidth: CGFloat = 1
-        static let horizontalPadding: CGFloat = 10
+        static let horizontalPadding: CGFloat = 14
         static let iconSize: CGFloat = 15
         static let dirtyDotSize: CGFloat = 7
         static let labelSpacing: CGFloat = 6
@@ -159,7 +159,7 @@ final class CurrentThreadStripView: NSView {
             if thread.hasWaitingForInput {
                 return NSColor.systemOrange.withAlphaComponent(0.5)
             }
-            if thread.isAnyBusy || thread.hasUnreadAgentCompletion {
+            if thread.hasUnreadAgentCompletion {
                 return NSColor.systemGreen.withAlphaComponent(0.5)
             }
         }
