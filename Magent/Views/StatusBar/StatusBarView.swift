@@ -217,9 +217,11 @@ private final class InlineThreadStatusBadgeButton: NSControl {
         isPressed = true
     }
 
+    override func menu(for event: NSEvent) -> NSMenu? {
+        contextMenuProvider?() ?? super.menu(for: event)
+    }
+
     override func rightMouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        guard bounds.contains(point) else { return }
         guard let menu = contextMenuProvider?() else {
             super.rightMouseDown(with: event)
             return
@@ -230,8 +232,6 @@ private final class InlineThreadStatusBadgeButton: NSControl {
     override func mouseUp(with event: NSEvent) {
         defer { isPressed = false }
         guard isEnabled else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        guard bounds.contains(point) else { return }
         sendAction(action, to: target)
     }
 
