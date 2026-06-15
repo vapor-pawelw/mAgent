@@ -16,9 +16,13 @@ private extension NSImage {
 }
 
 private final class StatusSummaryButton: NSButton {
+    private static let horizontalPadding: CGFloat = 8
+    private static let height: CGFloat = 21
+
     var contextMenuProvider: (() -> NSMenu?)?
     var showsBadgeChrome = true {
         didSet {
+            invalidateIntrinsicContentSize()
             updateBadgeLayer()
         }
     }
@@ -42,6 +46,14 @@ private final class StatusSummaryButton: NSButton {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        var size = super.intrinsicContentSize
+        guard showsBadgeChrome else { return size }
+        size.width += Self.horizontalPadding * 2
+        size.height = max(size.height, Self.height)
+        return size
     }
 
     override func rightMouseDown(with event: NSEvent) {
