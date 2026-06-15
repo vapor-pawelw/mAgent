@@ -652,6 +652,7 @@ final class SplitViewController: NSSplitViewController {
         currentThreadToolbarStack.orientation = .horizontal
         currentThreadToolbarStack.alignment = .centerY
         currentThreadToolbarStack.spacing = 4
+        currentThreadToolbarStack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
         currentThreadToolbarStack.detachesHiddenViews = true
         currentThreadToolbarStack.translatesAutoresizingMaskIntoConstraints = false
         currentThreadToolbarStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
