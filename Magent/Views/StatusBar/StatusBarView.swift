@@ -1829,10 +1829,8 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         button.setAccessibilityLabel(descriptor.tooltip.replacingOccurrences(of: "\n", with: ", "))
         button.target = self
         button.action = #selector(inlineThreadStatusBadgeTapped(_:))
-        if descriptor.kind == .done {
-            button.contextMenuProvider = { [weak self, threadId = descriptor.threadId] in
-                self?.buildDoneBadgeContextMenu(threadId: threadId)
-            }
+        button.contextMenuProvider = { [weak self, threadId = descriptor.threadId, kind = descriptor.kind] in
+            self?.buildInlineThreadBadgeContextMenu(threadId: threadId, status: kind)
         }
         button.translatesAutoresizingMaskIntoConstraints = false
         let minWidth = button.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumInlineBadgeWidth)
@@ -2623,13 +2621,14 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         return doneStatusContextMenu
     }
 
-    private func buildDoneBadgeContextMenu(threadId: UUID) -> NSMenu? {
+    private func buildInlineThreadBadgeContextMenu(threadId: UUID, status: ThreadStatusSummaryKind) -> NSMenu? {
         guard let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) else { return nil }
 
         let menu = NSMenu(title: thread.name)
         menu.autoenablesItems = false
 
-        if thread.hasUnreadAgentCompletion {
+        switch status {
+        case .done:
             let markReadItem = NSMenuItem(
                 title: String(localized: .ThreadStrings.threadMarkAsRead),
                 action: #selector(markDoneThreadAsReadFromMenu(_:)),
@@ -2651,16 +2650,40 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             markAllReadItem.isAlternate = true
             markAllReadItem.keyEquivalentModifierMask = [.option]
             menu.addItem(markAllReadItem)
+        case .favorites:
+            let removeFavoriteItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.threadRemoveFromFavorites),
+                action: #selector(removeFavoriteThreadFromMenu(_:)),
+                keyEquivalent: ""
+            )
+            removeFavoriteItem.target = self
+            removeFavoriteItem.image = NSImage(systemSymbolName: "heart.slash.fill", accessibilityDescription: nil)
+            removeFavoriteItem.representedObject = threadId
+            menu.addItem(removeFavoriteItem)
+        default:
+            let markDoneItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.threadMarkAsDone),
+                action: #selector(markThreadAsDoneFromMenu(_:)),
+                keyEquivalent: ""
+            )
+            markDoneItem.target = self
+            markDoneItem.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
+            markDoneItem.representedObject = [
+                "threadId": threadId,
+                "status": status.rawValue,
+            ] as [String: Any]
+            markDoneItem.isEnabled = completionTargetSessionName(for: thread, status: status) != nil
+            menu.addItem(markDoneItem)
         }
 
-        if !thread.isMain {
+        if status == .done, !thread.isMain {
             if menu.items.isEmpty == false {
                 menu.addItem(NSMenuItem.separator())
             }
 
             let archiveItem = NSMenuItem(
                 title: String(localized: .ThreadStrings.threadArchiveMenuTitle),
-                action: #selector(archiveDoneThreadFromMenu(_:)),
+                action: #selector(archiveInlineThreadFromMenu(_:)),
                 keyEquivalent: ""
             )
             archiveItem.target = self
@@ -2673,6 +2696,11 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         return menu.items.isEmpty ? nil : menu
     }
 
+    private func completionTargetSessionName(for thread: MagentThread, status: ThreadStatusSummaryKind) -> String? {
+        navigationSessionName(for: status, threadId: thread.id)
+            ?? (thread.tmuxSessionNames + thread.agentTmuxSessions).first
+    }
+
     private func markDoneThreadAsRead(_ threadId: UUID) {
         ThreadManager.shared.markThreadCompletionSeen(threadId: threadId)
         refresh()
@@ -2683,13 +2711,35 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         markDoneThreadAsRead(threadId)
     }
 
+    @objc private func markThreadAsDoneFromMenu(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let threadId = info["threadId"] as? UUID,
+              let statusRawValue = info["status"] as? String,
+              let status = ThreadStatusSummaryKind(rawValue: statusRawValue),
+              let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }),
+              let sessionName = completionTargetSessionName(for: thread, status: status)
+        else { return }
+
+        ThreadManager.shared.markSessionCompletionDetected(
+            threadId: threadId,
+            sessionName: sessionName,
+            isActiveTab: false
+        )
+        refresh()
+    }
+
+    @objc private func removeFavoriteThreadFromMenu(_ sender: NSMenuItem) {
+        guard let threadId = sender.representedObject as? UUID else { return }
+        removeFavoriteThread(threadId)
+    }
+
     @objc private func markAllCompletedThreadsAsRead(_ sender: Any?) {
         let changed = ThreadManager.shared.markAllThreadCompletionsSeen()
         guard changed > 0 else { return }
         refresh()
     }
 
-    @objc private func archiveDoneThreadFromMenu(_ sender: NSMenuItem) {
+    @objc private func archiveInlineThreadFromMenu(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID,
               let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId })
         else { return }
