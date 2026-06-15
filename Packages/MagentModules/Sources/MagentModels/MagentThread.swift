@@ -499,6 +499,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var isPinned: Bool
     public var isFavorite: Bool
     public var favoritedAt: Date?
+    public var favoriteAlias: String?
     public var isSidebarHidden: Bool
     public var lastAgentCompletionAt: Date?
     public var unreadCompletionSessions: Set<String>
@@ -865,7 +866,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case tmuxSessionNames, agentTmuxSessions, sessionConversationIDs, sessionAgentTypes, sessionCreatedAts, freshAgentSessions, forwardedTmuxSessions, pinnedTmuxSessions, protectedTmuxSessions, isKeepAlive, didOfferKeepAlivePromotion
         case createdAt, isArchived, archivedAt, sectionId, isMain
         case lastSelectedTabIdentifier = "lastSelectedTmuxSessionName"
-        case agentHasRun, isPinned, isFavorite, favoritedAt, isSidebarHidden, lastAgentCompletionAt
+        case agentHasRun, isPinned, isFavorite, favoritedAt, favoriteAlias, isSidebarHidden, lastAgentCompletionAt
         case unreadCompletionSessions
         case currentDiffFingerprint
         case lastSeenDiffFingerprint
@@ -922,6 +923,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isPinned: Bool = false,
         isFavorite: Bool = false,
         favoritedAt: Date? = nil,
+        favoriteAlias: String? = nil,
         isSidebarHidden: Bool = false,
         lastAgentCompletionAt: Date? = nil,
         unreadCompletionSessions: Set<String> = [],
@@ -975,6 +977,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.isPinned = isPinned
         self.isFavorite = isFavorite
         self.favoritedAt = favoritedAt
+        self.favoriteAlias = favoriteAlias
         self.isSidebarHidden = isSidebarHidden
         self.lastAgentCompletionAt = lastAgentCompletionAt
         self.unreadCompletionSessions = unreadCompletionSessions
@@ -1053,6 +1056,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             isPinned: isPinned,
             isFavorite: isFavorite,
             favoritedAt: favoritedAt,
+            favoriteAlias: favoriteAlias,
             isSidebarHidden: isSidebarHidden,
             lastAgentCompletionAt: lastAgentCompletionAt,
             unreadCompletionSessions: unreadCompletionSessions,
@@ -1130,6 +1134,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         favoritedAt = try container.decodeIfPresent(Date.self, forKey: .favoritedAt)
+        favoriteAlias = try container.decodeIfPresent(String.self, forKey: .favoriteAlias)
         isSidebarHidden = try container.decodeIfPresent(Bool.self, forKey: .isSidebarHidden) ?? false
         lastAgentCompletionAt = try container.decodeIfPresent(Date.self, forKey: .lastAgentCompletionAt)
         didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
@@ -1224,6 +1229,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(isPinned, forKey: .isPinned)
         try container.encode(isFavorite, forKey: .isFavorite)
         try container.encodeIfPresent(favoritedAt, forKey: .favoritedAt)
+        try container.encodeIfPresent(favoriteAlias, forKey: .favoriteAlias)
         try container.encode(isSidebarHidden, forKey: .isSidebarHidden)
         try container.encodeIfPresent(lastAgentCompletionAt, forKey: .lastAgentCompletionAt)
         try container.encode(unreadCompletionSessions, forKey: .unreadCompletionSessions)

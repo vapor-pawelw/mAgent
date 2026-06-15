@@ -1,6 +1,8 @@
 import Cocoa
 import MagentCore
 
+private let inlineFavoriteThreadPasteboardType = NSPasteboard.PasteboardType("com.magent.inline-favorite-thread")
+
 private extension NSImage {
     /// Returns a copy of the template image filled with the given color.
     func tinted(with color: NSColor) -> NSImage {
@@ -126,7 +128,7 @@ private final class StatusSummaryButton: NSButton {
     }
 }
 
-private final class InlineThreadStatusBadgeButton: NSButton {
+private final class InlineThreadStatusBadgeButton: NSButton, NSDraggingSource {
     private static let horizontalPadding: CGFloat = 8
     private static let height: CGFloat = 21
 
@@ -210,6 +212,77 @@ private final class InlineThreadStatusBadgeButton: NSButton {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
+    override func mouseDown(with event: NSEvent) {
+        guard statusKind == .favorites else {
+            super.mouseDown(with: event)
+            return
+        }
+        guard isEnabled, let window else { return }
+
+        let startLocation = event.locationInWindow
+        isHighlighted = true
+
+        while let nextEvent = window.nextEvent(
+            matching: [.leftMouseDragged, .leftMouseUp],
+            until: .distantFuture,
+            inMode: .eventTracking,
+            dequeue: true
+        ) {
+            switch nextEvent.type {
+            case .leftMouseDragged:
+                let deltaX = nextEvent.locationInWindow.x - startLocation.x
+                let deltaY = nextEvent.locationInWindow.y - startLocation.y
+                guard hypot(deltaX, deltaY) >= 4 else { continue }
+                isHighlighted = false
+                beginFavoriteDrag(with: nextEvent)
+                return
+            case .leftMouseUp:
+                isHighlighted = false
+                sendAction(action, to: target)
+                return
+            default:
+                continue
+            }
+        }
+
+        isHighlighted = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard statusKind == .favorites else {
+            super.mouseDragged(with: event)
+            return
+        }
+
+        beginFavoriteDrag(with: event)
+    }
+
+    private func beginFavoriteDrag(with event: NSEvent) {
+        let item = NSPasteboardItem()
+        item.setString(threadId.uuidString, forType: inlineFavoriteThreadPasteboardType)
+
+        let draggingItem = NSDraggingItem(pasteboardWriter: item)
+        draggingItem.setDraggingFrame(bounds, contents: dragImage())
+        let session = beginDraggingSession(with: [draggingItem], event: event, source: self)
+        session.animatesToStartingPositionsOnCancelOrFail = true
+    }
+
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        .move
+    }
+
+    func ignoreModifierKeys(for session: NSDraggingSession) -> Bool {
+        true
+    }
+
+    func draggingSession(_ session: NSDraggingSession, willBeginAt screenPoint: NSPoint) {
+        alphaValue = 0.55
+    }
+
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        alphaValue = 1
+    }
+
     private func setupBadgeLayer() {
         wantsLayer = true
         layer?.cornerRadius = 7
@@ -224,6 +297,7 @@ private final class InlineThreadStatusBadgeButton: NSButton {
         focusRingType = .none
         setButtonType(.momentaryChange)
         alignment = .center
+        cell?.lineBreakMode = .byTruncatingTail
         updateBadgeLayer()
     }
 
@@ -236,6 +310,15 @@ private final class InlineThreadStatusBadgeButton: NSButton {
             layer?.backgroundColor = fill.cgColor
             layer?.borderColor = badgeTintColor.withAlphaComponent(isHovered ? 0.62 : 0.38).cgColor
         }
+    }
+
+    private func dragImage() -> NSImage {
+        let image = NSImage(size: bounds.size)
+        if let bitmap = bitmapImageRepForCachingDisplay(in: bounds) {
+            cacheDisplay(in: bounds, to: bitmap)
+            image.addRepresentation(bitmap)
+        }
+        return image
     }
 }
 
@@ -1154,6 +1237,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private static let horizontalPadding: CGFloat = 20
     private static let minimumInlineBadgeWidth: CGFloat = 46
     private static let maximumInlineBadgeWidth: CGFloat = 420
+    private static let inlineFavoriteDropIndicatorWidth: CGFloat = 3
 
     // MARK: - Subviews
 
@@ -1168,6 +1252,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private let separator = NSBox()
     private let leftStack = NSStackView()
     private let rightStack = NSStackView()
+    private let inlineFavoriteDropIndicator = NSView()
 
     // MARK: - State
 
@@ -1189,6 +1274,8 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private var lastRenderedLiveSessionCount: Int = -1
     private var lastRenderedZombieCount: Int = -1
     private var lastRenderedTmuxRecoveryState = false
+    private var inlineFavoriteDropTargetIndex: Int?
+    private var inlineFavoriteDraggedThreadId: UUID?
 
     // MARK: - Init
 
@@ -1230,6 +1317,34 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         updateThreadStatus()
     }
 
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        updateInlineFavoriteDropTarget(sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        updateInlineFavoriteDropTarget(sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        clearInlineFavoriteDropTarget()
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        clearInlineFavoriteDropTarget()
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let draggedThreadId = inlineFavoriteDraggedThreadId,
+              let targetIndex = inlineFavoriteDropTargetIndex else {
+            clearInlineFavoriteDropTarget()
+            return false
+        }
+        ThreadManager.shared.reorderFavoriteThread(threadId: draggedThreadId, toChronologicalIndex: targetIndex)
+        clearInlineFavoriteDropTarget()
+        refresh()
+        return true
+    }
+
     private func updateLayerColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let isDark = self.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
@@ -1237,7 +1352,89 @@ final class StatusBarView: NSView, NSPopoverDelegate {
                 ? NSColor(resource: .surface)
                 : NSColor(resource: .appBackground)
             layer?.backgroundColor = bg.cgColor
+            inlineFavoriteDropIndicator.layer?.backgroundColor = NSColor(resource: .primaryBrand).cgColor
         }
+    }
+
+    private func updateInlineFavoriteDropTarget(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard isRenderingInlineThreadBadges,
+              let threadIdString = sender.draggingPasteboard.string(forType: inlineFavoriteThreadPasteboardType),
+              let threadId = UUID(uuidString: threadIdString) else {
+            clearInlineFavoriteDropTarget()
+            return []
+        }
+
+        let favoriteBadges = inlineFavoriteBadgeButtons()
+        guard let sourceIndex = favoriteBadges.firstIndex(where: { $0.threadId == threadId }),
+              favoriteBadges.count > 1 else {
+            clearInlineFavoriteDropTarget()
+            return []
+        }
+
+        let location = convert(sender.draggingLocation, from: nil)
+        let targetIndex = inlineFavoriteDropIndex(for: location, favoriteBadges: favoriteBadges)
+        guard targetIndex != sourceIndex && targetIndex != sourceIndex + 1 else {
+            clearInlineFavoriteDropTarget()
+            return .move
+        }
+
+        inlineFavoriteDraggedThreadId = threadId
+        inlineFavoriteDropTargetIndex = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
+        showInlineFavoriteDropIndicator(atDropIndex: targetIndex, favoriteBadges: favoriteBadges)
+        return .move
+    }
+
+    private func clearInlineFavoriteDropTarget() {
+        inlineFavoriteDropTargetIndex = nil
+        inlineFavoriteDraggedThreadId = nil
+        inlineFavoriteDropIndicator.isHidden = true
+    }
+
+    private func inlineFavoriteBadgeButtons() -> [InlineThreadStatusBadgeButton] {
+        threadStatusStack.arrangedSubviews.compactMap { view in
+            guard let button = view as? InlineThreadStatusBadgeButton,
+                  button.statusKind == .favorites else { return nil }
+            return button
+        }
+    }
+
+    private func inlineFavoriteDropIndex(
+        for location: NSPoint,
+        favoriteBadges: [InlineThreadStatusBadgeButton]
+    ) -> Int {
+        for (index, button) in favoriteBadges.enumerated() {
+            let frame = convert(button.bounds, from: button)
+            if location.x < frame.midX {
+                return index
+            }
+        }
+        return favoriteBadges.count
+    }
+
+    private func showInlineFavoriteDropIndicator(
+        atDropIndex dropIndex: Int,
+        favoriteBadges: [InlineThreadStatusBadgeButton]
+    ) {
+        guard !favoriteBadges.isEmpty else {
+            inlineFavoriteDropIndicator.isHidden = true
+            return
+        }
+
+        let clampedIndex = max(0, min(dropIndex, favoriteBadges.count))
+        let xPosition: CGFloat
+        if clampedIndex == favoriteBadges.count {
+            xPosition = convert(favoriteBadges[favoriteBadges.count - 1].bounds, from: favoriteBadges[favoriteBadges.count - 1]).maxX + 3
+        } else {
+            xPosition = convert(favoriteBadges[clampedIndex].bounds, from: favoriteBadges[clampedIndex]).minX - 3
+        }
+
+        inlineFavoriteDropIndicator.frame = NSRect(
+            x: xPosition - Self.inlineFavoriteDropIndicatorWidth / 2,
+            y: bounds.midY - 10,
+            width: Self.inlineFavoriteDropIndicatorWidth,
+            height: 20
+        )
+        inlineFavoriteDropIndicator.isHidden = false
     }
 
     // MARK: - Setup
@@ -1330,6 +1527,13 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
         addSubview(leftStack)
         addSubview(rightStack)
+
+        inlineFavoriteDropIndicator.wantsLayer = true
+        inlineFavoriteDropIndicator.layer?.cornerRadius = 1
+        inlineFavoriteDropIndicator.layer?.masksToBounds = true
+        inlineFavoriteDropIndicator.isHidden = true
+        addSubview(inlineFavoriteDropIndicator)
+        registerForDraggedTypes([inlineFavoriteThreadPasteboardType])
 
         NSLayoutConstraint.activate([
             separator.topAnchor.constraint(equalTo: topAnchor),
@@ -1573,6 +1777,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     }
 
     private func rebuildInlineThreadStatusBadges(groups: [InlineThreadStatusBadgeGroup]) {
+        clearInlineFavoriteDropTarget()
         statusButtonsByKind = statusButtonsByKind.filter { trailingStatusKinds.contains($0.key) }
         threadStatusStack.arrangedSubviews.forEach { subview in
             threadStatusStack.removeArrangedSubview(subview)
@@ -1739,7 +1944,14 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         kind: ThreadStatusSummaryKind,
         settings: AppSettings
     ) -> InlineThreadStatusBadgeDescriptor {
-        let title = Self.truncatedInlineBadgeTitle(for: thread)
+        let favoriteAlias = thread.favoriteAlias?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let visibleFavoriteAlias = favoriteAlias?.isEmpty == false ? favoriteAlias : nil
+        let title: String
+        if kind == .favorites, let visibleFavoriteAlias {
+            title = visibleFavoriteAlias
+        } else {
+            title = Self.truncatedInlineBadgeTitle(for: thread)
+        }
         let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
@@ -1748,6 +1960,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         var tooltipParts = [kind.popoverTitle]
         if let projectName = displayedProjectName {
             tooltipParts.append(projectName)
+        }
+        if kind == .favorites, let visibleFavoriteAlias {
+            tooltipParts.append(visibleFavoriteAlias)
         }
         tooltipParts.append(contentsOf: [fullInlineBadgeTitle(for: thread), resolvedBranchName])
         if resolvedBranchName != worktreeName {
@@ -2589,6 +2804,16 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             markReadItem.representedObject = threadId
             menu.addItem(markReadItem)
         case .favorites:
+            let aliasItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.threadSetFavoriteAlias),
+                action: #selector(editFavoriteAliasFromMenu(_:)),
+                keyEquivalent: ""
+            )
+            aliasItem.target = self
+            aliasItem.image = NSImage(systemSymbolName: "tag", accessibilityDescription: nil)
+            aliasItem.representedObject = threadId
+            menu.addItem(aliasItem)
+
             let removeFavoriteItem = NSMenuItem(
                 title: String(localized: .ThreadStrings.threadRemoveFromFavorites),
                 action: #selector(removeFavoriteThreadFromMenu(_:)),
@@ -2603,6 +2828,45 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         }
 
         return menu.items.isEmpty ? nil : menu
+    }
+
+    @objc private func editFavoriteAliasFromMenu(_ sender: NSMenuItem) {
+        guard let threadId = sender.representedObject as? UUID else { return }
+        showFavoriteAliasEditor(for: threadId)
+    }
+
+    private func showFavoriteAliasEditor(for threadId: UUID) {
+        guard let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) else { return }
+
+        let alert = NSAlert()
+        alert.messageText = String(localized: .ThreadStrings.threadSetFavoriteAliasTitle)
+        alert.informativeText = String(localized: .ThreadStrings.threadSetFavoriteAliasMessage)
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonSave))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        let existingAlias = thread.favoriteAlias?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let existingAlias, !existingAlias.isEmpty {
+            textField.stringValue = existingAlias
+        } else {
+            textField.stringValue = fullInlineBadgeTitle(for: thread)
+        }
+        textField.placeholderString = String(localized: .ThreadStrings.threadSetFavoriteAliasPlaceholder)
+        alert.accessoryView = textField
+
+        guard let window else {
+            if alert.runModal() == .alertFirstButtonReturn {
+                ThreadManager.shared.setFavoriteAlias(textField.stringValue, forThreadId: threadId)
+                refresh()
+            }
+            return
+        }
+
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            ThreadManager.shared.setFavoriteAlias(textField.stringValue, forThreadId: threadId)
+            self?.refresh()
+        }
     }
 
     private func markDoneThreadAsRead(_ threadId: UUID) {

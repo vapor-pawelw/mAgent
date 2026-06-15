@@ -78,6 +78,16 @@ extension ThreadManager {
     }
 
     @MainActor
+    func reorderFavoriteThread(threadId: UUID, toChronologicalIndex targetIndex: Int) {
+        sidebarOrderingService.reorderFavoriteThread(threadId: threadId, toChronologicalIndex: targetIndex)
+    }
+
+    @MainActor
+    func setFavoriteAlias(_ alias: String?, forThreadId threadId: UUID) {
+        sidebarOrderingService.setFavoriteAlias(alias, forThreadId: threadId)
+    }
+
+    @MainActor
     func toggleThreadHidden(threadId: UUID) {
         sidebarOrderingService.toggleThreadHidden(threadId: threadId)
     }

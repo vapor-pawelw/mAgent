@@ -24,8 +24,9 @@ All notable changes to this project will be documented in this file.
 ### Status Bar
 
 #### Features
-- The bottom status bar now expands favorite, waiting, completed, busy, and popped-out thread statuses into compact clickable thread badges when there is enough room, then falls back to the existing count badges when space gets tight.
+- The bottom status bar now expands favorite, completed, and waiting thread statuses into compact clickable thread badges when there is enough room, then falls back to the existing count badges when space gets tight.
 - Inline thread badges now support right-click actions to clear completed work or remove favorites, while status glyphs keep the collapsed status item click and context-menu behavior.
+- Inline favorite badges can now be dragged to reorder Favorites and can use a saved status-bar alias for shorter labels.
 - Rate-limited, busy, and popped-out thread status items stay compact near the trailing side without displacing sync status from the right edge.
 
 #### Bug Fixes

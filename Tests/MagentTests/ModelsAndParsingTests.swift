@@ -1659,6 +1659,30 @@ struct MagentThreadDiffStatePersistenceTests {
     }
 }
 
+@Suite("MagentThread favorite alias persistence")
+struct MagentThreadFavoriteAliasPersistenceTests {
+
+    @Test("Persists favorite alias independently from favorite membership")
+    func persistsFavoriteAliasIndependentlyFromFavoriteMembership() throws {
+        let original = MagentThread(
+            projectId: UUID(),
+            name: "thread",
+            worktreePath: "/tmp/thread",
+            branchName: "thread",
+            isFavorite: false,
+            favoritedAt: nil,
+            favoriteAlias: "Short status name"
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(MagentThread.self, from: data)
+
+        #expect(!decoded.isFavorite)
+        #expect(decoded.favoritedAt == nil)
+        #expect(decoded.favoriteAlias == "Short status name")
+    }
+}
+
 @Suite("MagentThread completion identifiers")
 struct MagentThreadCompletionIdentifierTests {
 

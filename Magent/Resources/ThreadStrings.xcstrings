@@ -606,6 +606,50 @@
         }
       }
     },
+    "threadSetFavoriteAlias": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Favorite Alias..."
+          }
+        }
+      }
+    },
+    "threadSetFavoriteAliasMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a status-bar name for this favorite. Leave empty to use the thread description."
+          }
+        }
+      }
+    },
+    "threadSetFavoriteAliasPlaceholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorite alias"
+          }
+        }
+      }
+    },
+    "threadSetFavoriteAliasTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Favorite Alias"
+          }
+        }
+      }
+    },
     "threadMoveTo": {
       "extractionState": "manual",
       "localizations": {

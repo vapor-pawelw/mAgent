@@ -209,6 +209,38 @@ final class SidebarOrderingService {
     }
 
     @MainActor
+    func reorderFavoriteThread(threadId: UUID, toChronologicalIndex targetIndex: Int) {
+        var favorites = favoriteThreadsChronological
+        guard let currentIndex = favorites.firstIndex(where: { $0.id == threadId }) else { return }
+
+        let moved = favorites.remove(at: currentIndex)
+        let clampedIndex = max(0, min(targetIndex, favorites.count))
+        guard clampedIndex != currentIndex else { return }
+        favorites.insert(moved, at: clampedIndex)
+
+        let baseDate = Date().addingTimeInterval(-Double(favorites.count))
+        for (order, favorite) in favorites.enumerated() {
+            guard let storeIndex = store.threads.firstIndex(where: { $0.id == favorite.id }) else { continue }
+            store.threads[storeIndex].favoritedAt = baseDate.addingTimeInterval(Double(order))
+        }
+
+        try? persistence.saveActiveThreads(store.threads)
+        onThreadsChanged?()
+        NotificationCenter.default.post(name: .magentFavoritesChanged, object: nil)
+    }
+
+    @MainActor
+    func setFavoriteAlias(_ alias: String?, forThreadId threadId: UUID) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        let normalizedAlias = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
+        store.threads[index].favoriteAlias = normalizedAlias?.isEmpty == false ? normalizedAlias : nil
+
+        try? persistence.saveActiveThreads(store.threads)
+        onThreadsChanged?()
+        NotificationCenter.default.post(name: .magentFavoritesChanged, object: nil)
+    }
+
+    @MainActor
     func toggleThreadHidden(threadId: UUID) {
         guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
         store.threads[index].isSidebarHidden.toggle()
