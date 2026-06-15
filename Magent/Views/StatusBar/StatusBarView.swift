@@ -126,7 +126,7 @@ private final class StatusSummaryButton: NSButton {
     }
 }
 
-private final class InlineThreadStatusBadgeButton: NSControl {
+private final class InlineThreadStatusBadgeButton: NSButton {
     private static let horizontalPadding: CGFloat = 8
     private static let height: CGFloat = 21
 
@@ -135,21 +135,15 @@ private final class InlineThreadStatusBadgeButton: NSControl {
     var contextMenuProvider: (() -> NSMenu?)?
     var badgeTintColor: NSColor = .tertiaryLabelColor {
         didSet {
-            needsDisplay = true
+            updateBadgeLayer()
         }
     }
     private var trackingArea: NSTrackingArea?
     private var isHovered = false {
         didSet {
-            needsDisplay = true
+            updateBadgeLayer()
         }
     }
-    private var isPressed = false {
-        didSet {
-            needsDisplay = true
-        }
-    }
-    private var attributedBadgeTitle = NSAttributedString()
 
     init(threadId: UUID, statusKind: ThreadStatusSummaryKind) {
         self.threadId = threadId
@@ -164,16 +158,15 @@ private final class InlineThreadStatusBadgeButton: NSControl {
     }
 
     var badgeTitle: NSAttributedString {
-        get { attributedBadgeTitle }
+        get { attributedTitle }
         set {
-            attributedBadgeTitle = newValue
+            attributedTitle = newValue
             invalidateIntrinsicContentSize()
-            needsDisplay = true
         }
     }
 
     override var intrinsicContentSize: NSSize {
-        let width = Self.horizontalPadding * 2 + ceil(attributedBadgeTitle.size().width)
+        let width = Self.horizontalPadding * 2 + ceil(attributedTitle.size().width)
         return NSSize(width: width, height: Self.height)
     }
 
@@ -202,19 +195,7 @@ private final class InlineThreadStatusBadgeButton: NSControl {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard !isHidden, alphaValue > 0, bounds.contains(point) else {
-            return nil
-        }
-        return self
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        guard isEnabled else { return }
-        isPressed = true
+        updateBadgeLayer()
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
@@ -229,56 +210,31 @@ private final class InlineThreadStatusBadgeButton: NSControl {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
-    override func mouseUp(with event: NSEvent) {
-        defer { isPressed = false }
-        guard isEnabled else { return }
-        sendAction(action, to: target)
-    }
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 36 || event.keyCode == 49 {
-            sendAction(action, to: target)
-        } else {
-            super.keyDown(with: event)
-        }
-    }
-
     private func setupBadgeLayer() {
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        layer?.borderWidth = 1
+        layer?.masksToBounds = true
+        title = ""
+        attributedTitle = NSAttributedString()
+        alternateTitle = ""
+        attributedAlternateTitle = NSAttributedString()
+        isBordered = false
+        bezelStyle = .inline
         focusRingType = .none
-        setAccessibilityRole(.button)
+        setButtonType(.momentaryChange)
+        alignment = .center
+        updateBadgeLayer()
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-
+    private func updateBadgeLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let background = NSColor.controlBackgroundColor
-            let fill = isHovered || isPressed
-                ? badgeTintColor.withAlphaComponent(isPressed ? 0.16 : 0.10)
+            let fill = isHovered
+                ? badgeTintColor.withAlphaComponent(0.10)
                 : background.withAlphaComponent(0.82)
-            let border = badgeTintColor.withAlphaComponent(isHovered || isPressed ? 0.62 : 0.38)
-            let badgeRect = bounds.insetBy(dx: 0.5, dy: 0.5)
-            let path = NSBezierPath(roundedRect: badgeRect, xRadius: 7, yRadius: 7)
-            fill.setFill()
-            path.fill()
-            border.setStroke()
-            path.lineWidth = 1
-            path.stroke()
-
-            guard !attributedBadgeTitle.string.isEmpty else { return }
-            let textSize = attributedBadgeTitle.size()
-            let textRect = NSRect(
-                x: bounds.minX + Self.horizontalPadding,
-                y: bounds.midY - ceil(textSize.height) / 2,
-                width: max(0, bounds.width - Self.horizontalPadding * 2),
-                height: ceil(textSize.height)
-            )
-            NSGraphicsContext.saveGraphicsState()
-            NSBezierPath(rect: textRect).addClip()
-            attributedBadgeTitle.draw(in: textRect)
-            NSGraphicsContext.restoreGraphicsState()
+            layer?.backgroundColor = fill.cgColor
+            layer?.borderColor = badgeTintColor.withAlphaComponent(isHovered ? 0.62 : 0.38).cgColor
         }
     }
 }
@@ -1844,6 +1800,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         button.contextMenuProvider = { [weak self, threadId = descriptor.threadId, kind = descriptor.kind] in
             self?.buildInlineThreadBadgeContextMenu(threadId: threadId, status: kind)
         }
+        button.menu = button.contextMenuProvider?()
         button.translatesAutoresizingMaskIntoConstraints = false
         let minWidth = button.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumInlineBadgeWidth)
         let maxWidth = button.widthAnchor.constraint(lessThanOrEqualToConstant: Self.maximumInlineBadgeWidth)
