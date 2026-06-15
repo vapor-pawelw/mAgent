@@ -62,6 +62,26 @@ final class CurrentThreadStripView: NSView {
         updateAppearance()
     }
 
+    override func mouseDown(with event: NSEvent) {
+        guard bounds.contains(convert(event.locationInWindow, from: nil)),
+              let threadId = currentThread?.id else { return }
+
+        NotificationCenter.default.post(
+            name: .magentNavigateToThread,
+            object: self,
+            userInfo: [
+                "threadId": threadId,
+                "centerInSidebar": true,
+                "revealSidebarIfHidden": true,
+            ]
+        )
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
     private func setup() {
         wantsLayer = true
         layer?.cornerRadius = Layout.cornerRadius
