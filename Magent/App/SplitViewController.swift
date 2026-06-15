@@ -825,7 +825,6 @@ final class SplitViewController: NSSplitViewController {
         guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
         let tabIdentifier = notification.userInfo?["sessionName"] as? String
         let centerInSidebar = notification.userInfo?["centerInSidebar"] as? Bool ?? false
-        let alreadyShowing = currentDetailVC?.thread.id == threadId
 
         // Pre-seed UserDefaults so a newly-created ThreadDetailViewController
         // opens on the correct tab during its async setup.
@@ -844,39 +843,12 @@ final class SplitViewController: NSSplitViewController {
             revealSidebarIfHidden()
         }
 
-        // Select the thread in the sidebar (creates ThreadDetailViewController if needed)
-        threadListVC.selectThread(
-            byId: threadId,
-            scrollRowToVisible: !centerInSidebar,
-            forceNotifyDelegate: true
+        selectThreadForNavigation(
+            threadId: threadId,
+            tabIdentifier: tabIdentifier,
+            centerInSidebar: centerInSidebar,
+            scrollRowToVisible: !centerInSidebar
         )
-        if centerInSidebar {
-            threadListVC.centerAndPulseThreadRow(byId: threadId)
-        }
-
-        if let tabIdentifier,
-           let popout = PopoutWindowManager.shared.threadWindows[threadId] {
-            let selectInPopout = {
-                if let tabIndex = popout.detailVC.displayIndex(forIdentifier: tabIdentifier) {
-                    popout.detailVC.selectTab(at: tabIndex)
-                }
-            }
-            selectInPopout()
-            DispatchQueue.main.async {
-                selectInPopout()
-            }
-        }
-
-        // If the thread was already showing, tabs are set up — select directly
-        if alreadyShowing, let tabIdentifier, let detailVC = currentDetailVC {
-            if let tabIndex = detailVC.displayIndex(forIdentifier: tabIdentifier) {
-                detailVC.selectTab(at: tabIndex)
-            }
-        } else if alreadyShowing, tabIdentifier == nil {
-            currentDetailVC?.focusCurrentTabForNavigation()
-        }
-
-        markFocusedThreadCompletionSeenIfNeeded()
     }
 
     @objc private func handleMainWindowDidBecomeKey(_ notification: Notification) {
@@ -1161,23 +1133,74 @@ final class SplitViewController: NSSplitViewController {
         }
         return enforcedSidebarWidth
     }
+
+    private func selectThreadForNavigation(
+        threadId: UUID,
+        thread threadSnapshot: MagentThread? = nil,
+        tabIdentifier: String?,
+        centerInSidebar: Bool,
+        scrollRowToVisible: Bool
+    ) {
+        let resolvedThread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) ?? threadSnapshot
+        guard let resolvedThread else { return }
+
+        if let tabIdentifier,
+           PopoutWindowManager.shared.isTabDetached(sessionName: tabIdentifier) {
+            PopoutWindowManager.shared.bringToFront(sessionName: tabIdentifier)
+            markFocusedThreadCompletionSeenIfNeeded()
+            return
+        }
+
+        if PopoutWindowManager.shared.isThreadPoppedOut(threadId) {
+            if let tabIdentifier,
+               let popout = PopoutWindowManager.shared.threadWindows[threadId],
+               let tabIndex = popout.detailVC.displayIndex(forIdentifier: tabIdentifier) {
+                popout.detailVC.selectTab(at: tabIndex)
+            }
+            PopoutWindowManager.shared.bringToFront(threadId: threadId)
+            threadListVC.setDiffInspectionContext(threadId: threadId, isPopoutContext: true)
+            threadListVC.centerAndPulseThreadRow(byId: threadId)
+            markFocusedThreadCompletionSeenIfNeeded()
+            return
+        }
+
+        let alreadyShowing = currentDetailVC?.thread.id == threadId
+        ThreadManager.shared.setActiveThread(threadId)
+        _ = threadListVC.selectThread(
+            byId: threadId,
+            scrollRowToVisible: scrollRowToVisible,
+            forceNotifyDelegate: false,
+            notifyDelegate: false
+        )
+        if centerInSidebar {
+            threadListVC.centerAndPulseThreadRow(byId: threadId)
+        }
+        showThread(resolvedThread)
+
+        if let tabIdentifier,
+           let detailVC = currentDetailVC,
+           let tabIndex = detailVC.displayIndex(forIdentifier: tabIdentifier) {
+            detailVC.selectTab(at: tabIndex)
+        } else if alreadyShowing || tabIdentifier == nil {
+            currentDetailVC?.focusCurrentTabForNavigation()
+        }
+
+        markFocusedThreadCompletionSeenIfNeeded()
+        threadListVC.refreshDiffPanelForSelectedThread()
+    }
 }
 
 // MARK: - ThreadListDelegate
 
 extension SplitViewController: ThreadListDelegate {
     func threadList(_ controller: ThreadListViewController, didSelectThread thread: MagentThread) {
-        if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
-            PopoutWindowManager.shared.bringToFront(threadId: thread.id)
-            threadListVC.setDiffInspectionContext(threadId: thread.id, isPopoutContext: true)
-            threadListVC.centerAndPulseThreadRow(byId: thread.id)
-            return
-        }
-        ThreadManager.shared.setActiveThread(thread.id)
-        showThread(thread)
-        currentDetailVC?.focusCurrentTabForNavigation()
-        markFocusedThreadCompletionSeenIfNeeded()
-        threadListVC.refreshDiffPanelForSelectedThread()
+        selectThreadForNavigation(
+            threadId: thread.id,
+            thread: thread,
+            tabIdentifier: nil,
+            centerInSidebar: false,
+            scrollRowToVisible: true
+        )
     }
 
     func threadList(_ controller: ThreadListViewController, didRenameThread thread: MagentThread) {

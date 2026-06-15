@@ -682,9 +682,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             }
             if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
                 if isMouseSelectionEvent {
-                    PopoutWindowManager.shared.bringToFront(threadId: thread.id)
-                    centerAndPulseThreadRow(byId: thread.id)
-                    setDiffInspectionContext(threadId: thread.id, isPopoutContext: true)
+                    delegate?.threadList(self, didSelectThread: thread)
                 }
                 return false
             }

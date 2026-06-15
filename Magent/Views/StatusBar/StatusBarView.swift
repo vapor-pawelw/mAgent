@@ -126,7 +126,7 @@ private final class StatusSummaryButton: NSButton {
     }
 }
 
-private final class InlineThreadStatusBadgeButton: NSButton {
+private final class InlineThreadStatusBadgeButton: NSControl {
     private static let horizontalPadding: CGFloat = 8
     private static let height: CGFloat = 21
 
@@ -135,15 +135,21 @@ private final class InlineThreadStatusBadgeButton: NSButton {
     var contextMenuProvider: (() -> NSMenu?)?
     var badgeTintColor: NSColor = .tertiaryLabelColor {
         didSet {
-            updateBadgeLayer()
+            needsDisplay = true
         }
     }
     private var trackingArea: NSTrackingArea?
     private var isHovered = false {
         didSet {
-            updateBadgeLayer()
+            needsDisplay = true
         }
     }
+    private var isPressed = false {
+        didSet {
+            needsDisplay = true
+        }
+    }
+    private var attributedBadgeTitle = NSAttributedString()
 
     init(threadId: UUID, statusKind: ThreadStatusSummaryKind) {
         self.threadId = threadId
@@ -158,15 +164,16 @@ private final class InlineThreadStatusBadgeButton: NSButton {
     }
 
     var badgeTitle: NSAttributedString {
-        get { attributedTitle }
+        get { attributedBadgeTitle }
         set {
-            attributedTitle = newValue
+            attributedBadgeTitle = newValue
             invalidateIntrinsicContentSize()
+            needsDisplay = true
         }
     }
 
     override var intrinsicContentSize: NSSize {
-        let width = Self.horizontalPadding * 2 + ceil(attributedTitle.size().width)
+        let width = Self.horizontalPadding * 2 + ceil(attributedBadgeTitle.size().width)
         return NSSize(width: width, height: Self.height)
     }
 
@@ -195,12 +202,7 @@ private final class InlineThreadStatusBadgeButton: NSButton {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        updateBadgeLayer()
-    }
-
-    override func updateLayer() {
-        super.updateLayer()
-        updateBadgeLayer()
+        needsDisplay = true
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -212,10 +214,12 @@ private final class InlineThreadStatusBadgeButton: NSButton {
 
     override func mouseDown(with event: NSEvent) {
         guard isEnabled else { return }
-        isHighlighted = true
+        isPressed = true
     }
 
     override func rightMouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(point) else { return }
         guard let menu = contextMenuProvider?() else {
             super.rightMouseDown(with: event)
             return
@@ -224,7 +228,7 @@ private final class InlineThreadStatusBadgeButton: NSButton {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { isHighlighted = false }
+        defer { isPressed = false }
         guard isEnabled else { return }
         let point = convert(event.locationInWindow, from: nil)
         guard bounds.contains(point) else { return }
@@ -242,31 +246,39 @@ private final class InlineThreadStatusBadgeButton: NSButton {
     }
 
     private func setupBadgeLayer() {
-        wantsLayer = true
-        layer?.cornerRadius = 7
-        layer?.borderWidth = 1
-        layer?.masksToBounds = true
-        title = ""
-        attributedTitle = NSAttributedString()
-        alternateTitle = ""
-        attributedAlternateTitle = NSAttributedString()
-        isBordered = false
-        bezelStyle = .inline
         focusRingType = .none
-        setButtonType(.momentaryChange)
-        alignment = .center
-
-        updateBadgeLayer()
+        setAccessibilityRole(.button)
     }
 
-    private func updateBadgeLayer() {
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let background = NSColor.controlBackgroundColor
-            layer?.backgroundColor = (isHovered
-                ? badgeTintColor.withAlphaComponent(0.10)
+            let fill = isHovered || isPressed
+                ? badgeTintColor.withAlphaComponent(isPressed ? 0.16 : 0.10)
                 : background.withAlphaComponent(0.82)
-            ).cgColor
-            layer?.borderColor = badgeTintColor.withAlphaComponent(isHovered ? 0.62 : 0.38).cgColor
+            let border = badgeTintColor.withAlphaComponent(isHovered || isPressed ? 0.62 : 0.38)
+            let badgeRect = bounds.insetBy(dx: 0.5, dy: 0.5)
+            let path = NSBezierPath(roundedRect: badgeRect, xRadius: 7, yRadius: 7)
+            fill.setFill()
+            path.fill()
+            border.setStroke()
+            path.lineWidth = 1
+            path.stroke()
+
+            guard !attributedBadgeTitle.string.isEmpty else { return }
+            let textSize = attributedBadgeTitle.size()
+            let textRect = NSRect(
+                x: bounds.minX + Self.horizontalPadding,
+                y: bounds.midY - ceil(textSize.height) / 2,
+                width: max(0, bounds.width - Self.horizontalPadding * 2),
+                height: ceil(textSize.height)
+            )
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: textRect).addClip()
+            attributedBadgeTitle.draw(in: textRect)
+            NSGraphicsContext.restoreGraphicsState()
         }
     }
 }
@@ -2434,7 +2446,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         showPopover(for: .favorites)
     }
 
-    @objc private func inlineThreadStatusBadgeTapped(_ sender: NSButton) {
+    @objc private func inlineThreadStatusBadgeTapped(_ sender: NSControl) {
         guard let badge = sender as? InlineThreadStatusBadgeButton else { return }
         navigateToThread(
             threadId: badge.threadId,
@@ -2547,41 +2559,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         centerInSidebar: Bool,
         status: ThreadStatusSummaryKind
     ) {
-        if let sessionName,
-           PopoutWindowManager.shared.isTabDetached(sessionName: sessionName) {
-            PopoutWindowManager.shared.bringToFront(sessionName: sessionName)
-            if status == .done {
-                ThreadManager.shared.markSessionCompletionSeen(threadId: threadId, sessionName: sessionName)
-            }
-            refresh()
-            return
-        }
-
-        if PopoutWindowManager.shared.isThreadPoppedOut(threadId) {
-            if let sessionName,
-               let popout = PopoutWindowManager.shared.threadWindows[threadId],
-               let tabIndex = popout.detailVC.displayIndex(forIdentifier: sessionName) {
-                popout.detailVC.selectTab(at: tabIndex)
-            }
-            PopoutWindowManager.shared.bringToFront(threadId: threadId)
-            if status == .done {
-                ThreadManager.shared.markThreadCompletionSeen(threadId: threadId)
-            }
-            refresh()
-            if centerInSidebar {
-                NotificationCenter.default.post(
-                    name: .magentNavigateToThread,
-                    object: self,
-                    userInfo: [
-                        "threadId": threadId,
-                        "sessionName": sessionName as Any,
-                        "centerInSidebar": true,
-                    ]
-                )
-            }
-            return
-        }
-
         var userInfo: [String: Any] = [
             "threadId": threadId,
             "sessionName": sessionName as Any,
@@ -2595,6 +2572,15 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             object: self,
             userInfo: userInfo
         )
+
+        if status == .done {
+            if let sessionName {
+                ThreadManager.shared.markSessionCompletionSeen(threadId: threadId, sessionName: sessionName)
+            } else {
+                ThreadManager.shared.markThreadCompletionSeen(threadId: threadId)
+            }
+            refresh()
+        }
     }
 
     private func removeFavoriteThread(_ threadId: UUID) {

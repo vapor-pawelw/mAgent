@@ -1374,12 +1374,22 @@ final class ThreadListViewController: NSViewController {
     }
 
     @discardableResult
-    func selectThread(byId threadId: UUID, scrollRowToVisible: Bool = true, forceNotifyDelegate: Bool = false) -> Bool {
+    func selectThread(
+        byId threadId: UUID,
+        scrollRowToVisible: Bool = true,
+        forceNotifyDelegate: Bool = false,
+        notifyDelegate: Bool = true
+    ) -> Bool {
         revealThreadIfHiddenOrCollapsed(byId: threadId)
         if PopoutWindowManager.shared.isThreadPoppedOut(threadId) {
-            PopoutWindowManager.shared.bringToFront(threadId: threadId)
-            centerAndPulseThreadRow(byId: threadId)
-            setDiffInspectionContext(threadId: threadId, isPopoutContext: true)
+            if notifyDelegate,
+               let thread = threadManager.threads.first(where: { $0.id == threadId }) {
+                delegate?.threadList(self, didSelectThread: thread)
+            } else {
+                PopoutWindowManager.shared.bringToFront(threadId: threadId)
+                centerAndPulseThreadRow(byId: threadId)
+                setDiffInspectionContext(threadId: threadId, isPopoutContext: true)
+            }
             return true
         }
         expandAncestorsIfNeeded(for: threadId)
@@ -1387,7 +1397,7 @@ final class ThreadListViewController: NSViewController {
             if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
                 let isNewThread = selectedThreadID != thread.id
                 let resolved = recordSelectedThread(thread)
-                if isNewThread || forceNotifyDelegate {
+                if notifyDelegate && (isNewThread || forceNotifyDelegate) {
                     delegate?.threadList(self, didSelectThread: resolved)
                 }
                 // `selectRowIndexes` also triggers NSOutlineView's internal
