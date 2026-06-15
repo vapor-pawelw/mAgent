@@ -1425,7 +1425,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         leftStack.spacing = 10
         leftStack.translatesAutoresizingMaskIntoConstraints = false
 
-        rightStack.setViews([syncStatusLabel, syncRefreshButton, trailingThreadStatusStack], in: .leading)
+        rightStack.setViews([trailingThreadStatusStack, syncStatusLabel, syncRefreshButton], in: .leading)
         rightStack.orientation = .horizontal
         rightStack.alignment = .centerY
         rightStack.spacing = 12
@@ -1812,10 +1812,22 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private func availableInlineBadgeWidth() -> CGFloat {
         guard bounds.width > 0 else { return 0 }
 
+        let visibleLeadingFixedViews = [
+            sessionCountButton,
+            sessionStatusSeparator,
+            rateLimitStatusSeparator,
+            rateLimitButton,
+            favoritesButton,
+        ].filter { !$0.isHidden }
+        let leadingFixedWidth = visibleLeadingFixedViews.reduce(CGFloat(0)) { partial, view in
+            partial + view.fittingSize.width
+        }
+        let leadingGapCount = max(0, visibleLeadingFixedViews.count)
         let fixedWidth = Self.horizontalPadding * 2
+            + leadingFixedWidth
+            + CGFloat(leadingGapCount) * leftStack.spacing
             + rightStack.fittingSize.width
-            + sessionCountButton.fittingSize.width
-            + 36 // left stack gaps plus reserved breathing room near the right side
+            + 12 // constraint gap between leading and trailing status regions
         return max(0, bounds.width - fixedWidth)
     }
 

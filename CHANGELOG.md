@@ -26,11 +26,12 @@ All notable changes to this project will be documented in this file.
 #### Features
 - The bottom status bar now expands favorite, waiting, completed, busy, and popped-out thread statuses into compact clickable thread badges when there is enough room, then falls back to the existing count badges when space gets tight.
 - Inline thread badges now support right-click actions to clear completed work or remove favorites, while status glyphs keep the collapsed status item click and context-menu behavior.
-- Rate-limited threads now stay in a compact status item next to session counts, while busy and popped-out thread status items sit on the trailing side of the status bar.
+- Rate-limited threads now stay in a compact status item next to session counts, while busy and popped-out thread status items sit near the trailing side without displacing sync status from the right edge.
 
 #### Bug Fixes
 - The bottom status bar now separates session counts from thread status badges and refreshes persisted thread statuses immediately on launch.
 - Inline status-bar thread badges now respond to clicks reliably and focus popped-out thread or tab windows directly when their status is selected.
+- Inline status-bar thread badges now stay expanded until the measured fixed status-bar controls actually leave too little room.
 - Busy and waiting status badges now use clearer filled glyphs in the bottom status bar.
 
 ## 1.6.4 - 2026-05-29
