@@ -1242,8 +1242,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private let trailingThreadStatusStack = NSStackView()
     private let sessionCountButton = NSButton()
     private let sessionStatusSeparator = VerticalSeparatorView()
-    private let rateLimitButton = StatusSummaryButton()
-    private let rateLimitStatusSeparator = VerticalSeparatorView()
     private let favoritesButton = StatusSummaryButton()
     private let rateLimitLabel = NSTextField(labelWithString: "")
     private let syncStatusLabel = NSTextField(labelWithString: "")
@@ -1360,13 +1358,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         sessionStatusSeparator.setContentHuggingPriority(.required, for: .vertical)
         sessionStatusSeparator.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        rateLimitStatusSeparator.translatesAutoresizingMaskIntoConstraints = false
-        rateLimitStatusSeparator.setContentHuggingPriority(.required, for: .horizontal)
-        rateLimitStatusSeparator.setContentCompressionResistancePriority(.required, for: .horizontal)
-        rateLimitStatusSeparator.setContentHuggingPriority(.required, for: .vertical)
-        rateLimitStatusSeparator.setContentCompressionResistancePriority(.required, for: .vertical)
-        rateLimitStatusSeparator.isHidden = true
-
         sessionCountButton.isBordered = false
         sessionCountButton.bezelStyle = .inline
         sessionCountButton.focusRingType = .none
@@ -1376,19 +1367,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         sessionCountButton.toolTip = "Active tmux sessions — click to manage"
         sessionCountButton.translatesAutoresizingMaskIntoConstraints = false
         updateSessionCountButton(total: 0, live: 0, zombieCount: 0, isRecoveringTmux: false)
-
-        rateLimitButton.isBordered = false
-        rateLimitButton.bezelStyle = .inline
-        rateLimitButton.focusRingType = .none
-        rateLimitButton.setButtonType(.momentaryChange)
-        rateLimitButton.target = self
-        rateLimitButton.action = #selector(threadStatusTapped(_:))
-        rateLimitButton.identifier = NSUserInterfaceItemIdentifier(ThreadStatusSummaryKind.rateLimited.rawValue)
-        rateLimitButton.translatesAutoresizingMaskIntoConstraints = false
-        rateLimitButton.isHidden = true
-        rateLimitButton.contextMenuProvider = { [weak self] in
-            self?.rateLimitLabel.menu
-        }
 
         favoritesButton.isBordered = false
         favoritesButton.bezelStyle = .inline
@@ -1419,7 +1397,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         syncRefreshButton.toolTip = "Refresh PR and Jira statuses"
         syncRefreshButton.translatesAutoresizingMaskIntoConstraints = false
 
-        leftStack.setViews([sessionCountButton, sessionStatusSeparator, rateLimitStatusSeparator, rateLimitButton, favoritesButton, threadStatusStack], in: .leading)
+        leftStack.setViews([sessionCountButton, sessionStatusSeparator, favoritesButton, threadStatusStack], in: .leading)
         leftStack.orientation = .horizontal
         leftStack.alignment = .centerY
         leftStack.spacing = 10
@@ -1521,11 +1499,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             guard count > 0 else { return nil }
             return ThreadStatusSummaryDescriptor(kind: kind, count: count)
         }
-        let rateLimitedCount = threads.lazy.filter { ThreadStatusSummaryKind.rateLimited.matches($0) }.count
-        let allVisibleSummaries = summaries
-            + (rateLimitedCount > 0 ? [ThreadStatusSummaryDescriptor(kind: .rateLimited, count: rateLimitedCount)] : [])
-            + trailingSummaries
-        updateRateLimitedThreadButton(count: rateLimitedCount)
+        let allVisibleSummaries = summaries + trailingSummaries
         rebuildTrailingThreadStatusSegments(summaries: trailingSummaries)
 
         let isStatusPopoverVisible = activePopover?.isShown == true
@@ -1593,7 +1567,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     }
 
     private var trailingStatusKinds: [ThreadStatusSummaryKind] {
-        [.busy, .separateWindows]
+        [.rateLimited, .busy, .separateWindows]
     }
 
     private func updateFavoritesStatus(force: Bool = false) {
@@ -1628,9 +1602,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     }
 
     private func rebuildThreadStatusSegments(summaries: [ThreadStatusSummaryDescriptor], totalCount: Int) {
-        statusButtonsByKind = statusButtonsByKind.filter { entry in
-            entry.key == .rateLimited || trailingStatusKinds.contains(entry.key)
-        }
+        statusButtonsByKind = statusButtonsByKind.filter { trailingStatusKinds.contains($0.key) }
         threadStatusStack.arrangedSubviews.forEach { subview in
             threadStatusStack.removeArrangedSubview(subview)
             subview.removeFromSuperview()
@@ -1681,28 +1653,8 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         trailingThreadStatusStack.isHidden = summaries.isEmpty
     }
 
-    private func updateRateLimitedThreadButton(count: Int) {
-        guard count > 0 else {
-            rateLimitButton.isHidden = true
-            rateLimitStatusSeparator.isHidden = true
-            statusButtonsByKind.removeValue(forKey: .rateLimited)
-            return
-        }
-
-        let summary = ThreadStatusSummaryDescriptor(kind: .rateLimited, count: count)
-        rateLimitButton.badgeTintColor = ThreadStatusSummaryKind.rateLimited.color
-        rateLimitButton.contentTintColor = ThreadStatusSummaryKind.rateLimited.color
-        configureStatusButton(rateLimitButton, summary: summary)
-        rateLimitButton.toolTip = ThreadManager.shared.globalRateLimitSummaryText()
-        rateLimitButton.isHidden = false
-        rateLimitStatusSeparator.isHidden = false
-        statusButtonsByKind[.rateLimited] = rateLimitButton
-    }
-
     private func rebuildInlineThreadStatusBadges(groups: [InlineThreadStatusBadgeGroup]) {
-        statusButtonsByKind = statusButtonsByKind.filter { entry in
-            entry.key == .rateLimited || trailingStatusKinds.contains(entry.key)
-        }
+        statusButtonsByKind = statusButtonsByKind.filter { trailingStatusKinds.contains($0.key) }
         threadStatusStack.arrangedSubviews.forEach { subview in
             threadStatusStack.removeArrangedSubview(subview)
             subview.removeFromSuperview()
@@ -1815,8 +1767,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let visibleLeadingFixedViews = [
             sessionCountButton,
             sessionStatusSeparator,
-            rateLimitStatusSeparator,
-            rateLimitButton,
             favoritesButton,
         ].filter { !$0.isHidden }
         let leadingFixedWidth = visibleLeadingFixedViews.reduce(CGFloat(0)) { partial, view in
@@ -2021,6 +1971,11 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         if summary.kind == .done {
             button.contextMenuProvider = { [weak self] in
                 self?.buildDoneContextMenu()
+            }
+        } else if summary.kind == .rateLimited {
+            button.toolTip = ThreadManager.shared.globalRateLimitSummaryText()
+            button.contextMenuProvider = { [weak self] in
+                self?.rateLimitLabel.menu
             }
         }
         return button
