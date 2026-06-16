@@ -43,7 +43,7 @@ Both overlays must override the full `mouseDown`/`mouseDragged`/`mouseUp` trio, 
 
 ## Gotchas
 
-- Keep terminal overlays attached to `terminalContainer` and re-added above terminal surfaces after lazy tab creation; otherwise Ghostty's metal-backed surface can render over them. See `docs/libghostty-integration.md`.
+- Keep terminal overlays attached to `terminalContainer` and re-added above terminal surfaces after lazy tab creation; otherwise Ghostty's metal-backed surface can render over them. See `docs/agent-runtime/libghostty-integration.md`.
 - Avoid using constraint changes for the standalone pill's entrance/exit animation. Constraint-driven movement would couple layout state to transient animation state and can leave the pill in the wrong resting position if visibility toggles rapidly.
 - Do not call `bindingAction("scroll_to_bottom")` before `TmuxService.scrollToBottom()` resolves. Ghostty's scrollback grows when tmux redraws after exiting copy-mode, so a premature Ghostty scroll anchors to a stale bottom and the fresh live-pane content ends up off-screen.
 - Both overlays must override the full `mouseDown`/`mouseDragged`/`mouseUp` trio. Overriding only `mouseUp` still lets the `mouseDown` fall through to Ghostty and start a text selection.

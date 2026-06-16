@@ -99,7 +99,7 @@ final class ThreadLifecycleService {
     /// `closePoppedOutThread` / `returnTabToThread` re-cache the surfaces via
     /// `cacheTerminalViewsForReuse` with `preserveSurfaceOnDetach = true`.
     ///
-    /// See docs/libghostty-integration.md → "Surface Lifecycle: Thread
+    /// See docs/agent-runtime/libghostty-integration.md → "Surface Lifecycle: Thread
     /// Archive/Delete Contract" for full rationale.
     func releaseLivingGhosttySurfaces(for thread: MagentThread) {
         if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {

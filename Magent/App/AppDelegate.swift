@@ -132,7 +132,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // thread is archived/deleted while its terminal surface is still
         // alive. Every `TmuxService.killSession` funnels through this hook;
         // do not bypass it with ad-hoc kill commands. See
-        // `docs/libghostty-integration.md`.
+        // `docs/agent-runtime/libghostty-integration.md`.
         TmuxService.shared.setPreKillHook { sessionName in
             await MainActor.run {
                 GhosttyAppManager.shared.freeSurfaces(forTmuxSession: sessionName)

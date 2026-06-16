@@ -110,11 +110,11 @@ magent-cli batch-create --file threads.json
 magent-cli archive-thread --thread omanyte
 ```
 
-See [docs/cli.md](docs/cli.md) for the full command reference.
+See [docs/cli/cli.md](docs/cli/cli.md) for the full command reference.
 
 ## Building from Source
 
-See [docs/building.md](docs/building.md).
+See [docs/project/building.md](docs/project/building.md).
 
 ## License
 

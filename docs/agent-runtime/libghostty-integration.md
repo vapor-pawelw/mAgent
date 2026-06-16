@@ -12,7 +12,7 @@ When upgrading Ghostty to a new version, update **all three** of these in the sa
 
 1. **`scripts/bootstrap-ghosttykit.sh`** — default value of `GHOSTTY_REF` (line: `GHOSTTY_REF="${GHOSTTY_REF:-vX.Y.Z}"`)
 2. **`scripts/rebuild-and-relaunch.sh`** — default value of `PINNED_GHOSTTY_REF` (line: `PINNED_GHOSTTY_REF="${MAGENT_GHOSTTY_REF:-vX.Y.Z}"`)
-3. **`docs/libghostty-integration.md`** — the "Pinned default ref" line above and the Zig version table below (if the required Zig version changed)
+3. **`docs/agent-runtime/libghostty-integration.md`** — the "Pinned default ref" line above and the Zig version table below (if the required Zig version changed)
 
 The release workflow (`.github/workflows/release.yml`) calls `bootstrap-ghosttykit.sh` without a `--ref` argument, so it automatically picks up the default. No changes needed there unless the build flags change.
 

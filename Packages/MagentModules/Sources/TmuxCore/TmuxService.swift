@@ -565,7 +565,7 @@ public final class TmuxService: Sendable {
         // structural place to guarantee Ghostty surfaces backed by this
         // session are freed before the PTY closes — otherwise libghostty
         // calls `_exit()` and takes the whole app down. See
-        // `docs/libghostty-integration.md`.
+        // `docs/agent-runtime/libghostty-integration.md`.
         let hook = preKillHookLock.withLock { $0 }
         if let hook {
             await hook(name)

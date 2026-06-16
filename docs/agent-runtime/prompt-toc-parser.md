@@ -120,7 +120,7 @@ There are five independent paths that can fire auto-rename for a thread's first 
 
 **Shared implementation:** Paths 1–2 (early and draft) and paths 3–4 (TOC and bell, which both call `autoRenameThreadAfterFirstPromptIfNeeded`) all converge on the private `performAutoRename(threadId:requireSession:prompt:prefixDraft:)` helper. The only differences are whether a tmux session is required and whether the "DRAFT: " prefix is applied.
 
-**Rename payload cache:** All paths check `promptRenameResultCache` (keyed by `threadId + normalizedPrompt`) before calling the agent. If an earlier path already cached a result, later paths reuse it instantly. See architecture.md §4.2 for details.
+**Rename payload cache:** All paths check `promptRenameResultCache` (keyed by `threadId + normalizedPrompt`) before calling the agent. If an earlier path already cached a result, later paths reuse it instantly. See [docs/project/architecture.md](../project/architecture.md) §4.2 for details.
 
 **Lightweight prompt extractor vs full TOC parser:** The bell path uses `extractFirstPromptFromPane` — a simplified version of the TOC parser that scans for `❯`/`›` markers and collects multiline continuation lines (2+ leading spaces). It does not handle ANSI stripping, placeholder detection, or bottom-cluster exclusion because it only needs the first prompt text for slug generation, not a full TOC. The full TOC parser remains in `ThreadDetailViewController+PromptTOC` for display purposes.
 

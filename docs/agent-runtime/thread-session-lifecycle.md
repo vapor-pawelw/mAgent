@@ -48,7 +48,7 @@ Archiving or deleting a thread must free every `ghostty_surface_t` owned by the 
 
 Required sequence before any tmux kill: evict cache -> return pop-outs -> evict cache again -> swap detail VC to empty state. Archive may then continue cleanup in a detached task because it is the soft action and keeps an archived record. Delete is the hard action: it must await worktree removal and branch deletion, verify the worktree path is gone, and only then remove the thread from persistence/UI. Both archive and delete must post `.magentArchivedThreadsDidChange`; the notification is load-bearing because `PopoutWindowManager` only learns the thread is gone via that observer. `deleteThread` must post it too — `didDeleteThread` alone is not enough.
 
-See `docs/libghostty-integration.md` → "Surface Lifecycle: Thread Archive/Delete Contract" for the full rationale, code sketch, and the `preserveSurfaceOnDetach` gotcha that makes the second cache eviction mandatory.
+See `docs/agent-runtime/libghostty-integration.md` → "Surface Lifecycle: Thread Archive/Delete Contract" for the full rationale, code sketch, and the `preserveSurfaceOnDetach` gotcha that makes the second cache eviction mandatory.
 
 ## Startup Recovery
 

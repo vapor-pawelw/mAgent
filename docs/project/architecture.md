@@ -16,9 +16,16 @@
 magent/
 ├── CLAUDE.md
 ├── docs/
-│   ├── requirements.md
-│   ├── architecture.md
-│   └── libghostty-integration.md
+│   ├── README.md
+│   ├── project/
+│   │   ├── requirements.md
+│   │   └── architecture.md
+│   ├── agent-runtime/
+│   │   └── libghostty-integration.md
+│   └── changelog/
+│       ├── README.md
+│       ├── unreleased.md
+│       └── archive/
 ├── Packages/
 │   └── MagentModules/
 │       ├── Package.swift
