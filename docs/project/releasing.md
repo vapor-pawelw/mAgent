@@ -67,17 +67,19 @@ When updating changelog notes for a release or pre-release notes:
 3. Omit empty domains; only keep headings that have at least one note.
 4. Order domain sections by release importance, not by insertion time. Put broad user-facing changes and headline fixes first; keep niche CLI/API details later unless they are the main release story.
 5. Keep `Thread` as a single top-level domain by default; avoid permanent split domains like `Thread: Rename`.
-6. Within each domain, split entries into `#### Features` and `#### Bug Fixes` when both exist, with bug fixes listed below features.
-7. If one topic dominates in a domain for a specific release, use an optional temporary `##### <Topic>` subheading inside `#### Features`/`#### Bug Fixes` and drop it once no longer needed.
-8. Include only:
+6. Within each domain, split entries into `#### Features`, `#### Improvements`, and `#### Bug Fixes` as needed, in that order.
+7. Use `Features` for new user capabilities or workflows, `Improvements` for polish/usability/clarity/performance refinements to existing behavior, and `Bug Fixes` for broken, misleading, unreliable, or regressed behavior.
+8. If one topic dominates in a domain for a specific release, use an optional temporary `##### <Topic>` subheading inside `#### Features`/`#### Improvements`/`#### Bug Fixes` and drop it once no longer needed.
+9. Include only:
    - New features
+   - Improvements
    - Bug fixes
    - Performance improvements
-9. Omit implementation details, internal refactors, tooling-only changes, and infrastructure-only updates.
-10. Within each subsection, order entries by user impact:
+10. Omit implementation details, internal refactors, tooling-only changes, and infrastructure-only updates.
+11. Within each subsection, order entries by user impact:
    - Put broad/high-impact items first and describe them at a higher level.
    - Keep niche or smaller items shorter and place them near the end.
-11. Use user-facing wording focused on outcomes, not code internals.
+12. Use user-facing wording focused on outcomes, not code internals.
 
 Root `CHANGELOG.md` contains only the latest released app version and is bundled into the app. Older released versions live one-per-file in `docs/changelog/archive/<version>.md`.
 

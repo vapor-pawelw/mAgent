@@ -22,11 +22,12 @@ Guidelines:
 
 - Group notes by product domain using `### <Domain>` headings (for example: `Thread`, `Sidebar`, `Settings`, `Agents`).
 - Hide empty domains; only include a domain heading when it has at least one note.
-- **Each `### <Domain>` heading must appear at most once in `docs/changelog/unreleased.md`.** When adding a new bullet to a domain that already exists, merge it into the existing `### <Domain>` block under the appropriate `#### Features` or `#### Bug Fixes` subsection instead of creating a second domain block later in the file. Before any commit that touches `docs/changelog/unreleased.md`, scan it for duplicate domain headings and collapse them.
+- **Each `### <Domain>` heading must appear at most once in `docs/changelog/unreleased.md`.** When adding a new bullet to a domain that already exists, merge it into the existing `### <Domain>` block under the appropriate `#### Features`, `#### Improvements`, or `#### Bug Fixes` subsection instead of creating a second domain block later in the file. Before any commit that touches `docs/changelog/unreleased.md`, scan it for duplicate domain headings and collapse them.
 - Order domain sections by release importance, not by when a thread happened to add its changelog entry. Put broad user-facing changes and headline fixes first; keep niche domains, CLI/API details, and supporting fixes later unless they are the primary release story.
 - Keep `Thread` as a single top-level domain by default. Do not split it into permanent domains like `Thread: Rename`.
-- Within each domain, use `#### Features` and `#### Bug Fixes` subsections when both exist, with `#### Bug Fixes` listed below `#### Features`. Do not interleave bullets.
-- If one topic inside a domain dominates a release, use an optional temporary `##### <Topic>` subheading inside `#### Features` or `#### Bug Fixes` and remove it in later releases when no longer needed.
+- Within each domain, use `#### Features`, `#### Improvements`, and `#### Bug Fixes` subsections as needed, in that order. Do not interleave bullets.
+- Use `Features` for new user capabilities or workflows, `Improvements` for polish/usability/clarity/performance refinements to existing behavior, and `Bug Fixes` for broken, misleading, unreliable, or regressed behavior.
+- If one topic inside a domain dominates a release, use an optional temporary `##### <Topic>` subheading inside `#### Features`, `#### Improvements`, or `#### Bug Fixes` and remove it in later releases when no longer needed.
 - Focus on behavior users can notice: new features, fixes, UX changes, and performance improvements.
 - Skip internal-only refactors unless they affect user outcomes.
 - Keep bullets short and specific.
@@ -67,5 +68,5 @@ GitHub Releases read release notes from root `CHANGELOG.md` for the latest relea
 - Launch-time `What's New` is shown once per app version, tracked in `AppSettings.lastShownChangelogVersion`.
 - If no matching `## <version> - ...` section exists in bundled `CHANGELOG.md`, launch skips the popup.
 - Debug Settings includes a `What's New` helper to reopen the current-version popup for testing.
-- Rendering (`ChangelogWindowController.attributedReleaseNotes`) groups bullets under each `### <Domain>` heading, draws a brand-tinted horizontal separator directly under the domain heading, and styles `#### Features` / `#### Bug Fixes` subsection labels in uppercase with the app's primary brand color. Duplicate `### <Domain>` headings within the same release are auto-merged at render time (`mergeDuplicateDomains`) as a safety net, but `docs/changelog/unreleased.md` should still be kept clean per the rules above.
+- Rendering (`ChangelogWindowController.attributedReleaseNotes`) groups bullets under each `### <Domain>` heading, draws a brand-tinted horizontal separator directly under the domain heading, and styles subsection labels in uppercase with the app's primary brand color. Duplicate `### <Domain>` headings within the same release are auto-merged at render time (`mergeDuplicateDomains`) as a safety net, but `docs/changelog/unreleased.md` should still be kept clean per the rules above.
 - Inline markdown bold is supported in release-note body and bullet text: wrap text as `**bold**` to render bold text.
