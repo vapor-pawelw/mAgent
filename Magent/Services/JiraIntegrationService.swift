@@ -31,13 +31,6 @@ final class JiraIntegrationService {
         self.persistence = persistence
     }
 
-    // MARK: - Cache TTL
-
-    /// How long a cache entry is considered fresh before re-verification.
-    /// Slightly above the 5-minute polling cadence so mid-cycle refreshes
-    /// (e.g. on thread selection) survive until the next periodic tick.
-    private static let jiraTicketCacheTTL: TimeInterval = 6 * 60
-
     // MARK: - Cache Loading
 
     func loadJiraTicketCacheIfNeeded() {
@@ -52,7 +45,10 @@ final class JiraIntegrationService {
     /// If `forThreadIds` is nil, scans all active threads. Otherwise only the specified threads.
     /// Populates `verifiedJiraTicket` on matching threads from cache or fresh verification.
     /// Only one verification pass runs at a time — concurrent calls are skipped.
-    func verifyDetectedJiraTickets(forThreadIds: Set<UUID>? = nil) async {
+    func verifyDetectedJiraTickets(
+        forThreadIds: Set<UUID>? = nil,
+        reason: JiraTicketRefreshReason = .detectedTicketChange
+    ) async {
         let settings = persistence.loadSettings()
         guard settings.jiraIntegrationEnabled, settings.jiraTicketDetectionEnabled else { return }
         guard !isJiraVerificationRunning else { return }
@@ -87,10 +83,12 @@ final class JiraIntegrationService {
 
         // Determine which keys need (re-)verification
         let now = Date()
-        let staleThreshold = now.addingTimeInterval(-Self.jiraTicketCacheTTL)
         let keysNeedingVerification = keyToThreadIds.keys.filter { key in
-            guard let cached = jiraTicketCache[key] else { return true }
-            return cached.verifiedAt < staleThreshold
+            JiraTicketRefreshPolicy.needsVerification(
+                cachedVerifiedAt: jiraTicketCache[key]?.verifiedAt,
+                now: now,
+                reason: reason
+            )
         }
 
         // If we have keys to verify, try acli
@@ -119,7 +117,7 @@ final class JiraIntegrationService {
         loadJiraTicketCacheIfNeeded()
         populateVerifiedTicketsFromCache()
         Task {
-            await verifyDetectedJiraTickets()
+            await verifyDetectedJiraTickets(reason: .settingsEnabled)
         }
     }
 

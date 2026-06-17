@@ -97,6 +97,7 @@ extension ThreadManager {
             if _jiraSyncTickCounter >= SessionMonitorRefreshCadence.statusSyncIntervalTicks {
                 _jiraSyncTickCounter = 0
                 let jiraResult = await runJiraSyncTick()
+                await verifyDetectedJiraTickets(reason: .displayedStatusSync)
                 if jiraResult.hadErrors {
                     syncHadErrors = true
                     if let summary = jiraResult.failureSummary {
@@ -140,7 +141,7 @@ extension ThreadManager {
         Task {
             let prResult = await runPRSyncTick()
             let jiraResult = await runJiraSyncTick()
-            await verifyDetectedJiraTickets()
+            await verifyDetectedJiraTickets(reason: .manual)
             lastStatusSyncAt = Date()
             lastStatusSyncFailed = prResult.hadErrors || jiraResult.hadErrors
             lastStatusSyncFailureSummary = lastStatusSyncFailed
@@ -180,6 +181,7 @@ extension ThreadManager {
             var syncFailureSummaries: [String] = []
 
             let jiraResult = await runJiraSyncTick()
+            await verifyDetectedJiraTickets(reason: .displayedStatusSync)
             if jiraResult.hadErrors {
                 syncHadErrors = true
                 if let summary = jiraResult.failureSummary {

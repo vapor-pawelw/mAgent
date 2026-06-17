@@ -9,8 +9,11 @@ extension ThreadManager {
         jiraIntegrationService.loadJiraTicketCacheIfNeeded()
     }
 
-    func verifyDetectedJiraTickets(forThreadIds: Set<UUID>? = nil) async {
-        await jiraIntegrationService.verifyDetectedJiraTickets(forThreadIds: forThreadIds)
+    func verifyDetectedJiraTickets(
+        forThreadIds: Set<UUID>? = nil,
+        reason: JiraTicketRefreshReason = .detectedTicketChange
+    ) async {
+        await jiraIntegrationService.verifyDetectedJiraTickets(forThreadIds: forThreadIds, reason: reason)
     }
 
     func enableAndRefreshJiraDetection() {

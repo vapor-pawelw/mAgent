@@ -17,6 +17,7 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 - Completion detection still enters through `ThreadManager.checkForAgentCompletions()`.
 - The shared completion-processing path is also used by synthetic Codex completions generated from the session monitor's busy→idle transition, so unread dots, notifications, auto-reorder, and auto-rename stay aligned across completion sources.
 - After processing completion events, the shared completion path also triggers auto-rename for threads that haven't been renamed yet (`!didAutoRenameFromFirstPrompt`). This covers threads not currently displayed (no `ThreadDetailViewController`). See `prompt-toc-parser.md` § "Three auto-rename trigger paths" for details.
+- Completion processing also force-refreshes Jira ticket details for the completed thread, bypassing the normal ticket cache so status badges and synced Jira descriptions can catch up as soon as the agent finishes.
 - A Dock bounce is requested only when a thread transitions from `hasUnreadAgentCompletion == false` to `true`, which avoids repeated bounces for additional unread tabs in the same thread.
 - Dock badge updates are centralized in `ThreadManager.updateDockBadge()`.
 - The Dock badge uses thread count, not unread session count, so it matches the sidebar's thread-level completion affordance.

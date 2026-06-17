@@ -72,6 +72,9 @@ final class SessionLifecycleService {
     /// Refreshes the "delivered" git state indicator for a thread.
     var refreshDeliveredState: ((UUID) async -> Void)?
 
+    /// Refreshes Jira ticket status for threads that just received agent completion.
+    var refreshJiraTicketsForCompletedThreads: ((Set<UUID>) async -> Void)?
+
     /// Posts busy-sessions-changed notification for a thread.
     var postBusySessionsChanged: ((MagentThread) -> Void)?
 
@@ -1136,6 +1139,7 @@ final class SessionLifecycleService {
             await refreshDirtyState?(threadId)
             await refreshDeliveredState?(threadId)
         }
+        scheduleJiraRefreshForCompletedThreads(result.changedThreadIds)
 
         // Trigger auto-rename for threads that haven't been renamed yet.
         // This covers the case where a thread is not currently displayed
@@ -1639,6 +1643,7 @@ final class SessionLifecycleService {
                 await refreshDirtyState?(threadId)
                 await refreshDeliveredState?(threadId)
             }
+            scheduleJiraRefreshForCompletedThreads(implicitCompletionResult.changedThreadIds)
 
             for session in deduplicatedImplicitCompletionSessions {
                 if let index = store.threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }),
@@ -1997,6 +2002,15 @@ final class SessionLifecycleService {
         onThreadsChanged?()
         postCompletionChangedNotification(for: store.threads[index])
         postBusySessionsChanged?(store.threads[index])
+
+        scheduleJiraRefreshForCompletedThreads([threadId])
+    }
+
+    private func scheduleJiraRefreshForCompletedThreads(_ threadIds: Set<UUID>) {
+        guard !threadIds.isEmpty else { return }
+        Task {
+            await self.refreshJiraTicketsForCompletedThreads?(threadIds)
+        }
     }
 
     @MainActor

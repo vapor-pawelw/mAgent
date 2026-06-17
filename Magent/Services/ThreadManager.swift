@@ -187,6 +187,9 @@ final class ThreadManager {
         svc.refreshDeliveredState = { [weak self] threadId in
             _ = await self?.refreshDeliveredState(for: threadId)
         }
+        svc.refreshJiraTicketsForCompletedThreads = { [weak self] threadIds in
+            await self?.verifyDetectedJiraTickets(forThreadIds: threadIds, reason: .agentCompletion)
+        }
         svc.postBusySessionsChanged = { [weak self] thread in
             self?.postBusySessionsChangedNotification(for: thread)
         }
@@ -898,7 +901,7 @@ final class ThreadManager {
         await refreshDirtyStates()
         await refreshDeliveredStates()
         await refreshBranchStates()
-        await verifyDetectedJiraTickets()
+        await verifyDetectedJiraTickets(reason: .appLaunch)
         populatePRInfoFromCache()
         let prSyncResult = await runPRSyncTick()
         lastStatusSyncAt = Date()
