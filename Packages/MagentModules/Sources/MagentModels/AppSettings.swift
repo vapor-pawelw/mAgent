@@ -46,6 +46,35 @@ public enum AgentPermissionMode: String, Codable, Sendable, CaseIterable {
     case unrestricted
 }
 
+public enum StatusBarThreadStatusKind: String, Codable, Sendable, CaseIterable {
+    case favorites
+    case done
+    case waiting
+    case busy
+    case separateWindows
+    case rateLimited
+
+    public static let displayOrder: [StatusBarThreadStatusKind] = [
+        .favorites,
+        .done,
+        .waiting,
+        .busy,
+        .separateWindows,
+        .rateLimited,
+    ]
+
+    public static let defaultExpanded: [StatusBarThreadStatusKind] = [
+        .favorites,
+        .done,
+        .waiting,
+    ]
+
+    public static func normalizedExpanded(_ statuses: [StatusBarThreadStatusKind]) -> [StatusBarThreadStatusKind] {
+        let selected = Set(statuses)
+        return displayOrder.filter { selected.contains($0) }
+    }
+}
+
 public nonisolated struct AgentLaunchPromptDraft: Codable, Sendable, Equatable {
     public var prompt: String
     public var description: String
@@ -110,6 +139,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var showPRStatusBadges: Bool
     public var showJiraStatusBadges: Bool
     public var showBusyStateDuration: Bool
+    public var expandedStatusBarThreadStatuses: [StatusBarThreadStatusKind]
     public var autoRenameSlugPrompt: String
     public var useThreadSections: Bool
     public var isConfigured: Bool
@@ -177,6 +207,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showPRStatusBadges: Bool = true,
         showJiraStatusBadges: Bool = true,
         showBusyStateDuration: Bool = true,
+        expandedStatusBarThreadStatuses: [StatusBarThreadStatusKind] = StatusBarThreadStatusKind.defaultExpanded,
         autoRenameSlugPrompt: String = AppSettings.defaultSlugPrompt,
         useThreadSections: Bool = true,
         isConfigured: Bool = false,
@@ -243,6 +274,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.showPRStatusBadges = showPRStatusBadges
         self.showJiraStatusBadges = showJiraStatusBadges
         self.showBusyStateDuration = showBusyStateDuration
+        self.expandedStatusBarThreadStatuses = StatusBarThreadStatusKind.normalizedExpanded(expandedStatusBarThreadStatuses)
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.useThreadSections = useThreadSections
         self.isConfigured = isConfigured
@@ -315,6 +347,11 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showPRStatusBadges = try container.decodeIfPresent(Bool.self, forKey: .showPRStatusBadges) ?? true
         showJiraStatusBadges = try container.decodeIfPresent(Bool.self, forKey: .showJiraStatusBadges) ?? true
         showBusyStateDuration = try container.decodeIfPresent(Bool.self, forKey: .showBusyStateDuration) ?? true
+        let decodedExpandedStatuses = try container.decodeIfPresent(
+            [StatusBarThreadStatusKind].self,
+            forKey: .expandedStatusBarThreadStatuses
+        ) ?? StatusBarThreadStatusKind.defaultExpanded
+        expandedStatusBarThreadStatuses = StatusBarThreadStatusKind.normalizedExpanded(decodedExpandedStatuses)
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt) ?? Self.defaultSlugPrompt
         useThreadSections = try container.decodeIfPresent(Bool.self, forKey: .useThreadSections) ?? true
         isConfigured = try container.decodeIfPresent(Bool.self, forKey: .isConfigured) ?? !projects.isEmpty
@@ -384,6 +421,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(narrowThreads, forKey: .narrowThreads)
         try container.encode(showPRStatusBadges, forKey: .showPRStatusBadges)
         try container.encode(showJiraStatusBadges, forKey: .showJiraStatusBadges)
+        try container.encode(expandedStatusBarThreadStatuses, forKey: .expandedStatusBarThreadStatuses)
         // Keep writing the legacy key for backward compatibility with older builds.
         try container.encode(autoRenameBranches, forKey: .autoRenameWorktrees)
         try container.encode(autoRenameSlugPrompt, forKey: .autoRenameSlugPrompt)
@@ -619,6 +657,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case showPRStatusBadges
         case showJiraStatusBadges
         case showBusyStateDuration
+        case expandedStatusBarThreadStatuses
         case autoRenameWorktrees
         case autoRenameSlugPrompt
         case useThreadSections

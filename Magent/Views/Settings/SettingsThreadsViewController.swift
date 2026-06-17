@@ -16,6 +16,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var showPRStatusBadgesCheckbox: NSButton!
     private var showJiraStatusBadgesCheckbox: NSButton!
     private var showBusyStateDurationCheckbox: NSButton!
+    private var statusBarExpandedStatusCheckboxes: [StatusBarThreadStatusKind: NSButton] = [:]
     private var maxIdleSessionsCheckbox: NSButton!
     private var maxIdleSessionsStepper: NSStepper!
     private var maxIdleSessionsValueLabel: NSTextField!
@@ -266,6 +267,25 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         showBusyStateDurationCheckbox.state = settings.showBusyStateDuration ? .on : .off
         sidebarSection.addArrangedSubview(showBusyStateDurationCheckbox)
 
+        let (statusBarCard, statusBarSection) = createSectionCard(
+            title: String(localized: .SettingsStrings.settingsThreadsStatusBarTitle),
+            description: String(localized: .SettingsStrings.settingsThreadsStatusBarDescription)
+        )
+        stackView.addArrangedSubview(statusBarCard)
+
+        statusBarExpandedStatusCheckboxes.removeAll()
+        for status in StatusBarThreadStatusKind.displayOrder {
+            let checkbox = NSButton(
+                checkboxWithTitle: statusBarStatusTitle(for: status),
+                target: self,
+                action: #selector(statusBarExpandedStatusToggled(_:))
+            )
+            checkbox.identifier = NSUserInterfaceItemIdentifier(status.rawValue)
+            checkbox.state = settings.expandedStatusBarThreadStatuses.contains(status) ? .on : .off
+            statusBarExpandedStatusCheckboxes[status] = checkbox
+            statusBarSection.addArrangedSubview(checkbox)
+        }
+
         let (injectionCard, injectionSection) = createSectionCard(
             title: "Startup Injection",
             description: "Values in this section are applied to every new terminal/agent tab at startup."
@@ -394,6 +414,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             threadNamingCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sectionsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sidebarCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            statusBarCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             injectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             reviewCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sessionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
@@ -435,6 +456,23 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         guard let clipView = contentScrollView?.contentView as NSClipView? else { return }
         clipView.scroll(to: NSPoint(x: 0, y: 0))
         contentScrollView.reflectScrolledClipView(clipView)
+    }
+
+    private func statusBarStatusTitle(for status: StatusBarThreadStatusKind) -> String {
+        switch status {
+        case .favorites:
+            return String(localized: .SettingsStrings.settingsThreadsStatusBarFavorites)
+        case .done:
+            return String(localized: .SettingsStrings.settingsThreadsStatusBarDone)
+        case .waiting:
+            return String(localized: .SettingsStrings.settingsThreadsStatusBarWaiting)
+        case .busy:
+            return String(localized: .SettingsStrings.settingsThreadsStatusBarBusy)
+        case .separateWindows:
+            return String(localized: .SettingsStrings.settingsThreadsStatusBarPopoutWindows)
+        case .rateLimited:
+            return String(localized: .SettingsStrings.settingsThreadsStatusBarRateLimited)
+        }
     }
 
     func refreshRecentlyArchivedThreads() {
@@ -782,6 +820,15 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     @objc private func showBusyStateDurationToggled() {
         persistSettings(notify: true) { settings in
             settings.showBusyStateDuration = showBusyStateDurationCheckbox.state == .on
+        }
+    }
+
+    @objc private func statusBarExpandedStatusToggled(_ sender: NSButton) {
+        let expandedStatuses = StatusBarThreadStatusKind.displayOrder.filter { status in
+            statusBarExpandedStatusCheckboxes[status]?.state == .on
+        }
+        persistSettings(notify: true) { settings in
+            settings.expandedStatusBarThreadStatuses = StatusBarThreadStatusKind.normalizedExpanded(expandedStatuses)
         }
     }
 

@@ -4,11 +4,12 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 
 ## User-facing behavior
 
-- The left side of the bottom status bar starts with the session-count control, followed by favorite, done, and waiting thread statuses. The right side keeps rate-limited, busy, and separate-window statuses compact, with sync status remaining the rightmost item.
-- When the left side has enough horizontal space, favorite, done, and waiting statuses expand into one-line clickable thread badges instead of aggregate count labels.
+- The left side of the bottom status bar starts with the session-count control, followed by thread-status types the user selected to expand by default. The right side keeps collapsed status types compact, with sync status remaining the rightmost item.
+- Users choose default-expanded status types in Settings -> Threads -> Status Bar. Checked types expand into one-line clickable thread badges when space allows; unchecked types always stay collapsed on the trailing side.
+- Status types always keep this left-to-right order: favorites, done, waiting for input, busy, popout windows, rate limited.
 - Inline thread badges show the thread description when present, otherwise the thread name. Thread text is shown up to 60 characters; longer text uses the first 58 characters plus an ellipsis. When multiple projects are configured, the badge includes the project name as a small dimmed trailing label.
-- Inline badges are grouped by logical status with one tinted status glyph before each group. Badges do not repeat the glyph or show status words; the shared glyph color, matching border color, and tooltip provide the context. Rate-limited, busy, and separate-window thread statuses do not expand inline.
-- If the inline groups do not fit cleanly, the status bar falls back to the aggregate count controls and existing popovers.
+- Inline badges are grouped by logical status with one tinted status glyph before each group. Badges do not repeat the glyph or show status words; the shared glyph color, matching border color, and tooltip provide the context.
+- If the checked inline groups do not fit cleanly, the status bar collapses the lowest-priority checked group and tries again until the remaining inline groups and trailing collapsed controls fit.
 - Inline favorite badges can be dragged left or right to reorder Favorites directly from the status bar. A slim insertion marker shows the drop position.
 - Right-clicking an inline favorite badge includes `Set Favorite Alias...`, which opens a text input prefilled with the saved alias or the thread's current description/name. Saving an empty value clears the alias and returns the badge to the default description/name.
 - When at least one thread is favorited, a dedicated `X favorites` control appears immediately after the session-count control, using a primary-color heart icon.
@@ -53,16 +54,15 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - Separate-window close actions should still route through `PopoutWindowManager` so the same persistence, duplicate-window guards, and sidebar/status notifications fire as they do for context-menu or keyboard-triggered returns.
 - While a status popover is visible, `StatusBarView` avoids rebuilding the status-button stack (to preserve the popover anchor) and updates existing button counts in place.
 - If a read action clears the currently open status entirely (for example, `done` goes to zero after `Mark All as Read`), `StatusBarView` must close that popover and rebuild the status-button stack immediately so stale `done` UI does not linger.
-- Inline badge mode is opportunistic. `StatusBarView` measures the space left after the protected session count and trailing status/sync controls, then drops lower-priority inline groups before falling back to aggregate mode.
-- Inline badge group priority is favorites, done, then waiting. A group is rendered as a full group or not at all; the status bar does not mix inline badges with `+more` overflow controls.
+- Inline badge mode is opportunistic. `StatusBarView` measures the space left after the protected session count and projected trailing status/sync controls, then drops lower-priority checked inline groups before falling back to aggregate mode.
+- Inline badge group priority is favorites, done, waiting, busy, popout windows, then rate limited. A group is rendered as a full group or not at all; the status bar does not mix inline badges with `+more` overflow controls.
 
 ## Gotchas
 
 - Preserve the mixed persistence model: only `done` ordering should survive relaunch. Do not persist `busy` / `waiting` / `rate-limited` tooltip ordering unless those underlying states also become persisted first.
 - When choosing the 3 rows to show, sort by newest-added first, take the latest 3, then reverse them for display so the newest row ends up bottom-most near the status-bar anchor.
-- Keep sync status rightmost. Rate-limited, busy, and separate-window thread statuses stay compact in the trailing status stack so they do not consume left-side inline badge space.
-- Keep favorites as a separate left-side control (not part of the `ThreadStatusSummaryKind` button stack) so opening/refreshing status popovers does not accidentally remove the favorites anchor view.
-- Inline mode hides the separate favorites aggregate button and renders favorites inside the inline badge strip. Aggregate fallback must restore the favorites button even when only the window width changed.
+- Keep sync status rightmost. Collapsed status controls stay in the trailing status stack and keep the fixed global order.
+- Favorites can be either inline or collapsed like other status types. Keep the hidden legacy favorites button only as a fallback anchor; visible favorites controls should come from the normal inline/trailing status rendering path.
 - Keep sync failure details sourced from the most recent sync runner output rather than inventing independent UI-only error state, so hover text and the sync context menu stay in sync.
 - For the `done` popover row-level mark-read button, suppress row navigation when the click lands inside the button hit area. Otherwise the click can both mark as read and navigate, which is surprising and can race popover refresh.
 - Keep popover content rows at a fixed width. The popover width is constant; description text may wrap up to two lines, but content must never change the popover width while rows are being marked read.

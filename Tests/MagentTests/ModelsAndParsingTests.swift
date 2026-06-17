@@ -722,6 +722,36 @@ struct AppSettingsDefaultAgentTests {
     }
 }
 
+// MARK: - AppSettings status bar thread statuses
+
+@Suite("AppSettings status bar thread statuses")
+struct AppSettingsStatusBarThreadStatusTests {
+
+    @Test("Default expanded status bar statuses match the legacy inline groups")
+    func defaultExpandedStatuses() {
+        #expect(AppSettings().expandedStatusBarThreadStatuses == [.favorites, .done, .waiting])
+    }
+
+    @Test("Expanded status bar statuses normalize to fixed display order")
+    func normalizesExpandedStatusOrder() {
+        let settings = AppSettings(expandedStatusBarThreadStatuses: [.rateLimited, .busy, .favorites, .busy])
+
+        #expect(settings.expandedStatusBarThreadStatuses == [.favorites, .busy, .rateLimited])
+    }
+
+    @Test("Missing expanded status bar settings decode to the legacy default")
+    func decodesMissingExpandedStatusesToDefault() throws {
+        let baselineData = try JSONEncoder().encode(AppSettings())
+        var baselineObject = try #require(JSONSerialization.jsonObject(with: baselineData) as? [String: Any])
+        baselineObject.removeValue(forKey: "expandedStatusBarThreadStatuses")
+        let data = try JSONSerialization.data(withJSONObject: baselineObject)
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(decoded.expandedStatusBarThreadStatuses == [.favorites, .done, .waiting])
+    }
+}
+
 // MARK: - AppSettings chat appearance fields
 
 @Suite("AppSettings chat appearance fields")

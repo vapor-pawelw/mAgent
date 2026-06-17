@@ -320,6 +320,94 @@
         }
       }
     },
+    "settingsThreadsStatusBarBusy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Busy"
+          }
+        }
+      }
+    },
+    "settingsThreadsStatusBarDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checked statuses expand into thread badges from the leading side when space allows. Unchecked statuses stay collapsed on the trailing side."
+          }
+        }
+      }
+    },
+    "settingsThreadsStatusBarDone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "settingsThreadsStatusBarFavorites": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorites"
+          }
+        }
+      }
+    },
+    "settingsThreadsStatusBarPopoutWindows": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Popout windows"
+          }
+        }
+      }
+    },
+    "settingsThreadsStatusBarRateLimited": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate limited"
+          }
+        }
+      }
+    },
+    "settingsThreadsStatusBarTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status Bar"
+          }
+        }
+      }
+    },
+    "settingsThreadsStatusBarWaiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for input"
+          }
+        }
+      }
+    },
     "settingsDebugExperimentalChats": {
       "extractionState": "manual",
       "localizations": {

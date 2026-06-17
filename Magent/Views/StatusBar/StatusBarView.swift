@@ -428,8 +428,30 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
         self == .done || self == .favorites
     }
 
-    var showsInStatusSummaryStack: Bool {
-        self != .favorites
+    static let displayOrder: [ThreadStatusSummaryKind] = [
+        .favorites,
+        .done,
+        .waiting,
+        .busy,
+        .separateWindows,
+        .rateLimited,
+    ]
+
+    init?(settingsKind: StatusBarThreadStatusKind) {
+        switch settingsKind {
+        case .favorites:
+            self = .favorites
+        case .done:
+            self = .done
+        case .waiting:
+            self = .waiting
+        case .busy:
+            self = .busy
+        case .separateWindows:
+            self = .separateWindows
+        case .rateLimited:
+            self = .rateLimited
+        }
     }
 }
 
@@ -1263,7 +1285,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private var isRenderingInlineThreadBadges = false
     private var lastRenderedThreadCount: Int = -1
     private var lastLayoutWidth: CGFloat = 0
-    private var lastRenderedFavoriteCount: Int = -1
     private var transientStatusThreadIds: [ThreadStatusSummaryKind: Set<UUID>] = [:]
     private var transientStatusAddedAt: [ThreadStatusSummaryKind: [UUID: Date]] = [:]
     private var activePopoverStatus: ThreadStatusSummaryKind?
@@ -1582,6 +1603,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         nc.addObserver(self, selector: sel, name: .magentFavoritesChanged, object: nil)
         nc.addObserver(self, selector: sel, name: .magentThreadPoppedOut, object: nil)
         nc.addObserver(self, selector: sel, name: .magentThreadReturnedToMain, object: nil)
+        nc.addObserver(self, selector: sel, name: .magentSettingsDidChange, object: nil)
 
         statusTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
@@ -1599,7 +1621,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     // MARK: - Refresh
 
     func refresh() {
-        updateFavoritesStatus()
         updateThreadStatus()
         updateSessionCount()
         updateRateLimitStatus()
@@ -1612,26 +1633,42 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let threads = ThreadManager.shared.threads
         syncTransientStatusAddedAt(with: threads)
 
-        let summaries = leadingStatusKinds.compactMap { kind -> ThreadStatusSummaryDescriptor? in
+        let settings = PersistenceService.shared.loadSettings()
+        let preferredExpandedKinds = preferredExpandedStatusKinds(from: settings)
+        let summaryByKind = Dictionary(uniqueKeysWithValues: ThreadStatusSummaryKind.displayOrder.compactMap { kind -> (ThreadStatusSummaryKind, ThreadStatusSummaryDescriptor)? in
             let count = threads.lazy.filter { kind.matches($0) }.count
             guard count > 0 else { return nil }
-            return ThreadStatusSummaryDescriptor(kind: kind, count: count)
-        }
-        let trailingSummaries = trailingStatusKinds.compactMap { kind -> ThreadStatusSummaryDescriptor? in
-            let count = threads.lazy.filter { kind.matches($0) }.count
-            guard count > 0 else { return nil }
-            return ThreadStatusSummaryDescriptor(kind: kind, count: count)
-        }
-        let allVisibleSummaries = summaries + trailingSummaries
-        rebuildTrailingThreadStatusSegments(summaries: trailingSummaries)
+            let summary = ThreadStatusSummaryDescriptor(kind: kind, count: count)
+            return (kind, summary)
+        })
+        let allVisibleSummaries = ThreadStatusSummaryKind.displayOrder.compactMap { summaryByKind[$0] }
 
         let isStatusPopoverVisible = activePopover?.isShown == true
-        let settings = PersistenceService.shared.loadSettings()
-        let inlineGroups = inlineBadgeGroups(from: threads, settings: settings, priority: leadingInlineStatusKinds)
-        if !isStatusPopoverVisible,
-           let fittingGroups = fittingInlineBadgeGroups(from: inlineGroups),
-           !fittingGroups.isEmpty {
-            favoritesButton.isHidden = true
+        let activeStatusStillPresent = activePopoverStatus.map { status in
+            allVisibleSummaries.contains { $0.kind == status }
+        } ?? false
+
+        if isStatusPopoverVisible, activeStatusStillPresent {
+            refreshStatusButtonCountsInPlace(summaries: allVisibleSummaries)
+            lastRenderedThreadCount = threads.count
+            refreshActivePopover()
+            return
+        }
+        if isStatusPopoverVisible {
+            activePopover?.close()
+        }
+
+        favoritesButton.isHidden = true
+        let inlineGroups = inlineBadgeGroups(from: threads, settings: settings, priority: preferredExpandedKinds)
+        let fittingGroups = fittingInlineBadgeGroups(from: inlineGroups, summaryByKind: summaryByKind) ?? []
+        let fittingGroupKinds = Set(fittingGroups.map(\.kind))
+        let collapsedSummaries = ThreadStatusSummaryKind.displayOrder.compactMap { kind -> ThreadStatusSummaryDescriptor? in
+            guard !fittingGroupKinds.contains(kind) else { return nil }
+            return summaryByKind[kind]
+        }
+        rebuildTrailingThreadStatusSegments(summaries: collapsedSummaries)
+
+        if !fittingGroups.isEmpty {
             let shouldRebuildInline = !isRenderingInlineThreadBadges
                 || fittingGroups != lastRenderedInlineBadgeGroups
                 || threads.count != lastRenderedThreadCount
@@ -1639,9 +1676,10 @@ final class StatusBarView: NSView, NSPopoverDelegate {
                 rebuildInlineThreadStatusBadges(groups: fittingGroups)
                 isRenderingInlineThreadBadges = true
                 lastRenderedInlineBadgeGroups = fittingGroups
-                lastRenderedThreadSummaries = summaries
+                lastRenderedThreadSummaries = collapsedSummaries
                 lastRenderedThreadCount = threads.count
             }
+            pruneStatusButtons(keeping: fittingGroupKinds.union(collapsedSummaries.map(\.kind)))
             refreshActivePopover()
             return
         }
@@ -1649,105 +1687,32 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         if isRenderingInlineThreadBadges {
             lastRenderedInlineBadgeGroups = []
             isRenderingInlineThreadBadges = false
-            updateFavoritesStatus(force: true)
+            clearLeadingThreadStatusSegments()
         }
 
-        let shouldRebuild = summaries != lastRenderedThreadSummaries || threads.count != lastRenderedThreadCount
-        let activeStatusStillPresent = activePopoverStatus.map { status in
-            allVisibleSummaries.contains { $0.kind == status }
-        } ?? false
-
-        // Rebuilding the status-button stack replaces the anchor button view and
-        // causes AppKit to dismiss an open popover. While any status popover is
-        // visible, keep the stack stable and just refresh popover rows in place.
-        if shouldRebuild, !isStatusPopoverVisible {
-            rebuildThreadStatusSegments(summaries: summaries, totalCount: threads.count)
-            lastRenderedThreadSummaries = summaries
+        let shouldRebuild = collapsedSummaries != lastRenderedThreadSummaries || threads.count != lastRenderedThreadCount
+        if shouldRebuild {
+            clearLeadingThreadStatusSegments()
+            lastRenderedThreadSummaries = collapsedSummaries
             lastRenderedThreadCount = threads.count
-        } else if shouldRebuild, isStatusPopoverVisible {
-            refreshStatusButtonCountsInPlace(summaries: summaries)
-            lastRenderedThreadSummaries = summaries
-            lastRenderedThreadCount = threads.count
-
-            // If the active status disappeared entirely (for example, "done"
-            // was cleared via Mark All as Read), close the stale popover and
-            // rebuild immediately so the status bar reflects the user action.
-            if !activeStatusStillPresent {
-                activePopover?.close()
-                rebuildThreadStatusSegments(summaries: summaries, totalCount: threads.count)
-            }
         }
+        pruneStatusButtons(keeping: Set(collapsedSummaries.map(\.kind)))
 
         refreshActivePopover()
     }
 
-    private var leadingStatusKinds: [ThreadStatusSummaryKind] {
-        [.waiting, .done]
+    private func preferredExpandedStatusKinds(from settings: AppSettings) -> [ThreadStatusSummaryKind] {
+        settings.expandedStatusBarThreadStatuses.compactMap(ThreadStatusSummaryKind.init(settingsKind:))
     }
 
-    private var leadingInlineStatusKinds: [ThreadStatusSummaryKind] {
-        [.favorites, .done, .waiting]
+    private func pruneStatusButtons(keeping visibleKinds: Set<ThreadStatusSummaryKind>) {
+        statusButtonsByKind = statusButtonsByKind.filter { visibleKinds.contains($0.key) }
     }
 
-    private var trailingStatusKinds: [ThreadStatusSummaryKind] {
-        [.rateLimited, .busy, .separateWindows]
-    }
-
-    private func updateFavoritesStatus(force: Bool = false) {
-        let count = ThreadManager.shared.favoriteThreadCount
-        guard force || count != lastRenderedFavoriteCount else { return }
-        lastRenderedFavoriteCount = count
-
-        guard count > 0 else {
-            favoritesButton.isHidden = true
-            return
-        }
-
-        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
-        favoritesButton.image = NSImage(
-            systemSymbolName: "heart.fill",
-            accessibilityDescription: "Favorites"
-        )?.withSymbolConfiguration(symbolConfig)
-        favoritesButton.imagePosition = .imageLeading
-        favoritesButton.imageHugsTitle = true
-        favoritesButton.badgeTintColor = NSColor(resource: .primaryBrand)
-        favoritesButton.contentTintColor = NSColor(resource: .primaryBrand)
-        favoritesButton.attributedTitle = NSAttributedString(
-            string: "\(count) favorite\(count == 1 ? "" : "s")",
-            attributes: [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: NSColor(resource: .primaryBrand),
-            ]
-        )
-        favoritesButton.setAccessibilityLabel("\(count) favorite thread\(count == 1 ? "" : "s")")
-        favoritesButton.toolTip = "Favorite threads"
-        favoritesButton.isHidden = false
-    }
-
-    private func rebuildThreadStatusSegments(summaries: [ThreadStatusSummaryDescriptor], totalCount: Int) {
-        statusButtonsByKind = statusButtonsByKind.filter { trailingStatusKinds.contains($0.key) }
+    private func clearLeadingThreadStatusSegments() {
         threadStatusStack.arrangedSubviews.forEach { subview in
             threadStatusStack.removeArrangedSubview(subview)
             subview.removeFromSuperview()
-        }
-
-        guard !summaries.isEmpty else {
-            threadStatusStack.addArrangedSubview(
-                makeStaticStatusLabel(
-                    text: "\(totalCount) thread\(totalCount == 1 ? "" : "s")",
-                    color: .tertiaryLabelColor
-                )
-            )
-            return
-        }
-
-        for (index, summary) in summaries.enumerated() {
-            if index > 0 {
-                threadStatusStack.addArrangedSubview(makeSeparatorLabel())
-            }
-            let button = makeStatusButton(for: summary)
-            statusButtonsByKind[summary.kind] = button
-            threadStatusStack.addArrangedSubview(button)
         }
     }
 
@@ -1778,7 +1743,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
     private func rebuildInlineThreadStatusBadges(groups: [InlineThreadStatusBadgeGroup]) {
         clearInlineFavoriteDropTarget()
-        statusButtonsByKind = statusButtonsByKind.filter { trailingStatusKinds.contains($0.key) }
         threadStatusStack.arrangedSubviews.forEach { subview in
             threadStatusStack.removeArrangedSubview(subview)
             subview.removeFromSuperview()
@@ -1869,14 +1833,23 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     }
 
     private func fittingInlineBadgeGroups(
-        from groups: [InlineThreadStatusBadgeGroup]
+        from groups: [InlineThreadStatusBadgeGroup],
+        summaryByKind: [ThreadStatusSummaryKind: ThreadStatusSummaryDescriptor]
     ) -> [InlineThreadStatusBadgeGroup]? {
         guard !groups.isEmpty else { return nil }
-        let availableWidth = availableInlineBadgeWidth()
-        guard availableWidth >= Self.minimumInlineBadgeWidth else { return nil }
 
         var candidate = groups
         while !candidate.isEmpty {
+            let candidateKinds = Set(candidate.map(\.kind))
+            let collapsedSummaries = ThreadStatusSummaryKind.displayOrder.compactMap { kind -> ThreadStatusSummaryDescriptor? in
+                guard !candidateKinds.contains(kind) else { return nil }
+                return summaryByKind[kind]
+            }
+            let availableWidth = availableInlineBadgeWidth(collapsedSummaries: collapsedSummaries)
+            guard availableWidth >= Self.minimumInlineBadgeWidth else {
+                candidate.removeLast()
+                continue
+            }
             if inlineBadgeGroupsWidth(candidate) <= availableWidth {
                 return candidate
             }
@@ -1885,7 +1858,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         return nil
     }
 
-    private func availableInlineBadgeWidth() -> CGFloat {
+    private func availableInlineBadgeWidth(collapsedSummaries: [ThreadStatusSummaryDescriptor]) -> CGFloat {
         guard bounds.width > 0 else { return 0 }
 
         let visibleLeadingFixedViews = [
@@ -1900,9 +1873,44 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let fixedWidth = Self.horizontalPadding * 2
             + leadingFixedWidth
             + CGFloat(leadingGapCount) * leftStack.spacing
-            + rightStack.fittingSize.width
+            + projectedRightStackWidth(collapsedSummaries: collapsedSummaries)
             + 12 // constraint gap between leading and trailing status regions
         return max(0, bounds.width - fixedWidth)
+    }
+
+    private func projectedRightStackWidth(collapsedSummaries: [ThreadStatusSummaryDescriptor]) -> CGFloat {
+        let trailingWidth = trailingThreadStatusStackWidth(for: collapsedSummaries)
+        var visibleWidths: [CGFloat] = []
+        if trailingWidth > 0 {
+            visibleWidths.append(trailingWidth)
+        }
+        if !syncStatusLabel.isHidden {
+            visibleWidths.append(syncStatusLabel.fittingSize.width)
+        }
+        if !syncRefreshButton.isHidden {
+            visibleWidths.append(syncRefreshButton.fittingSize.width)
+        }
+        guard !visibleWidths.isEmpty else { return 0 }
+        return visibleWidths.reduce(0, +) + CGFloat(max(0, visibleWidths.count - 1)) * rightStack.spacing
+    }
+
+    private func trailingThreadStatusStackWidth(for summaries: [ThreadStatusSummaryDescriptor]) -> CGFloat {
+        guard !summaries.isEmpty else { return 0 }
+        let buttonWidths = summaries.reduce(CGFloat(0)) { partial, summary in
+            partial + statusButtonWidth(for: summary)
+        }
+        return buttonWidths + CGFloat(max(0, summaries.count - 1)) * trailingThreadStatusStack.spacing
+    }
+
+    private func statusButtonWidth(for summary: ThreadStatusSummaryDescriptor) -> CGFloat {
+        let button = StatusSummaryButton()
+        button.isBordered = false
+        button.image = Self.statusSymbolImage(for: summary.kind, count: summary.count)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .medium))
+        button.imagePosition = .imageLeading
+        button.imageHugsTitle = true
+        configureStatusButton(button, summary: summary)
+        return button.fittingSize.width
     }
 
     private func inlineBadgeGroupsWidth(_ groups: [InlineThreadStatusBadgeGroup]) -> CGFloat {
@@ -2074,6 +2082,11 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             button.contextMenuProvider = { [weak self] in
                 self?.buildDoneContextMenu()
             }
+        } else if kind == .rateLimited {
+            button.toolTip = ThreadManager.shared.globalRateLimitSummaryText()
+            button.contextMenuProvider = { [weak self] in
+                self?.rateLimitLabel.menu
+            }
         }
         statusButtonsByKind[kind] = button
         NSLayoutConstraint.activate([
@@ -2142,29 +2155,6 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             guard let summary = summariesByKind[kind] else { continue }
             configureStatusButton(button, summary: summary)
         }
-    }
-
-    private func makeSeparatorLabel() -> NSView {
-        makeVerticalStatusSeparator()
-    }
-
-    private func makeVerticalStatusSeparator() -> NSView {
-        let separator = VerticalSeparatorView()
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        separator.setContentHuggingPriority(.required, for: .horizontal)
-        separator.setContentCompressionResistancePriority(.required, for: .horizontal)
-        separator.setContentHuggingPriority(.required, for: .vertical)
-        separator.setContentCompressionResistancePriority(.required, for: .vertical)
-        return separator
-    }
-
-    private func makeStaticStatusLabel(text: String, color: NSColor) -> NSTextField {
-        let label = NSTextField(labelWithString: text)
-        label.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        label.textColor = color
-        label.lineBreakMode = .byTruncatingTail
-        label.maximumNumberOfLines = 1
-        return label
     }
 
     private func sectionColor(for thread: MagentThread, settings: AppSettings) -> NSColor? {
@@ -2620,9 +2610,10 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
     @objc private func inlineThreadStatusBadgeTapped(_ sender: NSControl) {
         guard let badge = sender as? InlineThreadStatusBadgeButton else { return }
+        let sessionName = navigationSessionName(for: badge.statusKind, threadId: badge.threadId)
         navigateToThread(
             threadId: badge.threadId,
-            sessionName: nil,
+            sessionName: sessionName,
             centerInSidebar: shouldCenterSidebarOnNavigation(for: badge.statusKind),
             status: badge.statusKind
         )
@@ -2631,12 +2622,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private func showPopover(for status: ThreadStatusSummaryKind) {
         let entries = popoverEntries(for: status)
         guard !entries.isEmpty else { return }
-        let anchorButton: NSButton?
-        if status == .favorites {
-            anchorButton = favoritesButton
-        } else {
-            anchorButton = statusButtonsByKind[status]
-        }
+        let anchorButton = statusButtonsByKind[status] ?? (status == .favorites ? favoritesButton : nil)
         guard let anchorButton else { return }
 
         activePopover?.close()
