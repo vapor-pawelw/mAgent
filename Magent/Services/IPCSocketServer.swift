@@ -6,7 +6,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v33"
+    private static let cliVersion = "magent-cli-v34"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -1242,6 +1242,34 @@ actor IPCSocketServer {
             [ -n "$session" ] || die "Not running inside a tmux session"
             send_request "{$(json_kv command current-thread),$(json_kv sessionName "$session")}"
             ;;
+        start-agent)
+            session=""; output_json=0; print_command=0
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --session) session="$2"; shift 2 ;;
+                    --json) output_json=1; shift ;;
+                    --print-command) print_command=1; shift ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            if [ -z "$session" ]; then
+                session=$(tmux display-message -p '#{session_name}' 2>/dev/null)
+            fi
+            [ -n "$session" ] || die "Usage: magent-cli start-agent [--session <tmux-session>] [--print-command] [--json]"
+            json="{$(json_kv command start-agent),$(json_kv sessionName "$session")}"
+            if [ "$output_json" = "1" ]; then
+                send_request "$json"
+            else
+                start_resp=$(send_checked_request "$json")
+                start_cmd=$(printf '%s' "$start_resp" | jq -r '.shellCommand // empty')
+                [ -n "$start_cmd" ] || die "Magent did not return an agent start command."
+                if [ "$print_command" = "1" ]; then
+                    printf '%s\n' "$start_cmd"
+                else
+                    env MAGENT_START_AGENT_NO_HINT=1 /bin/zsh -il -c "$start_cmd"
+                fi
+            fi
+            ;;
         auto-rename-thread|rename-thread)
             thread=""; prompt=""; description=""
             while [ $# -gt 0 ]; do
@@ -1581,6 +1609,7 @@ actor IPCSocketServer {
             echo "  magent-cli ls [--project <name>]"
             echo "  magent-cli attach (--thread <name> | --thread-id <id>) [--index <terminal-tab-n>]"
             echo "  magent-cli attach --session <tmux-session>"
+            echo "  start-agent                         (inside a Magent terminal: launch or resume this tab's agent)"
             echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
             echo "Thread commands:"
@@ -1596,6 +1625,7 @@ actor IPCSocketServer {
             echo "  read-tab             (--thread <name> | --thread-id <id>) (--index <n> | --session <name>) [--limit <n>] [--json]"
             echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--name <text>|--title <text>] [--fresh|--no-resume] [--prompt <text>]"
             echo "  create-web-tab       --thread <name> --url <http(s)-url> [--name <text>|--title <text>]    (opens an in-app web tab at the given URL)"
+            echo "  start-agent          [--session <tmux-session>] [--print-command] [--json]"
             echo "  close-tab            --thread <name> (--index <n> | --session <name>)"
             echo "  rename-tab           --thread <name> (--index <n> | --session <name>) --name <text>"
             echo "  pin-tab              --thread <name> (--index <n> | --session <name>) [--remove]"
@@ -1655,7 +1685,7 @@ actor IPCSocketServer {
             "\(home)/.local/bin",
             "\(home)/bin",
         ]
-        let launcherNames = ["magent", "magent-cli", "magent-tmux"]
+        let launcherNames = ["magent", "magent-cli", "magent-tmux", "start-agent"]
 
         for dir in candidateDirs {
             var isDir: ObjCBool = false
@@ -1682,11 +1712,36 @@ actor IPCSocketServer {
             return
         }
 
-        let script = """
-        #!/bin/sh
-        # \(launcherMarker)
-        exec "\(cliPath)" "$@"
-        """
+        let launcherName = (path as NSString).lastPathComponent
+        let script: String
+        if launcherName == "start-agent" {
+            script = """
+            #!/bin/sh
+            # \(launcherMarker)
+            # Fallback for shells that have not loaded Magent's managed start-agent function.
+            # The managed function is preferred because it evals in the current shell.
+            session="$(tmux display-message -p '#{session_name}' 2>/dev/null)" || {
+              echo "start-agent: not running inside a Magent tmux session" >&2
+              exit 1
+            }
+            [ -n "$session" ] || {
+              echo "start-agent: not running inside a Magent tmux session" >&2
+              exit 1
+            }
+            command_text=$("\(cliPath)" start-agent --session "$session" --print-command) || exit $?
+            [ -n "$command_text" ] || {
+              echo "start-agent: Magent did not return an agent command" >&2
+              exit 1
+            }
+            env MAGENT_START_AGENT_NO_HINT=1 /bin/zsh -il -c "$command_text"
+            """
+        } else {
+            script = """
+            #!/bin/sh
+            # \(launcherMarker)
+            exec "\(cliPath)" "$@"
+            """
+        }
         try? script.write(toFile: path, atomically: true, encoding: .utf8)
         chmod(path, 0o755)
     }

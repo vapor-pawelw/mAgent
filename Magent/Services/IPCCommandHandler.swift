@@ -122,6 +122,8 @@ final class IPCCommandHandler {
             return listArchived(request)
         case "send-prompt":
             return await sendPrompt(request)
+        case "start-agent":
+            return await startAgent(request)
         case "archive-thread":
             return await archiveThread(request)
         case "delete-thread":
@@ -1103,6 +1105,59 @@ final class IPCCommandHandler {
 
     private func chatRequestStateKey(threadID: UUID, chatIdentifier: String) -> String {
         "\(threadID.uuidString.lowercased())::\(chatIdentifier)"
+    }
+
+    private func startAgent(_ request: IPCRequest) async -> IPCResponse {
+        let thread: MagentThread
+        if request.threadName != nil || request.threadId != nil {
+            switch resolveThread(request) {
+            case .found(let t): thread = t
+            case .error(let err): return err
+            }
+        } else if let sessionName = request.sessionName {
+            guard let t = threadManager.threads.first(where: { $0.tmuxSessionNames.contains(sessionName) }) else {
+                return .failure("No thread found for session: \(sessionName)", id: request.id)
+            }
+            thread = t
+        } else {
+            return .failure("Specify --session or --thread for start-agent", id: request.id)
+        }
+
+        let sessionName: String
+        if request.sessionName != nil || request.tabIndex != nil {
+            switch resolveTabSelection(request, in: thread) {
+            case .resolved(let tab):
+                guard case .terminal(let selectedSessionName, _) = tab.kind else {
+                    return .failure("Selected tab is not a terminal tab", id: request.id)
+                }
+                sessionName = selectedSessionName
+            case .error(let err):
+                return err
+            }
+        } else if let firstAgentSession = thread.agentTmuxSessions.first {
+            sessionName = firstAgentSession
+        } else {
+            return .failure("Thread has no agent terminal session", id: request.id)
+        }
+
+        guard thread.agentTmuxSessions.contains(sessionName) else {
+            return .failure("Selected terminal tab is not an agent session", id: request.id)
+        }
+
+        if await threadManager.detectedAgentTypeInSession(sessionName) != nil {
+            return .failure("An agent already appears to be running in this session", id: request.id)
+        }
+
+        await threadManager.refreshAgentConversationID(threadId: thread.id, sessionName: sessionName)
+        guard let resolvedAgentType = threadManager.agentType(for: thread, sessionName: sessionName),
+              let command = threadManager.agentShellStartCommand(
+                sessionName: sessionName,
+                agentType: resolvedAgentType
+              ) else {
+            return .failure("Could not build an agent start command for this session", id: request.id)
+        }
+
+        return IPCResponse(ok: true, id: request.id, shellCommand: command)
     }
 
     private func archiveThread(_ request: IPCRequest) async -> IPCResponse {

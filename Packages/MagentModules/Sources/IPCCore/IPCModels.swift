@@ -91,6 +91,7 @@ public nonisolated struct IPCResponse: Encodable, Sendable {
     public var sections: [IPCSectionInfo]?
     public var section: IPCSectionInfo?
     public var activeAgents: [String]?
+    public var shellCommand: String?
 
     public init(
         ok: Bool,
@@ -105,7 +106,8 @@ public nonisolated struct IPCResponse: Encodable, Sendable {
         transcript: IPCTabTranscript? = nil,
         sections: [IPCSectionInfo]? = nil,
         section: IPCSectionInfo? = nil,
-        activeAgents: [String]? = nil
+        activeAgents: [String]? = nil,
+        shellCommand: String? = nil
     ) {
         self.ok = ok
         self.id = id
@@ -120,6 +122,7 @@ public nonisolated struct IPCResponse: Encodable, Sendable {
         self.sections = sections
         self.section = section
         self.activeAgents = activeAgents
+        self.shellCommand = shellCommand
     }
 
     public static func success(id: String? = nil, warning: String? = nil) -> IPCResponse {
