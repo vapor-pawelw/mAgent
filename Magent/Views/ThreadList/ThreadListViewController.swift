@@ -16,10 +16,23 @@ final class SidebarOutlineView: NSOutlineView {
 
     func noteLocalDragWillBegin() {
         isDragInteractionActive = true
+        DevSessionLog.log(.sidebar, "drag-state changed", fields: [
+            "active": true,
+            "source": "local-drag-begin",
+        ])
     }
 
     func noteLocalDragDidEnd() {
+        clearDragInteraction(reason: "local-drag-ended")
+    }
+
+    func clearDragInteraction(reason: String) {
+        guard isDragInteractionActive else { return }
         isDragInteractionActive = false
+        DevSessionLog.log(.sidebar, "drag-state changed", fields: [
+            "active": false,
+            "source": reason,
+        ])
     }
 
     override func scrollRowToVisible(_ row: Int) {
@@ -64,6 +77,8 @@ final class SidebarOutlineView: NSOutlineView {
     /// tapping "archive" does not also select the row (which would trigger a heavyweight
     /// detail-view load that is immediately discarded).
     override func mouseDown(with event: NSEvent) {
+        clearDragInteraction(reason: "mouse-down-reset")
+
         let loc = convert(event.locationInWindow, from: nil)
         let row = self.row(at: loc)
         if row >= 0,
@@ -81,6 +96,10 @@ final class SidebarOutlineView: NSOutlineView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         isDragInteractionActive = true
+        DevSessionLog.log(.sidebar, "drag-state changed", fields: [
+            "active": true,
+            "source": "dragging-entered",
+        ])
         return super.draggingEntered(sender)
     }
 
@@ -90,13 +109,13 @@ final class SidebarOutlineView: NSOutlineView {
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
-        isDragInteractionActive = false
+        clearDragInteraction(reason: "dragging-exited")
         super.draggingExited(sender)
     }
 
     override func concludeDragOperation(_ sender: NSDraggingInfo?) {
         super.concludeDragOperation(sender)
-        isDragInteractionActive = false
+        clearDragInteraction(reason: "conclude-drag-operation")
     }
 
 }
@@ -880,6 +899,7 @@ final class ThreadListViewController: NSViewController {
         // reloads that originate from acceptDrop itself (isInsideAcceptDrop).
         if (outlineView as? SidebarOutlineView)?.isDragInteractionActive == true,
            !isInsideAcceptDrop {
+            DevSessionLog.log(.sidebar, "reload deferred while drag is active")
             pendingReloadAfterDrag = true
             return
         }

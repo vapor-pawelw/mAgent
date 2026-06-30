@@ -29,6 +29,7 @@ let project = Project(
                 "Magent/Services/AgentModelsService.swift",
                 "Magent/Services/BannerManager.swift",
                 "Magent/Services/CrashReportingService.swift",
+                "Magent/Services/DevSessionLog.swift",
                 "Magent/Services/IPCCommandHandler.swift",
                 "Magent/Services/IPCCommandHandler+Sections.swift",
                 "Magent/Services/IPCSocketServer.swift",

@@ -558,6 +558,12 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func showThread(_ thread: MagentThread) {
+        DevSessionLog.log(.navigation, "show-thread requested", fields: [
+            "currentThreadId": currentDetailVC?.thread.id,
+            "threadId": thread.id,
+            "thread": thread.name,
+        ])
+
         Task {
             // Keep thread switching from immediately killing sessions that only look
             // stale because metadata or UI state is still catching up.
@@ -580,6 +586,10 @@ final class SplitViewController: NSSplitViewController {
 
         // Skip if already showing this thread (preserves terminal scrollback)
         if currentDetailVC?.thread.id == resolvedThread.id {
+            DevSessionLog.log(.navigation, "show-thread skipped already showing", fields: [
+                "threadId": resolvedThread.id,
+                "thread": resolvedThread.name,
+            ])
             refreshCurrentThreadToolbarStrip(with: resolvedThread)
             return
         }
@@ -598,6 +608,10 @@ final class SplitViewController: NSSplitViewController {
         if exists {
             presentThread(resolvedThread)
         } else {
+            DevSessionLog.log(.navigation, "show-thread recovering missing worktree", fields: [
+                "threadId": resolvedThread.id,
+                "worktreePath": resolvedThread.worktreePath,
+            ])
             recoverAndShowThread(resolvedThread)
         }
     }
@@ -637,6 +651,10 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func presentThread(_ thread: MagentThread) {
+        DevSessionLog.log(.navigation, "present-thread", fields: [
+            "threadId": thread.id,
+            "thread": thread.name,
+        ])
         currentDetailVC?.cacheTerminalViewsForReuse()
         let detailVC = ThreadDetailViewController(thread: thread)
         detailVC.loadViewIfNeeded()
@@ -1141,17 +1159,36 @@ final class SplitViewController: NSSplitViewController {
         centerInSidebar: Bool,
         scrollRowToVisible: Bool
     ) {
+        DevSessionLog.log(.navigation, "select-thread-for-navigation", fields: [
+            "centerInSidebar": centerInSidebar,
+            "scrollRowToVisible": scrollRowToVisible,
+            "tabIdentifier": tabIdentifier,
+            "threadId": threadId,
+        ])
         let resolvedThread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) ?? threadSnapshot
-        guard let resolvedThread else { return }
+        guard let resolvedThread else {
+            DevSessionLog.log(.navigation, "select-thread aborted missing thread", fields: [
+                "threadId": threadId,
+            ])
+            return
+        }
 
         if let tabIdentifier,
            PopoutWindowManager.shared.isTabDetached(sessionName: tabIdentifier) {
+            DevSessionLog.log(.navigation, "select-thread routed to detached tab", fields: [
+                "session": tabIdentifier,
+                "threadId": threadId,
+            ])
             PopoutWindowManager.shared.bringToFront(sessionName: tabIdentifier)
             markFocusedThreadCompletionSeenIfNeeded()
             return
         }
 
         if PopoutWindowManager.shared.isThreadPoppedOut(threadId) {
+            DevSessionLog.log(.navigation, "select-thread routed to popped-out thread", fields: [
+                "threadId": threadId,
+                "thread": resolvedThread.name,
+            ])
             if let tabIdentifier,
                let popout = PopoutWindowManager.shared.threadWindows[threadId],
                let tabIndex = popout.detailVC.displayIndex(forIdentifier: tabIdentifier) {
@@ -1165,6 +1202,11 @@ final class SplitViewController: NSSplitViewController {
         }
 
         let alreadyShowing = currentDetailVC?.thread.id == threadId
+        DevSessionLog.log(.navigation, "select-thread will show in main", fields: [
+            "alreadyShowing": alreadyShowing,
+            "threadId": threadId,
+            "thread": resolvedThread.name,
+        ])
         ThreadManager.shared.setActiveThread(threadId)
         _ = threadListVC.selectThread(
             byId: threadId,

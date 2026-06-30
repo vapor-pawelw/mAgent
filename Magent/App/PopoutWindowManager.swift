@@ -80,10 +80,18 @@ final class PopoutWindowManager: PopoutStateProviding {
     @discardableResult
     func popOutThread(_ thread: MagentThread, from sourceWindow: NSWindow?) -> ThreadPopoutWindowController {
         if let existing = threadWindows[thread.id] {
+            DevSessionLog.log(.popout, "pop-out requested for existing window", fields: [
+                "threadId": thread.id,
+                "thread": thread.name,
+            ])
             existing.window?.makeKeyAndOrderFront(nil)
             return existing
         }
 
+        DevSessionLog.log(.popout, "pop-out thread", fields: [
+            "threadId": thread.id,
+            "thread": thread.name,
+        ])
         let controller = ThreadPopoutWindowController(thread: thread, sourceWindow: sourceWindow)
         threadWindows[thread.id] = controller
         controller.window?.makeKeyAndOrderFront(nil)
@@ -100,6 +108,9 @@ final class PopoutWindowManager: PopoutStateProviding {
     }
 
     func returnThreadToMain(_ threadId: UUID) {
+        DevSessionLog.log(.popout, "return thread to main", fields: [
+            "threadId": threadId,
+        ])
         closePoppedOutThread(threadId, postReturnNotification: true)
     }
 

@@ -123,6 +123,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             return
         }
 
+        DevSessionLog.log(.app, "application did finish launching", fields: [
+            "bundleIdentifier": Bundle.main.bundleIdentifier,
+            "configuration": "debug",
+            "pid": currentPID,
+        ])
+
         CrashReportingService.initialize()
         setupMainMenu()
         GhosttyAppManager.shared.initialize()

@@ -611,6 +611,10 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
         if (outlineView as? SidebarOutlineView)?.isDragInteractionActive == true {
+            DevSessionLog.log(.sidebar, "selection refused", fields: [
+                "reason": "drag-active",
+                "item": String(describing: type(of: item)),
+            ])
             return false
         }
         if item is SidebarAddRepoRow {
@@ -678,20 +682,40 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             let eventType = NSApp.currentEvent?.type
             let isMouseSelectionEvent = eventType == .leftMouseDown || eventType == .leftMouseUp
             if thread.isArchiving {
+                DevSessionLog.log(.sidebar, "selection refused", fields: [
+                    "reason": "archiving",
+                    "threadId": thread.id,
+                    "thread": thread.name,
+                ])
                 return false
             }
             if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
+                DevSessionLog.log(.sidebar, "selection routed to popout", fields: [
+                    "mouse": isMouseSelectionEvent,
+                    "threadId": thread.id,
+                    "thread": thread.name,
+                ])
                 if isMouseSelectionEvent {
                     delegate?.threadList(self, didSelectThread: thread)
                 }
                 return false
             }
             if selectedThreadID == thread.id {
+                DevSessionLog.log(.sidebar, "selection repeated", fields: [
+                    "mouse": isMouseSelectionEvent,
+                    "threadId": thread.id,
+                    "thread": thread.name,
+                ])
                 if isMouseSelectionEvent {
                     delegate?.threadList(self, didSelectThread: thread)
                 }
                 return false
             }
+            DevSessionLog.log(.sidebar, "selection allowed", fields: [
+                "previousThreadId": selectedThreadID,
+                "threadId": thread.id,
+                "thread": thread.name,
+            ])
             return true
         }
         return false
@@ -1189,6 +1213,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         }
         let selectionChanged = selectedThreadID != thread.id
         let resolved = recordSelectedThread(thread)
+        DevSessionLog.log(.sidebar, "selection changed", fields: [
+            "changed": selectionChanged,
+            "threadId": resolved.id,
+            "thread": resolved.name,
+        ])
         if selectionChanged,
            let forcedThreadId = diffPanelForcedAllChangesThreadId,
            forcedThreadId != resolved.id {

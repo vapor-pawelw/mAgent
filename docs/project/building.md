@@ -94,6 +94,7 @@ It always attempts `--ff-only` first and automatically falls back to a non-ff me
 - Release CI builds `GhosttyKit.xcframework` on GitHub's `macos-15` arm64 image, selects Xcode 26.3, and runs the bootstrap through Ghostty's Nix environment (`GHOSTTY_USE_NIX=1`) to match Ghostty's upstream macOS builds without triggering Zig 0.15.2's macOS 26 host linker issue. The workflow then uploads that framework as an artifact and builds/packages Magent on `macos-26`, because Xcode 26's asset catalog tools expect the newer macOS runtime while compiling `AppIcon.icon`.
 - `Packages/MagentModules` contains local SwiftPM modules consumed through `Tuist/Package.swift`. If package dependencies change, rerun `mise x -- tuist install` before `mise x -- tuist generate --no-open`.
 - After adding or removing Swift files, run `mise x -- tuist generate --no-open` before `xcodebuild` so the generated workspace includes the current source list.
+- Debug builds write a per-launch diagnostic log to `/tmp/magent-debug-<pid>-<timestamp>.log` and reset `/tmp/magent-debug-current.log` on app launch. Release builds compile this logger to no-ops, so Homebrew and official distributions do not write these debug session logs.
 
 ## Local Feature Flags
 
