@@ -7,7 +7,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add a git repository to manage worktrees for."
+            "value": "Add a git repository now, or skip this step and add one later."
           }
         }
       }

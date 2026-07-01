@@ -86,8 +86,10 @@ Before the app is usable, the user must complete a configuration step:
    - **Full Access** (Codex `--yolo`, Claude `--dangerously-skip-permissions`)
    - **Auto** (Codex `--full-auto`, Claude `--permission-mode auto`)
    - **Ask** (no explicit permission/sandbox flags)
-4. **Add projects** — register git repositories that the user wants to work with
-5. **Worktrees path** — where worktrees are created; default suggestion: `<repo-parent-dir>/<repo-name>-worktrees/`
+4. **Add projects (optional)** — register git repositories now, or finish onboarding without a repository and use the sidebar empty state later
+5. **Worktrees path** — per repository, where worktrees are created; default suggestion: `<repo-parent-dir>/<repo-name>-worktrees/`
+
+If no repositories are configured after onboarding, the sidebar shows a centered empty state with actions to create a new repository, add an existing repository, or clone a repository from a remote URL. The same repository actions are available from the toolbar add-repository icon.
 
 ## Thread Lifecycle
 
@@ -243,7 +245,7 @@ For the main thread, the sidebar uses these rules:
 
 ## Settings
 
-- **Projects**: Add/remove git repositories
+- **Projects**: Add/remove git repositories; users can also create, import, or clone repositories from the sidebar toolbar/empty state
 - **Terminal**: App-wide appearance (`System`, `Light`, `Dark`) that also controls the embedded terminal, plus wheel-behavior and overlay preferences
 - **Worktrees path**: Per-project or global path for worktrees (default: `<parent>/<repo>-worktrees/`)
 - **Local sync paths** (per project): Line-separated repo-relative files/directories copied into new thread worktrees and merged back on archive

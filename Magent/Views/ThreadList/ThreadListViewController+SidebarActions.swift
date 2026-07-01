@@ -1070,7 +1070,7 @@ extension ThreadListViewController {
     @objc func addRepoButtonTapped(_ sender: NSButton) {
         let menu = NSMenu()
         let createItem = NSMenuItem(
-            title: "Create New Repository\u{2026}",
+            title: String(localized: .AppStrings.repositoryCreateNewMenuItem),
             action: #selector(addRepoCreateNew(_:)),
             keyEquivalent: ""
         )
@@ -1078,17 +1078,26 @@ extension ThreadListViewController {
         createItem.image = NSImage(systemSymbolName: "plus.rectangle.on.folder", accessibilityDescription: nil)
 
         let importItem = NSMenuItem(
-            title: "Import Existing Repository\u{2026}",
+            title: String(localized: .AppStrings.repositoryImportExistingMenuItem),
             action: #selector(addRepoImportExisting(_:)),
             keyEquivalent: ""
         )
         importItem.target = self
         importItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
 
+        let cloneItem = NSMenuItem(
+            title: String(localized: .AppStrings.repositoryCloneMenuItem),
+            action: #selector(addRepoClone(_:)),
+            keyEquivalent: ""
+        )
+        cloneItem.target = self
+        cloneItem.image = NSImage(systemSymbolName: "arrow.down.doc", accessibilityDescription: nil)
+
         menu.addItem(createItem)
         menu.addItem(importItem)
+        menu.addItem(cloneItem)
 
-        let anchorView = addRepositoryMenuAnchor(for: sender)
+        let anchorView: NSView = sender.window == nil ? view : sender
         let anchorBounds = anchorView.bounds
         menu.popUp(
             positioning: menu.items.first,
@@ -1097,30 +1106,27 @@ extension ThreadListViewController {
         )
     }
 
-    private func addRepositoryMenuAnchor(for sender: NSButton) -> NSView {
-        if sender.window != nil, outlineView.row(for: sender) >= 0 {
-            return sender
-        }
-
-        let addRepoRow = (0..<outlineView.numberOfRows).first { row in
-            outlineView.item(atRow: row) is SidebarAddRepoRow
-        }
-        if let addRepoRow,
-           let cell = outlineView.view(atColumn: 0, row: addRepoRow, makeIfNecessary: false) {
-            return cell
-        }
-        return view
+    @objc private func addRepoCreateNew(_ sender: NSMenuItem) {
+        presentCreateNewRepositoryFlow()
     }
 
-    @objc private func addRepoCreateNew(_ sender: NSMenuItem) {
+    @objc private func addRepoImportExisting(_ sender: NSMenuItem) {
+        presentImportExistingRepositoryFlow()
+    }
+
+    @objc private func addRepoClone(_ sender: NSMenuItem) {
+        presentCloneRepositoryFlow()
+    }
+
+    func presentCreateNewRepositoryFlow() {
         guard let window = view.window else { return }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.message = "Select or create an empty folder for the new repository"
-        panel.prompt = "Create Repository"
+        panel.message = String(localized: .AppStrings.repositoryCreateNewPanelMessage)
+        panel.prompt = String(localized: .AppStrings.repositoryCreateNewPanelPrompt)
 
         panel.beginSheetModal(for: window) { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
@@ -1130,16 +1136,16 @@ extension ThreadListViewController {
             let gitDir = url.appendingPathComponent(".git")
             if FileManager.default.fileExists(atPath: gitDir.path) {
                 let alert = NSAlert()
-                alert.messageText = "Already a Git Repository"
-                alert.informativeText = "The selected folder already contains a .git directory. Use \"Import Existing Repository\" instead."
+                alert.messageText = String(localized: .AppStrings.repositoryAlreadyGitRepositoryTitle)
+                alert.informativeText = String(localized: .AppStrings.repositoryAlreadyGitRepositoryMessage)
                 alert.alertStyle = .warning
-                alert.addButton(withTitle: "OK")
+                alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
                 alert.beginSheetModal(for: window)
                 return
             }
 
             BannerManager.shared.show(
-                message: "Creating repository: \(url.lastPathComponent)",
+                message: String(localized: .AppStrings.repositoryCreatingBanner(url.lastPathComponent)),
                 style: .info,
                 duration: nil,
                 isDismissible: false,
@@ -1147,49 +1153,14 @@ extension ThreadListViewController {
             )
 
             Task {
-                func runGit(arguments: [String]) async throws {
-                    let process = Process()
-                    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-                    process.arguments = arguments
-                    process.standardOutput = FileHandle.nullDevice
-                    let stderrPipe = Pipe()
-                    process.standardError = stderrPipe
-
-                    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                        process.terminationHandler = { proc in
-                            if proc.terminationStatus == 0 {
-                                cont.resume()
-                                return
-                            }
-
-                            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                            let stderrText = String(data: stderrData, encoding: .utf8)?
-                                .trimmingCharacters(in: .whitespacesAndNewlines)
-                            let message = stderrText?.isEmpty == false
-                                ? stderrText!
-                                : "git \(arguments.joined(separator: " ")) exited with status \(proc.terminationStatus)"
-                            cont.resume(throwing: NSError(
-                                domain: "Magent",
-                                code: Int(proc.terminationStatus),
-                                userInfo: [NSLocalizedDescriptionKey: message]
-                            ))
-                        }
-                        do {
-                            try process.run()
-                        } catch {
-                            cont.resume(throwing: error)
-                        }
-                    }
-                }
-
                 do {
-                    try await runGit(arguments: ["init", path])
+                    try await self.runGit(arguments: ["init", path])
 
                     // Create an initial empty commit so the default branch actually
                     // exists — without this, worktree creation and branch validation
                     // fail because `git init` alone leaves the repo with no commits
                     // and no materialized branch.
-                    try await runGit(arguments: [
+                    try await self.runGit(arguments: [
                         "-C", path,
                         "-c", "user.name=Magent",
                         "-c", "user.email=magent@local.invalid",
@@ -1203,7 +1174,7 @@ extension ThreadListViewController {
                         do {
                             try self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
                             BannerManager.shared.show(
-                                message: "Repository created: \(url.lastPathComponent)",
+                                message: String(localized: .AppStrings.repositoryCreatedBanner(url.lastPathComponent)),
                                 style: .info,
                                 duration: 3.0
                             )
@@ -1212,22 +1183,22 @@ extension ThreadListViewController {
                             alert.messageText = "Failed to Add Repository"
                             alert.informativeText = error.localizedDescription
                             alert.alertStyle = .critical
-                            alert.addButton(withTitle: "OK")
+                            alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
                             alert.beginSheetModal(for: window)
                         }
                     }
                 } catch {
                     await MainActor.run {
                         BannerManager.shared.show(
-                            message: "Failed to create repository: \(url.lastPathComponent)",
+                            message: String(localized: .AppStrings.repositoryCreateFailedBanner(url.lastPathComponent)),
                             style: .error,
                             duration: 6.0
                         )
                         let alert = NSAlert()
-                        alert.messageText = "Failed to Create Repository"
+                        alert.messageText = String(localized: .AppStrings.repositoryCreateFailedTitle)
                         alert.informativeText = error.localizedDescription
                         alert.alertStyle = .critical
-                        alert.addButton(withTitle: "OK")
+                        alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
                         alert.beginSheetModal(for: window)
                     }
                 }
@@ -1235,13 +1206,13 @@ extension ThreadListViewController {
         }
     }
 
-    @objc private func addRepoImportExisting(_ sender: NSMenuItem) {
+    func presentImportExistingRepositoryFlow() {
         guard let window = view.window else { return }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.message = "Select a git repository folder"
+        panel.message = String(localized: .ConfigurationStrings.configurationSelectRepositoryFolder)
 
         panel.beginSheetModal(for: window) { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
@@ -1259,16 +1230,127 @@ extension ThreadListViewController {
                             alert.messageText = "Failed to Import Repository"
                             alert.informativeText = error.localizedDescription
                             alert.alertStyle = .critical
-                            alert.addButton(withTitle: "OK")
+                            alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
                             alert.beginSheetModal(for: window)
                         }
                     } else {
                         let alert = NSAlert()
-                        alert.messageText = "Not a Git Repository"
-                        alert.informativeText = "The selected folder is not a git repository."
+                        alert.messageText = String(localized: .ConfigurationStrings.configurationAlertNotGitRepositoryTitle)
+                        alert.informativeText = String(localized: .ConfigurationStrings.configurationAlertNotGitRepositoryMessage)
                         alert.alertStyle = .warning
-                        alert.addButton(withTitle: "OK")
+                        alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
                         alert.beginSheetModal(for: window)
+                    }
+                }
+            }
+        }
+    }
+
+    func presentCloneRepositoryFlow() {
+        guard let window = view.window else { return }
+        let alert = NSAlert()
+        alert.messageText = String(localized: .AppStrings.repositoryCloneAlertTitle)
+        alert.informativeText = String(localized: .AppStrings.repositoryCloneAlertMessage)
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonNext))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        textField.placeholderString = String(localized: .AppStrings.repositoryCloneURLPlaceholder)
+        alert.accessoryView = textField
+
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .alertFirstButtonReturn else { return }
+            let remoteURL = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !remoteURL.isEmpty else {
+                self.showRepositoryAlert(
+                    title: String(localized: .AppStrings.repositoryCloneMissingURLTitle),
+                    message: String(localized: .AppStrings.repositoryCloneMissingURLMessage),
+                    style: .warning,
+                    window: window
+                )
+                return
+            }
+            self.presentCloneDestinationPicker(remoteURL: remoteURL, window: window)
+        }
+    }
+
+    private func presentCloneDestinationPicker(remoteURL: String, window: NSWindow) {
+        guard let directoryName = RepositoryCloneDestination.suggestedDirectoryName(from: remoteURL) else {
+            showRepositoryAlert(
+                title: String(localized: .AppStrings.repositoryCloneInvalidURLTitle),
+                message: String(localized: .AppStrings.repositoryCloneInvalidURLMessage),
+                style: .warning,
+                window: window
+            )
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.message = String(localized: .AppStrings.repositoryCloneParentPanelMessage)
+        panel.prompt = String(localized: .AppStrings.repositoryCloneParentPanelPrompt)
+
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let parentURL = panel.url else { return }
+            let destinationURL = parentURL.appendingPathComponent(directoryName, isDirectory: true)
+
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                self.showRepositoryAlert(
+                    title: String(localized: .AppStrings.repositoryCloneDestinationExistsTitle),
+                    message: String(localized: .AppStrings.repositoryCloneDestinationExistsMessage(destinationURL.path)),
+                    style: .warning,
+                    window: window
+                )
+                return
+            }
+
+            BannerManager.shared.show(
+                message: String(localized: .AppStrings.repositoryCloningBanner(directoryName)),
+                style: .info,
+                duration: nil,
+                isDismissible: false,
+                showsSpinner: true
+            )
+
+            Task {
+                do {
+                    try await self.runGit(arguments: ["clone", remoteURL, destinationURL.path])
+                    let defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: destinationURL.path)
+
+                    await MainActor.run {
+                        do {
+                            try self.addProjectAtPath(url: destinationURL, defaultBranch: defaultBranch)
+                            BannerManager.shared.show(
+                                message: String(localized: .AppStrings.repositoryClonedBanner(directoryName)),
+                                style: .info,
+                                duration: 3.0
+                            )
+                        } catch {
+                            self.showRepositoryAlert(
+                                title: String(localized: .AppStrings.repositoryCloneFailedTitle),
+                                message: error.localizedDescription,
+                                style: .critical,
+                                window: window
+                            )
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        BannerManager.shared.show(
+                            message: String(localized: .AppStrings.repositoryCloneFailedBanner(directoryName)),
+                            style: .error,
+                            duration: 6.0
+                        )
+                        self.showRepositoryAlert(
+                            title: String(localized: .AppStrings.repositoryCloneFailedTitle),
+                            message: error.localizedDescription,
+                            style: .critical,
+                            window: window
+                        )
                     }
                 }
             }
@@ -1284,7 +1366,7 @@ extension ThreadListViewController {
             ($0.repoPath as NSString).standardizingPath == (path as NSString).standardizingPath
         }) {
             BannerManager.shared.show(
-                message: "Repository already added: \(url.lastPathComponent)",
+                message: String(localized: .AppStrings.repositoryAlreadyAddedBanner(url.lastPathComponent)),
                 style: .info,
                 duration: 4.0
             )
@@ -1302,6 +1384,50 @@ extension ThreadListViewController {
         reloadData()
 
         Task { try? await ThreadManager.shared.createMainThread(project: project) }
+    }
+
+    private nonisolated func runGit(arguments: [String]) async throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        process.standardOutput = FileHandle.nullDevice
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
+
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            process.terminationHandler = { proc in
+                if proc.terminationStatus == 0 {
+                    cont.resume()
+                    return
+                }
+
+                let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                let stderrText = String(data: stderrData, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let message = stderrText?.isEmpty == false
+                    ? stderrText!
+                    : "git \(arguments.joined(separator: " ")) exited with status \(proc.terminationStatus)"
+                cont.resume(throwing: NSError(
+                    domain: "Magent",
+                    code: Int(proc.terminationStatus),
+                    userInfo: [NSLocalizedDescriptionKey: message]
+                ))
+            }
+            do {
+                try process.run()
+            } catch {
+                cont.resume(throwing: error)
+            }
+        }
+    }
+
+    private func showRepositoryAlert(title: String, message: String, style: NSAlert.Style, window: NSWindow) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = style
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
+        alert.beginSheetModal(for: window)
     }
 
     // MARK: - Helpers

@@ -8,6 +8,10 @@
 
 ### Sidebar
 
+#### Features
+
+- Added toolbar and empty-state repository actions for creating, importing, or cloning repositories.
+
 #### Improvements
 
 - Keep moved or missing repositories visible with recovery and discard actions.

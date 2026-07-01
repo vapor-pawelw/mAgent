@@ -53,7 +53,6 @@ class SidebarSection {
 
 final class SidebarSpacer {}
 final class SidebarProjectMainSpacer {}
-final class SidebarAddRepoRow {}
 final class SidebarMissingProjectRow {
     let projectId: UUID
     let projectName: String

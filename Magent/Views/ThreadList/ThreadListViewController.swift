@@ -142,6 +142,118 @@ private final class SidebarBackgroundView: NSView {
     }
 }
 
+private final class SidebarNoRepositoriesView: NSView {
+    var onCreateRepository: (() -> Void)?
+    var onImportRepository: (() -> Void)?
+    var onCloneRepository: (() -> Void)?
+
+    private let iconView = NSImageView()
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let subtitleLabel = NSTextField(wrappingLabelWithString: "")
+    private let createButton = NSButton()
+    private let importButton = NSButton()
+    private let cloneButton = NSButton()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        translatesAutoresizingMaskIntoConstraints = false
+
+        iconView.image = NSImage(
+            systemSymbolName: "folder.badge.plus",
+            accessibilityDescription: nil
+        )?.withSymbolConfiguration(.init(pointSize: 32, weight: .regular))
+        iconView.contentTintColor = NSColor(resource: .textSecondary)
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+
+        titleLabel.stringValue = String(localized: .AppStrings.sidebarNoRepositoriesTitle)
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.alignment = .center
+
+        subtitleLabel.stringValue = String(localized: .AppStrings.sidebarNoRepositoriesSubtitle)
+        subtitleLabel.font = .systemFont(ofSize: 12)
+        subtitleLabel.textColor = NSColor(resource: .textSecondary)
+        subtitleLabel.alignment = .center
+        subtitleLabel.maximumNumberOfLines = 0
+
+        configureButton(
+            createButton,
+            title: String(localized: .AppStrings.repositoryCreateNewButton),
+            symbolName: "plus.rectangle.on.folder",
+            action: #selector(createTapped)
+        )
+        configureButton(
+            importButton,
+            title: String(localized: .AppStrings.repositoryImportExistingButton),
+            symbolName: "folder",
+            action: #selector(importTapped)
+        )
+        configureButton(
+            cloneButton,
+            title: String(localized: .AppStrings.repositoryCloneButton),
+            symbolName: "arrow.down.doc",
+            action: #selector(cloneTapped)
+        )
+
+        let buttonStack = NSStackView(views: [createButton, importButton, cloneButton])
+        buttonStack.orientation = .vertical
+        buttonStack.alignment = .centerX
+        buttonStack.spacing = 8
+
+        let stack = NSStackView(views: [iconView, titleLabel, subtitleLabel, buttonStack])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 10
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 40),
+            iconView.heightAnchor.constraint(equalToConstant: 40),
+
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 24),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -24),
+            subtitleLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 230),
+            createButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 170),
+            importButton.widthAnchor.constraint(equalTo: createButton.widthAnchor),
+            cloneButton.widthAnchor.constraint(equalTo: createButton.widthAnchor),
+        ])
+    }
+
+    private func configureButton(_ button: NSButton, title: String, symbolName: String, action: Selector) {
+        button.title = title
+        button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: title)
+        button.imagePosition = .imageLeading
+        button.bezelStyle = .rounded
+        button.controlSize = .regular
+        button.target = self
+        button.action = action
+        button.translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    @objc private func createTapped() {
+        onCreateRepository?()
+    }
+
+    @objc private func importTapped() {
+        onImportRepository?()
+    }
+
+    @objc private func cloneTapped() {
+        onCloneRepository?()
+    }
+}
+
 final class ThreadListViewController: NSViewController {
 
     static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
@@ -166,7 +278,6 @@ final class ThreadListViewController: NSViewController {
         AlwaysEmphasizedRowView.capsuleLeadingInset
         + AlwaysEmphasizedRowView.capsuleBorderInset
         + AlwaysEmphasizedRowView.capsuleContentHPadding
-    static let addRepoRowHeight: CGFloat = 32
     static let sidebarTrailingInset: CGFloat =
         AlwaysEmphasizedRowView.capsuleTrailingInset
         + AlwaysEmphasizedRowView.capsuleBorderInset
@@ -191,6 +302,7 @@ final class ThreadListViewController: NSViewController {
     private var scrollView: NSScrollView!
     private var stickyHeaderOverlay: StickyHeaderOverlayView!
     private var stickyHeaderHeightConstraint: NSLayoutConstraint!
+    private let noRepositoriesView = SidebarNoRepositoriesView()
     /// The project/section currently shown in the sticky header, for scroll-on-click.
     private weak var stickyProject: SidebarProject?
     private weak var stickySection: SidebarSection?
@@ -671,8 +783,8 @@ final class ThreadListViewController: NSViewController {
         let totalRows = outlineView.numberOfRows
         for i in (projectRow + 1)..<totalRows {
             let item = outlineView.item(atRow: i)
-            // Stop when we hit another project or the add-repo row
-            if item is SidebarProject || item is SidebarAddRepoRow {
+            // Stop when we hit another project.
+            if item is SidebarProject {
                 break
             }
             // Skip inter-project spacers (they belong between projects)
@@ -828,6 +940,18 @@ final class ThreadListViewController: NSViewController {
 
         view.addSubview(scrollView)
 
+        noRepositoriesView.onCreateRepository = { [weak self] in
+            self?.presentCreateNewRepositoryFlow()
+        }
+        noRepositoriesView.onImportRepository = { [weak self] in
+            self?.presentImportExistingRepositoryFlow()
+        }
+        noRepositoriesView.onCloneRepository = { [weak self] in
+            self?.presentCloneRepositoryFlow()
+        }
+        noRepositoriesView.isHidden = true
+        view.addSubview(noRepositoriesView)
+
         // Diff panel at the bottom of sidebar
         diffPanelView = DiffPanelView()
         diffPanelView.onLoadMoreCommits = { [weak self] in
@@ -880,6 +1004,11 @@ final class ThreadListViewController: NSViewController {
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: diffPanelView.topAnchor),
+
+            noRepositoriesView.topAnchor.constraint(equalTo: view.topAnchor),
+            noRepositoriesView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            noRepositoriesView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            noRepositoriesView.bottomAnchor.constraint(equalTo: diffPanelView.topAnchor),
 
             diffPanelView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             diffPanelView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -1073,7 +1202,7 @@ final class ThreadListViewController: NSViewController {
             )
         }
 
-        sidebarRootItems = [SidebarAddRepoRow()]
+        sidebarRootItems = []
         for (index, project) in sidebarProjects.enumerated() {
             if index > 0 {
                 sidebarRootItems.append(SidebarSpacer())
@@ -1081,6 +1210,7 @@ final class ThreadListViewController: NSViewController {
             sidebarRootItems.append(project)
         }
         sidebarRootItems.append(SidebarBottomPadding(height: selectedThreadJumpRequiredListBottomInset))
+        noRepositoriesView.isHidden = !settings.projects.isEmpty
 
         // Read collapse state before reloadData() — AppKit can fire outlineViewItemDidCollapse
         // for previously-expanded items during the reload, which would corrupt UserDefaults

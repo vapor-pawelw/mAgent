@@ -23,9 +23,11 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - Sign emoji is rendered at the **row view** level (`AlwaysEmphasizedRowView`) inside a circular `SignEmojiBadgeView` anchored to the top-left corner of the row (2pt margin from leading and top edges). The badge self-sizes via `intrinsicContentSize` (text size + 4pt padding, high priority) with a required 1:1 width/height ratio to stay circular. Border color and width mirror the capsule's current state. Not part of `ThreadCell`.
 - Project repo names use system bold 20pt font.
 - No separator divider between project groups; vertical gap (`projectHeaderInterProjectGap = 24pt`) handles spacing.
-- The global "Add repository" button is a `SidebarAddRepoRow` at the top of the outline view's root items. It scrolls with the rest of the content — there is no sticky toolbar.
-- The add-repo row opens a 2-item menu: `Create New Repository…` and `Import Existing Repository…`.
+- The global "Add repository" button is a toolbar icon next to Recently Archived and Settings.
+- The add-repo toolbar button opens a 3-item menu: `Create New Repository…`, `Import Existing Repository…`, and `Clone Repository…`.
+- When no repositories are configured, the sidebar shows a centered no-content view with direct actions for creating, importing, or cloning a repository.
 - `Create New Repository…` selects/creates a target folder, initializes git, seeds an empty initial commit, then registers the project and creates the main thread.
+- `Clone Repository…` first asks for the remote URL, then asks for the parent folder where the checkout should be created. The destination folder name is derived from the remote URL (for example `repo` from `git@github.com:owner/repo.git`). After `git clone` succeeds, Magent registers the cloned checkout and creates the main thread.
 - During create-repo flow, Magent shows a persistent spinner banner (`Creating repository: <name>`), then replaces it with explicit success (`Repository created: <name>`) or failure status (`Failed to create repository: <name>`) and an error alert.
 - Missing repository paths stay visible as project headers instead of being filtered out. The expanded project shows an inline recovery row with `Open New Location` and `Discard` actions; threads are hidden until the repo path is repaired so stale worktree paths are not opened accidentally.
 - Missing-repository recovery row content is vertically centered inside the fixed-height row and aligned to the same capsule content rails as thread rows. When Magent becomes active, the sidebar runs a lightweight background existence check for visible project repo paths and reloads only if a project's missing/available state changed.
@@ -45,7 +47,6 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
   - `sidebarHorizontalInset` = capsuleLeadingInset + borderInset + contentHPadding — leading content rail.
   - `sidebarTrailingInset` — trailing content rail (same derivation from trailing side).
   - `capsuleAlignedLeading` / `capsuleAlignedTrailing` — non-thread row alignment (project/section headers).
-  - `addRepoRowHeight` — height for the `SidebarAddRepoRow`.
 - Sidebar and changes-panel scroll views use `NonFlashingScrollView`. `flashScrollers()` is still gated by recent local `scrollWheel` input, but `reflectScrolledClipView(...)` is always forwarded to `super` so AppKit keeps tiling/geometry in sync during programmatic scroll restore and reload paths. Scroller visibility is still policy-driven (hidden without recent local input), which preserves anti-flicker behavior without risking stale layout.
 - Bottom overlay spacing is reserved via a dedicated `SidebarBottomPadding` root item appended after projects. This keeps end-of-list scroll space deterministic regardless of changes-panel visibility.
 - Outline view uses `indentationPerLevel = 0`. All indentation is managed via capsule-relative padding in `ThreadCell`.
