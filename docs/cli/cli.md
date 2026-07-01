@@ -1,7 +1,7 @@
 # CLI Reference
 
 mAgent installs a `magent-cli` script at `/tmp/magent-cli` on launch. It communicates with the running app over a Unix domain socket (`/tmp/magent.sock`).
-It also installs launcher commands (`magent`, `magent-cli`, `magent-tmux`) into common user PATH directories when writable.
+It also installs launcher commands (`magent`, `magent-cli`, `magent-tmux`, `start-agent`) into common user PATH directories when writable.
 
 The CLI is auto-updated when the app version changes. A background watchdog checks every 30 seconds and reinstalls the script if macOS purges `/tmp` while the app is running. The same watchdog covers tmux helper scripts (bell watcher, URL capture).
 
@@ -15,12 +15,14 @@ magent-cli interactive [--project <name>]
 magent-cli ls [--project <name>]
 magent-cli attach --session <tmux-session>
 magent-cli attach (--thread <name> | --thread-id <id>) [--index <terminal-tab-n>]
+start-agent
 magent-cli docs
 ```
 
 - `interactive`: picker flow `project -> thread (or create) -> tab -> tmux attach`, with ANSI colors when the terminal supports them. Tab rows use real tab names (not `Tab #`). Thread rows show branch/worktree info, PR/Jira details (when present), and live status badges (`done`, `busy`, `input`, `dirty`, `limited`, `delivered`, `♥`) each on their own line. Threads are grouped by section in sidebar order; if a thread has only one tab the tab step is skipped. The CLI remembers the last attached session context and, on the next interactive run (without `--project`), opens directly in that thread when possible; fallback is last project, then project picker. Uses a numbered list (`1) … 2) …`) without fzf for reliable SSH/phone use.
 - `ls`: table view (project/thread/branch/type/status/description/session), reusing the same live thread status data
 - `attach`: attach directly by tmux session or by thread + terminal-tab index
+- `start-agent`: from inside a Magent-managed terminal, launch or resume the configured agent for the current tab after it exits back to a shell
 - `docs`: full on-demand IPC command reference + usage guidance (for agent/tooling prompts)
 
 ## Thread Commands
@@ -199,6 +201,23 @@ magent-cli current-thread
 ```
 
 Must be run from within a mAgent-managed tmux session.
+
+### start-agent
+
+Launch or resume the configured agent for an agent-backed terminal tab. This is intended for the case where Claude/Codex exits back to a shell, for example after an update prompt or interrupted startup.
+
+```bash
+start-agent
+magent-cli start-agent [--session <tmux-session>]
+magent-cli start-agent --session <tmux-session> --print-command
+magent-cli start-agent --session <tmux-session> --json
+```
+
+Inside Magent-managed zsh sessions, `start-agent` is a shell function that resolves the current tmux session, asks Magent for the session-specific launch/resume command, and runs it in the current shell. Magent also installs a PATH launcher named `start-agent` as a fallback for older shells that have not loaded the managed function yet.
+
+`magent-cli start-agent` executes the agent command by default. `--print-command` returns the generated command without executing it, which is what the managed shell function uses internally. `--json` returns the raw IPC response, including `shellCommand`.
+
+The command refuses plain terminal tabs and sessions where a known agent process already appears to be running.
 
 ### send-prompt
 
