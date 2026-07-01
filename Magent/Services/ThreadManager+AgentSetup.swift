@@ -185,6 +185,10 @@ extension ThreadManager {
         agentSetupService.effectiveInjection(for: projectId)
     }
 
+    func agentShellStartCommand(sessionName: String, agentType: AgentType? = nil) -> String? {
+        agentSetupService.agentShellStartCommand(sessionName: sessionName, agentType: agentType)
+    }
+
     func preAgentInjectionCommand(for projectId: UUID, settings: AppSettings) -> String {
         agentSetupService.preAgentInjectionCommand(for: projectId, settings: settings)
     }

@@ -22,6 +22,7 @@ public enum IPCAgentDocs {
     /tmp/magent-cli pin-tab --thread <name> (--index <n> | --session <name>) [--remove]
     /tmp/magent-cli unpin-tab --thread <name> (--index <n> | --session <name>)
     /tmp/magent-cli current-thread
+    /tmp/magent-cli start-agent [--session <tmux-session>] [--print-command] [--json]
     /tmp/magent-cli auto-rename-thread --thread <name> --prompt <text>
     /tmp/magent-cli rename-thread --thread <name> --prompt <text>
     /tmp/magent-cli rename-branch --thread <name> --name <text>
@@ -59,6 +60,7 @@ public enum IPCAgentDocs {
     list-tabs returns all tab types in GUI order (`terminal`, `web`, `draft`, `chat`) with `tabType` and `isPinned` fields. For non-terminal tabs, use `sessionName` as the tab identifier in close-tab / rename-tab. Draft tabs cannot be renamed. Use pin-tab / unpin-tab to pin or unpin any movable tab by index or session name; the fixed Terminal and Diff tabs cannot be pinned.
     read-tab returns tab transcript content through one command: terminal tabs use tmux capture, chat tabs use persisted chat messages. Use --json when you need structured fields (`source`, `chatMessages`, etc.).
     send-prompt can target either terminal or chat tabs via --session / --index. Without explicit tab targeting, it uses the first terminal agent tab; if none exists, it falls back to the first chat tab.
+    In a Magent-managed terminal, use start-agent to launch or resume the tab's configured agent after it exits. The helper resolves the current tmux session and asks Magent for the correct session-specific command.
     For Codex chat tabs, if a turn is already running, another send-prompt to the same tab is treated as in-flight steering (turn/steer) for that active turn.
     Section names are case-insensitive throughout — "TODO" and "todo" resolve to the same section.
     Use auto-rename-thread (or its rename-thread alias) by default; it generates a branch name and description from one prompt. The thread/worktree name is never changed.

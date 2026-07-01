@@ -71,4 +71,20 @@ struct IPCAgentDocsTests {
         #expect(IPCAgentDocs.codexDeveloperInstructions.contains("thread"))
         #expect(IPCAgentDocs.codexDeveloperInstructions.contains("tab"))
     }
+
+    @Test("CLI reference documents start-agent")
+    func cliReferenceDocumentsStartAgent() {
+        #expect(IPCAgentDocs.cliReferenceText.contains("/tmp/magent-cli start-agent"))
+        #expect(IPCAgentDocs.cliReferenceText.contains("launch or resume"))
+    }
+
+    @Test("IPC response can carry shell command")
+    func ipcResponseEncodesShellCommand() throws {
+        let response = IPCResponse(ok: true, shellCommand: "start-agent")
+        let data = try JSONEncoder().encode(response)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(object["ok"] as? Bool == true)
+        #expect(object["shellCommand"] as? String == "start-agent")
+    }
 }
