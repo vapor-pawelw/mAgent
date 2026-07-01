@@ -211,6 +211,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         applyAppAppearanceAndTerminalPreferences()
         ThreadManager.shared.startSessionMonitor()
         ThreadManager.shared.refreshAfterAppBecameActive()
+        NotificationCenter.default.post(name: .magentProjectPathValidityRefreshRequested, object: nil)
         let hasVisibleAppWindow = NSApp.windows.contains { window in
             window.isVisible && !window.isMiniaturized
         }

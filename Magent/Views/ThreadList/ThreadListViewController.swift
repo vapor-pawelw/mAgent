@@ -334,6 +334,12 @@ final class ThreadListViewController: NSViewController {
         )
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(projectPathValidityRefreshRequested),
+            name: .magentProjectPathValidityRefreshRequested,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(handleRecoveryReopenRequested(_:)),
             name: .magentRecoveryReopenRequested,
             object: nil
@@ -660,6 +666,36 @@ final class ThreadListViewController: NSViewController {
         }
         pendingSettingsReloadWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+    }
+
+    @objc private func projectPathValidityRefreshRequested() {
+        let settings = persistence.loadSettings()
+        let visibleProjectIds = Set(sidebarProjects.map(\.projectId))
+        let previousMissingByProjectId = Dictionary(
+            uniqueKeysWithValues: sidebarProjects.map { ($0.projectId, $0.isMissing) }
+        )
+        let projectsToCheck = settings.projects.filter { visibleProjectIds.contains($0.id) }
+        guard !projectsToCheck.isEmpty else { return }
+
+        Task { [weak self] in
+            let missingByProjectId = await Task.detached(priority: .utility) {
+                var result: [UUID: Bool] = [:]
+                for project in projectsToCheck {
+                    result[project.id] = !FileManager.default.fileExists(atPath: project.repoPath)
+                }
+                return result
+            }.value
+
+            await MainActor.run {
+                guard let self else { return }
+                let didChange = missingByProjectId.contains { projectId, isMissing in
+                    previousMissingByProjectId[projectId] != isMissing
+                }
+                guard didChange else { return }
+                self.reloadData()
+                self.refreshSidebarLayout(forceColumnRefit: true)
+            }
+        }
     }
 
     @objc private func handleFocusedThreadContextChanged(_ notification: Notification) {

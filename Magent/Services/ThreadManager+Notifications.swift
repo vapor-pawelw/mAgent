@@ -30,6 +30,7 @@ extension Notification.Name {
     static let magentStatusSyncCompleted = Notification.Name("magentStatusSyncCompleted")
     static let magentPromptTOCVisibilityChanged = Notification.Name("magentPromptTOCVisibilityChanged")
     static let magentSettingsDidChange = Notification.Name("magentSettingsDidChange")
+    static let magentProjectPathValidityRefreshRequested = Notification.Name("magentProjectPathValidityRefreshRequested")
     static let magentProjectVisibilityDidChange = Notification.Name("magentProjectVisibilityDidChange")
     static let magentUpdateStateChanged = Notification.Name("magentUpdateStateChanged")
     static let magentThreadCreationFinished = Notification.Name("magentThreadCreationFinished")

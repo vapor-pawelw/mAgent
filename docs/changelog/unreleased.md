@@ -5,6 +5,8 @@
 #### Improvements
 
 - Keep moved or missing repositories visible with recovery and discard actions.
+- Refresh missing-repository status when Magent returns to the foreground.
+- Center the missing-repository recovery row content within its sidebar box.
 
 #### Bug Fixes
 
