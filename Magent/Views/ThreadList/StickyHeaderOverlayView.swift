@@ -22,6 +22,7 @@ final class StickyHeaderOverlayView: NSView {
     private let projectContainer = NSView()
     private let projectNameLabel = NSTextField(labelWithString: "")
     private let projectPinIcon = NSImageView()
+    private let projectAddButton = NSButton()
 
     private let sectionContainer = NSView()
     private let sectionDotView = NSImageView()
@@ -38,6 +39,7 @@ final class StickyHeaderOverlayView: NSView {
     // MARK: - State
 
     struct HeaderState: Equatable {
+        var projectId: UUID?
         var projectName: String?
         var projectIsPinned: Bool = false
         var sectionName: String?
@@ -89,6 +91,21 @@ final class StickyHeaderOverlayView: NSView {
         projectPinIcon.translatesAutoresizingMaskIntoConstraints = false
         projectPinIcon.isHidden = true
         projectContainer.addSubview(projectPinIcon)
+
+        projectAddButton.identifier = ThreadListViewController.projectAddButtonIdentifier
+        projectAddButton.translatesAutoresizingMaskIntoConstraints = false
+        projectAddButton.isBordered = false
+        projectAddButton.imagePosition = .imageOnly
+        projectAddButton.focusRingType = .none
+        projectAddButton.setButtonType(.momentaryChange)
+        projectAddButton.sendAction(on: [.leftMouseUp])
+        let plusImage = NSImage(
+            systemSymbolName: "plus",
+            accessibilityDescription: "Add Thread"
+        )?.withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
+        projectAddButton.image = plusImage ?? NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Thread")
+        projectAddButton.contentTintColor = .controlAccentColor
+        projectContainer.addSubview(projectAddButton)
 
         // Section header row
         sectionContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -151,8 +168,16 @@ final class StickyHeaderOverlayView: NSView {
             projectPinIcon.widthAnchor.constraint(equalToConstant: 10),
             projectPinIcon.heightAnchor.constraint(equalToConstant: 10),
             projectPinIcon.trailingAnchor.constraint(
-                lessThanOrEqualTo: projectContainer.trailingAnchor,
-                constant: -Self.trailingInset
+                lessThanOrEqualTo: projectAddButton.leadingAnchor,
+                constant: -6
+            ),
+
+            projectAddButton.centerYAnchor.constraint(equalTo: projectNameLabel.centerYAnchor),
+            projectAddButton.widthAnchor.constraint(equalToConstant: ThreadListViewController.projectHeaderActionButtonSize),
+            projectAddButton.heightAnchor.constraint(equalToConstant: ThreadListViewController.projectHeaderActionButtonSize),
+            projectAddButton.trailingAnchor.constraint(
+                equalTo: projectContainer.trailingAnchor,
+                constant: -ThreadListViewController.projectAddButtonTrailingInset
             ),
 
             sectionTopToProject,
@@ -187,8 +212,9 @@ final class StickyHeaderOverlayView: NSView {
 
     // MARK: - Update
 
-    func update(state: HeaderState) {
-        guard state != currentState else { return }
+    @discardableResult
+    func update(state: HeaderState) -> Bool {
+        guard state != currentState else { return false }
         currentState = state
 
         let showProject = state.projectName != nil
@@ -198,7 +224,7 @@ final class StickyHeaderOverlayView: NSView {
             isHidden = true
             projectContainer.isHidden = true
             sectionContainer.isHidden = true
-            return
+            return true
         }
 
         isHidden = false
@@ -208,6 +234,8 @@ final class StickyHeaderOverlayView: NSView {
         if showProject {
             projectNameLabel.stringValue = state.projectName ?? ""
             projectPinIcon.isHidden = !state.projectIsPinned
+            projectAddButton.objectValue = state.projectId?.uuidString
+            projectAddButton.isHidden = state.projectId == nil
         }
 
         // Section row
@@ -229,6 +257,25 @@ final class StickyHeaderOverlayView: NSView {
 
         updateBackground()
         invalidateIntrinsicContentSize()
+        return true
+    }
+
+    func configureProjectAddButton(
+        target: AnyObject?,
+        action: Selector,
+        toolTip: String?,
+        menu: NSMenu?,
+        isEnabled: Bool
+    ) {
+        projectAddButton.target = target
+        projectAddButton.action = action
+        projectAddButton.toolTip = toolTip
+        projectAddButton.menu = menu
+        projectAddButton.isEnabled = isEnabled
+    }
+
+    func setProjectAddButtonEnabled(_ isEnabled: Bool) {
+        projectAddButton.isEnabled = isEnabled
     }
 
     override var intrinsicContentSize: NSSize {

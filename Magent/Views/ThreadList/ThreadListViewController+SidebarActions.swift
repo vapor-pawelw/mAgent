@@ -641,6 +641,8 @@ extension ThreadListViewController {
     }
 
     private func refreshVisibleProjectAddButtonsEnabledState() {
+        refreshStickyProjectAddButtonEnabledState()
+
         for row in 0..<outlineView.numberOfRows {
             guard outlineView.item(atRow: row) is SidebarProject,
                   let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView,
