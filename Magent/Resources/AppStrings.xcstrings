@@ -133,6 +133,347 @@
         }
       }
     },
+    "repositoryAddToolbarTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Repository"
+          }
+        }
+      }
+    },
+    "repositoryAlreadyAddedBanner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repository already added: %@"
+          }
+        }
+      }
+    },
+    "repositoryAlreadyGitRepositoryMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected folder already contains a .git directory. Use \"Import Existing Repository\" instead."
+          }
+        }
+      }
+    },
+    "repositoryAlreadyGitRepositoryTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Already a Git Repository"
+          }
+        }
+      }
+    },
+    "repositoryCloneAlertMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter the Git remote URL to clone."
+          }
+        }
+      }
+    },
+    "repositoryCloneAlertTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone Repository"
+          }
+        }
+      }
+    },
+    "repositoryCloneButton": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone"
+          }
+        }
+      }
+    },
+    "repositoryCloneDestinationExistsMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A folder already exists at %@. Choose another parent folder or remove the existing folder first."
+          }
+        }
+      }
+    },
+    "repositoryCloneDestinationExistsTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone Destination Exists"
+          }
+        }
+      }
+    },
+    "repositoryCloneFailedBanner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to clone repository: %@"
+          }
+        }
+      }
+    },
+    "repositoryCloneFailedTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to Clone Repository"
+          }
+        }
+      }
+    },
+    "repositoryCloneInvalidURLMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magent could not determine a local folder name from that remote URL."
+          }
+        }
+      }
+    },
+    "repositoryCloneInvalidURLTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid Repository URL"
+          }
+        }
+      }
+    },
+    "repositoryCloneMenuItem": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone Repository…"
+          }
+        }
+      }
+    },
+    "repositoryCloneMissingURLMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a Git remote URL before continuing."
+          }
+        }
+      }
+    },
+    "repositoryCloneMissingURLTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repository URL Required"
+          }
+        }
+      }
+    },
+    "repositoryCloneParentPanelMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select the parent folder where the repository will be cloned"
+          }
+        }
+      }
+    },
+    "repositoryCloneParentPanelPrompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone Here"
+          }
+        }
+      }
+    },
+    "repositoryCloneURLPlaceholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "git@github.com:owner/repo.git"
+          }
+        }
+      }
+    },
+    "repositoryClonedBanner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repository cloned: %@"
+          }
+        }
+      }
+    },
+    "repositoryCloningBanner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloning repository: %@"
+          }
+        }
+      }
+    },
+    "repositoryCreateFailedBanner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to create repository: %@"
+          }
+        }
+      }
+    },
+    "repositoryCreateFailedTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to Create Repository"
+          }
+        }
+      }
+    },
+    "repositoryCreateNewButton": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create New"
+          }
+        }
+      }
+    },
+    "repositoryCreateNewMenuItem": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create New Repository…"
+          }
+        }
+      }
+    },
+    "repositoryCreateNewPanelMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select or create an empty folder for the new repository"
+          }
+        }
+      }
+    },
+    "repositoryCreateNewPanelPrompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Repository"
+          }
+        }
+      }
+    },
+    "repositoryCreatedBanner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repository created: %@"
+          }
+        }
+      }
+    },
+    "repositoryCreatingBanner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creating repository: %@"
+          }
+        }
+      }
+    },
+    "repositoryImportExistingButton": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Existing"
+          }
+        }
+      }
+    },
+    "repositoryImportExistingMenuItem": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Existing Repository…"
+          }
+        }
+      }
+    },
     "projectInvalidPathsWarning": {
       "extractionState": "manual",
       "localizations": {
@@ -140,6 +481,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Invalid project paths: %@. Update them in Settings."
+          }
+        }
+      }
+    },
+    "sidebarNoRepositoriesSubtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create, add, or clone a repository to start using Magent."
+          }
+        }
+      }
+    },
+    "sidebarNoRepositoriesTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No repositories added"
           }
         }
       }

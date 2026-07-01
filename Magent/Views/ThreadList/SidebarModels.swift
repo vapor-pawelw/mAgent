@@ -51,7 +51,6 @@ class SidebarSection {
 
 final class SidebarSpacer {}
 final class SidebarProjectMainSpacer {}
-final class SidebarAddRepoRow {}
 /// Visual separator inserted between pinned / normal / hidden thread groups.
 final class SidebarGroupSeparator {}
 final class SidebarBottomPadding {

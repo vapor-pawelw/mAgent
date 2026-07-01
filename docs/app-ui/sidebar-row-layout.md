@@ -23,9 +23,11 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - Sign emoji is rendered at the **row view** level (`AlwaysEmphasizedRowView`) inside a circular `SignEmojiBadgeView` anchored to the top-left corner of the row (2pt margin from leading and top edges). The badge self-sizes via `intrinsicContentSize` (text size + 4pt padding, high priority) with a required 1:1 width/height ratio to stay circular. Border color and width mirror the capsule's current state. Not part of `ThreadCell`.
 - Project repo names use system bold 20pt font.
 - No separator divider between project groups; vertical gap (`projectHeaderInterProjectGap = 24pt`) handles spacing.
-- The global "Add repository" button is a `SidebarAddRepoRow` at the top of the outline view's root items. It scrolls with the rest of the content — there is no sticky toolbar.
-- The add-repo row opens a 2-item menu: `Create New Repository…` and `Import Existing Repository…`.
+- The global "Add repository" button is a toolbar icon next to Recently Archived and Settings.
+- The add-repo toolbar button opens a 3-item menu: `Create New Repository…`, `Import Existing Repository…`, and `Clone Repository…`.
+- When no repositories are configured, the sidebar shows a centered no-content view with direct actions for creating, importing, or cloning a repository.
 - `Create New Repository…` selects/creates a target folder, initializes git, seeds an empty initial commit, then registers the project and creates the main thread.
+- `Clone Repository…` first asks for the remote URL, then asks for the parent folder where the checkout should be created. The destination folder name is derived from the remote URL (for example `repo` from `git@github.com:owner/repo.git`). After `git clone` succeeds, Magent registers the cloned checkout and creates the main thread.
 - During create-repo flow, Magent shows a persistent spinner banner (`Creating repository: <name>`), then replaces it with explicit success (`Repository created: <name>`) or failure status (`Failed to create repository: <name>`) and an error alert.
 - **Sticky headers**: When the user scrolls past a project or section header, a floating overlay (`StickyHeaderOverlayView`) pins the project name (and current section, if applicable) at the top of the sidebar. A 12pt fade gradient softens the transition into scrolling content. Clicking a sticky header smoothly scrolls the sidebar to reveal the actual header row.
 - **Selected-thread jump capsule**: When the selected thread is outside the visible thread-list viewport, a floating capsule appears near the bottom of the thread list (inside the sidebar's thread area, not over the changes panel). It shows thread icon + title (prefer task description, fallback to worktree name) and a directional arrow (`up`/`down`) indicating where the row is relative to the viewport. Clicking the capsule centers the selected thread row. The capsule fades/slides in/out, and after scrolling completes the target row gets a brief pulse.
@@ -43,7 +45,6 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
   - `sidebarHorizontalInset` = capsuleLeadingInset + borderInset + contentHPadding — leading content rail.
   - `sidebarTrailingInset` — trailing content rail (same derivation from trailing side).
   - `capsuleAlignedLeading` / `capsuleAlignedTrailing` — non-thread row alignment (project/section headers).
-  - `addRepoRowHeight` — height for the `SidebarAddRepoRow`.
 - Sidebar and changes-panel scroll views use `NonFlashingScrollView`. `flashScrollers()` is still gated by recent local `scrollWheel` input, but `reflectScrolledClipView(...)` is always forwarded to `super` so AppKit keeps tiling/geometry in sync during programmatic scroll restore and reload paths. Scroller visibility is still policy-driven (hidden without recent local input), which preserves anti-flicker behavior without risking stale layout.
 - Bottom overlay spacing is reserved via a dedicated `SidebarBottomPadding` root item appended after projects. This keeps end-of-list scroll space deterministic regardless of changes-panel visibility.
 - Outline view uses `indentationPerLevel = 0`. All indentation is managed via capsule-relative padding in `ThreadCell`.

@@ -138,13 +138,6 @@ final class ConfigurationViewController: NSViewController {
         case 3:
             showStep(4)
         case 4:
-            if settings.projects.isEmpty {
-                showAlert(
-                    title: String(localized: .ConfigurationStrings.configurationAlertNoProjectTitle),
-                    message: String(localized: .ConfigurationStrings.configurationAlertNoProjectMessage)
-                )
-                return
-            }
             finishConfiguration()
         default:
             break

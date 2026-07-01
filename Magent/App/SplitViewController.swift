@@ -821,6 +821,7 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private static let settingsToolbarItemId = NSToolbarItem.Identifier("settings")
+    private static let addRepositoryToolbarItemId = NSToolbarItem.Identifier("addRepository")
     private static let recentlyArchivedToolbarItemId = NSToolbarItem.Identifier("recentlyArchived")
     private static let currentThreadToolbarItemId = NSToolbarItem.Identifier("currentThread")
 
@@ -1305,6 +1306,20 @@ extension SplitViewController: NSToolbarDelegate {
             item.view = button
             return item
         }
+        if itemIdentifier == Self.addRepositoryToolbarItemId {
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            let title = String(localized: .AppStrings.repositoryAddToolbarTitle)
+            item.label = title
+            item.toolTip = title
+            let button = NSButton()
+            button.image = NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: title)
+            button.bezelStyle = .texturedRounded
+            button.target = threadListVC
+            button.action = #selector(ThreadListViewController.addRepoButtonTapped(_:))
+            button.isBordered = false
+            item.view = button
+            return item
+        }
         if itemIdentifier == Self.settingsToolbarItemId {
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             let settingsTitle = String(localized: .CommonStrings.commonSettings)
@@ -1319,11 +1334,11 @@ extension SplitViewController: NSToolbarDelegate {
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.currentThreadToolbarItemId, .flexibleSpace, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
+        [Self.currentThreadToolbarItemId, .flexibleSpace, Self.addRepositoryToolbarItemId, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.currentThreadToolbarItemId, .flexibleSpace, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
+        [Self.currentThreadToolbarItemId, .flexibleSpace, Self.addRepositoryToolbarItemId, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
     }
 }
 
