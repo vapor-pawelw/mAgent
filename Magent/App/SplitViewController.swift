@@ -105,6 +105,7 @@ final class SplitViewController: NSSplitViewController {
     private let currentThreadToolbarStack = ThreadToolbarCapsuleView()
     private var didConfigureCurrentThreadToolbarStack = false
     private var didInstallCurrentThreadToolbarSizingConstraints = false
+    private weak var pendingPromptRecoveryToolbarButton: NSButton?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -230,6 +231,13 @@ final class SplitViewController: NSSplitViewController {
             name: .magentSectionsDidChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePendingPromptRecoveryReminderChanged),
+            name: .magentPendingPromptRecoveryReminderChanged,
+            object: nil
+        )
+        refreshPendingPromptRecoveryToolbarItem()
     }
 
     /// Forwarded from the main menu's "New Thread" item (⌘N).
@@ -272,6 +280,7 @@ final class SplitViewController: NSSplitViewController {
 
     @objc private func handleCurrentThreadToolbarRefreshNeeded() {
         refreshCurrentThreadToolbarStrip()
+        refreshPendingPromptRecoveryToolbarItem()
     }
 
     private func reloadKeyBindings() {
@@ -823,6 +832,7 @@ final class SplitViewController: NSSplitViewController {
     private static let settingsToolbarItemId = NSToolbarItem.Identifier("settings")
     private static let addRepositoryToolbarItemId = NSToolbarItem.Identifier("addRepository")
     private static let recentlyArchivedToolbarItemId = NSToolbarItem.Identifier("recentlyArchived")
+    private static let pendingPromptRecoveryToolbarItemId = NSToolbarItem.Identifier("pendingPromptRecovery")
     private static let currentThreadToolbarItemId = NSToolbarItem.Identifier("currentThread")
 
     private var recentlyArchivedPopover: NSPopover?
@@ -834,6 +844,69 @@ final class SplitViewController: NSSplitViewController {
         toolbar.displayMode = .iconOnly
         window.toolbar = toolbar
         refreshCurrentThreadToolbarStrip()
+        refreshPendingPromptRecoveryToolbarItem()
+    }
+
+    @objc private func handlePendingPromptRecoveryReminderChanged() {
+        refreshPendingPromptRecoveryToolbarItem(animateWhenShowing: true)
+    }
+
+    private func shouldShowPendingPromptRecoveryToolbarItem() -> Bool {
+        threadListVC.showsPendingPromptRecoveryReminder ||
+            (currentDetailVC?.showsPendingPromptRecoveryReminder ?? false)
+    }
+
+    private func refreshPendingPromptRecoveryToolbarItem(animateWhenShowing: Bool = false) {
+        guard let toolbar = view.window?.toolbar else { return }
+
+        let shouldShow = shouldShowPendingPromptRecoveryToolbarItem()
+        let existingIndex = toolbar.items.firstIndex {
+            $0.itemIdentifier == Self.pendingPromptRecoveryToolbarItemId
+        }
+
+        if shouldShow {
+            guard existingIndex == nil else { return }
+            toolbar.insertItem(
+                withItemIdentifier: Self.pendingPromptRecoveryToolbarItemId,
+                at: pendingPromptRecoveryToolbarInsertionIndex(in: toolbar)
+            )
+            if animateWhenShowing {
+                flashPendingPromptRecoveryToolbarButton()
+            }
+        } else if let existingIndex {
+            toolbar.removeItem(at: existingIndex)
+            pendingPromptRecoveryToolbarButton = nil
+        }
+    }
+
+    private func pendingPromptRecoveryToolbarInsertionIndex(in toolbar: NSToolbar) -> Int {
+        if let archiveIndex = toolbar.items.firstIndex(where: { $0.itemIdentifier == Self.recentlyArchivedToolbarItemId }) {
+            return archiveIndex
+        }
+        if let settingsIndex = toolbar.items.firstIndex(where: { $0.itemIdentifier == Self.settingsToolbarItemId }) {
+            return settingsIndex
+        }
+        return toolbar.items.count
+    }
+
+    private func flashPendingPromptRecoveryToolbarButton() {
+        guard let button = pendingPromptRecoveryToolbarButton else { return }
+        button.wantsLayer = true
+
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = 0.35
+        animation.toValue = 1.0
+        animation.duration = 0.18
+        animation.autoreverses = true
+        animation.repeatCount = 3
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        button.layer?.add(animation, forKey: "magentPendingPromptRecoveryFlash")
+    }
+
+    @objc private func pendingPromptRecoveryTapped(_ sender: Any?) {
+        threadListVC.showDismissedPendingPromptRecoveryBanners()
+        currentDetailVC?.redisplayDismissedRecoveryBanner()
+        refreshPendingPromptRecoveryToolbarItem()
     }
 
     @objc private func openSettingsFromNotification(_ notification: Notification) {
@@ -1320,6 +1393,26 @@ extension SplitViewController: NSToolbarDelegate {
             item.view = button
             return item
         }
+        if itemIdentifier == Self.pendingPromptRecoveryToolbarItemId {
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            let title = String(localized: .ThreadStrings.threadShowRecoveredPrompts)
+            item.label = title
+            item.toolTip = title
+            let button = NSButton()
+            button.title = ""
+            button.image = pendingPromptRecoveryToolbarImage(accessibilityDescription: title)
+            button.imagePosition = .imageOnly
+            button.imageScaling = .scaleProportionallyDown
+            button.toolTip = title
+            button.setAccessibilityLabel(title)
+            button.bezelStyle = .texturedRounded
+            button.target = self
+            button.action = #selector(pendingPromptRecoveryTapped(_:))
+            button.isBordered = false
+            item.view = button
+            pendingPromptRecoveryToolbarButton = button
+            return item
+        }
         if itemIdentifier == Self.settingsToolbarItemId {
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             let settingsTitle = String(localized: .CommonStrings.commonSettings)
@@ -1333,12 +1426,24 @@ extension SplitViewController: NSToolbarDelegate {
         return nil
     }
 
+    private func pendingPromptRecoveryToolbarImage(accessibilityDescription: String) -> NSImage? {
+        NSImage(systemSymbolName: "exclamationmark.bubble", accessibilityDescription: accessibilityDescription)
+            ?? NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: accessibilityDescription)
+    }
+
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [Self.currentThreadToolbarItemId, .flexibleSpace, Self.addRepositoryToolbarItemId, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.currentThreadToolbarItemId, .flexibleSpace, Self.addRepositoryToolbarItemId, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
+        [
+            Self.currentThreadToolbarItemId,
+            .flexibleSpace,
+            Self.addRepositoryToolbarItemId,
+            Self.pendingPromptRecoveryToolbarItemId,
+            Self.recentlyArchivedToolbarItemId,
+            Self.settingsToolbarItemId,
+        ]
     }
 }
 

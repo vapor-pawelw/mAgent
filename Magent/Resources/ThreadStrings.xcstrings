@@ -375,6 +375,17 @@
         }
       }
     },
+    "threadShowRecoveredPrompts": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Lost Prompts"
+          }
+        }
+      }
+    },
     "threadCouldNotConstructRemoteURL": {
       "extractionState": "manual",
       "localizations": {

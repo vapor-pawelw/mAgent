@@ -308,6 +308,10 @@ final class ThreadListViewController: NSViewController {
     private weak var stickySection: SidebarSection?
     let threadManager = ThreadManager.shared
     let persistence = PersistenceService.shared
+    var pendingPromptRecoveryReminderState = PendingPromptRecoveryReminderState()
+    var showsPendingPromptRecoveryReminder: Bool {
+        pendingPromptRecoveryReminderState.isReminderVisible
+    }
 
     private var scrollViewTopConstraint: NSLayoutConstraint?
     var diffPanelView: DiffPanelView!

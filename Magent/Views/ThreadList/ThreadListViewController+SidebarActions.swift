@@ -917,6 +917,46 @@ extension ThreadListViewController {
         }
     }
 
+    func showDismissedPendingPromptRecoveryBanners() {
+        pendingPromptRecoveryReminderState.reminderActivated()
+        postPendingPromptRecoveryReminderChanged()
+
+        let pending = PendingInitialPromptStore.loadAll().filter { $0.prompt.scopeKind == .newThread }
+        guard !pending.isEmpty else {
+            pendingPromptRecoveryReminderState.setRecoverablePromptsAvailable(false)
+            postPendingPromptRecoveryReminderChanged()
+            return
+        }
+
+        showNextRecoveryBanner(pending: pending, index: 0, bannerTotal: pending.count, bannerShown: 0)
+    }
+
+    private func hasRecoverableNewThreadPendingPrompts() -> Bool {
+        PendingInitialPromptStore.loadAll().contains { $0.prompt.scopeKind == .newThread }
+    }
+
+    private func markPendingPromptRecoveryBannerDismissed() {
+        pendingPromptRecoveryReminderState.bannerDismissed(
+            hasRecoverablePrompts: hasRecoverableNewThreadPendingPrompts()
+        )
+        postPendingPromptRecoveryReminderChanged()
+    }
+
+    private func clearPendingPromptRecoveryReminder() {
+        pendingPromptRecoveryReminderState.reminderActivated()
+        pendingPromptRecoveryReminderState.setRecoverablePromptsAvailable(
+            hasRecoverableNewThreadPendingPrompts()
+        )
+        postPendingPromptRecoveryReminderChanged()
+    }
+
+    private func postPendingPromptRecoveryReminderChanged() {
+        NotificationCenter.default.post(
+            name: .magentPendingPromptRecoveryReminderChanged,
+            object: self
+        )
+    }
+
     private func showNextRecoveryBanner(
         pending: [(url: URL, prompt: PendingInitialPrompt)],
         index: Int,
@@ -941,6 +981,7 @@ extension ThreadListViewController {
             guard let projectId = record.projectId,
                   let project = settings.projects.first(where: { $0.id == projectId }) else {
                 try? FileManager.default.removeItem(at: url)
+                clearPendingPromptRecoveryReminder()
                 next()
                 return
             }
@@ -956,6 +997,8 @@ extension ThreadListViewController {
             )
             let promptPreview = record.prompt.magentPromptPreview(maxLength: 140, singleLine: true)
             let promptDetails = record.prompt.magentPromptPreview(maxLength: 500, singleLine: false)
+            pendingPromptRecoveryReminderState.bannerBecameVisible(hasRecoverablePrompts: true)
+            postPendingPromptRecoveryReminderChanged()
             BannerManager.shared.show(
                 message: "Unsubmitted thread prompt recovered — Project: \(project.name)\(countSuffix)\nPreview: \(promptPreview)",
                 style: .warning,
@@ -967,21 +1010,26 @@ extension ThreadListViewController {
                         NSPasteboard.general.setString(record.prompt, forType: .string)
                     },
                     BannerAction(title: "Reopen") { [weak self] in
+                        self?.clearPendingPromptRecoveryReminder()
                         BannerManager.shared.dismissCurrent()
                         // File stays alive; a new pending file will be created on next submit.
                         // Delete original once the recovery sheet is closed (submitted or cancelled).
                         self?.presentRecoverySheet(for: project, originalPendingURL: url, prefill: prefill)
                         nextAfterBanner()
                     },
-                    BannerAction(title: "Discard") {
+                    BannerAction(title: "Discard") { [weak self] in
                         BannerManager.shared.dismissCurrent()
                         try? FileManager.default.removeItem(at: url)
+                        self?.clearPendingPromptRecoveryReminder()
                         nextAfterBanner()
                     }
                 ],
                 details: promptDetails,
                 detailsCollapsedTitle: "Show More",
-                detailsExpandedTitle: "Hide More"
+                detailsExpandedTitle: "Hide More",
+                onDismiss: { [weak self] in
+                    self?.markPendingPromptRecoveryBannerDismissed()
+                }
             )
 
         case .newTab:

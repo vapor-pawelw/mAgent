@@ -58,6 +58,9 @@ extension Notification.Name {
     /// Posted when a pending prompt recovery is added or removed for a thread.
     /// Carries "threadId" (UUID).
     static let magentPendingPromptRecovery = Notification.Name("magentPendingPromptRecovery")
+    /// Posted when a recoverable prompt banner is dismissed/restored, so the main
+    /// toolbar can show or hide its reminder button.
+    static let magentPendingPromptRecoveryReminderChanged = Notification.Name("magentPendingPromptRecoveryReminderChanged")
     /// Posted by ThreadDetailViewController when the user clicks "Reopen as Thread"
     /// on a per-thread recovery banner. Carries "projectId" (UUID), "tempFileURL" (URL),
     /// and "prefill" (AgentLaunchSheetPrefill).

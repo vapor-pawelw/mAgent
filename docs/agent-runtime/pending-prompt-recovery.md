@@ -67,6 +67,7 @@ This banner is scoped to the affected terminal tab only. Switching to another ta
 
 - **`.newThread`** — shown as a global `BannerManager` banner with "Reopen" / "Discard" buttons. The "(N of M)" counter only counts `.newThread` entries, so `.newTab` entries that were silently stored don't inflate the count.
 - Global recovery banners include an inline prompt preview, a full "Copy Prompt" action, and expandable "Show More" details so users can identify the recovered prompt before deciding what to do.
+- Dismissing a global recovery banner hides it for the current app session without deleting the temp file, then shows a top-right toolbar button near Recently Archived and Settings. Clicking that button re-displays the dismissed recovery banner and hides the button. Relaunch still scans `/tmp` and asks about the prompt again.
 - **`.newTab`** — stored on `ThreadManager.pendingPromptRecoveriesByThread` (keyed by thread ID, supports multiple recoveries per thread). No global banner is shown. Instead, `ThreadDetailViewController` shows an embedded per-thread recovery banner when the affected thread is selected.
 
 ### Per-thread recovery banner
@@ -79,6 +80,7 @@ When a thread with pending recoveries is selected, `ThreadDetailViewController.r
 - **Reopen as Thread** — removes that single recovery entry, posts `.magentRecoveryReopenRequested` (observed by `ThreadListViewController` to present the recovery sheet), then shows the next recovery if any remain.
 - **Discard** — deletes the temp file, removes the entry, and shows the next.
 - **Dismiss (X)** — hides the banner without deleting data. The banner reappears on next thread selection, giving the user a "deal with it later" option.
+- After dismissing, the same top-right toolbar button appears for the active thread. Clicking it re-displays the per-thread recovery banner and hides the button. The button is cleared when all pending prompts for that surface are reopened or discarded.
 
 ## Failed Create Recovery
 

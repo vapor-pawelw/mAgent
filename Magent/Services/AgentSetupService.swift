@@ -449,6 +449,9 @@ final class AgentSetupService {
     // MARK: - Pending Prompt Recovery (per-thread)
 
     func addPendingPromptRecovery(for threadId: UUID, info: ThreadManager.PendingPromptRecoveryInfo) {
+        if pendingPromptRecoveriesByThread[threadId]?.contains(where: { $0.tempFileURL == info.tempFileURL }) == true {
+            return
+        }
         pendingPromptRecoveriesByThread[threadId, default: []].append(info)
         NotificationCenter.default.post(
             name: .magentPendingPromptRecovery,

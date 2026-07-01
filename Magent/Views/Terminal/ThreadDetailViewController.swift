@@ -228,6 +228,10 @@ final class ThreadDetailViewController: NSViewController {
     var pendingPromptBannerTopConstraint: NSLayoutConstraint?
     var recoveryBanner: BannerView?
     var recoveryBannerTopConstraint: NSLayoutConstraint?
+    private var pendingPromptRecoveryReminderState = PendingPromptRecoveryReminderState()
+    var showsPendingPromptRecoveryReminder: Bool {
+        pendingPromptRecoveryReminderState.isReminderVisible
+    }
     var preparedSessions: Set<String> = []
     var reusableSurfacePreparedSessions: Set<String> = []
     var sessionPreparationTasks: [String: Task<Bool, Never>] = [:]
@@ -2175,10 +2179,25 @@ final class ThreadDetailViewController: NSViewController {
     func refreshRecoveryBanner() {
         let recoveries = threadManager.pendingPromptRecoveries(for: thread.id)
         guard let first = recoveries.first else {
+            pendingPromptRecoveryReminderState.setRecoverablePromptsAvailable(false)
             dismissRecoveryBanner()
+            postPendingPromptRecoveryReminderChanged()
+            return
+        }
+
+        pendingPromptRecoveryReminderState.setRecoverablePromptsAvailable(true)
+        if pendingPromptRecoveryReminderState.isReminderVisible {
+            dismissRecoveryBanner()
+            postPendingPromptRecoveryReminderChanged()
             return
         }
         showRecoveryBanner(recovery: first, total: recoveries.count)
+    }
+
+    func redisplayDismissedRecoveryBanner() {
+        pendingPromptRecoveryReminderState.reminderActivated()
+        postPendingPromptRecoveryReminderChanged()
+        refreshRecoveryBanner()
     }
 
     private func showRecoveryBanner(
@@ -2243,7 +2262,10 @@ final class ThreadDetailViewController: NSViewController {
         // Dismiss just hides the banner — data stays alive and the banner reappears
         // next time the thread is selected.
         banner.onDismiss = { [weak self] in
-            self?.dismissRecoveryBanner()
+            guard let self else { return }
+            self.pendingPromptRecoveryReminderState.bannerDismissed(hasRecoverablePrompts: true)
+            self.dismissRecoveryBanner()
+            self.postPendingPromptRecoveryReminderChanged()
         }
         bringTerminalBannerOverlayToFront()
         banner.translatesAutoresizingMaskIntoConstraints = false
@@ -2259,12 +2281,21 @@ final class ThreadDetailViewController: NSViewController {
 
         recoveryBanner = banner
         recoveryBannerTopConstraint = topConstraint
+        pendingPromptRecoveryReminderState.bannerBecameVisible(hasRecoverablePrompts: true)
+        postPendingPromptRecoveryReminderChanged()
     }
 
     private func dismissRecoveryBanner() {
         recoveryBanner?.removeFromSuperview()
         recoveryBanner = nil
         recoveryBannerTopConstraint = nil
+    }
+
+    private func postPendingPromptRecoveryReminderChanged() {
+        NotificationCenter.default.post(
+            name: .magentPendingPromptRecoveryReminderChanged,
+            object: self
+        )
     }
 
 }

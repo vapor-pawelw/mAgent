@@ -62,7 +62,8 @@ final class BannerManager {
         actions: [BannerAction] = [],
         details: String? = nil,
         detailsCollapsedTitle: String? = nil,
-        detailsExpandedTitle: String? = nil
+        detailsExpandedTitle: String? = nil,
+        onDismiss: (() -> Void)? = nil
     ) {
         showOnMain(config: BannerConfig(
             message: message,
@@ -74,7 +75,7 @@ final class BannerManager {
             details: details,
             detailsCollapsedTitle: detailsCollapsedTitle,
             detailsExpandedTitle: detailsExpandedTitle
-        ))
+        ), onDismiss: onDismiss)
     }
 
     func show(
@@ -86,7 +87,8 @@ final class BannerManager {
         actions: [BannerAction] = [],
         details: String? = nil,
         detailsCollapsedTitle: String? = nil,
-        detailsExpandedTitle: String? = nil
+        detailsExpandedTitle: String? = nil,
+        onDismiss: (() -> Void)? = nil
     ) {
         showOnMain(config: BannerConfig(
             attributedMessage: attributedMessage,
@@ -98,7 +100,7 @@ final class BannerManager {
             details: details,
             detailsCollapsedTitle: detailsCollapsedTitle,
             detailsExpandedTitle: detailsExpandedTitle
-        ))
+        ), onDismiss: onDismiss)
     }
 
     func dismissCurrent() {
@@ -107,7 +109,7 @@ final class BannerManager {
 
     // MARK: - Private
 
-    private func showOnMain(config: BannerConfig) {
+    private func showOnMain(config: BannerConfig, onDismiss: (() -> Void)? = nil) {
         dispatchPrecondition(condition: .onQueue(.main))
 
         // Dismiss any existing banner immediately
@@ -119,6 +121,7 @@ final class BannerManager {
 
         let banner = BannerView(config: config)
         banner.onDismiss = { [weak self] in
+            onDismiss?()
             self?.dismissAnimated()
         }
         banner.onUserInteraction = { [weak self] in
