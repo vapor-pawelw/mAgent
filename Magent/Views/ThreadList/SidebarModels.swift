@@ -5,12 +5,14 @@ class SidebarProject {
     let projectId: UUID
     let name: String
     let isPinned: Bool
+    let isMissing: Bool
     var children: [Any] // Mix of MagentThread (main) and SidebarSection
 
-    init(projectId: UUID, name: String, isPinned: Bool, children: [Any]) {
+    init(projectId: UUID, name: String, isPinned: Bool, isMissing: Bool = false, children: [Any]) {
         self.projectId = projectId
         self.name = name
         self.isPinned = isPinned
+        self.isMissing = isMissing
         self.children = children
     }
 }
@@ -52,6 +54,17 @@ class SidebarSection {
 final class SidebarSpacer {}
 final class SidebarProjectMainSpacer {}
 final class SidebarAddRepoRow {}
+final class SidebarMissingProjectRow {
+    let projectId: UUID
+    let projectName: String
+    let repoPath: String
+
+    init(projectId: UUID, projectName: String, repoPath: String) {
+        self.projectId = projectId
+        self.projectName = projectName
+        self.repoPath = repoPath
+    }
+}
 /// Visual separator inserted between pinned / normal / hidden thread groups.
 final class SidebarGroupSeparator {}
 final class SidebarBottomPadding {

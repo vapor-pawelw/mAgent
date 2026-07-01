@@ -424,6 +424,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarAddRepoRow {
             return SidebarSpacerRowView()
         }
+        if item is SidebarMissingProjectRow {
+            return AlwaysEmphasizedRowView()
+        }
         if item is SidebarSpacer {
             return SidebarSpacerRowView()
         }
@@ -557,6 +560,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarAddRepoRow {
             return Self.addRepoRowHeight
         }
+        if item is SidebarMissingProjectRow {
+            return 118
+        }
         if item is SidebarSpacer {
             return Self.projectHeaderInterProjectGap
         }
@@ -619,6 +625,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         }
         if item is SidebarAddRepoRow {
             addRepoButtonTapped(NSButton())
+            return false
+        }
+        if item is SidebarMissingProjectRow {
             return false
         }
         if item is SidebarSpacer {
@@ -755,6 +764,93 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     ])
                     return c
                 }()
+            return cell
+        }
+        if let missing = item as? SidebarMissingProjectRow {
+            let identifier = NSUserInterfaceItemIdentifier("MissingProjectCell")
+            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
+                ?? {
+                    let c = NSTableCellView()
+                    c.identifier = identifier
+
+                    let icon = NSImageView()
+                    icon.translatesAutoresizingMaskIntoConstraints = false
+                    icon.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "Repository missing")
+                    icon.contentTintColor = .systemOrange
+                    icon.setContentHuggingPriority(.required, for: .horizontal)
+                    icon.setContentCompressionResistancePriority(.required, for: .horizontal)
+                    NSLayoutConstraint.activate([
+                        icon.widthAnchor.constraint(equalToConstant: 16),
+                        icon.heightAnchor.constraint(equalToConstant: 16),
+                    ])
+
+                    let title = NSTextField(labelWithString: "")
+                    title.translatesAutoresizingMaskIntoConstraints = false
+                    title.font = .systemFont(ofSize: 12, weight: .semibold)
+                    title.textColor = .labelColor
+                    c.textField = title
+
+                    let detail = NSTextField(wrappingLabelWithString: "")
+                    detail.identifier = Self.missingProjectDetailIdentifier
+                    detail.translatesAutoresizingMaskIntoConstraints = false
+                    detail.font = .systemFont(ofSize: 11)
+                    detail.textColor = .secondaryLabelColor
+                    detail.maximumNumberOfLines = 2
+
+                    let openButton = NSButton(title: "Open New Location", target: self, action: #selector(openMissingProjectLocation(_:)))
+                    openButton.identifier = Self.missingProjectOpenButtonIdentifier
+                    openButton.translatesAutoresizingMaskIntoConstraints = false
+                    openButton.bezelStyle = .rounded
+                    openButton.setContentHuggingPriority(.required, for: .horizontal)
+
+                    let discardButton = NSButton(title: "Discard", target: self, action: #selector(discardMissingProject(_:)))
+                    discardButton.identifier = Self.missingProjectDiscardButtonIdentifier
+                    discardButton.translatesAutoresizingMaskIntoConstraints = false
+                    discardButton.bezelStyle = .rounded
+                    discardButton.setContentHuggingPriority(.required, for: .horizontal)
+
+                    let buttonStack = NSStackView(views: [openButton, discardButton])
+                    buttonStack.translatesAutoresizingMaskIntoConstraints = false
+                    buttonStack.orientation = .horizontal
+                    buttonStack.alignment = .centerY
+                    buttonStack.spacing = 8
+                    buttonStack.distribution = .gravityAreas
+
+                    let textStack = NSStackView(views: [title, detail, buttonStack])
+                    textStack.translatesAutoresizingMaskIntoConstraints = false
+                    textStack.orientation = .vertical
+                    textStack.alignment = .leading
+                    textStack.spacing = 5
+                    textStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+                    textStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+                    let rowStack = NSStackView(views: [icon, textStack])
+                    rowStack.translatesAutoresizingMaskIntoConstraints = false
+                    rowStack.orientation = .horizontal
+                    rowStack.alignment = .top
+                    rowStack.spacing = 8
+                    c.addSubview(rowStack)
+
+                    NSLayoutConstraint.activate([
+                        rowStack.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
+                        rowStack.trailingAnchor.constraint(lessThanOrEqualTo: c.trailingAnchor, constant: -Self.sidebarTrailingInset),
+                        rowStack.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        textStack.trailingAnchor.constraint(lessThanOrEqualTo: c.trailingAnchor, constant: -Self.sidebarTrailingInset),
+                        openButton.heightAnchor.constraint(equalToConstant: 26),
+                        discardButton.heightAnchor.constraint(equalToConstant: 26),
+                    ])
+                    return c
+                }()
+
+            cell.textField?.stringValue = "Repository not found"
+            let descendants = cell.recursiveSubviews()
+            let detail = descendants.first(where: { $0.identifier == Self.missingProjectDetailIdentifier }) as? NSTextField
+            detail?.stringValue = missing.repoPath
+            detail?.toolTip = missing.repoPath
+            for button in descendants.compactMap({ $0 as? NSButton }) {
+                button.objectValue = missing.projectId.uuidString
+                button.isEnabled = true
+            }
             return cell
         }
         if item is SidebarSpacer {
@@ -898,7 +994,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 addButton.contentTintColor = .controlAccentColor
                 addButton.objectValue = project.projectId.uuidString
                 addButton.toolTip = "Add thread to \(project.name). Right-click for agent options. Option-click to use project default."
-                addButton.isEnabled = !isCreatingThread
+                addButton.isEnabled = !isCreatingThread && !project.isMissing
                 if let fullProject = currentSettings.projects.first(where: { $0.id == project.projectId }) {
                     addButton.menu = buildAgentSubmenu(for: fullProject)
                 }
@@ -1544,5 +1640,11 @@ extension ThreadListViewController: ThreadManagerDelegate {
     func refreshThreadRowInPlace(threadId: UUID) {
         guard let thread = threadManager.threads.first(where: { $0.id == threadId }) else { return }
         updateSidebarInPlace(with: [thread])
+    }
+}
+
+private extension NSView {
+    func recursiveSubviews() -> [NSView] {
+        subviews + subviews.flatMap { $0.recursiveSubviews() }
     }
 }

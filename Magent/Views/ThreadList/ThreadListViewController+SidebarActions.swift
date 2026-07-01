@@ -27,6 +27,57 @@ extension ThreadListViewController {
         }
     }
 
+    @objc func openMissingProjectLocation(_ sender: NSButton) {
+        guard let projectId = projectId(from: sender),
+              let project = persistence.loadSettings().projects.first(where: { $0.id == projectId }) else { return }
+
+        let panel = NSOpenPanel()
+        panel.title = "Open Repository Location"
+        panel.message = "Choose the new location for \(project.name)."
+        panel.prompt = "Open"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: project.repoPath).deletingLastPathComponent()
+
+        let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            Task { @MainActor in
+                await self.recoverMissingProject(projectId: projectId, newRepoURL: url)
+            }
+        }
+
+        if let window = view.window {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            completion(panel.runModal())
+        }
+    }
+
+    @objc func discardMissingProject(_ sender: NSButton) {
+        guard let projectId = projectId(from: sender),
+              let project = persistence.loadSettings().projects.first(where: { $0.id == projectId }) else { return }
+
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Discard \(project.name)?"
+        alert.informativeText = "This permanently removes the repository, its threads, archived threads, sections, local sync settings, and related Magent metadata from Magent. Files on disk are not deleted."
+        alert.addButton(withTitle: "Discard Repository")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+
+        if let window = view.window {
+            alert.beginSheetModal(for: window) { [weak self] response in
+                guard response == .alertFirstButtonReturn else { return }
+                self?.discardProjectFromMagent(projectId: projectId)
+            }
+        } else {
+            let response = alert.runModal()
+            guard response == .alertFirstButtonReturn else { return }
+            discardProjectFromMagent(projectId: projectId)
+        }
+    }
+
     @objc func toggleSectionExpanded(_ sender: NSButton) {
         suppressNextSectionRowToggle = true
         defer {
@@ -171,6 +222,139 @@ extension ThreadListViewController {
         guard row >= 0,
               let sidebarProject = outlineView.item(atRow: row) as? SidebarProject else { return nil }
         return settings.projects.first(where: { $0.id == sidebarProject.projectId })
+    }
+
+    private func projectId(from sender: NSButton) -> UUID? {
+        if let raw = sender.objectValue as? String {
+            return UUID(uuidString: raw)
+        }
+        let row = outlineView.row(for: sender)
+        guard row >= 0,
+              let missing = outlineView.item(atRow: row) as? SidebarMissingProjectRow else { return nil }
+        return missing.projectId
+    }
+
+    @MainActor
+    private func recoverMissingProject(projectId: UUID, newRepoURL: URL) async {
+        let newRepoPath = newRepoURL.standardizedFileURL.path
+        guard await isGitRepository(at: newRepoPath) else {
+            showInvalidRepositoryAlert(path: newRepoPath)
+            return
+        }
+
+        var settings = persistence.loadSettings()
+        guard let projectIndex = settings.projects.firstIndex(where: { $0.id == projectId }) else { return }
+        let oldProject = settings.projects[projectIndex]
+        let oldRepoPath = URL(fileURLWithPath: oldProject.repoPath).standardizedFileURL.path
+        let oldWorktreesBasePath = URL(fileURLWithPath: oldProject.resolvedWorktreesBasePath()).standardizedFileURL.path
+        let newWorktreesBasePath = RepositoryRecoveryPlanner.worktreesBasePath(
+            oldProject: oldProject,
+            newRepoPath: newRepoPath
+        )
+        let resolvedNewWorktreesBasePath = URL(fileURLWithPath: newWorktreesBasePath.replacingOccurrences(of: "$MAGENT_PROJECT_NAME", with: oldProject.name)).standardizedFileURL.path
+
+        settings.projects[projectIndex].repoPath = newRepoPath
+        settings.projects[projectIndex].worktreesBasePath = newWorktreesBasePath
+
+        let originalThreads = persistence.loadThreads()
+        var allThreads = originalThreads
+        for index in allThreads.indices where allThreads[index].projectId == projectId {
+            allThreads[index].worktreePath = RepositoryRecoveryPlanner.remappedThreadWorktreePath(
+                allThreads[index].worktreePath,
+                oldRepoPath: oldRepoPath,
+                newRepoPath: newRepoPath,
+                oldWorktreesBasePath: oldWorktreesBasePath,
+                newWorktreesBasePath: resolvedNewWorktreesBasePath
+            )
+        }
+
+        do {
+            try persistence.saveThreads(allThreads)
+            do {
+                try persistence.saveSettings(settings)
+            } catch {
+                try? persistence.saveThreads(originalThreads)
+                throw error
+            }
+            threadManager.threads = allThreads.filter { !$0.isArchived }
+            reloadData()
+            NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+            NotificationCenter.default.post(name: .magentThreadsDidChange, object: nil)
+            BannerManager.shared.show(message: "Repository location updated.", style: .info)
+        } catch {
+            BannerManager.shared.show(message: "Failed to update repository location: \(error.localizedDescription)", style: .error)
+        }
+    }
+
+    private func isGitRepository(at path: String) async -> Bool {
+        let result = await ShellExecutor.execute("git rev-parse --show-toplevel", workingDirectory: path)
+        guard result.exitCode == 0 else { return false }
+        let topLevel = URL(fileURLWithPath: result.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+        let selectedPath = URL(fileURLWithPath: path)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+        return topLevel == selectedPath
+    }
+
+    private func showInvalidRepositoryAlert(path: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Not a Git Repository"
+        alert.informativeText = "Magent could not open a Git repository at:\n\(path)"
+        alert.addButton(withTitle: "OK")
+        if let window = view.window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
+    private func discardProjectFromMagent(projectId: UUID) {
+        var settings = persistence.loadSettings()
+        settings.projects.removeAll { $0.id == projectId }
+        let originalThreads = persistence.loadThreads()
+        var allThreads = originalThreads
+        let removedActiveThreads = threadManager.threads.filter { $0.projectId == projectId }
+        let removedSelectedThread = selectedThreadID.flatMap { selectedId in
+            removedActiveThreads.first(where: { $0.id == selectedId })
+        }
+        allThreads.removeAll { $0.projectId == projectId }
+
+        do {
+            try persistence.saveThreads(allThreads)
+            do {
+                try persistence.saveSettings(settings)
+            } catch {
+                try? persistence.saveThreads(originalThreads)
+                throw error
+            }
+            PopoutWindowManager.shared.closePopouts(forProjectId: projectId)
+            threadManager.threads = allThreads.filter { !$0.isArchived }
+            if removedSelectedThread != nil {
+                clearSelectedThreadState()
+            }
+            var collapsedProjects = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
+            collapsedProjects.remove(projectId.uuidString)
+            UserDefaults.standard.set(Array(collapsedProjects), forKey: Self.collapsedProjectIdsKey)
+            var collapsedSections = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedSectionIdsKey) ?? [])
+            collapsedSections = collapsedSections.filter { !$0.hasPrefix(projectId.uuidString + ":") }
+            UserDefaults.standard.set(Array(collapsedSections), forKey: Self.collapsedSectionIdsKey)
+            reloadData()
+            NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+            NotificationCenter.default.post(name: .magentThreadsDidChange, object: nil)
+            if let removedSelectedThread {
+                delegate?.threadList(self, didDeleteThread: removedSelectedThread)
+            }
+            Task {
+                await ThreadManager.shared.cleanupStaleMagentSessions(minimumStaleAge: 0)
+            }
+        } catch {
+            BannerManager.shared.show(message: "Failed to discard repository: \(error.localizedDescription)", style: .error)
+        }
     }
 
     private func showNoProjectsAlert() {
@@ -904,8 +1088,28 @@ extension ThreadListViewController {
         menu.addItem(createItem)
         menu.addItem(importItem)
 
-        let buttonBounds = sender.bounds
-        menu.popUp(positioning: menu.items.first, at: NSPoint(x: 0, y: buttonBounds.maxY + 4), in: sender)
+        let anchorView = addRepositoryMenuAnchor(for: sender)
+        let anchorBounds = anchorView.bounds
+        menu.popUp(
+            positioning: menu.items.first,
+            at: NSPoint(x: anchorBounds.minX, y: anchorBounds.maxY + 4),
+            in: anchorView
+        )
+    }
+
+    private func addRepositoryMenuAnchor(for sender: NSButton) -> NSView {
+        if sender.window != nil, outlineView.row(for: sender) >= 0 {
+            return sender
+        }
+
+        let addRepoRow = (0..<outlineView.numberOfRows).first { row in
+            outlineView.item(atRow: row) is SidebarAddRepoRow
+        }
+        if let addRepoRow,
+           let cell = outlineView.view(atColumn: 0, row: addRepoRow, makeIfNecessary: false) {
+            return cell
+        }
+        return view
     }
 
     @objc private func addRepoCreateNew(_ sender: NSMenuItem) {
@@ -996,12 +1200,21 @@ extension ThreadListViewController {
                     let defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: path)
 
                     await MainActor.run {
-                        self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
-                        BannerManager.shared.show(
-                            message: "Repository created: \(url.lastPathComponent)",
-                            style: .info,
-                            duration: 3.0
-                        )
+                        do {
+                            try self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
+                            BannerManager.shared.show(
+                                message: "Repository created: \(url.lastPathComponent)",
+                                style: .info,
+                                duration: 3.0
+                            )
+                        } catch {
+                            let alert = NSAlert()
+                            alert.messageText = "Failed to Add Repository"
+                            alert.informativeText = error.localizedDescription
+                            alert.alertStyle = .critical
+                            alert.addButton(withTitle: "OK")
+                            alert.beginSheetModal(for: window)
+                        }
                     }
                 } catch {
                     await MainActor.run {
@@ -1039,7 +1252,16 @@ extension ThreadListViewController {
                 let defaultBranch = isRepo ? await GitService.shared.detectDefaultBranch(repoPath: path) : nil
                 await MainActor.run {
                     if isRepo {
-                        self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
+                        do {
+                            try self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
+                        } catch {
+                            let alert = NSAlert()
+                            alert.messageText = "Failed to Import Repository"
+                            alert.informativeText = error.localizedDescription
+                            alert.alertStyle = .critical
+                            alert.addButton(withTitle: "OK")
+                            alert.beginSheetModal(for: window)
+                        }
                     } else {
                         let alert = NSAlert()
                         alert.messageText = "Not a Git Repository"
@@ -1053,7 +1275,7 @@ extension ThreadListViewController {
         }
     }
 
-    private func addProjectAtPath(url: URL, defaultBranch: String?) {
+    private func addProjectAtPath(url: URL, defaultBranch: String?) throws {
         var settings = persistence.loadSettings()
 
         // Don't add a project that's already registered.
@@ -1076,7 +1298,7 @@ extension ThreadListViewController {
             defaultBranch: defaultBranch
         )
         settings.projects.append(project)
-        try? persistence.saveSettings(settings)
+        try persistence.saveSettings(settings)
         reloadData()
 
         Task { try? await ThreadManager.shared.createMainThread(project: project) }
