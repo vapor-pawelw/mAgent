@@ -132,6 +132,9 @@ final class ThreadListViewController: NSViewController {
     static let collapsedSectionIdsKey = "MagentCollapsedSectionIds"
     static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
     static let projectAddButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectAddButton")
+    static let missingProjectOpenButtonIdentifier = NSUserInterfaceItemIdentifier("MissingProjectOpenButton")
+    static let missingProjectDiscardButtonIdentifier = NSUserInterfaceItemIdentifier("MissingProjectDiscardButton")
+    static let missingProjectDetailIdentifier = NSUserInterfaceItemIdentifier("MissingProjectDetail")
     static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
     static let sectionNameStackIdentifier = NSUserInterfaceItemIdentifier("SectionNameStack")
     static let sectionCountBadgeContainerIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeContainer")
@@ -904,32 +907,27 @@ final class ThreadListViewController: NSViewController {
         let mainThreads = allThreads.filter { $0.isMain }
         let regularThreads = allThreads.filter { !$0.isMain }
 
-        let validVisibleProjects = settings.projects.filter { $0.isValid && !$0.isHidden }
-        let sortedValidProjects = validVisibleProjects.filter(\.isPinned) + validVisibleProjects.filter { !$0.isPinned }
-        // If project path validation temporarily excludes all projects, still render
-        // projects referenced by live threads so users can recover from Settings.
-        let sortedProjects: [Project]
-        if sortedValidProjects.isEmpty && !allThreads.isEmpty {
-            let projectIdsWithThreads = Set(allThreads.map(\.projectId))
-            let projectsWithThreads = settings.projects
-                .filter { projectIdsWithThreads.contains($0.id) && !$0.isHidden }
-            let pinned = projectsWithThreads.filter(\.isPinned)
-            let unpinned = projectsWithThreads.filter { !$0.isPinned }
-            // Preserve explicit project ordering from settings within each pin group.
-            sortedProjects = pinned + unpinned
-        } else {
-            sortedProjects = sortedValidProjects
-        }
+        let visibleProjects = settings.projects.filter { !$0.isHidden }
+        let sortedProjects = visibleProjects.filter(\.isPinned) + visibleProjects.filter { !$0.isPinned }
 
         sidebarProjects = sortedProjects.map { project in
             var children: [Any] = []
+            let isMissing = !project.isValid
             let shouldUseSections = settings.shouldUseThreadSections(for: project.id)
             let projectSections = settings.visibleSections(for: project.id)
             let projectKnownSectionIds = Set(settings.sections(for: project.id).map(\.id))
             let projectDefaultSectionId = settings.defaultSection(for: project.id)?.id
 
+            if isMissing {
+                children.append(SidebarMissingProjectRow(
+                    projectId: project.id,
+                    projectName: project.name,
+                    repoPath: project.repoPath
+                ))
+            }
+
             // Main thread(s) for this project first
-            let projectMainThreads = mainThreads.filter { $0.projectId == project.id }
+            let projectMainThreads = isMissing ? [] : mainThreads.filter { $0.projectId == project.id }
             if !projectMainThreads.isEmpty {
                 if Self.projectHeaderToMainRowGap > 0 {
                     children.append(SidebarProjectMainSpacer())
@@ -937,7 +935,9 @@ final class ThreadListViewController: NSViewController {
                 children.append(contentsOf: projectMainThreads)
             }
 
-            if shouldUseSections {
+            if isMissing {
+                // Keep stored thread state untouched while the repo path is unresolved.
+            } else if shouldUseSections {
                 // Section groups with regular threads (per-project or global fallback)
                 for section in projectSections {
                     let matchingThreads = regularThreads.filter { thread in
@@ -980,6 +980,7 @@ final class ThreadListViewController: NSViewController {
                 projectId: project.id,
                 name: project.name,
                 isPinned: project.isPinned,
+                isMissing: isMissing,
                 children: children
             )
         }
