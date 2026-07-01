@@ -558,6 +558,7 @@ final class ThreadListViewController: NSViewController {
                 let lastChildRect = outlineView.rect(ofRow: lastChildRow)
                 // If the bottom of the last child is still visible, show sticky
                 if lastChildRect.maxY > visibleTop + StickyHeaderOverlayView.projectRowHeight {
+                    state.projectId = project.projectId
                     state.projectName = project.name
                     state.projectIsPinned = project.isPinned
                 }
@@ -589,9 +590,40 @@ final class ThreadListViewController: NSViewController {
         stickyProject = foundProject != nil && state.projectName != nil ? foundProject : nil
         stickySection = foundSection != nil && state.sectionName != nil ? foundSection : nil
 
-        stickyHeaderOverlay.update(state: state)
+        let didChangeStickyHeader = stickyHeaderOverlay.update(state: state)
+        if didChangeStickyHeader {
+            configureStickyProjectAddButton(for: stickyProject)
+        } else {
+            refreshStickyProjectAddButtonEnabledState()
+        }
         let height = stickyHeaderOverlay.intrinsicContentSize.height
         stickyHeaderHeightConstraint.constant = height
+    }
+
+    private func configureStickyProjectAddButton(for sidebarProject: SidebarProject?) {
+        guard let sidebarProject,
+              let project = currentSettings.projects.first(where: { $0.id == sidebarProject.projectId }) else {
+            stickyHeaderOverlay.configureProjectAddButton(
+                target: nil,
+                action: #selector(addThreadForProjectTapped(_:)),
+                toolTip: nil,
+                menu: nil,
+                isEnabled: false
+            )
+            return
+        }
+
+        stickyHeaderOverlay.configureProjectAddButton(
+            target: self,
+            action: #selector(addThreadForProjectTapped(_:)),
+            toolTip: "Add thread to \(project.name). Right-click for agent options. Option-click to use project default.",
+            menu: buildAgentSubmenu(for: project),
+            isEnabled: !isCreatingThread
+        )
+    }
+
+    func refreshStickyProjectAddButtonEnabledState() {
+        stickyHeaderOverlay?.setProjectAddButtonEnabled(!isCreatingThread)
     }
 
     private func scrollToStickyProject() {
