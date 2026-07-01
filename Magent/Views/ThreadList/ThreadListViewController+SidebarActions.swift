@@ -1086,8 +1086,28 @@ extension ThreadListViewController {
         menu.addItem(createItem)
         menu.addItem(importItem)
 
-        let buttonBounds = sender.bounds
-        menu.popUp(positioning: menu.items.first, at: NSPoint(x: 0, y: buttonBounds.maxY + 4), in: sender)
+        let anchorView = addRepositoryMenuAnchor(for: sender)
+        let anchorBounds = anchorView.bounds
+        menu.popUp(
+            positioning: menu.items.first,
+            at: NSPoint(x: anchorBounds.minX, y: anchorBounds.maxY + 4),
+            in: anchorView
+        )
+    }
+
+    private func addRepositoryMenuAnchor(for sender: NSButton) -> NSView {
+        if sender.window != nil, outlineView.row(for: sender) >= 0 {
+            return sender
+        }
+
+        let addRepoRow = (0..<outlineView.numberOfRows).first { row in
+            outlineView.item(atRow: row) is SidebarAddRepoRow
+        }
+        if let addRepoRow,
+           let cell = outlineView.view(atColumn: 0, row: addRepoRow, makeIfNecessary: false) {
+            return cell
+        }
+        return view
     }
 
     @objc private func addRepoCreateNew(_ sender: NSMenuItem) {
@@ -1178,12 +1198,21 @@ extension ThreadListViewController {
                     let defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: path)
 
                     await MainActor.run {
-                        self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
-                        BannerManager.shared.show(
-                            message: "Repository created: \(url.lastPathComponent)",
-                            style: .info,
-                            duration: 3.0
-                        )
+                        do {
+                            try self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
+                            BannerManager.shared.show(
+                                message: "Repository created: \(url.lastPathComponent)",
+                                style: .info,
+                                duration: 3.0
+                            )
+                        } catch {
+                            let alert = NSAlert()
+                            alert.messageText = "Failed to Add Repository"
+                            alert.informativeText = error.localizedDescription
+                            alert.alertStyle = .critical
+                            alert.addButton(withTitle: "OK")
+                            alert.beginSheetModal(for: window)
+                        }
                     }
                 } catch {
                     await MainActor.run {
@@ -1221,7 +1250,16 @@ extension ThreadListViewController {
                 let defaultBranch = isRepo ? await GitService.shared.detectDefaultBranch(repoPath: path) : nil
                 await MainActor.run {
                     if isRepo {
-                        self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
+                        do {
+                            try self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
+                        } catch {
+                            let alert = NSAlert()
+                            alert.messageText = "Failed to Import Repository"
+                            alert.informativeText = error.localizedDescription
+                            alert.alertStyle = .critical
+                            alert.addButton(withTitle: "OK")
+                            alert.beginSheetModal(for: window)
+                        }
                     } else {
                         let alert = NSAlert()
                         alert.messageText = "Not a Git Repository"
@@ -1235,7 +1273,7 @@ extension ThreadListViewController {
         }
     }
 
-    private func addProjectAtPath(url: URL, defaultBranch: String?) {
+    private func addProjectAtPath(url: URL, defaultBranch: String?) throws {
         var settings = persistence.loadSettings()
 
         // Don't add a project that's already registered.
@@ -1258,7 +1296,7 @@ extension ThreadListViewController {
             defaultBranch: defaultBranch
         )
         settings.projects.append(project)
-        try? persistence.saveSettings(settings)
+        try persistence.saveSettings(settings)
         reloadData()
 
         Task { try? await ThreadManager.shared.createMainThread(project: project) }
