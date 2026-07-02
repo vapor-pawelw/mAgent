@@ -893,13 +893,14 @@ final class SplitViewController: NSSplitViewController {
         guard let button = pendingPromptRecoveryToolbarButton else { return }
         button.wantsLayer = true
 
-        let animation = CABasicAnimation(keyPath: "opacity")
-        animation.fromValue = 0.35
-        animation.toValue = 1.0
-        animation.duration = 0.18
-        animation.autoreverses = true
-        animation.repeatCount = 3
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        let animation = CAKeyframeAnimation(keyPath: "opacity")
+        animation.values = [1.0, 0.45, 1.0]
+        animation.keyTimes = [0.0, 0.5, 1.0]
+        animation.duration = 0.9
+        animation.timingFunctions = [
+            CAMediaTimingFunction(name: .easeInEaseOut),
+            CAMediaTimingFunction(name: .easeInEaseOut)
+        ]
         button.layer?.add(animation, forKey: "magentPendingPromptRecoveryFlash")
     }
 

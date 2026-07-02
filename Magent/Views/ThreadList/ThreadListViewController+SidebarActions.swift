@@ -1064,7 +1064,8 @@ extension ThreadListViewController {
         alert.alertStyle = .critical
         alert.messageText = String(localized: .ThreadStrings.threadDiscardRecoveredPromptTitle)
         alert.informativeText = String(localized: .ThreadStrings.threadDiscardRecoveredPromptMessage)
-        alert.addButton(withTitle: String(localized: .ThreadStrings.threadDiscardRecoveredPromptButton))
+        let discardButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadDiscardRecoveredPromptButton))
+        discardButton.hasDestructiveAction = true
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
         return alert.runModal() == .alertFirstButtonReturn
     }
