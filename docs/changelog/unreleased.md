@@ -12,6 +12,12 @@
 
 - Reopen cached recent threads immediately more often and let users tune how many terminal views Magent keeps for fast switching.
 
+### Terminal
+
+#### Bug Fixes
+
+- Fixed terminal content scaling after moving a window between displays with different Retina scaling.
+
 ### Sidebar
 
 #### Features

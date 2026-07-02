@@ -7,6 +7,16 @@ private final class PassthroughVisualEffectView: NSVisualEffectView {
     }
 }
 
+public enum TerminalSurfaceSizing {
+    public static func pixelSize(for pointSize: CGSize, scale: CGFloat) -> (width: UInt32, height: UInt32)? {
+        guard pointSize.width > 0, pointSize.height > 0, scale > 0 else { return nil }
+        return (
+            width: UInt32((pointSize.width * scale).rounded(.toNearestOrAwayFromZero)),
+            height: UInt32((pointSize.height * scale).rounded(.toNearestOrAwayFromZero))
+        )
+    }
+}
+
 /// NSView subclass that hosts a ghostty terminal surface with Metal rendering.
 public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClient {
 
@@ -118,7 +128,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func makeBackingLayer() -> CALayer {
         let layer = CAMetalLayer()
-        layer.contentsScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        layer.contentsScale = currentBackingScale
         // Mark the layer as opaque so the macOS window server always treats this
         // region as solid during its hit testing pass. Without this, the compositor
         // can decide the CAMetalLayer area is transparent (e.g. between drawables
@@ -126,6 +136,20 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         // behind, making the terminal unresponsive to clicks.
         layer.isOpaque = true
         return layer
+    }
+
+    private var currentBackingScale: CGFloat {
+        window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+    }
+
+    private var currentDisplayID: CGDirectDisplayID? {
+        guard
+            let screen = window?.screen,
+            let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        else {
+            return nil
+        }
+        return CGDirectDisplayID(number.uint32Value)
     }
 
     // MARK: - Surface Lifecycle
@@ -197,7 +221,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             if surface == nil {
                 createSurface()
             }
-            updateSurfaceSize()
+            syncSurfaceGeometry()
             GhosttyAppManager.shared.surfaceDidAppear()
         } else {
             GhosttyAppManager.shared.surfaceDidDisappear()
@@ -205,6 +229,11 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
                 destroySurface()
             }
         }
+    }
+
+    override public func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        syncSurfaceGeometry()
     }
 
     override public func viewDidChangeEffectiveAppearance() {
@@ -253,13 +282,19 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     private func updateSurfaceSize() {
         guard let surface else { return }
-        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
-        let widthPx = UInt32(bounds.width * scale)
-        let heightPx = UInt32(bounds.height * scale)
-        guard widthPx > 0 && heightPx > 0 else { return }
+        let scale = currentBackingScale
+        guard let pixelSize = TerminalSurfaceSizing.pixelSize(for: bounds.size, scale: scale) else { return }
 
         ghostty_surface_set_content_scale(surface, Double(scale), Double(scale))
-        ghostty_surface_set_size(surface, widthPx, heightPx)
+        ghostty_surface_set_size(surface, pixelSize.width, pixelSize.height)
+    }
+
+    private func syncSurfaceGeometry() {
+        layer?.contentsScale = currentBackingScale
+        if let surface, let displayID = currentDisplayID {
+            ghostty_surface_set_display_id(surface, displayID)
+        }
+        updateSurfaceSize()
     }
 
     // MARK: - Focus
