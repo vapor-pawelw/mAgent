@@ -1018,9 +1018,11 @@ extension ThreadListViewController {
                         nextAfterBanner()
                     },
                     BannerAction(title: "Discard") { [weak self] in
+                        guard let self else { return }
+                        guard self.confirmDiscardRecoveredPrompt() else { return }
                         BannerManager.shared.dismissCurrent()
                         try? FileManager.default.removeItem(at: url)
-                        self?.clearPendingPromptRecoveryReminder()
+                        self.clearPendingPromptRecoveryReminder()
                         nextAfterBanner()
                     }
                 ],
@@ -1055,6 +1057,16 @@ extension ThreadListViewController {
             )
             next()
         }
+    }
+
+    private func confirmDiscardRecoveredPrompt() -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = String(localized: .ThreadStrings.threadDiscardRecoveredPromptTitle)
+        alert.informativeText = String(localized: .ThreadStrings.threadDiscardRecoveredPromptMessage)
+        alert.addButton(withTitle: String(localized: .ThreadStrings.threadDiscardRecoveredPromptButton))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Opens a new-thread creation sheet pre-populated with `prefill`.

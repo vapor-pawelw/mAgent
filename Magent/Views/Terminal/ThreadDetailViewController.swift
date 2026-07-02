@@ -2248,6 +2248,7 @@ final class ThreadDetailViewController: NSViewController {
                 },
                 BannerAction(title: "Discard") { [weak self] in
                     guard let self else { return }
+                    guard self.confirmDiscardRecoveredPrompt() else { return }
                     try? FileManager.default.removeItem(at: recovery.tempFileURL)
                     self.threadManager.removePendingPromptRecovery(for: threadId, tempFileURL: recovery.tempFileURL)
                     self.dismissRecoveryBanner()
@@ -2283,6 +2284,16 @@ final class ThreadDetailViewController: NSViewController {
         recoveryBannerTopConstraint = topConstraint
         pendingPromptRecoveryReminderState.bannerBecameVisible(hasRecoverablePrompts: true)
         postPendingPromptRecoveryReminderChanged()
+    }
+
+    private func confirmDiscardRecoveredPrompt() -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = String(localized: .ThreadStrings.threadDiscardRecoveredPromptTitle)
+        alert.informativeText = String(localized: .ThreadStrings.threadDiscardRecoveredPromptMessage)
+        alert.addButton(withTitle: String(localized: .ThreadStrings.threadDiscardRecoveredPromptButton))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func dismissRecoveryBanner() {

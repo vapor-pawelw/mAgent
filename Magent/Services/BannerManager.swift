@@ -130,7 +130,7 @@ final class BannerManager {
 
         container.addSubview(banner)
 
-        let top = banner.topAnchor.constraint(equalTo: container.topAnchor, constant: -50)
+        let top = banner.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: -50)
         topConstraint = top
 
         NSLayoutConstraint.activate([

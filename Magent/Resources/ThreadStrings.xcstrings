@@ -397,6 +397,39 @@
         }
       }
     },
+    "threadDiscardRecoveredPromptButton": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard Prompt"
+          }
+        }
+      }
+    },
+    "threadDiscardRecoveredPromptMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will permanently delete the saved recovery prompt. This cannot be undone."
+          }
+        }
+      }
+    },
+    "threadDiscardRecoveredPromptTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard Recovered Prompt?"
+          }
+        }
+      }
+    },
     "threadCouldNotSaveDescription": {
       "extractionState": "manual",
       "localizations": {
