@@ -85,6 +85,7 @@ final class SplitViewController: NSSplitViewController {
 
     private static let sidebarWidthDefaultsKey = "MagentSidebarWidth"
     private static let sidebarHiddenDefaultsKey = "MagentSidebarHidden"
+    private static let pendingPromptRecoveryToolbarHintShownDefaultsKey = "MagentPendingPromptRecoveryToolbarHintShown"
     private static let defaultSidebarWidth: CGFloat = 280
 
     private let threadListVC = ThreadListViewController()
@@ -106,6 +107,7 @@ final class SplitViewController: NSSplitViewController {
     private var didConfigureCurrentThreadToolbarStack = false
     private var didInstallCurrentThreadToolbarSizingConstraints = false
     private weak var pendingPromptRecoveryToolbarButton: NSButton?
+    private var pendingPromptRecoveryToolbarHintPopover: NSPopover?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -304,6 +306,10 @@ final class SplitViewController: NSSplitViewController {
             return event
         }
 
+        if event.magentIsBareEscapeKeyDown, dismissTopUserDismissibleBannerFromKeyboard(in: event.window) {
+            return nil
+        }
+
         let eventModifiers = KeyModifiers.from(event.modifierFlags.intersection(.deviceIndependentFlagsMask))
 
         if matchesBinding(.newTab, keyCode: event.keyCode, modifiers: eventModifiers) {
@@ -344,6 +350,13 @@ final class SplitViewController: NSSplitViewController {
         }
 
         return event
+    }
+
+    private func dismissTopUserDismissibleBannerFromKeyboard(in window: NSWindow?) -> Bool {
+        if BannerManager.shared.dismissCurrentIfUserDismissible(in: window) {
+            return true
+        }
+        return currentDetailVC?.dismissTopUserDismissibleBannerFromKeyboard() ?? false
     }
 
     private func matchesBinding(_ action: KeyBindingAction, keyCode: UInt16, modifiers: KeyModifiers) -> Bool {
@@ -873,6 +886,7 @@ final class SplitViewController: NSSplitViewController {
             if animateWhenShowing {
                 flashPendingPromptRecoveryToolbarButton()
             }
+            presentPendingPromptRecoveryToolbarHintIfNeeded()
         } else if let existingIndex {
             toolbar.removeItem(at: existingIndex)
             pendingPromptRecoveryToolbarButton = nil
@@ -904,7 +918,71 @@ final class SplitViewController: NSSplitViewController {
         button.layer?.add(animation, forKey: "magentPendingPromptRecoveryFlash")
     }
 
+    private func presentPendingPromptRecoveryToolbarHintIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: Self.pendingPromptRecoveryToolbarHintShownDefaultsKey) else {
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.showPendingPromptRecoveryToolbarHint()
+        }
+    }
+
+    private func showPendingPromptRecoveryToolbarHint() {
+        guard let button = pendingPromptRecoveryToolbarButton,
+              button.window != nil else { return }
+
+        var hintState = PendingPromptRecoveryToolbarHintState(
+            hasShownHint: UserDefaults.standard.bool(
+                forKey: Self.pendingPromptRecoveryToolbarHintShownDefaultsKey
+            )
+        )
+        guard hintState.consumeHintIfNeeded(isReminderVisible: shouldShowPendingPromptRecoveryToolbarItem()) else {
+            return
+        }
+        UserDefaults.standard.set(
+            hintState.hasShownHint,
+            forKey: Self.pendingPromptRecoveryToolbarHintShownDefaultsKey
+        )
+
+        pendingPromptRecoveryToolbarHintPopover?.close()
+
+        let label = NSTextField(wrappingLabelWithString: String(localized: .ThreadStrings.threadRecoveredPromptsToolbarHint))
+        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.textColor = .labelColor
+        label.maximumNumberOfLines = 3
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let contentView = NSView()
+        contentView.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 14),
+            label.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
+            label.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            label.widthAnchor.constraint(equalToConstant: 220),
+        ])
+
+        let viewController = NSViewController()
+        viewController.view = contentView
+
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        popover.contentViewController = viewController
+        pendingPromptRecoveryToolbarHintPopover = popover
+
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self, weak popover] in
+            guard self?.pendingPromptRecoveryToolbarHintPopover === popover else { return }
+            popover?.close()
+            self?.pendingPromptRecoveryToolbarHintPopover = nil
+        }
+    }
+
     @objc private func pendingPromptRecoveryTapped(_ sender: Any?) {
+        pendingPromptRecoveryToolbarHintPopover?.close()
+        pendingPromptRecoveryToolbarHintPopover = nil
         threadListVC.showDismissedPendingPromptRecoveryBanners()
         currentDetailVC?.redisplayDismissedRecoveryBanner()
         refreshPendingPromptRecoveryToolbarItem()

@@ -4,12 +4,14 @@
 
 - Timed banners (`duration != nil`) are always user-dismissible. They must show a top-right `X` and support swipe-to-dismiss in any direction.
 - Persistent informational or warning banners (`duration == nil`) should usually be user-dismissible with the same `X` and swipe affordances.
+- Pressing `Esc` dismisses the top visible banner in the active window only when that banner shows the same user-dismissal `X`.
 - Persistent in-flight progress banners should usually be non-dismissible unless the same progress state is visible elsewhere in the UI.
 - Explicit-action-required banners may also be non-dismissible when we intentionally need the user to respond through banner actions instead of hiding the state.
 
 ## Implementation Notes
 
 - `BannerView` owns the shared dismissal affordances. `BannerConfig.allowsUserDismissal` treats timed banners as user-dismissible even if a caller forgets to opt in explicitly.
+- `BannerView.dismissFromKeyboardIfAllowed()` must share the same `allowsUserDismissal` gate as the close button. Window key monitors route bare `Esc` through `BannerManager.dismissCurrentIfUserDismissible(in:)` for global banners and through the active `ThreadDetailViewController`'s terminal `BannerOverlayView` for embedded banners.
 - Swipe dismissal is attached only when `allowsUserDismissal` is true. The gesture dismisses after a short drag threshold in any direction.
 - **Gesture gotcha**: any banner swipe recognizer must set `delaysPrimaryMouseButtonEvents = false`. Leaving the default delay in place can make action buttons and the top-right `X` feel dead because the pan recognizer holds the click while deciding whether a drag is starting.
 - **Control-hit gotcha**: the banner swipe recognizer must also refuse to begin when the initial pointer-down lands on an interactive descendant (`NSButton`, details scroller/text view, etc.). Otherwise dismissible banners can still steal clicks from their own actions even with delayed mouse events disabled.

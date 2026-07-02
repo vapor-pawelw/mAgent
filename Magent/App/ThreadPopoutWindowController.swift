@@ -248,6 +248,13 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func handleKeyEvent(_ event: NSEvent) -> NSEvent? {
+        if event.magentIsBareEscapeKeyDown {
+            if BannerManager.shared.dismissCurrentIfUserDismissible(in: window) ||
+                detailVC.dismissTopUserDismissibleBannerFromKeyboard() {
+                return nil
+            }
+        }
+
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let settings = PersistenceService.shared.loadSettings()
         let bindings = settings.keyBindings

@@ -232,6 +232,11 @@ final class ThreadDetailViewController: NSViewController {
     var showsPendingPromptRecoveryReminder: Bool {
         pendingPromptRecoveryReminderState.isReminderVisible
     }
+
+    @discardableResult
+    func dismissTopUserDismissibleBannerFromKeyboard() -> Bool {
+        terminalBannerOverlay.dismissTopUserDismissibleBannerFromKeyboard()
+    }
     var preparedSessions: Set<String> = []
     var reusableSurfacePreparedSessions: Set<String> = []
     var sessionPreparationTasks: [String: Task<Bool, Never>] = [:]

@@ -386,6 +386,17 @@
         }
       }
     },
+    "threadRecoveredPromptsToolbarHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismissed lost prompts are here. Click to show them again."
+          }
+        }
+      }
+    },
     "threadCouldNotConstructRemoteURL": {
       "extractionState": "manual",
       "localizations": {

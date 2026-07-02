@@ -46,4 +46,29 @@ struct PendingPromptRecoveryReminderStateTests {
         #expect(!state.isReminderVisible)
         #expect(state.hasRecoverablePrompts)
     }
+
+    @Test
+    func toolbarHintIsConsumedOnlyTheFirstTimeReminderAppears() {
+        var state = PendingPromptRecoveryToolbarHintState()
+
+        let hiddenResult = state.consumeHintIfNeeded(isReminderVisible: false)
+        #expect(!hiddenResult)
+        #expect(!state.hasShownHint)
+
+        let firstVisibleResult = state.consumeHintIfNeeded(isReminderVisible: true)
+        #expect(firstVisibleResult)
+        #expect(state.hasShownHint)
+
+        let secondVisibleResult = state.consumeHintIfNeeded(isReminderVisible: true)
+        #expect(!secondVisibleResult)
+    }
+
+    @Test
+    func toolbarHintStaysHiddenAfterEarlierPresentation() {
+        var state = PendingPromptRecoveryToolbarHintState(hasShownHint: true)
+
+        let result = state.consumeHintIfNeeded(isReminderVisible: true)
+        #expect(!result)
+        #expect(state.hasShownHint)
+    }
 }

@@ -1,6 +1,14 @@
 import Cocoa
 import MagentCore
 
+extension NSEvent {
+    var magentIsBareEscapeKeyDown: Bool {
+        type == .keyDown &&
+            keyCode == 53 &&
+            modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty
+    }
+}
+
 // MARK: - Banner Types
 
 enum BannerStyle {
@@ -114,6 +122,17 @@ final class BannerOverlayView: NSView {
             }
         }
         return nil
+    }
+
+    @discardableResult
+    func dismissTopUserDismissibleBannerFromKeyboard() -> Bool {
+        for subview in subviews.reversed() {
+            guard !subview.isHidden, subview.alphaValue > 0 else { continue }
+            if let banner = subview as? BannerView {
+                return banner.dismissFromKeyboardIfAllowed()
+            }
+        }
+        return false
     }
 }
 
@@ -506,6 +525,13 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
 
     @objc private func closeTapped() {
         onDismiss?()
+    }
+
+    @discardableResult
+    func dismissFromKeyboardIfAllowed() -> Bool {
+        guard config.allowsUserDismissal else { return false }
+        onDismiss?()
+        return true
     }
 
     @objc private func toggleDetails() {

@@ -107,6 +107,16 @@ final class BannerManager {
         dismissAnimated()
     }
 
+    @discardableResult
+    func dismissCurrentIfUserDismissible(in window: NSWindow?) -> Bool {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard let currentBanner,
+              window == nil || currentBanner.window === window else {
+            return false
+        }
+        return currentBanner.dismissFromKeyboardIfAllowed()
+    }
+
     // MARK: - Private
 
     private func showOnMain(config: BannerConfig, onDismiss: (() -> Void)? = nil) {

@@ -11,11 +11,11 @@
 #### Improvements
 
 - Reopen cached recent threads immediately more often and let users tune how many terminal views Magent keeps for fast switching.
-- Added a toolbar reminder to reopen dismissed lost-prompt recovery banners without discarding the saved prompt.
+- Added a toolbar reminder with a first-time hint to reopen dismissed lost-prompt recovery banners without discarding the saved prompt.
 
 #### Bug Fixes
 
-- Fixed lost-prompt recovery controls showing a generic button label, kept recovery banners out of the toolbar area, and added confirmation before discarding recovered prompts.
+- Fixed lost-prompt recovery controls showing a generic button label, kept recovery banners out of the toolbar area, added confirmation before discarding recovered prompts, and made `Esc` dismiss banners that show an `X`.
 
 ### Terminal
 

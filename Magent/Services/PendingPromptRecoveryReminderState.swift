@@ -29,3 +29,17 @@ struct PendingPromptRecoveryReminderState: Equatable {
         hasDismissedBanner = false
     }
 }
+
+struct PendingPromptRecoveryToolbarHintState: Equatable {
+    private(set) var hasShownHint: Bool
+
+    init(hasShownHint: Bool = false) {
+        self.hasShownHint = hasShownHint
+    }
+
+    mutating func consumeHintIfNeeded(isReminderVisible: Bool) -> Bool {
+        guard isReminderVisible, !hasShownHint else { return false }
+        hasShownHint = true
+        return true
+    }
+}
