@@ -142,6 +142,7 @@ let project = Project(
             ],
             dependencies: [
                 .external(name: "MagentCore"),
+                .external(name: "GhosttyBridge"),
             ],
             settings: .settings(
                 base: [
@@ -150,6 +151,7 @@ let project = Project(
                     "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
                     "TEST_HOST": "",
                     "BUNDLE_LOADER": "",
+                    "OTHER_LDFLAGS": "$(inherited) -lc++ -framework Carbon",
                 ]
             )
         ),

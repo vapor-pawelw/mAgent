@@ -140,6 +140,8 @@ libghostty manages Metal rendering internally. The host app only:
 
 **Critical: `CAMetalLayer.isOpaque` must be `true`.**  The macOS window server performs compositor-level hit testing before delivering mouse events to the application. If the `CAMetalLayer` region appears transparent (between drawables, during surface re-creation, or when the GPU is busy), the window server routes mouse events to the window behind instead of to our window — making the terminal unresponsive to clicks while non-Metal UI (sidebar, tabs) continues working. Setting `isOpaque = true` in `makeBackingLayer()` prevents this.
 
+**Backing-scale changes are geometry changes.** Moving a window between displays can change `window.backingScaleFactor` without changing the terminal view's point bounds. `TerminalSurfaceView.viewDidChangeBackingProperties()` must therefore resync `CAMetalLayer.contentsScale`, `ghostty_surface_set_content_scale()`, `ghostty_surface_set_size()`, and `ghostty_surface_set_display_id()`. Relying on `setFrameSize(_:)` alone leaves Ghostty rendering at the old backing pixel size, which can make the terminal content appear tiny and pinned to the top-left after moving to an external monitor.
+
 ## Platform Selection
 
 mAgent is macOS-only, so use the native macOS path:
