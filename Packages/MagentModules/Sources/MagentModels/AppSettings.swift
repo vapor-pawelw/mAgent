@@ -122,6 +122,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public static let minChatFontSize: Double = 12
     public static let maxChatFontSize: Double = 22
     public static let defaultChatFontSize: Double = 14
+    public static let defaultTerminalSurfaceCacheLimit = 8
+    public static let minTerminalSurfaceCacheLimit = 1
+    public static let maxTerminalSurfaceCacheLimit = 100
 
     public var projects: [Project]
     public var activeAgents: [AgentType]
@@ -183,6 +186,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var switchToNewlyCreatedTab: Bool
     public var protectPinnedFromEviction: Bool
     public var maxIdleSessions: Int?
+    public var terminalSurfaceCacheLimit: Int?
     public var aiRenameIcon: Bool
     public var aiRenameDescription: Bool
     public var aiRenameBranch: Bool
@@ -251,6 +255,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         switchToNewlyCreatedTab: Bool = true,
         protectPinnedFromEviction: Bool = true,
         maxIdleSessions: Int? = 30,
+        terminalSurfaceCacheLimit: Int? = AppSettings.defaultTerminalSurfaceCacheLimit,
         aiRenameIcon: Bool = true,
         aiRenameDescription: Bool = true,
         aiRenameBranch: Bool = true,
@@ -318,6 +323,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.switchToNewlyCreatedTab = switchToNewlyCreatedTab
         self.protectPinnedFromEviction = protectPinnedFromEviction
         self.maxIdleSessions = maxIdleSessions
+        self.terminalSurfaceCacheLimit = Self.normalizedTerminalSurfaceCacheLimit(terminalSurfaceCacheLimit)
         self.aiRenameIcon = aiRenameIcon
         self.aiRenameDescription = aiRenameDescription
         self.aiRenameBranch = aiRenameBranch
@@ -396,6 +402,13 @@ public nonisolated struct AppSettings: Codable, Sendable {
         switchToNewlyCreatedTab = try container.decodeIfPresent(Bool.self, forKey: .switchToNewlyCreatedTab) ?? true
         protectPinnedFromEviction = try container.decodeIfPresent(Bool.self, forKey: .protectPinnedFromEviction) ?? true
         maxIdleSessions = try container.decodeIfPresent(Int.self, forKey: .maxIdleSessions)
+        if container.contains(.terminalSurfaceCacheLimit) {
+            terminalSurfaceCacheLimit = Self.normalizedTerminalSurfaceCacheLimit(
+                try container.decodeIfPresent(Int.self, forKey: .terminalSurfaceCacheLimit)
+            )
+        } else {
+            terminalSurfaceCacheLimit = Self.defaultTerminalSurfaceCacheLimit
+        }
         aiRenameIcon = try container.decodeIfPresent(Bool.self, forKey: .aiRenameIcon) ?? true
         aiRenameDescription = try container.decodeIfPresent(Bool.self, forKey: .aiRenameDescription) ?? true
         aiRenameBranch = try container.decodeIfPresent(Bool.self, forKey: .aiRenameBranch) ?? true
@@ -467,6 +480,11 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(switchToNewlyCreatedTab, forKey: .switchToNewlyCreatedTab)
         try container.encode(protectPinnedFromEviction, forKey: .protectPinnedFromEviction)
         try container.encodeIfPresent(maxIdleSessions, forKey: .maxIdleSessions)
+        if let terminalSurfaceCacheLimit {
+            try container.encode(terminalSurfaceCacheLimit, forKey: .terminalSurfaceCacheLimit)
+        } else {
+            try container.encodeNil(forKey: .terminalSurfaceCacheLimit)
+        }
         try container.encode(aiRenameIcon, forKey: .aiRenameIcon)
         try container.encode(aiRenameDescription, forKey: .aiRenameDescription)
         try container.encode(aiRenameBranch, forKey: .aiRenameBranch)
@@ -640,6 +658,10 @@ public nonisolated struct AppSettings: Codable, Sendable {
             .filter { !$0.isEmpty }
     }
 
+    public static func normalizedTerminalSurfaceCacheLimit(_ limit: Int?) -> Int? {
+        limit.map { min(max($0, minTerminalSurfaceCacheLimit), maxTerminalSurfaceCacheLimit) }
+    }
+
     private enum CodingKeys: String, CodingKey {
         case projects
         case activeAgents
@@ -702,6 +724,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case switchToNewlyCreatedTab
         case protectPinnedFromEviction
         case maxIdleSessions
+        case terminalSurfaceCacheLimit
         case aiRenameIcon
         case aiRenameDescription
         case aiRenameBranch

@@ -55,15 +55,32 @@ final class SessionRecreationService {
     /// Without this, every thread switch into a recently-visited thread goes through
     /// an async `tmux has-session` call before the overlay can be dismissed, which is
     /// the bulk of the visible "Starting agent..." flash on revisits.
-    func isSessionPreparedFastPath(sessionName: String, thread: MagentThread) -> Bool {
+    func isSessionPreparedFastPath(
+        sessionName: String,
+        thread: MagentThread,
+        hasReusableTerminalSurface: Bool = false
+    ) -> Bool {
+        guard isEligibleForProbeSkipping(sessionName: sessionName, thread: thread) else { return false }
+
+        if hasReusableTerminalSurface {
+            return true
+        }
+
         guard let cached = sessionTracker.knownGoodSessionContexts[sessionName] else { return false }
         guard Date().timeIntervalSince(cached.validatedAt) <= Self.knownGoodSessionTTL else {
             sessionTracker.knownGoodSessionContexts.removeValue(forKey: sessionName)
             return false
         }
-        // The cached context must belong to this thread. (Rename rekeys the cache,
-        // but a session whose thread ID drifted for any other reason is unsafe to trust.)
+        // The cached context must still describe this thread and session role.
+        // Rename rekeys the cache, but any other drift should use the validating path.
         guard cached.threadId == thread.id else { return false }
+        guard cached.expectedPath == thread.worktreePath else { return false }
+        guard cached.isAgentSession == thread.agentTmuxSessions.contains(sessionName) else { return false }
+        return true
+    }
+
+    private func isEligibleForProbeSkipping(sessionName: String, thread: MagentThread) -> Bool {
+        guard thread.tmuxSessionNames.contains(sessionName) else { return false }
         // Sessions that were marked dead or evicted must fall through to the slow path
         // so the VC can trigger recreation.
         if thread.deadSessions.contains(sessionName) { return false }

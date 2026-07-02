@@ -26,7 +26,6 @@ final class AppBackgroundView: NSView {
 final class ReusableTerminalViewCache {
     static let shared = ReusableTerminalViewCache()
 
-    static let maxCachedViews = 8
     static let maxIdleAge: TimeInterval = 60 * 60
 
     private struct Entry {
@@ -82,6 +81,11 @@ final class ReusableTerminalViewCache {
         fifoSessionNames.removeAll()
     }
 
+    func pruneToConfiguredLimit() {
+        pruneExpiredEntries()
+        evictOverflowIfNeeded()
+    }
+
     /// Evict cached views whose sessions are about to be killed (archive/delete).
     /// This prevents ghostty from calling _exit() when the PTY closes on a cached surface.
     func evictSessions(_ sessionNames: [String]) {
@@ -102,7 +106,8 @@ final class ReusableTerminalViewCache {
     }
 
     private func evictOverflowIfNeeded() {
-        while entriesBySession.count > Self.maxCachedViews {
+        guard let maxCachedViews = PersistenceService.shared.loadSettings().terminalSurfaceCacheLimit else { return }
+        while entriesBySession.count > maxCachedViews {
             guard let oldestSessionName = fifoSessionNames.first else { return }
             fifoSessionNames.removeFirst()
             entriesBySession.removeValue(forKey: oldestSessionName)
@@ -224,6 +229,7 @@ final class ThreadDetailViewController: NSViewController {
     var recoveryBanner: BannerView?
     var recoveryBannerTopConstraint: NSLayoutConstraint?
     var preparedSessions: Set<String> = []
+    var reusableSurfacePreparedSessions: Set<String> = []
     var sessionPreparationTasks: [String: Task<Bool, Never>] = [:]
     var sessionPreparationTaskTokens: [String: UUID] = [:]
     var backgroundSessionPreparationTask: Task<Void, Never>?
@@ -911,6 +917,7 @@ final class ThreadDetailViewController: NSViewController {
                 terminalView.removeFromSuperview()
             }
             terminalViews.removeAll()
+            reusableSurfacePreparedSessions.removeAll()
             tabItems.removeAll()
 
             // Clear any existing web/draft/chat tabs from a previous setupTabs call
@@ -1240,12 +1247,14 @@ final class ThreadDetailViewController: NSViewController {
             reuseKey: reuseKey
         ) {
             view = cachedView
+            reusableSurfacePreparedSessions.insert(sessionName)
         } else {
             let tmuxCommand = buildTmuxCommand(for: sessionName)
             view = TerminalSurfaceView(
                 workingDirectory: resolvedThread.worktreePath,
                 command: tmuxCommand
             )
+            reusableSurfacePreparedSessions.remove(sessionName)
         }
         // Tag the view with its tmux session so `GhosttyAppManager` can
         // synchronously free its surface from the `TmuxService` pre-kill

@@ -6,6 +6,12 @@
 
 - Added a `start-agent` helper in Magent terminals so users can relaunch or resume a tab's configured agent after it exits, and recovery banners now use the short helper instead of injecting the full startup command.
 
+### Thread
+
+#### Improvements
+
+- Reopen cached recent threads immediately more often and let users tune how many terminal views Magent keeps for fast switching.
+
 ### Sidebar
 
 #### Features

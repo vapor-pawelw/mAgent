@@ -10,18 +10,31 @@ struct SessionRecreationServiceTests {
     @Test
     func fastPathReturnsTrueForFreshMatchingCacheEntry() {
         let (service, tracker) = makeService()
-        let thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
-        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(threadId: thread.id, validatedAt: Date())
+        var thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
+        thread.agentTmuxSessions = ["ma-alpha"]
+        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(thread: thread, validatedAt: Date())
 
         #expect(service.isSessionPreparedFastPath(sessionName: "ma-alpha", thread: thread))
     }
 
     @Test
-    func fastPathReturnsFalseWhenNoCacheEntryExists() {
+    func fastPathReturnsFalseWhenNoCacheEntryOrReusableSurfaceExists() {
         let (service, _) = makeService()
         let thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
 
         #expect(!service.isSessionPreparedFastPath(sessionName: "ma-alpha", thread: thread))
+    }
+
+    @Test
+    func fastPathReturnsTrueForReusableTerminalSurfaceWithoutKnownGoodCacheEntry() {
+        let (service, _) = makeService()
+        let thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
+
+        #expect(service.isSessionPreparedFastPath(
+            sessionName: "ma-alpha",
+            thread: thread,
+            hasReusableTerminalSurface: true
+        ))
     }
 
     @Test
@@ -30,7 +43,7 @@ struct SessionRecreationServiceTests {
         let thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
         // One second past the TTL so the entry is definitely stale.
         let stale = Date().addingTimeInterval(-(SessionRecreationService.knownGoodSessionTTL + 1))
-        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(threadId: thread.id, validatedAt: stale)
+        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(thread: thread, validatedAt: stale)
 
         #expect(!service.isSessionPreparedFastPath(sessionName: "ma-alpha", thread: thread))
         // Stale entry must be scrubbed so the slow path won't re-encounter it.
@@ -41,7 +54,40 @@ struct SessionRecreationServiceTests {
     func fastPathReturnsFalseWhenCachedThreadIdDoesNotMatch() {
         let (service, tracker) = makeService()
         let thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
-        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(threadId: UUID(), validatedAt: Date())
+        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(
+            thread: thread,
+            threadId: UUID(),
+            validatedAt: Date()
+        )
+
+        #expect(!service.isSessionPreparedFastPath(sessionName: "ma-alpha", thread: thread))
+    }
+
+    @Test
+    func fastPathReturnsFalseWhenCachedPathDoesNotMatch() {
+        let (service, tracker) = makeService()
+        let thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
+        tracker.knownGoodSessionContexts["ma-alpha"] = KnownGoodSessionContext(
+            threadId: thread.id,
+            expectedPath: "/tmp/other",
+            projectPath: "/repo",
+            isAgentSession: false,
+            validatedAt: Date()
+        )
+
+        #expect(!service.isSessionPreparedFastPath(sessionName: "ma-alpha", thread: thread))
+    }
+
+    @Test
+    func fastPathReturnsFalseWhenCachedAgentRoleDoesNotMatch() {
+        let (service, tracker) = makeService()
+        var thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
+        thread.agentTmuxSessions = ["ma-alpha"]
+        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(
+            thread: thread,
+            isAgentSession: false,
+            validatedAt: Date()
+        )
 
         #expect(!service.isSessionPreparedFastPath(sessionName: "ma-alpha", thread: thread))
     }
@@ -51,29 +97,56 @@ struct SessionRecreationServiceTests {
         let (service, tracker) = makeService()
         var thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
         thread.deadSessions = ["ma-alpha"]
-        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(threadId: thread.id, validatedAt: Date())
+        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(thread: thread, validatedAt: Date())
 
         #expect(!service.isSessionPreparedFastPath(sessionName: "ma-alpha", thread: thread))
+        #expect(!service.isSessionPreparedFastPath(
+            sessionName: "ma-alpha",
+            thread: thread,
+            hasReusableTerminalSurface: true
+        ))
     }
 
     @Test
     func fastPathReturnsFalseWhenSessionIsEvicted() {
         let (service, tracker) = makeService()
         let thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
-        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(threadId: thread.id, validatedAt: Date())
+        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(thread: thread, validatedAt: Date())
         tracker.evictedIdleSessions = ["ma-alpha"]
 
         #expect(!service.isSessionPreparedFastPath(sessionName: "ma-alpha", thread: thread))
+        #expect(!service.isSessionPreparedFastPath(
+            sessionName: "ma-alpha",
+            thread: thread,
+            hasReusableTerminalSurface: true
+        ))
     }
 
     @Test
     func fastPathReturnsFalseWhileSessionIsBeingRecreated() {
         let (service, tracker) = makeService()
         let thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
-        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(threadId: thread.id, validatedAt: Date())
+        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(thread: thread, validatedAt: Date())
         tracker.sessionsBeingRecreated = ["ma-alpha"]
 
         #expect(!service.isSessionPreparedFastPath(sessionName: "ma-alpha", thread: thread))
+        #expect(!service.isSessionPreparedFastPath(
+            sessionName: "ma-alpha",
+            thread: thread,
+            hasReusableTerminalSurface: true
+        ))
+    }
+
+    @Test
+    func fastPathReturnsFalseForReusableSurfaceWhenSessionIsNoLongerInThread() {
+        let (service, _) = makeService()
+        let thread = makeThread(name: "alpha", sessions: ["ma-alpha"])
+
+        #expect(!service.isSessionPreparedFastPath(
+            sessionName: "ma-missing",
+            thread: thread,
+            hasReusableTerminalSurface: true
+        ))
     }
 
     // MARK: - markSessionContextKnownGood
@@ -110,8 +183,11 @@ struct SessionRecreationServiceTests {
         let (service, tracker) = makeService()
         let originalThreadId = UUID()
         let newThreadId = UUID()
-        tracker.knownGoodSessionContexts["ma-alpha"] = makeContext(
+        tracker.knownGoodSessionContexts["ma-alpha"] = KnownGoodSessionContext(
             threadId: originalThreadId,
+            expectedPath: "/tmp/original",
+            projectPath: "/repo",
+            isAgentSession: true,
             validatedAt: Date(timeIntervalSince1970: 0)
         )
 
@@ -154,12 +230,17 @@ struct SessionRecreationServiceTests {
         )
     }
 
-    private func makeContext(threadId: UUID, validatedAt: Date) -> KnownGoodSessionContext {
+    private func makeContext(
+        thread: MagentThread,
+        threadId: UUID? = nil,
+        isAgentSession: Bool? = nil,
+        validatedAt: Date
+    ) -> KnownGoodSessionContext {
         KnownGoodSessionContext(
-            threadId: threadId,
-            expectedPath: "/tmp/worktree",
+            threadId: threadId ?? thread.id,
+            expectedPath: thread.worktreePath,
             projectPath: "/repo",
-            isAgentSession: true,
+            isAgentSession: isAgentSession ?? thread.agentTmuxSessions.contains(thread.tmuxSessionNames.first ?? ""),
             validatedAt: validatedAt
         )
     }

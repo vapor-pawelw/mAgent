@@ -8,8 +8,16 @@ extension ThreadManager {
 
     static let knownGoodSessionTTL: TimeInterval = SessionRecreationService.knownGoodSessionTTL
 
-    func isSessionPreparedFastPath(sessionName: String, thread: MagentThread) -> Bool {
-        sessionRecreationService.isSessionPreparedFastPath(sessionName: sessionName, thread: thread)
+    func isSessionPreparedFastPath(
+        sessionName: String,
+        thread: MagentThread,
+        hasReusableTerminalSurface: Bool = false
+    ) -> Bool {
+        sessionRecreationService.isSessionPreparedFastPath(
+            sessionName: sessionName,
+            thread: thread,
+            hasReusableTerminalSurface: hasReusableTerminalSurface
+        )
     }
 
     func recreateSessionIfNeeded(

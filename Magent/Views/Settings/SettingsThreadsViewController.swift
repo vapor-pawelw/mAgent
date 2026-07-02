@@ -20,6 +20,9 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var maxIdleSessionsCheckbox: NSButton!
     private var maxIdleSessionsStepper: NSStepper!
     private var maxIdleSessionsValueLabel: NSTextField!
+    private var terminalSurfaceCacheCheckbox: NSButton!
+    private var terminalSurfaceCacheStepper: NSStepper!
+    private var terminalSurfaceCacheValueLabel: NSTextField!
     private var protectPinnedCheckbox: NSButton!
     private var autoReorderOnCompletionCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
@@ -366,6 +369,43 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         maxIdleDesc.font = .systemFont(ofSize: 11)
         maxIdleDesc.textColor = NSColor(resource: .textSecondary)
         sessionSection.addArrangedSubview(maxIdleDesc)
+
+        let surfaceCacheRow = NSStackView()
+        surfaceCacheRow.orientation = .horizontal
+        surfaceCacheRow.alignment = .centerY
+        surfaceCacheRow.spacing = 8
+
+        let isSurfaceCacheLimited = settings.terminalSurfaceCacheLimit != nil
+        terminalSurfaceCacheCheckbox = NSButton(
+            checkboxWithTitle: String(localized: .SettingsStrings.settingsThreadsTerminalSurfaceCacheLimit),
+            target: self,
+            action: #selector(terminalSurfaceCacheToggled)
+        )
+        terminalSurfaceCacheCheckbox.state = isSurfaceCacheLimited ? .on : .off
+        surfaceCacheRow.addArrangedSubview(terminalSurfaceCacheCheckbox)
+
+        terminalSurfaceCacheStepper = NSStepper()
+        terminalSurfaceCacheStepper.minValue = Double(AppSettings.minTerminalSurfaceCacheLimit)
+        terminalSurfaceCacheStepper.maxValue = Double(AppSettings.maxTerminalSurfaceCacheLimit)
+        terminalSurfaceCacheStepper.increment = 1
+        terminalSurfaceCacheStepper.integerValue = settings.terminalSurfaceCacheLimit ?? AppSettings.defaultTerminalSurfaceCacheLimit
+        terminalSurfaceCacheStepper.isEnabled = isSurfaceCacheLimited
+        terminalSurfaceCacheStepper.target = self
+        terminalSurfaceCacheStepper.action = #selector(terminalSurfaceCacheStepperChanged)
+        surfaceCacheRow.addArrangedSubview(terminalSurfaceCacheStepper)
+
+        terminalSurfaceCacheValueLabel = NSTextField(labelWithString: "")
+        terminalSurfaceCacheValueLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        surfaceCacheRow.addArrangedSubview(terminalSurfaceCacheValueLabel)
+        sessionSection.addArrangedSubview(surfaceCacheRow)
+        updateTerminalSurfaceCacheControls()
+
+        let surfaceCacheDesc = NSTextField(
+            wrappingLabelWithString: String(localized: .SettingsStrings.settingsThreadsTerminalSurfaceCacheDescription)
+        )
+        surfaceCacheDesc.font = .systemFont(ofSize: 11)
+        surfaceCacheDesc.textColor = NSColor(resource: .textSecondary)
+        sessionSection.addArrangedSubview(surfaceCacheDesc)
 
         protectPinnedCheckbox = NSButton(
             checkboxWithTitle: "Protect pinned threads and tabs from eviction",
@@ -852,6 +892,35 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         persistSettings(notify: true) { settings in
             settings.maxIdleSessions = maxIdleSessionsStepper.integerValue
         }
+    }
+
+    private func updateTerminalSurfaceCacheControls() {
+        let isLimited = terminalSurfaceCacheCheckbox.state == .on
+        terminalSurfaceCacheStepper.isEnabled = isLimited
+        terminalSurfaceCacheValueLabel.textColor = isLimited ? .labelColor : .tertiaryLabelColor
+        terminalSurfaceCacheValueLabel.stringValue = isLimited
+            ? "\(terminalSurfaceCacheStepper.integerValue)"
+            : String(localized: .SettingsStrings.settingsThreadsTerminalSurfaceCacheUnlimited)
+    }
+
+    @objc private func terminalSurfaceCacheToggled() {
+        let isLimited = terminalSurfaceCacheCheckbox.state == .on
+        if isLimited && terminalSurfaceCacheStepper.integerValue < AppSettings.minTerminalSurfaceCacheLimit {
+            terminalSurfaceCacheStepper.integerValue = AppSettings.defaultTerminalSurfaceCacheLimit
+        }
+        updateTerminalSurfaceCacheControls()
+        persistSettings { settings in
+            settings.terminalSurfaceCacheLimit = isLimited ? terminalSurfaceCacheStepper.integerValue : nil
+        }
+        ReusableTerminalViewCache.shared.pruneToConfiguredLimit()
+    }
+
+    @objc private func terminalSurfaceCacheStepperChanged() {
+        updateTerminalSurfaceCacheControls()
+        persistSettings { settings in
+            settings.terminalSurfaceCacheLimit = terminalSurfaceCacheStepper.integerValue
+        }
+        ReusableTerminalViewCache.shared.pruneToConfiguredLimit()
     }
 
     func textDidChange(_ notification: Notification) {

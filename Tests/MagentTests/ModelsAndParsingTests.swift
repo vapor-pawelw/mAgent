@@ -752,6 +752,47 @@ struct AppSettingsStatusBarThreadStatusTests {
     }
 }
 
+// MARK: - AppSettings terminal surface cache
+
+@Suite("AppSettings terminal surface cache")
+struct AppSettingsTerminalSurfaceCacheTests {
+
+    @Test("Default cache limit is finite")
+    func defaultCacheLimit() {
+        #expect(AppSettings().terminalSurfaceCacheLimit == AppSettings.defaultTerminalSurfaceCacheLimit)
+    }
+
+    @Test("Missing cache limit decodes to default for older settings files")
+    func missingCacheLimitDecodesToDefault() throws {
+        let baselineData = try JSONEncoder().encode(AppSettings())
+        var baselineObject = try #require(JSONSerialization.jsonObject(with: baselineData) as? [String: Any])
+        baselineObject.removeValue(forKey: "terminalSurfaceCacheLimit")
+        let data = try JSONSerialization.data(withJSONObject: baselineObject)
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(decoded.terminalSurfaceCacheLimit == AppSettings.defaultTerminalSurfaceCacheLimit)
+    }
+
+    @Test("Nil cache limit round-trips as unlimited")
+    func nilCacheLimitRoundTripsAsUnlimited() throws {
+        let original = AppSettings(terminalSurfaceCacheLimit: nil)
+
+        let data = try JSONEncoder().encode(original)
+        let decodedObject = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(decodedObject.keys.contains("terminalSurfaceCacheLimit"))
+        #expect(decoded.terminalSurfaceCacheLimit == nil)
+    }
+
+    @Test("Cache limit is clamped to supported range")
+    func cacheLimitClampsToSupportedRange() throws {
+        #expect(AppSettings(terminalSurfaceCacheLimit: -10).terminalSurfaceCacheLimit == AppSettings.minTerminalSurfaceCacheLimit)
+        #expect(AppSettings(terminalSurfaceCacheLimit: 1_000).terminalSurfaceCacheLimit == AppSettings.maxTerminalSurfaceCacheLimit)
+    }
+}
+
 // MARK: - AppSettings chat appearance fields
 
 @Suite("AppSettings chat appearance fields")

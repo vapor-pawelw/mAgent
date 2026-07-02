@@ -320,6 +320,39 @@
         }
       }
     },
+    "settingsThreadsTerminalSurfaceCacheDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cached terminal views reopen recent threads immediately. Higher values use more memory; turn the limit off to keep every cached view until it expires."
+          }
+        }
+      }
+    },
+    "settingsThreadsTerminalSurfaceCacheLimit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limit cached terminal views"
+          }
+        }
+      }
+    },
+    "settingsThreadsTerminalSurfaceCacheUnlimited": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlimited"
+          }
+        }
+      }
+    },
     "settingsThreadsStatusBarBusy": {
       "extractionState": "manual",
       "localizations": {

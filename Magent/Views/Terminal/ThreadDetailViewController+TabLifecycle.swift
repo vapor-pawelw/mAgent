@@ -482,12 +482,17 @@ extension ThreadDetailViewController {
         if preparedSessions.contains(sessionName), !forceRevalidate { return false }
 
         // Cross-VC fast path: a freshly-constructed ThreadDetailViewController has an
-        // empty `preparedSessions`, but the underlying tmux session may have been
-        // validated by a previous VC instance within the known-good TTL. Trust that
-        // cache so revisiting a recently-opened thread doesn't incur a `tmux has-session`
-        // round trip before the overlay is dismissed.
+        // empty `preparedSessions`, but it may have just restored a reusable terminal
+        // surface from the previous controller. Trust that resource-backed state so
+        // revisiting a retained thread doesn't incur a `tmux has-session` round trip
+        // before the overlay is dismissed. The shorter known-good context cache remains
+        // as a fallback when no surface was retained.
         if !forceRevalidate,
-           threadManager.isSessionPreparedFastPath(sessionName: sessionName, thread: thread) {
+           threadManager.isSessionPreparedFastPath(
+                sessionName: sessionName,
+                thread: thread,
+                hasReusableTerminalSurface: reusableSurfacePreparedSessions.contains(sessionName)
+           ) {
             preparedSessions.insert(sessionName)
             return false
         }
