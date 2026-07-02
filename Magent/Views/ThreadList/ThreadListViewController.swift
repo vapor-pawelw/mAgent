@@ -1249,6 +1249,7 @@ final class ThreadListViewController: NSViewController {
             }
         }
         refreshVisibleSectionDisclosureButtons()
+        settleSidebarOutlineGeometryAfterStructuralReload()
 
         // Restore selection
         var restoredSelection = false
@@ -1304,6 +1305,14 @@ final class ThreadListViewController: NSViewController {
                 self?.projectsWithValidRemotes = validIds
             }
         }
+    }
+
+    private func settleSidebarOutlineGeometryAfterStructuralReload() {
+        // Expansion rebuilds the visible row tree after reloadData's initial layout pass.
+        // Flush that second structure before scroll restore/sticky headers read row rects.
+        outlineView.noteNumberOfRowsChanged()
+        outlineView.layoutSubtreeIfNeeded()
+        scrollView.layoutSubtreeIfNeeded()
     }
 
     private func scheduleInitialSelectedThreadCenteringIfNeeded() {

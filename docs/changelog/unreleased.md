@@ -20,6 +20,7 @@
 
 #### Bug Fixes
 
+- Fixed project headers overlapping earlier sidebar sections and leaving a gap before the main worktree after creating threads.
 - Kept the add-thread `+` button visible on sticky repository headers.
 - Fixed sidebar thread clicks getting ignored after interrupted drag interactions.
 - Fixed the sidebar add-repository menu so create and import actions open reliably.
