@@ -3,30 +3,21 @@ import Testing
 @Suite
 struct StickyHeaderBackdropMaskTests {
     @Test
-    func firstLayerRampsAcrossLowerPartOfBlurRegion() {
-        let stops = StickyHeaderBackdropMask.gradientStops(totalHeight: 80, rampHeight: 48, layerIndex: 0)
+    func rampsAcrossLowerPartOfBlurRegion() {
+        let stops = StickyHeaderBackdropMask.gradientStops(totalHeight: 80, rampHeight: 48)
 
         #expect(stops.count == 3)
         #expect(stops[0].location == 0)
         #expect(stops[0].opacity == 0)
-        #expect(stops[1].location == 0.4)
+        #expect(stops[1].location == 0.6)
         #expect(stops[1].opacity == 1)
         #expect(stops[2].location == 1)
         #expect(stops[2].opacity == 1)
     }
 
     @Test
-    func laterLayersRampHigherForProgressiveBlur() {
-        let firstLayer = StickyHeaderBackdropMask.gradientStops(totalHeight: 80, rampHeight: 48, layerIndex: 0)
-        let lastLayer = StickyHeaderBackdropMask.gradientStops(totalHeight: 80, rampHeight: 48, layerIndex: 2)
-
-        #expect(firstLayer[1].location < lastLayer[1].location)
-        #expect(lastLayer[1].location == 0.6)
-    }
-
-    @Test
     func zeroRampKeepsBackdropFullyVisible() {
-        let stops = StickyHeaderBackdropMask.gradientStops(totalHeight: 80, rampHeight: 0, layerIndex: 0)
+        let stops = StickyHeaderBackdropMask.gradientStops(totalHeight: 80, rampHeight: 0)
 
         #expect(stops.count == 2)
         #expect(stops[0].opacity == 1)
@@ -35,7 +26,7 @@ struct StickyHeaderBackdropMaskTests {
 
     @Test
     func rampHeightIsClampedToAvailableHeight() {
-        let stops = StickyHeaderBackdropMask.gradientStops(totalHeight: 8, rampHeight: 12, layerIndex: 2)
+        let stops = StickyHeaderBackdropMask.gradientStops(totalHeight: 8, rampHeight: 12)
 
         #expect(stops[1].location == 1)
     }
