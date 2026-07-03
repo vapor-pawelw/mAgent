@@ -5,6 +5,7 @@
       "models": [
         { "id": "opus", "label": "Opus" },
         { "id": "sonnet", "label": "Sonnet" },
+        { "id": "fable", "label": "Fable" },
         { "id": "haiku", "label": "Haiku" }
       ],
       "reasoningLevels": ["low", "medium", "high", "max"]

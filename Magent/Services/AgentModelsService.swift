@@ -142,6 +142,7 @@ final class AgentModelsService: @unchecked Sendable {
                     models: [
                         AgentModel(id: "opus", label: "Opus"),
                         AgentModel(id: "sonnet", label: "Sonnet"),
+                        AgentModel(id: "fable", label: "Fable"),
                         AgentModel(id: "haiku", label: "Haiku"),
                     ],
                     reasoningLevels: ["low", "medium", "high", "max"]
