@@ -133,11 +133,12 @@ private final class SidebarBackgroundView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        // In dark mode the window background is already correct; only paint in light mode
-        // to tint the sidebar away from pure white without touching the layer hierarchy
-        // (wantsLayer on a parent breaks NSOutlineView capsule drawing in subviews).
-        guard !isDark else { return }
-        NSColor(resource: .appBackground).setFill()
+        let backgroundColor = isDark
+            ? NSColor(srgbRed: 0.085, green: 0.073, blue: 0.080, alpha: 1.0)
+            : NSColor(resource: .appBackground)
+        // Paint here instead of using a parent layer; wantsLayer on a parent breaks
+        // NSOutlineView capsule drawing in subviews.
+        backgroundColor.setFill()
         dirtyRect.fill()
     }
 }

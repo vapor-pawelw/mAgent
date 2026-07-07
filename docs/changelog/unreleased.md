@@ -36,6 +36,7 @@
 - Keep moved or missing repositories visible with recovery and discard actions.
 - Refresh missing-repository status when Magent returns to the foreground.
 - Center the missing-repository recovery row content within its sidebar box.
+- Made the thread-list background slightly darker in dark mode.
 - Sticky sidebar headers now use a stronger live blur instead of an opaque fill.
 - Hid the thread-list scrollbar so it no longer cuts through sticky header blur.
 - Added breathing room between repository headers and main worktree rows.
