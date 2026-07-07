@@ -18,3 +18,25 @@
 
 - Thread and tab busy indicators now remain visible when Codex keeps its composer open below an active Working status.
 - Agent completion and input-needed alerts now play their configured sound once instead of sometimes playing it twice when system banners are enabled.
+
+### Chat
+
+#### Improvements
+
+- Made chat tool activity cleaner by showing concise action summaries and keeping successful tool output collapsed by default.
+
+### Terminal
+
+#### Bug Fixes
+
+- Fixed terminal content scaling after moving a window between displays with different Retina scaling.
+
+### Sidebar
+
+#### Features
+
+- Added a disabled-by-default Threads setting for showing worktree folder names on the second line of sidebar rows.
+- Added collapsed-by-default hidden-thread groups that can be expanded independently in each sidebar section or project.
+- Added toolbar and empty-state repository actions for creating, importing, or cloning repositories.
+- Replaced thread activity durations with compact indicators: a colored spinner for long-running busy threads and a `zzz` symbol for stale threads, with the existing hover details and quick actions.
+- Made sidebar status items right-clickable while preserving left-click thread selection, including direct numbered PR/MR opening, the full Jira menu, quick Hide and Archive actions from stale indicators, precise Stale/Busy context, and quick menus for priority, favorite, pinned, and hidden states.

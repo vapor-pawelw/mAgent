@@ -68,11 +68,11 @@ public enum ChatToolTranscriptFormatter {
             let name = parts.first.map(String.init)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "tool"
             let rawBody = parts.count > 1 ? String(parts[1]) : ""
             let formatted = formattedToolCallArguments(rawBody)
-            let command = commandSummary(from: rawBody)
+            let summary = toolActionSummary(name: name, arguments: rawBody)
             return ChatToolTranscriptPresentation(
                 kind: .call,
-                title: command ?? name,
-                detail: command == nil ? jsonSummary(from: rawBody) : name,
+                title: summary.title,
+                detail: summary.detail ?? jsonSummary(from: rawBody),
                 body: formatted
             )
         }
@@ -85,13 +85,15 @@ public enum ChatToolTranscriptFormatter {
             let envelope = parseToolOutputEnvelope(split.output)
             let outputBody = formattedToolOutput(envelope)
             let argumentsBody = formattedToolResultArguments(split.arguments, toolName: name)
-            let summary = outputContentSummary(from: envelope, fallbackText: split.output)
+            let actionSummary = toolActionSummary(name: name, arguments: split.arguments)
+            let outputSummary = outputContentSummary(from: envelope, fallbackText: split.output)
+            let title = outputSummary.map { "\(actionSummary.completedTitle): \($0)" } ?? actionSummary.completedTitle
             return ChatToolTranscriptPresentation(
                 kind: .result,
-                title: summary ?? name,
-                detail: outputSummary(from: envelope, fallbackText: split.output, prefix: "from \(name)") ?? "from \(name)",
+                title: abbreviated(title, maxLength: 140),
+                detail: statusSummary(from: envelope, fallbackText: split.output, prefix: actionSummary.detail),
                 body: [outputBody, argumentsBody].filter { !$0.isEmpty }.joined(separator: "\n\n"),
-                isExpandedByDefault: true
+                isExpandedByDefault: shouldExpandOutput(envelope)
             )
         }
         if trimmed.hasPrefix("Tool output:") {
@@ -115,12 +117,13 @@ public enum ChatToolTranscriptFormatter {
             let envelope = parseToolOutputEnvelope(rawBody)
             let formatted = formattedToolOutput(envelope)
             let summary = outputContentSummary(from: envelope, fallbackText: rawBody)
+            let status = statusSummary(from: envelope, fallbackText: rawBody, prefix: outputName)
             return ChatToolTranscriptPresentation(
                 kind: .output,
-                title: outputName ?? summary ?? "No output",
-                detail: outputSummary(from: envelope, fallbackText: rawBody, prefix: outputName.map { "for \($0)" }),
+                title: abbreviated(summary.map { "Tool output: \($0)" } ?? outputName ?? "Tool output", maxLength: 140),
+                detail: status,
                 body: formatted,
-                isExpandedByDefault: true
+                isExpandedByDefault: shouldExpandOutput(envelope)
             )
         }
         return nil
@@ -332,12 +335,62 @@ public enum ChatToolTranscriptFormatter {
         return nil
     }
 
-    private static func commandSummary(from text: String) -> String? {
-        guard let dictionary = jsonObject(from: text) as? [String: Any] else { return nil }
-        if let command = dictionary["cmd"] as? String ?? dictionary["command"] as? String {
-            return command.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    private static func toolActionSummary(name: String, arguments: String) -> (title: String, completedTitle: String, detail: String?) {
+        guard let dictionary = jsonObject(from: arguments) as? [String: Any] else {
+            let cleanName = humanizedToolName(name)
+            return (cleanName, "\(cleanName) finished", nil)
         }
-        return nil
+
+        if let command = dictionary["cmd"] as? String ?? dictionary["command"] as? String {
+            let cleanCommand = command.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            return ("Run command", "Command finished", cleanCommand)
+        }
+        if let path = dictionary["file_path"] as? String ?? dictionary["path"] as? String {
+            let cleanPath = path.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            let title = actionTitleForToolName(name, fallback: "Open file")
+            return (title, "\(title) finished", cleanPath)
+        }
+        if let query = dictionary["query"] as? String ?? dictionary["pattern"] as? String {
+            let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            let title = actionTitleForToolName(name, fallback: "Search")
+            return (title, "\(title) finished", cleanQuery)
+        }
+        if let url = dictionary["url"] as? String {
+            let cleanURL = url.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            return ("Open URL", "URL request finished", cleanURL)
+        }
+
+        let cleanName = humanizedToolName(name)
+        return (cleanName, "\(cleanName) finished", jsonSummary(from: arguments))
+    }
+
+    private static func actionTitleForToolName(_ name: String, fallback: String) -> String {
+        let lowercased = name.lowercased()
+        if lowercased.contains("read") || lowercased.contains("open") {
+            return "Read file"
+        }
+        if lowercased.contains("write") || lowercased.contains("edit") || lowercased.contains("patch") {
+            return "Edit file"
+        }
+        if lowercased.contains("grep") || lowercased.contains("search") || lowercased.contains("find") {
+            return "Search"
+        }
+        return fallback
+    }
+
+    private static func humanizedToolName(_ name: String) -> String {
+        let clean = name
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return "Tool call" }
+        return clean
+            .split(separator: " ")
+            .map { word in
+                guard let first = word.first else { return "" }
+                return first.uppercased() + word.dropFirst()
+            }
+            .joined(separator: " ")
     }
 
     private static func outputContentSummary(from envelope: ToolOutputEnvelope, fallbackText: String) -> String? {
@@ -398,6 +451,24 @@ public enum ChatToolTranscriptFormatter {
             }
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private static func statusSummary(
+        from envelope: ToolOutputEnvelope,
+        fallbackText: String,
+        prefix: String? = nil
+    ) -> String? {
+        outputSummary(from: envelope, fallbackText: fallbackText, prefix: prefix)
+    }
+
+    private static func shouldExpandOutput(_ envelope: ToolOutputEnvelope) -> Bool {
+        if let exitCode = envelope.exitCode, exitCode != "0" {
+            return true
+        }
+        if envelope.sessionID != nil {
+            return true
+        }
+        return false
     }
 
     private static func abbreviated(_ text: String, maxLength: Int) -> String {

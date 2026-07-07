@@ -1808,10 +1808,11 @@ struct AgentChatRuntimeParsingTests {
         )
 
         #expect(presentation?.kind == .call)
-        #expect(presentation?.title == "rg hello")
-        #expect(presentation?.detail == "exec_command")
+        #expect(presentation?.title == "Run command")
+        #expect(presentation?.detail == "rg hello")
         #expect(presentation?.body.contains("Command\nrg hello") == true)
         #expect(presentation?.body.contains("Yield time: 1000 ms") == true)
+        #expect(presentation?.isExpandedByDefault == false)
     }
 
     @Test("Tool transcript formatter summarizes command output envelopes")
@@ -1830,12 +1831,13 @@ struct AgentChatRuntimeParsingTests {
         )
 
         #expect(presentation?.kind == .output)
-        #expect(presentation?.title == "Changed: true · Files: A.swift, B.swift")
+        #expect(presentation?.title == "Tool output: Changed: true · Files: A.swift, B.swift")
         #expect(presentation?.detail == nil)
         #expect(presentation?.body.contains("Status\nExit code: 0") == false)
         #expect(presentation?.body.contains("Tokens: 42") == false)
         #expect(presentation?.body.contains("Changed: true") == true)
         #expect(presentation?.body.contains("Files: A.swift, B.swift") == true)
+        #expect(presentation?.isExpandedByDefault == false)
     }
 
     @Test("Tool transcript formatter labels paired tool output")
@@ -1845,9 +1847,31 @@ struct AgentChatRuntimeParsingTests {
         )
 
         #expect(presentation?.kind == .output)
-        #expect(presentation?.title == "exec_command")
-        #expect(presentation?.detail == "for exec_command")
+        #expect(presentation?.title == "Tool output: found")
+        #expect(presentation?.detail == "exec_command")
         #expect(presentation?.body.contains("Output\nfound") == true)
+        #expect(presentation?.isExpandedByDefault == false)
+    }
+
+    @Test("Tool transcript formatter expands failed command output")
+    func toolTranscriptFormatterExpandsFailedCommandOutput() {
+        let presentation = ChatToolTranscriptFormatter.presentation(
+            for: ChatToolTranscriptFormatter.toolResultText(
+                name: "exec_command",
+                arguments: "{\"cmd\":\"swift test\"}",
+                output: """
+                Wall time: 1.2 seconds
+                Process exited with code 1
+                Output:
+                error: failed
+                """
+            )
+        )
+
+        #expect(presentation?.kind == .result)
+        #expect(presentation?.title == "Command finished: error: failed")
+        #expect(presentation?.detail == "swift test · exit 1 · 1.2 seconds")
+        #expect(presentation?.isExpandedByDefault == true)
     }
 
     @Test("Codex chat tab restore skips tabs without session ids")
