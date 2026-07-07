@@ -68,6 +68,12 @@ final class AgentSetupService {
         let fileExists: Bool
         let fileSize: UInt64?
         let fileModifiedAt: TimeInterval?
+        let configExists: Bool
+        let configSize: UInt64?
+        let configModifiedAt: TimeInterval?
+        let configResolvedPath: String?
+        let configResolvedSize: UInt64?
+        let configResolvedModifiedAt: TimeInterval?
     }
 
     // MARK: - Session Environment
@@ -1744,14 +1750,24 @@ final class AgentSetupService {
             .appendingPathComponent(".codex").path
         let userAgentsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex/AGENTS.md").path
+        let userConfigPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/config.toml").path
         let codexHomeAttrs = try? FileManager.default.attributesOfItem(atPath: userCodexHomePath)
         let attrs = try? FileManager.default.attributesOfItem(atPath: userAgentsPath)
+        let configAttrs = try? FileManager.default.attributesOfItem(atPath: userConfigPath)
+        let resolvedConfigPath = resolvedSymlinkDestinationIfNeeded(atPath: userConfigPath)
+        let resolvedConfigAttrs = resolvedConfigPath.flatMap { try? FileManager.default.attributesOfItem(atPath: $0) }
         let codexHomeExists = codexHomeAttrs != nil
         let codexHomeSize = codexHomeAttrs?[.size] as? UInt64
         let codexHomeModifiedAt = (codexHomeAttrs?[.modificationDate] as? Date)?.timeIntervalSince1970
         let fileExists = attrs != nil
         let fileSize = attrs?[.size] as? UInt64
         let modifiedAt = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970
+        let configExists = configAttrs != nil
+        let configSize = configAttrs?[.size] as? UInt64
+        let configModifiedAt = (configAttrs?[.modificationDate] as? Date)?.timeIntervalSince1970
+        let resolvedConfigSize = resolvedConfigAttrs?[.size] as? UInt64
+        let resolvedConfigModifiedAt = (resolvedConfigAttrs?[.modificationDate] as? Date)?.timeIntervalSince1970
         return CodexAgentsMetadataSignature(
             includeMagentIPC: includeMagentIPC,
             codexHomeExists: codexHomeExists,
@@ -1759,8 +1775,25 @@ final class AgentSetupService {
             codexHomeModifiedAt: codexHomeModifiedAt,
             fileExists: fileExists,
             fileSize: fileSize,
-            fileModifiedAt: modifiedAt
+            fileModifiedAt: modifiedAt,
+            configExists: configExists,
+            configSize: configSize,
+            configModifiedAt: configModifiedAt,
+            configResolvedPath: resolvedConfigPath,
+            configResolvedSize: resolvedConfigSize,
+            configResolvedModifiedAt: resolvedConfigModifiedAt
         )
+    }
+
+    private func resolvedSymlinkDestinationIfNeeded(atPath path: String) -> String? {
+        guard let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: path) else {
+            return nil
+        }
+        if destination.hasPrefix("/") {
+            return destination
+        }
+        let parent = (path as NSString).deletingLastPathComponent
+        return (parent as NSString).appendingPathComponent(destination)
     }
 
     // MARK: - Agent Start Command
@@ -1853,9 +1886,10 @@ final class AgentSetupService {
             try? fm.removeItem(atPath: managedCodexHome)
         }
         try? fm.createDirectory(atPath: managedCodexHome, withIntermediateDirectories: true)
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: managedCodexHome)
 
         let sourceEntries = (try? fm.contentsOfDirectory(atPath: userCodexHome)) ?? []
-        let desiredEntries = Set(sourceEntries.filter { $0 != "AGENTS.md" })
+        let desiredEntries = Set(sourceEntries.filter { $0 != "AGENTS.md" && $0 != "config.toml" })
 
         for entry in desiredEntries {
             let sourcePath = (userCodexHome as NSString).appendingPathComponent(entry)
@@ -1870,9 +1904,11 @@ final class AgentSetupService {
             try? fm.createSymbolicLink(atPath: managedPath, withDestinationPath: sourcePath)
         }
 
+        syncManagedCodexConfig(userCodexHome: userCodexHome, managedCodexHome: managedCodexHome)
+
         // Remove stale symlinks that previously mirrored ~/.codex entries now gone.
         let managedEntries = (try? fm.contentsOfDirectory(atPath: managedCodexHome)) ?? []
-        for entry in managedEntries where entry != "AGENTS.md" && !desiredEntries.contains(entry) {
+        for entry in managedEntries where entry != "AGENTS.md" && entry != "config.toml" && !desiredEntries.contains(entry) {
             let managedPath = (managedCodexHome as NSString).appendingPathComponent(entry)
             guard let existingSymlinkTarget = try? fm.destinationOfSymbolicLink(atPath: managedPath) else { continue }
             if existingSymlinkTarget.hasPrefix(userCodexHome + "/") {
@@ -1893,6 +1929,26 @@ final class AgentSetupService {
         }
 
         return managedCodexHome
+    }
+
+    private func syncManagedCodexConfig(userCodexHome: String, managedCodexHome: String) {
+        let fm = FileManager.default
+        let sourcePath = (userCodexHome as NSString).appendingPathComponent("config.toml")
+        let managedPath = (managedCodexHome as NSString).appendingPathComponent("config.toml")
+
+        guard let source = try? String(contentsOfFile: sourcePath, encoding: .utf8) else {
+            try? fm.removeItem(atPath: managedPath)
+            return
+        }
+
+        let migrated = CodexConfigMigration.migratingDeprecatedHooksFeatureKey(in: source)
+        if (try? fm.destinationOfSymbolicLink(atPath: managedPath)) != nil {
+            try? fm.removeItem(atPath: managedPath)
+        }
+        if (try? String(contentsOfFile: managedPath, encoding: .utf8)) != migrated {
+            try? migrated.write(toFile: managedPath, atomically: true, encoding: .utf8)
+        }
+        try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: managedPath)
     }
 
     private func cleanupGlobalCodexIPCInstructions() {

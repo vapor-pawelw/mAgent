@@ -7,6 +7,10 @@
 - Added Fable as the top Claude model and default review model.
 - Added a `start-agent` helper in Magent terminals so users can relaunch or resume a tab's configured agent after it exits, and recovery banners now use the short helper instead of injecting the full startup command.
 
+#### Bug Fixes
+
+- Stopped Magent-launched Codex tabs from showing the deprecated `features.codex_hooks` warning when the user's Codex config still uses the old key.
+
 ### Thread
 
 #### Improvements
