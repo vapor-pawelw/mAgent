@@ -862,8 +862,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let promptFont = NSFont.systemFont(ofSize: 13)
         var lastFieldView: NSView = agentRow
         if config.showPromptInputArea {
-            // Prompt label
-            promptLabel = makeFormLabel(promptLabelText)
+            stack.setCustomSpacing(8, after: agentRow)
+            promptLabel = makePromptHeadingLabel(promptLabelText)
             stack.addArrangedSubview(promptLabel)
             stack.setCustomSpacing(4, after: promptLabel)
 
@@ -928,7 +928,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 draftRow.addArrangedSubview(draftSpacer)
                 draftRow.addArrangedSubview(draftCheckbox)
 
-                stack.setCustomSpacing(4, after: promptScrollView)
+                stack.setCustomSpacing(8, after: promptScrollView)
                 stack.addArrangedSubview(draftRow)
                 NSLayoutConstraint.activate([draftRow.widthAnchor.constraint(equalTo: stack.widthAnchor)])
                 stack.setCustomSpacing(14, after: draftRow)
@@ -1143,6 +1143,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private func makeFormLabel(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
         label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        return label
+    }
+
+    private func makePromptHeadingLabel(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.textColor = NSColor(resource: .textSecondary)
         label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         return label
     }
