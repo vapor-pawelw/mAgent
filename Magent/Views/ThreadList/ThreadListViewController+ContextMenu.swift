@@ -1942,22 +1942,33 @@ extension ThreadListViewController {
         let currentName = currentSectionName(projectId: projectId, sectionId: sectionId) ?? fallbackName ?? ""
         activeSectionRename = (projectId: projectId, sectionId: sectionId, originalName: currentName)
         reloadData()
-        focusActiveSectionRenameField(selectAll: true)
+        focusActiveSectionRenameField(selectAll: true, attempt: 0)
     }
 
-    private func focusActiveSectionRenameField(selectAll: Bool) {
-        guard let editor = activeSectionRenameField() else { return }
+    private func focusActiveSectionRenameField(selectAll: Bool, attempt: Int = 0) {
+        let editor = activeSectionRenameField(makeIfNecessary: true)
+        guard let editor else {
+            guard SidebarInlineRenameFocusPolicy.shouldRetry(editorIsAvailable: false, attempt: attempt) else { return }
+            DispatchQueue.main.async { [weak self] in
+                self?.focusActiveSectionRenameField(selectAll: selectAll, attempt: attempt + 1)
+            }
+            return
+        }
         view.window?.makeFirstResponder(editor)
         if selectAll {
             editor.selectText(nil)
         }
     }
 
-    private func activeSectionRenameField() -> NSTextField? {
+    private func activeSectionRenameField(makeIfNecessary: Bool = false) -> NSTextField? {
         guard let activeSectionRename,
               let row = rowForSection(projectId: activeSectionRename.projectId, sectionId: activeSectionRename.sectionId),
-              row >= 0,
-              let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView else {
+              row >= 0 else {
+            return nil
+        }
+        outlineView.scrollRowToVisible(row)
+        outlineView.layoutSubtreeIfNeeded()
+        guard let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: makeIfNecessary) as? NSTableCellView else {
             return nil
         }
         return cell.subviews.first(where: { $0.identifier == Self.sectionInlineRenameFieldIdentifier }) as? NSTextField

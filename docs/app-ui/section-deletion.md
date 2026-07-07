@@ -26,6 +26,8 @@
 
 ### Gotchas
 
+- Menu-triggered sidebar rename starts after AppKit dismisses a context menu and reloads the outline. The inline editor may not be materialized immediately, so focus must scroll/materialize the section row and retry briefly instead of assuming `view(atColumn:row:)` is available synchronously.
+
 - Global section deletion must not sweep up threads from projects that use custom section overrides. Those projects are out of scope for global section membership and reassignment.
 - Effective membership matters more than stored `thread.sectionId`. A thread with an unknown section ID may still currently belong to the default section and therefore count toward the move warning.
 - For project overrides, the undeletable row is the effective default returned by `settings.defaultSection(for:)`, not only `project.defaultSectionId`. When the project inherits global default, the inherited row must still hide the trash icon and reject deletion.

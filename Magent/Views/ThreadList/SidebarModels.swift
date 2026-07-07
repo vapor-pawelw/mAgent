@@ -59,6 +59,14 @@ class SidebarSection {
     }
 }
 
+enum SidebarInlineRenameFocusPolicy {
+    static let maxDeferredFocusAttempts = 3
+
+    static func shouldRetry(editorIsAvailable: Bool, attempt: Int) -> Bool {
+        !editorIsAvailable && attempt < maxDeferredFocusAttempts
+    }
+}
+
 final class SidebarSpacer {}
 final class SidebarProjectMainSpacer {}
 final class SidebarMissingProjectRow {

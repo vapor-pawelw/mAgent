@@ -45,6 +45,18 @@ struct SidebarSectionOutlineChildCountTests {
         #expect(populatedSection.hasArchivableThreads)
     }
 
+    @Test
+    func inlineRenameFocusRetriesWhileEditorIsNotMaterialized() {
+        #expect(SidebarInlineRenameFocusPolicy.shouldRetry(editorIsAvailable: false, attempt: 0))
+        #expect(SidebarInlineRenameFocusPolicy.shouldRetry(editorIsAvailable: false, attempt: 2))
+    }
+
+    @Test
+    func inlineRenameFocusStopsWhenEditorExistsOrRetryLimitIsReached() {
+        #expect(!SidebarInlineRenameFocusPolicy.shouldRetry(editorIsAvailable: true, attempt: 0))
+        #expect(!SidebarInlineRenameFocusPolicy.shouldRetry(editorIsAvailable: false, attempt: 3))
+    }
+
     private func makeThread(
         projectId: UUID,
         name: String,
