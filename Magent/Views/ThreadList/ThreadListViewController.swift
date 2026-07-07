@@ -293,7 +293,7 @@ final class ThreadListViewController: NSViewController {
         capsuleAlignedTrailing - ((projectHeaderActionButtonSize - disclosureButtonSize) / 2)
     static let projectHeaderVerticalPadding: CGFloat = 6
     static let projectHeaderRowHeight: CGFloat = 36
-    static let projectHeaderToMainRowGap: CGFloat = 0
+    static let projectHeaderToMainRowGap: CGFloat = 10
     static let projectHeaderInterProjectGap: CGFloat = 24
 
     weak var delegate: ThreadListDelegate?

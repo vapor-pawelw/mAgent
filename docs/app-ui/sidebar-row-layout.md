@@ -15,6 +15,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - **Priority capsule**: Optional pill sitting immediately to the left of the duration badge on the capsule's bottom-right. Shown only when the thread has an explicit 1–5 priority. Renders cumulative dots (`●○○○○` through `●●●●●`) in a monospaced 9pt font so the string width is stable across levels. Dot color tints by level: 1 blue, 2 green, 3 yellow, 4 orange, 5 red. The capsule is filled with `windowBackgroundColor` (matches the sidebar background behind the row capsules) and uses the same `TopBorderBadge`-style border treatment as the duration pill so both badges read as a matched pair. 2pt inner padding on all sides.
 - The `Main worktree` row uses the same capsule geometry as other rows, but with a very subtle primary-tinted fill/border in its default state (1pt border) so it is visually distinct without a dedicated stripe.
 - The main row always uses a dedicated non-customizable `house.fill` icon. Tint behavior follows thread-row selection semantics: primary color when unselected, white when selected.
+- A 10pt spacer separates each project header from its main worktree row so sticky header blur does not cut directly into the first capsule.
 - Regular thread rows use a three-line vertical stack:
   - line 1 (primary): task description when set; otherwise the branch name.
   - line 2 (secondary / `subtitleLabel`): branch · worktree when a description is shown; worktree only when no description and the worktree name differs from the branch; hidden otherwise.
