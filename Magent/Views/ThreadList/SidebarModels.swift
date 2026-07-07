@@ -53,6 +53,10 @@ class SidebarSection {
     var outlineChildCount: Int {
         items.count
     }
+
+    var hasArchivableThreads: Bool {
+        !threads.isEmpty
+    }
 }
 
 final class SidebarSpacer {}

@@ -83,6 +83,21 @@
 
 ---
 
+## Bulk Archive
+
+### User-Facing Behavior
+
+- Right-clicking a section header with one or more assigned threads shows **Archive All Threads...**.
+- Empty section headers do not show the bulk archive action.
+- Each thread still goes through the normal archive flow, including dirty-worktree protection and local-sync conflict handling.
+
+### Implementation Notes
+
+- `SidebarSection.hasArchivableThreads` controls whether the context menu item is shown.
+- `archiveSectionThreads(_:)` in `ThreadListViewController+ContextMenu.swift` snapshots the section's `threads` array and calls the same `triggerArchive(for:)` path used by individual thread archive actions.
+
+---
+
 ## Renaming
 
 ### User-Facing Behavior
