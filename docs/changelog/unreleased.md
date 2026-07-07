@@ -41,6 +41,7 @@
 
 #### Bug Fixes
 
+- Prevented newly created thread selection from being undone by stale sidebar scroll restores.
 - Fixed project headers overlapping earlier sidebar sections and leaving a gap before the main worktree after creating threads.
 - Fixed sticky section headers not blurring the sidebar content underneath.
 - Fixed sticky repository headers disappearing in the gap before the next repository header takes over.
