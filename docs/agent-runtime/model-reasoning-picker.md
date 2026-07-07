@@ -4,7 +4,7 @@ Per-agent model and reasoning level selection when starting new threads or tabs.
 
 ## Overview
 
-Users can pick a model and reasoning level from the agent launch sheet before starting a new thread or tab. Each agent type (Claude, Codex) maintains its own last-selected model, and reasoning is remembered per model (not per agent type). Selections persist across sessions and are reused by fast-path creation (Option+click, context menu).
+Users can pick a model and reasoning level from the agent launch sheet before starting a new thread or tab. Each agent type (Claude, Codex) maintains its own last-selected model, and reasoning is remembered per model (not per agent type). Codex also remembers the launch-sheet Fast mode toggle per agent. Selections persist across sessions and are reused by fast-path creation (Option+click, context menu).
 
 ## Data Source: `agent-models.json`
 
@@ -63,8 +63,9 @@ Storage keys in `agent-last-selections.json`:
 - `model:<agent>` — e.g. `model:claude` → `"fable"`
 - `reasoning:<agent>:<model>` — e.g. `reasoning:claude:fable` → `"high"`
 - `reasoning:<agent>` — fallback key when model is `nil` (Auto)
+- `fastMode:codex` — `"true"` when the Codex Fast mode lightning toggle is filled, `"false"` when unfilled
 
-Stored in `AgentLastSelectionStore`. **Not stored per-thread** for normal live sessions — model/reasoning is only used at fresh-start time, and resume inherits from the agent session itself.
+Stored in `AgentLastSelectionStore`. **Not stored per-thread** for normal live sessions — model/reasoning/Fast mode are only used at fresh-start time, and resume inherits from the agent session itself.
 
 Draft tabs are the exception: if the user checks `Draft` in the launch sheet, the selected model and reasoning are persisted alongside the saved prompt so `Start Agent` later launches with the same explicit configuration. Missing values remain `nil` and mean `Auto`, which keeps older persisted drafts backward-compatible.
 
@@ -111,7 +112,7 @@ The set is re-keyed on session rename and cleaned up on tab close, consistent wi
 Type, Model, and Reasoning pickers share a **single row** in `AgentLaunchPromptSheetController`:
 
 ```
-Type [picker]  Model [picker]  Reasoning [picker]
+Type [picker]  Model [picker]  Reasoning [picker]  [bolt]
 ```
 
 The launch sheet uses a wider default content width so the three pickers have enough room to stay readable on one line without crowding the prompt field below.
@@ -121,8 +122,9 @@ The launch sheet uses a wider default content width so the three pickers have en
 - **Reasoning picker**: "Auto" + reasoning levels. Items update when:
   - Agent changes (load that agent's reasoning levels).
   - Model changes, if the selected model has a per-model `reasoningLevels` override.
+- **Codex Fast mode button**: a lightning icon shown only when Codex is selected. Filled means launch fresh Codex terminal sessions with the Fast service tier; unfilled means no Fast override is passed. The button has a tooltip and saves immediately so fast-path creation reuses it.
 
-Model and Reasoning pickers are **hidden** (individually, not the whole row) when agent is `.custom` or Terminal or Web.
+Model and Reasoning pickers are **hidden** (individually, not the whole row) when agent is `.custom` or Terminal or Web. The Fast mode button is hidden for every non-Codex selection.
 
 "Auto" means no flags are passed — the agent uses its own configured default.
 
@@ -166,7 +168,7 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 
 ### Fast Path (Option+click / Context Menu)
 
-Uses last-selected model + reasoning for the relevant agent. No sheet shown. Equivalent to accepting the sheet with last-used values.
+Uses last-selected model + reasoning + Codex Fast mode for the relevant agent. No sheet shown. Equivalent to accepting the sheet with last-used values.
 
 The right-click context menu on the "+" (new tab) button and the sidebar "New Thread" submenu list agent types directly — the default agent appears first with a "(Default)" suffix. Each agent's menu item shows its last-used model and reasoning verbatim in a verbose form (e.g., `Claude (Sonnet, high) (Default)`, `Codex (GPT 5.3 Codex, xhigh)`, `Claude` when both are Auto). Any part set to Auto is omitted individually. This is intentionally different from the compact tab-name formatter in `TmuxSessionNaming.defaultTabDisplayName(for:modelLabel:reasoningLevel:)` — the compact form strips the `GPT` vendor prefix for Codex (so `GPT 5.3 Codex` becomes `5.3-codex`, `GPT 5.4 Mini` becomes `5.4-mini`) and abbreviates reasoning to single letters, producing tab titles like `Codex (5.3-codex, M)` or `Claude (Opus, H)`. The verbose form is built inline in `AgentMenuBuilder.populate` and must not be replaced with the compact helper.
 
@@ -199,10 +201,11 @@ codex -m <id> -c model_reasoning_effort=<level>
 
 - `-m` omitted when "Auto"
 - `-c model_reasoning_effort=...` omitted when "Auto"
+- `-c service_tier="fast"` appended when the Codex Fast mode lightning toggle is filled
 
 ### Resume
 
-No model/reasoning flags passed on resume. The agent session retains its own state.
+No model/reasoning/Fast mode flags passed on resume. The agent session retains its own state.
 
 ### Custom Agent
 

@@ -21,6 +21,7 @@ extension ThreadManager {
         pendingPromptFileURL: URL? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
+        codexFastMode: Bool = false,
         shouldSwitchToCreatedTab: Bool = false
     ) async throws -> Tab {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
@@ -75,7 +76,8 @@ extension ThreadManager {
                     workingDirectory: projectPath,
                     resumeSessionID: resumeSessionID,
                     modelId: modelId,
-                    reasoningLevel: reasoningLevel
+                    reasoningLevel: reasoningLevel,
+                    codexFastMode: codexFastMode
                 )
                 requestedTabBaseName = TmuxSessionNaming.defaultTabDisplayName(
                     for: selectedAgentType,
@@ -137,7 +139,8 @@ extension ThreadManager {
                     workingDirectory: currentThread.worktreePath,
                     resumeSessionID: resumeSessionID,
                     modelId: modelId,
-                    reasoningLevel: reasoningLevel
+                    reasoningLevel: reasoningLevel,
+                    codexFastMode: codexFastMode
                 )
                 requestedTabBaseName = TmuxSessionNaming.defaultTabDisplayName(
                     for: selectedAgentType,

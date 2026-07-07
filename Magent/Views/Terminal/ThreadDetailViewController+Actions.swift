@@ -786,7 +786,8 @@ extension ThreadDetailViewController {
             let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
             let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
-            addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
+            let codexFastMode = resolvedAgent.map { AgentLastSelectionStore.lastCodexFastMode(for: $0) } ?? false
+            addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning, codexFastMode: codexFastMode)
         } else {
             presentNewTabSheet()
         }
@@ -854,6 +855,7 @@ extension ThreadDetailViewController {
                     pendingPromptFileURL: result.pendingPromptFileURL,
                     modelId: result.modelId,
                     reasoningLevel: result.reasoningLevel,
+                    codexFastMode: result.codexFastMode,
                     switchToTab: switchToTab
                 )
             }
@@ -897,6 +899,7 @@ extension ThreadDetailViewController {
                 customTitle: result.tabTitle,
                 modelId: result.modelId,
                 reasoningLevel: result.reasoningLevel,
+                codexFastMode: result.codexFastMode,
                 switchToTab: switchToTab
             )
         }
@@ -915,6 +918,7 @@ extension ThreadDetailViewController {
         tabNameSuffix: String? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
+        codexFastMode: Bool = false,
         switchToTab: Bool = true,
         pinAfterCreation: Bool = false
     ) {
@@ -967,6 +971,7 @@ extension ThreadDetailViewController {
                     pendingPromptFileURL: pendingPromptFileURL,
                     modelId: modelId,
                     reasoningLevel: reasoningLevel,
+                    codexFastMode: codexFastMode,
                     shouldSwitchToCreatedTab: switchToTab
                 )
                 // Skip recreateSessionIfNeeded — the session was just created by addTab().
@@ -1082,7 +1087,8 @@ extension ThreadDetailViewController {
             let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
             let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
-            addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
+            let codexFastMode = resolvedAgent.map { AgentLastSelectionStore.lastCodexFastMode(for: $0) } ?? false
+            addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning, codexFastMode: codexFastMode)
         } else {
             presentNewTabSheet()
         }
@@ -1581,6 +1587,7 @@ extension ThreadDetailViewController {
         customTitle: String? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
+        codexFastMode: Bool = false,
         switchToTab: Bool = true
     ) {
         guard index < tabSlots.count, case .terminal(let sessionName) = tabSlots[index] else { return }
@@ -1633,6 +1640,7 @@ extension ThreadDetailViewController {
                     customTitle: customTitle,
                     modelId: modelId,
                     reasoningLevel: reasoningLevel,
+                    codexFastMode: codexFastMode,
                     switchToTab: switchToTab
                 )
             }
@@ -1730,7 +1738,8 @@ extension ThreadDetailViewController: NSMenuDelegate {
         case .agent(let agentType):
             let modelId = AgentLastSelectionStore.lastModel(for: agentType)
             let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
-            addTab(using: agentType, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
+            let codexFastMode = AgentLastSelectionStore.lastCodexFastMode(for: agentType)
+            addTab(using: agentType, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning, codexFastMode: codexFastMode)
         case .chat(let agentType):
             let modelId = AgentLastSelectionStore.lastModel(for: agentType)
             let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
@@ -1745,7 +1754,8 @@ extension ThreadDetailViewController: NSMenuDelegate {
             let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
             let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
-            addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
+            let codexFastMode = resolvedAgent.map { AgentLastSelectionStore.lastCodexFastMode(for: $0) } ?? false
+            addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning, codexFastMode: codexFastMode)
         case .web:
             let blankURL = URL(string: "about:blank")!
             openWebTab(url: blankURL, identifier: "web:\(UUID().uuidString)", title: "Web", iconType: .web)

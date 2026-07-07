@@ -40,6 +40,7 @@ extension ThreadManager {
         initialWebURL: URL? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
+        codexFastMode: Bool = false,
         localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil
     ) async throws -> MagentThread {
         try await threadLifecycleService.createThread(
@@ -61,6 +62,7 @@ extension ThreadManager {
             initialWebURL: initialWebURL,
             modelId: modelId,
             reasoningLevel: reasoningLevel,
+            codexFastMode: codexFastMode,
             localFileSyncEntriesOverride: localFileSyncEntriesOverride
         )
     }

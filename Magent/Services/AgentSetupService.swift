@@ -1970,7 +1970,8 @@ final class AgentSetupService {
         workingDirectory: String,
         resumeSessionID: String? = nil,
         modelId: String? = nil,
-        reasoningLevel: String? = nil
+        reasoningLevel: String? = nil,
+        codexFastMode: Bool = false
     ) -> String {
         let shell = ShellExecutor.shellQuote(Self.startupShell)
         let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
@@ -1995,7 +1996,8 @@ final class AgentSetupService {
             agentType: agentType,
             resumeSessionID: resumeSessionID,
             modelId: modelId,
-            reasoningLevel: reasoningLevel
+            reasoningLevel: reasoningLevel,
+            codexFastMode: codexFastMode
         )
         // Use an interactive login shell so zsh loads both login files and `.zshrc`
         // before resolving the agent binary. Many PATH/custom command setups live in `.zshrc`.
@@ -2009,9 +2011,10 @@ final class AgentSetupService {
         agentType: AgentType,
         resumeSessionID: String?,
         modelId: String? = nil,
-        reasoningLevel: String? = nil
+        reasoningLevel: String? = nil,
+        codexFastMode: Bool = false
     ) -> String {
-        let fresh = freshAgentCommand(settings: settings, agentType: agentType, modelId: modelId, reasoningLevel: reasoningLevel)
+        let fresh = freshAgentCommand(settings: settings, agentType: agentType, modelId: modelId, reasoningLevel: reasoningLevel, codexFastMode: codexFastMode)
         guard let resumeSessionID = normalizedResumeID(resumeSessionID),
               let resume = resumableAgentCommand(
                 settings: settings,
@@ -2024,7 +2027,7 @@ final class AgentSetupService {
         return "{ \(resume) || \(fresh) ; }"
     }
 
-    private func freshAgentCommand(settings: AppSettings, agentType: AgentType, modelId: String? = nil, reasoningLevel: String? = nil) -> String {
+    private func freshAgentCommand(settings: AppSettings, agentType: AgentType, modelId: String? = nil, reasoningLevel: String? = nil, codexFastMode: Bool = false) -> String {
         var command = settings.command(for: agentType)
 
         // Validate against current manifest before emitting CLI flags — stale persisted values are dropped.
@@ -2051,6 +2054,9 @@ final class AgentSetupService {
             }
             if let validReasoning {
                 command += " -c \(ShellExecutor.shellQuote("model_reasoning_effort=\"\(validReasoning)\""))"
+            }
+            if codexFastMode {
+                command += " -c \(ShellExecutor.shellQuote("service_tier=\"fast\""))"
             }
             command = codexSessionConfiguredCommand(
                 command,
