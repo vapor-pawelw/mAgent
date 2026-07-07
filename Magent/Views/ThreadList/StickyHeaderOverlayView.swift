@@ -16,9 +16,10 @@ final class StickyHeaderOverlayView: NSView {
 
     // MARK: - Subviews
 
-    private let backdropBlurView = NSVisualEffectView()
-    private var lastBackdropMaskSize: NSSize = .zero
-    private var lastBackdropMaskScale: CGFloat = 0
+    private let headerBlurView = NSVisualEffectView()
+    private let fadeBlurView = NSVisualEffectView()
+    private var lastFadeMaskSize: NSSize = .zero
+    private var lastFadeMaskScale: CGFloat = 0
 
     private let projectContainer = NSView()
     private let projectNameLabel = NSTextField(labelWithString: "")
@@ -71,11 +72,13 @@ final class StickyHeaderOverlayView: NSView {
     private func setup() {
         wantsLayer = true
 
-        backdropBlurView.translatesAutoresizingMaskIntoConstraints = false
-        backdropBlurView.blendingMode = .withinWindow
-        backdropBlurView.material = .popover
-        backdropBlurView.state = .active
-        addSubview(backdropBlurView)
+        for blurView in [headerBlurView, fadeBlurView] {
+            blurView.translatesAutoresizingMaskIntoConstraints = false
+            blurView.blendingMode = .withinWindow
+            blurView.material = .popover
+            blurView.state = .active
+            addSubview(blurView)
+        }
 
         // Project header row
         projectContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -141,10 +144,15 @@ final class StickyHeaderOverlayView: NSView {
         )
 
         NSLayoutConstraint.activate([
-            backdropBlurView.topAnchor.constraint(equalTo: topAnchor),
-            backdropBlurView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            backdropBlurView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            backdropBlurView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            headerBlurView.topAnchor.constraint(equalTo: topAnchor),
+            headerBlurView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            headerBlurView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            headerBlurView.bottomAnchor.constraint(equalTo: fadeSpacerView.topAnchor),
+
+            fadeBlurView.topAnchor.constraint(equalTo: fadeSpacerView.topAnchor),
+            fadeBlurView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            fadeBlurView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            fadeBlurView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             projectContainer.topAnchor.constraint(equalTo: topAnchor, constant: Self.topInset),
             projectContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -284,20 +292,20 @@ final class StickyHeaderOverlayView: NSView {
     }
 
     private func updateBackdropMask() {
-        let size = backdropBlurView.bounds.size
+        let size = fadeBlurView.bounds.size
         let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         guard size.width > 0, size.height > 0 else {
-            backdropBlurView.maskImage = nil
+            fadeBlurView.maskImage = nil
             return
         }
-        guard size != lastBackdropMaskSize || scale != lastBackdropMaskScale else { return }
+        guard size != lastFadeMaskSize || scale != lastFadeMaskScale else { return }
 
-        backdropBlurView.maskImage = makeBackdropMaskImage(size: size, scale: scale)
-        lastBackdropMaskSize = size
-        lastBackdropMaskScale = scale
+        fadeBlurView.maskImage = makeFadeMaskImage(size: size, scale: scale)
+        lastFadeMaskSize = size
+        lastFadeMaskScale = scale
     }
 
-    private func makeBackdropMaskImage(size: NSSize, scale: CGFloat) -> NSImage {
+    private func makeFadeMaskImage(size: NSSize, scale: CGFloat) -> NSImage {
         let pixelWidth = max(1, Int(ceil(size.width * scale)))
         let pixelHeight = max(1, Int(ceil(size.height * scale)))
         let colorSpace = CGColorSpaceCreateDeviceRGB()
@@ -323,10 +331,10 @@ final class StickyHeaderOverlayView: NSView {
 
         let stops = StickyHeaderBackdropMask.gradientStops(
             totalHeight: size.height,
-            rampHeight: StickyHeaderBackdropMask.defaultRampHeight
+            rampHeight: size.height
         )
         let locations: [CGFloat] = stops.map(\.location)
-        let components: [CGFloat] = stops.flatMap { [1, 1, 1, $0.opacity] }
+        let components: [CGFloat] = stops.flatMap { [$0.opacity, $0.opacity, $0.opacity, $0.opacity] }
         let gradient = CGGradient(
             colorSpace: colorSpace,
             colorComponents: components,

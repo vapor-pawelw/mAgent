@@ -1,8 +1,6 @@
 import Foundation
 
 enum StickyHeaderBackdropMask {
-    static let defaultRampHeight: CGFloat = 44
-
     static func gradientStops(totalHeight: CGFloat, rampHeight: CGFloat) -> [(location: CGFloat, opacity: CGFloat)] {
         guard totalHeight > 0 else {
             return [(0, 0), (1, 0)]

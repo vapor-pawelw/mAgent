@@ -34,6 +34,7 @@
 #### Bug Fixes
 
 - Fixed project headers overlapping earlier sidebar sections and leaving a gap before the main worktree after creating threads.
+- Fixed sticky section headers not blurring the sidebar content underneath.
 - Fixed sticky repository headers disappearing in the gap before the next repository header takes over.
 - Kept the add-thread `+` button visible on sticky repository headers.
 - Fixed sidebar thread clicks getting ignored after interrupted drag interactions.
