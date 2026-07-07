@@ -18,7 +18,7 @@
 - Load the saved sidebar width into `preferredSidebarWidth` before startup selection/detail work begins, and apply the initial divider position no later than `viewWillAppear`. If launch-time content swaps run first, AppKit will build sidebar rows against the default width and then reflow them again when the saved width is restored.
 - Route thread-row height through `ThreadCell.sidebarRowHeight(descriptionLines:hasSubtitle:hasPRRow:narrowThreads:)` which computes per-thread height from actual content with a minimum enforced by `minimumContentHeight(narrowThreads:)`.
 - Dynamic heights are computed in `heightOfRowByItem` using `ThreadCell.estimatedDescriptionLineCount` for text-width-based line estimation.
-- Keep the description line limit in `AppSettings.sidebarDescriptionLineLimit` so the `Narrow threads` toggle switches both text wrapping and minimum row height together.
+- Keep the description line limit in `AppSettings.sidebarDescriptionLineLimit` so the default narrow layout uses one description line, and the `Wide threads` toggle switches both text wrapping and minimum row height to the roomier two-line layout.
 - Keep description text style stable for description rows (semibold) so wrapping does not change with unread-selection state transitions.
 - Status badges (pinned, rate-limit, keep-alive, duration) are now positioned on the capsule border rather than in a trailing stack. They do not affect available text width.
 - Synthetic spacer rows such as `SidebarBottomPadding` must use `SidebarSpacerRowView`, not `AlwaysEmphasizedRowView`, or the empty row will draw a thread-style capsule with no content.

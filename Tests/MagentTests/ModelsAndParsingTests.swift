@@ -752,6 +752,58 @@ struct AppSettingsStatusBarThreadStatusTests {
     }
 }
 
+// MARK: - AppSettings thread row width
+
+@Suite("AppSettings thread row width")
+struct AppSettingsThreadRowWidthTests {
+
+    @Test("New settings default to narrow thread rows")
+    func defaultsToNarrowThreadRows() {
+        let settings = AppSettings()
+
+        #expect(!settings.wideThreads)
+        #expect(settings.sidebarDescriptionLineLimit == 1)
+    }
+
+    @Test("Wide thread rows allow two description lines")
+    func wideThreadRowsAllowTwoDescriptionLines() {
+        let settings = AppSettings(wideThreads: true)
+
+        #expect(settings.sidebarDescriptionLineLimit == 2)
+    }
+
+    @Test("Legacy narrow thread setting migrates by inversion")
+    func legacyNarrowThreadsMigratesByInversion() throws {
+        let baselineData = try JSONEncoder().encode(AppSettings())
+        var baselineObject = try #require(JSONSerialization.jsonObject(with: baselineData) as? [String: Any])
+
+        baselineObject.removeValue(forKey: "wideThreads")
+        baselineObject["narrowThreads"] = true
+        let narrowData = try JSONSerialization.data(withJSONObject: baselineObject)
+        let migratedFromNarrow = try JSONDecoder().decode(AppSettings.self, from: narrowData)
+
+        baselineObject["narrowThreads"] = false
+        let wideData = try JSONSerialization.data(withJSONObject: baselineObject)
+        let migratedFromWide = try JSONDecoder().decode(AppSettings.self, from: wideData)
+
+        #expect(!migratedFromNarrow.wideThreads)
+        #expect(migratedFromNarrow.sidebarDescriptionLineLimit == 1)
+        #expect(migratedFromWide.wideThreads)
+        #expect(migratedFromWide.sidebarDescriptionLineLimit == 2)
+    }
+
+    @Test("Wide thread setting round-trips under the new key")
+    func wideThreadsRoundTripsUnderNewKey() throws {
+        let data = try JSONEncoder().encode(AppSettings(wideThreads: true))
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(object["wideThreads"] as? Bool == true)
+        #expect(object["narrowThreads"] == nil)
+        #expect(decoded.wideThreads)
+    }
+}
+
 // MARK: - AppSettings terminal surface cache
 
 @Suite("AppSettings terminal surface cache")

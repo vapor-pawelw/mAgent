@@ -420,7 +420,7 @@ final class ThreadListViewController: NSViewController {
             showPRStatusBadges = settings.showPRStatusBadges
             showJiraStatusBadges = settings.showJiraStatusBadges
             showBusyStateDuration = settings.showBusyStateDuration
-            narrowThreads = settings.narrowThreads
+            narrowThreads = !settings.wideThreads
         }
     }
 

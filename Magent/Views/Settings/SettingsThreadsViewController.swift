@@ -12,7 +12,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var autoRenameBranchCheckbox: NSButton!
     private var autoSetDescriptionCheckbox: NSButton!
     private var autoSetIconFromWorkTypeCheckbox: NSButton!
-    private var narrowThreadsCheckbox: NSButton!
+    private var wideThreadsCheckbox: NSButton!
     private var showPRStatusBadgesCheckbox: NSButton!
     private var showJiraStatusBadgesCheckbox: NSButton!
     private var showBusyStateDurationCheckbox: NSButton!
@@ -209,20 +209,20 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         )
         stackView.addArrangedSubview(sidebarCard)
 
-        narrowThreadsCheckbox = NSButton(
-            checkboxWithTitle: "Narrow threads",
+        wideThreadsCheckbox = NSButton(
+            checkboxWithTitle: String(localized: .SettingsStrings.settingsThreadsWideThreads),
             target: self,
-            action: #selector(narrowThreadsToggled)
+            action: #selector(wideThreadsToggled)
         )
-        narrowThreadsCheckbox.state = settings.narrowThreads ? .on : .off
-        sidebarSection.addArrangedSubview(narrowThreadsCheckbox)
+        wideThreadsCheckbox.state = settings.wideThreads ? .on : .off
+        sidebarSection.addArrangedSubview(wideThreadsCheckbox)
 
-        let narrowThreadsDesc = NSTextField(
-            wrappingLabelWithString: "Limit thread descriptions to one line and size every thread row for that tighter layout."
+        let wideThreadsDesc = NSTextField(
+            wrappingLabelWithString: String(localized: .SettingsStrings.settingsThreadsWideThreadsDescription)
         )
-        narrowThreadsDesc.font = .systemFont(ofSize: 11)
-        narrowThreadsDesc.textColor = NSColor(resource: .textSecondary)
-        sidebarSection.addArrangedSubview(narrowThreadsDesc)
+        wideThreadsDesc.font = .systemFont(ofSize: 11)
+        wideThreadsDesc.textColor = NSColor(resource: .textSecondary)
+        sidebarSection.addArrangedSubview(wideThreadsDesc)
 
         autoReorderOnCompletionCheckbox = NSButton(
             checkboxWithTitle: "Move completed threads to top",
@@ -833,9 +833,9 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         }
     }
 
-    @objc private func narrowThreadsToggled() {
+    @objc private func wideThreadsToggled() {
         persistSettings(notify: true) { settings in
-            settings.narrowThreads = narrowThreadsCheckbox.state == .on
+            settings.wideThreads = wideThreadsCheckbox.state == .on
         }
     }
 
