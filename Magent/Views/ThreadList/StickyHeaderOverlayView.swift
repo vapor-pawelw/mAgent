@@ -12,12 +12,14 @@ final class StickyHeaderOverlayView: NSView {
     private static let leadingInset: CGFloat = ThreadListViewController.capsuleAlignedLeading
     private static let trailingInset: CGFloat = ThreadListViewController.capsuleAlignedTrailing
     private static let topInset: CGFloat = 6
-    private static let fadeHeight: CGFloat = 12
+    private static let fadeHeight: CGFloat = 28
 
     // MARK: - Subviews
 
-    /// Opaque background behind the header labels (excludes the fade zone).
-    private let opaqueBackground = NSView()
+    private let headerBlurView = NSVisualEffectView()
+    private let fadeBlurView = NSVisualEffectView()
+    private var lastFadeMaskSize: NSSize = .zero
+    private var lastFadeMaskScale: CGFloat = 0
 
     private let projectContainer = NSView()
     private let projectNameLabel = NSTextField(labelWithString: "")
@@ -28,11 +30,10 @@ final class StickyHeaderOverlayView: NSView {
     private let sectionDotView = NSImageView()
     private let sectionNameLabel = NSTextField(labelWithString: "")
 
-    private let fadeGradientView = NSView()
+    private let fadeSpacerView = NSView()
 
     private var sectionTopToProject: NSLayoutConstraint!
     private var sectionTopToSuperview: NSLayoutConstraint!
-    /// Pins the fade just below whichever header row is last.
     private var fadeTopToProject: NSLayoutConstraint!
     private var fadeTopToSection: NSLayoutConstraint!
 
@@ -71,10 +72,13 @@ final class StickyHeaderOverlayView: NSView {
     private func setup() {
         wantsLayer = true
 
-        // Opaque background (covers header rows but not the fade)
-        opaqueBackground.translatesAutoresizingMaskIntoConstraints = false
-        opaqueBackground.wantsLayer = true
-        addSubview(opaqueBackground)
+        for blurView in [headerBlurView, fadeBlurView] {
+            blurView.translatesAutoresizingMaskIntoConstraints = false
+            blurView.blendingMode = .withinWindow
+            blurView.material = .popover
+            blurView.state = .active
+            addSubview(blurView)
+        }
 
         // Project header row
         projectContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -120,10 +124,8 @@ final class StickyHeaderOverlayView: NSView {
         sectionNameLabel.translatesAutoresizingMaskIntoConstraints = false
         sectionContainer.addSubview(sectionNameLabel)
 
-        // Fade gradient (within bounds, below headers)
-        fadeGradientView.translatesAutoresizingMaskIntoConstraints = false
-        fadeGradientView.wantsLayer = true
-        addSubview(fadeGradientView)
+        fadeSpacerView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(fadeSpacerView)
 
         // Constraints
         sectionTopToProject = sectionContainer.topAnchor.constraint(
@@ -134,20 +136,23 @@ final class StickyHeaderOverlayView: NSView {
             constant: Self.topInset
         )
 
-        // Fade sits below project (section-only hidden) or below section
-        fadeTopToProject = fadeGradientView.topAnchor.constraint(
+        fadeTopToProject = fadeSpacerView.topAnchor.constraint(
             equalTo: projectContainer.bottomAnchor
         )
-        fadeTopToSection = fadeGradientView.topAnchor.constraint(
+        fadeTopToSection = fadeSpacerView.topAnchor.constraint(
             equalTo: sectionContainer.bottomAnchor
         )
 
         NSLayoutConstraint.activate([
-            // Opaque background covers from top to the fade
-            opaqueBackground.topAnchor.constraint(equalTo: topAnchor),
-            opaqueBackground.leadingAnchor.constraint(equalTo: leadingAnchor),
-            opaqueBackground.trailingAnchor.constraint(equalTo: trailingAnchor),
-            opaqueBackground.bottomAnchor.constraint(equalTo: fadeGradientView.topAnchor),
+            headerBlurView.topAnchor.constraint(equalTo: topAnchor),
+            headerBlurView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            headerBlurView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            headerBlurView.bottomAnchor.constraint(equalTo: fadeSpacerView.topAnchor),
+
+            fadeBlurView.topAnchor.constraint(equalTo: fadeSpacerView.topAnchor),
+            fadeBlurView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            fadeBlurView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            fadeBlurView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             projectContainer.topAnchor.constraint(equalTo: topAnchor, constant: Self.topInset),
             projectContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -201,10 +206,10 @@ final class StickyHeaderOverlayView: NSView {
                 constant: -Self.trailingInset
             ),
 
-            fadeGradientView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            fadeGradientView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            fadeGradientView.heightAnchor.constraint(equalToConstant: Self.fadeHeight),
-            fadeGradientView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            fadeSpacerView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            fadeSpacerView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            fadeSpacerView.heightAnchor.constraint(equalToConstant: Self.fadeHeight),
+            fadeSpacerView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
         isHidden = true
@@ -255,7 +260,7 @@ final class StickyHeaderOverlayView: NSView {
         fadeTopToSection.isActive = showSection
         fadeTopToProject.isActive = !showSection && showProject
 
-        updateBackground()
+        updateBackdropMask()
         invalidateIntrinsicContentSize()
         return true
     }
@@ -286,46 +291,85 @@ final class StickyHeaderOverlayView: NSView {
         return NSSize(width: NSView.noIntrinsicMetric, height: h)
     }
 
-    private func updateBackground() {
-        let appearance = window?.effectiveAppearance ?? NSApp.effectiveAppearance
-        appearance.performAsCurrentDrawingAppearance {
-            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            let bgColor: NSColor = isDark
-                ? NSColor.windowBackgroundColor
-                : NSColor(resource: .appBackground)
-            opaqueBackground.layer?.backgroundColor = bgColor.cgColor
-
-            // Rebuild the gradient sublayer
-            let gradientLayer: CAGradientLayer
-            if let existing = fadeGradientView.layer?.sublayers?.first as? CAGradientLayer {
-                gradientLayer = existing
-            } else {
-                let gl = CAGradientLayer()
-                fadeGradientView.layer?.addSublayer(gl)
-                gradientLayer = gl
-            }
-            gradientLayer.colors = [bgColor.withAlphaComponent(0).cgColor, bgColor.cgColor]
-            gradientLayer.startPoint = CGPoint(x: 0.5, y: 0)
-            gradientLayer.endPoint = CGPoint(x: 0.5, y: 1)
-            gradientLayer.frame = fadeGradientView.bounds
+    private func updateBackdropMask() {
+        let size = fadeBlurView.bounds.size
+        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        guard size.width > 0, size.height > 0 else {
+            fadeBlurView.maskImage = nil
+            return
         }
+        guard size != lastFadeMaskSize || scale != lastFadeMaskScale else { return }
+
+        fadeBlurView.maskImage = makeFadeMaskImage(size: size, scale: scale)
+        lastFadeMaskSize = size
+        lastFadeMaskScale = scale
+    }
+
+    private func makeFadeMaskImage(size: NSSize, scale: CGFloat) -> NSImage {
+        let pixelWidth = max(1, Int(ceil(size.width * scale)))
+        let pixelHeight = max(1, Int(ceil(size.height * scale)))
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+        let context = CGContext(
+            data: nil,
+            width: pixelWidth,
+            height: pixelHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo
+        )
+
+        guard let context else {
+            let image = NSImage(size: size)
+            image.lockFocus()
+            NSColor.white.setFill()
+            NSRect(origin: .zero, size: size).fill()
+            image.unlockFocus()
+            return image
+        }
+
+        let stops = StickyHeaderBackdropMask.gradientStops(
+            totalHeight: size.height,
+            rampHeight: size.height
+        )
+        let locations: [CGFloat] = stops.map(\.location)
+        let components: [CGFloat] = stops.flatMap { [$0.opacity, $0.opacity, $0.opacity, $0.opacity] }
+        let gradient = CGGradient(
+            colorSpace: colorSpace,
+            colorComponents: components,
+            locations: locations,
+            count: stops.count
+        )
+
+        if let gradient {
+            context.drawLinearGradient(
+                gradient,
+                start: CGPoint(x: 0, y: 0),
+                end: CGPoint(x: 0, y: CGFloat(pixelHeight)),
+                options: []
+            )
+        }
+
+        guard let cgImage = context.makeImage() else { return NSImage(size: size) }
+        let image = NSImage(cgImage: cgImage, size: size)
+        image.cacheMode = .never
+        return image
     }
 
     override func layout() {
         super.layout()
-        if let gl = fadeGradientView.layer?.sublayers?.first as? CAGradientLayer {
-            gl.frame = fadeGradientView.bounds
-        }
+        updateBackdropMask()
     }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        if !isHidden { updateBackground() }
+        if !isHidden { updateBackdropMask() }
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if !isHidden { updateBackground() }
+        if !isHidden { updateBackdropMask() }
     }
 
     // MARK: - Click Handling

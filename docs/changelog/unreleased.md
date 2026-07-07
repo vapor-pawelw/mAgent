@@ -35,10 +35,15 @@
 - Keep moved or missing repositories visible with recovery and discard actions.
 - Refresh missing-repository status when Magent returns to the foreground.
 - Center the missing-repository recovery row content within its sidebar box.
+- Sticky sidebar headers now use a stronger live blur instead of an opaque fill.
+- Hid the thread-list scrollbar so it no longer cuts through sticky header blur.
+- Added breathing room between repository headers and main worktree rows.
 
 #### Bug Fixes
 
 - Fixed project headers overlapping earlier sidebar sections and leaving a gap before the main worktree after creating threads.
+- Fixed sticky section headers not blurring the sidebar content underneath.
+- Fixed sticky repository headers disappearing in the gap before the next repository header takes over.
 - Kept the add-thread `+` button visible on sticky repository headers.
 - Fixed sidebar thread clicks getting ignored after interrupted drag interactions.
 - Fixed the sidebar add-repository menu so create and import actions open reliably.

@@ -293,7 +293,7 @@ final class ThreadListViewController: NSViewController {
         capsuleAlignedTrailing - ((projectHeaderActionButtonSize - disclosureButtonSize) / 2)
     static let projectHeaderVerticalPadding: CGFloat = 6
     static let projectHeaderRowHeight: CGFloat = 36
-    static let projectHeaderToMainRowGap: CGFloat = 0
+    static let projectHeaderToMainRowGap: CGFloat = 10
     static let projectHeaderInterProjectGap: CGFloat = 24
 
     weak var delegate: ThreadListDelegate?
@@ -564,11 +564,9 @@ final class ThreadListViewController: NSViewController {
     private func refitOutlineColumnIfNeeded(force: Bool = false) {
         guard let outlineView, let scrollView else { return }
         // Use the scroll view's outer width rather than `contentView.bounds.width`
-        // so column/row widths don't flicker when the overlay scroller fades in/out
-        // (notably on window deactivate/reactivate, where macOS can briefly promote
-        // the overlay scroller to a space-reserving state and shrink the clip view).
-        // The overlay scroller floats over the capsule's 12pt trailing inset region,
-        // so the capsule itself is never covered.
+        // so column/row widths stay stable if AppKit ever reserves clip-view space
+        // for scrollers or window chrome. The thread-list scroller is intentionally
+        // disabled, but this keeps the column sizing robust across OS behavior.
         let targetWidth = scrollView.bounds.width
         guard targetWidth > 0 else { return }
 
@@ -627,9 +625,9 @@ final class ThreadListViewController: NSViewController {
     }
 
     /// Determines which project/section header should be pinned at the top of the
-    /// sidebar based on the current scroll position. A header becomes sticky when
-    /// its actual row has scrolled above the visible area but its children are still
-    /// partially visible.
+    /// sidebar based on the current scroll position. A project header becomes sticky
+    /// when its row crosses the top and stays visible until another project header
+    /// crosses that same point.
     func updateStickyHeaders() {
         guard let outlineView, let scrollView else { return }
 
@@ -647,13 +645,23 @@ final class ThreadListViewController: NSViewController {
 
         var state = StickyHeaderOverlayView.HeaderState.hidden
 
-        // Find the project whose header should be sticky: walk from the topmost
-        // visible row upward to find the nearest SidebarProject above the viewport.
-        // Also track the nearest section above or at the top of the viewport.
-        var foundProject: SidebarProject?
+        // A project header stays sticky after it first crosses the top and remains
+        // in place through inter-project gaps until the next project header crosses.
+        let projectCandidates = sidebarRootItems.compactMap { item -> StickyHeaderProjectCandidate<SidebarProject>? in
+            guard let project = item as? SidebarProject else { return nil }
+            let row = outlineView.row(forItem: project)
+            guard row >= 0 else { return nil }
+            return StickyHeaderProjectCandidate(project: project, rowMinY: outlineView.rect(ofRow: row).origin.y)
+        }
+        let foundProject = StickyHeaderProjectResolver.stickyProject(
+            from: projectCandidates,
+            visibleTop: visibleTop
+        )
+
+        // Track the nearest section above or at the top of the viewport.
         var foundSection: SidebarSection?
 
-        // Check from the first visible row backwards to find the project/section
+        // Check from the first visible row backwards to find the current section.
         let firstVisibleRow = visibleRange.location
         for row in stride(from: firstVisibleRow, through: 0, by: -1) {
             let item = outlineView.item(atRow: row)
@@ -664,30 +672,15 @@ final class ThreadListViewController: NSViewController {
                     foundSection = section
                 }
             }
-            if let project = item as? SidebarProject {
-                let rowRect = outlineView.rect(ofRow: row)
-                if rowRect.origin.y < visibleTop + 1 {
-                    foundProject = project
-                }
-                break // project is the top-level parent, stop here
+            if item is SidebarProject {
+                break
             }
         }
 
-        // Only show sticky project header if the project row is scrolled off
         if let project = foundProject {
-            // Verify the project has visible children below — don't pin if we've
-            // scrolled past all of its children too.
-            let projectRow = outlineView.row(forItem: project)
-            if projectRow >= 0 {
-                let lastChildRow = lastVisibleChildRow(of: project, projectRow: projectRow)
-                let lastChildRect = outlineView.rect(ofRow: lastChildRow)
-                // If the bottom of the last child is still visible, show sticky
-                if lastChildRect.maxY > visibleTop + StickyHeaderOverlayView.projectRowHeight {
-                    state.projectId = project.projectId
-                    state.projectName = project.name
-                    state.projectIsPinned = project.isPinned
-                }
-            }
+            state.projectId = project.projectId
+            state.projectName = project.name
+            state.projectIsPinned = project.isPinned
         }
 
         // Only show sticky section header if the section is expanded, its header
@@ -715,14 +708,20 @@ final class ThreadListViewController: NSViewController {
         stickyProject = foundProject != nil && state.projectName != nil ? foundProject : nil
         stickySection = foundSection != nil && state.sectionName != nil ? foundSection : nil
 
-        let didChangeStickyHeader = stickyHeaderOverlay.update(state: state)
+        var didChangeStickyHeader = false
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            didChangeStickyHeader = stickyHeaderOverlay.update(state: state)
+            let height = stickyHeaderOverlay.intrinsicContentSize.height
+            stickyHeaderHeightConstraint.constant = height
+            view.layoutSubtreeIfNeeded()
+        }
         if didChangeStickyHeader {
             configureStickyProjectAddButton(for: stickyProject)
         } else {
             refreshStickyProjectAddButtonEnabledState()
         }
-        let height = stickyHeaderOverlay.intrinsicContentSize.height
-        stickyHeaderHeightConstraint.constant = height
     }
 
     private func configureStickyProjectAddButton(for sidebarProject: SidebarProject?) {
@@ -779,25 +778,6 @@ final class ThreadListViewController: NSViewController {
             scrollView.contentView.animator().setBoundsOrigin(targetOrigin)
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
-    }
-
-    /// Returns the row index of the last visible child item under the given project.
-    private func lastVisibleChildRow(of project: SidebarProject, projectRow: Int) -> Int {
-        var lastRow = projectRow
-        let totalRows = outlineView.numberOfRows
-        for i in (projectRow + 1)..<totalRows {
-            let item = outlineView.item(atRow: i)
-            // Stop when we hit another project.
-            if item is SidebarProject {
-                break
-            }
-            // Skip inter-project spacers (they belong between projects)
-            if item is SidebarSpacer {
-                break
-            }
-            lastRow = i
-        }
-        return lastRow
     }
 
     @objc private func sectionsDidChange() {
@@ -896,11 +876,8 @@ final class ThreadListViewController: NSViewController {
         outlineView.indentationPerLevel = 0
         outlineView.rowSizeStyle = .custom
         outlineView.backgroundColor = .clear
-        // Keep column width fully manual (see `refitOutlineColumnIfNeeded`). AppKit's
-        // last-column autoresizing otherwise shrinks the column whenever the enclosing
-        // clip view briefly narrows — e.g. when the overlay scroller hover-expands or
-        // legacy scroller toggles visibility on window activate/deactivate — causing
-        // every capsule to resize along with the scroller.
+        // Keep column width fully manual (see `refitOutlineColumnIfNeeded`) so rows
+        // do not resize during window/sidebar layout churn.
         outlineView.columnAutoresizingStyle = .noColumnAutoresizing
         outlineView.intercellSpacing = NSSize(width: 0, height: 0)
         // Suppress AppKit's built-in selection drawing so right-click context menus
@@ -934,8 +911,8 @@ final class ThreadListViewController: NSViewController {
 
         scrollView = NonFlashingScrollView()
         scrollView.documentView = outlineView
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
+        scrollView.hasVerticalScroller = false
+        scrollView.autohidesScrollers = false
         scrollView.scrollerStyle = .overlay
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.drawsBackground = false

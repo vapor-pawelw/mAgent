@@ -140,6 +140,7 @@ let project = Project(
                 "Magent/Services/SelectedThreadJumpPresenter.swift",
                 "Magent/Services/TabNameAllocator.swift",
                 "Magent/Services/TabPinningState.swift",
+                "Magent/Views/ThreadList/StickyHeaderBackdropMask.swift",
                 "Tests/MagentTests/**",
             ],
             dependencies: [
