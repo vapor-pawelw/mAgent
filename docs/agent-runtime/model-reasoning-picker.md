@@ -22,6 +22,7 @@ A JSON file defines available models and reasoning levels per agent. The file li
   "agents": {
     "claude": {
       "models": [
+        { "id": "fable", "label": "Fable" },
         { "id": "opus", "label": "Opus" },
         { "id": "sonnet", "label": "Sonnet" },
         { "id": "haiku", "label": "Haiku" }
@@ -59,8 +60,8 @@ A JSON file defines available models and reasoning levels per agent. The file li
 Each agent independently remembers its last-selected model. Reasoning level is remembered **per model** (not just per agent), so switching between e.g. Opus and Sonnet restores each model's own last-used reasoning level.
 
 Storage keys in `agent-last-selections.json`:
-- `model:<agent>` — e.g. `model:claude` → `"opus"`
-- `reasoning:<agent>:<model>` — e.g. `reasoning:claude:opus` → `"high"`
+- `model:<agent>` — e.g. `model:claude` → `"fable"`
+- `reasoning:<agent>:<model>` — e.g. `reasoning:claude:fable` → `"high"`
 - `reasoning:<agent>` — fallback key when model is `nil` (Auto)
 
 Stored in `AgentLastSelectionStore`. **Not stored per-thread** for normal live sessions — model/reasoning is only used at fresh-start time, and resume inherits from the agent session itself.

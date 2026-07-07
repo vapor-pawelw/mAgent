@@ -1525,9 +1525,10 @@ extension ThreadDetailViewController {
     private func reviewLaunchOverrides(for agentType: AgentType, usesMaxReasoning: Bool) -> (modelId: String?, reasoningLevel: String?) {
         switch agentType {
         case .claude:
+            let modelId = "fable"
             return (
-                AgentModelsService.shared.validatedModelId("opus", for: .claude) ?? "opus",
-                AgentModelsService.shared.validatedReasoningLevel(usesMaxReasoning ? "max" : "high", for: .claude, modelId: "opus")
+                AgentModelsService.shared.validatedModelId(modelId, for: .claude) ?? modelId,
+                AgentModelsService.shared.validatedReasoningLevel(usesMaxReasoning ? "max" : "high", for: .claude, modelId: modelId)
             )
         case .codex:
             return (

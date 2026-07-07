@@ -140,9 +140,9 @@ final class AgentModelsService: @unchecked Sendable {
             agents: [
                 "claude": AgentModelConfig(
                     models: [
+                        AgentModel(id: "fable", label: "Fable"),
                         AgentModel(id: "opus", label: "Opus"),
                         AgentModel(id: "sonnet", label: "Sonnet"),
-                        AgentModel(id: "fable", label: "Fable"),
                         AgentModel(id: "haiku", label: "Haiku"),
                     ],
                     reasoningLevels: ["low", "medium", "high", "max"]
