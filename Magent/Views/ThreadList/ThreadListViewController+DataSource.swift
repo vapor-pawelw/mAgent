@@ -167,7 +167,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         if item == nil { return sidebarRootItems.count }
         if let project = item as? SidebarProject { return project.children.count }
         if let section = item as? SidebarSection {
-            return isSectionCollapsed(section) ? 0 : section.items.count
+            return section.outlineChildCount
         }
         return 0
     }

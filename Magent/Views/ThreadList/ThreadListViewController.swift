@@ -385,6 +385,7 @@ final class ThreadListViewController: NSViewController {
     private var hasSidebarAppeared = false
     private var didCenterInitialSelectedThreadOnLaunch = false
     private var pendingInitialSelectedThreadCenteringWorkItem: DispatchWorkItem?
+    private var scrollRestoreCoordinator = SidebarScrollRestoreCoordinator()
 
     private enum SidebarScrollAnchor: Equatable {
         case thread(UUID)
@@ -1090,6 +1091,7 @@ final class ThreadListViewController: NSViewController {
         isReloadingData = true
         defer { isReloadingData = false }
 
+        let scrollRestoreToken = scrollRestoreCoordinator.beginReload()
         let scrollSnapshot = captureSidebarScrollSnapshot()
 
         // Remember current selection
@@ -1260,10 +1262,16 @@ final class ThreadListViewController: NSViewController {
         updateStickyHeaders()
         updateSelectedThreadJumpCapsuleVisibility()
         DispatchQueue.main.async { [weak self] in
-            self?.restoreSidebarScrollSnapshot(scrollSnapshot)
-            self?.updateStickyHeaders()
-            self?.updateSelectedThreadJumpCapsuleVisibility()
-            self?.scheduleInitialSelectedThreadCenteringIfNeeded()
+            guard let self else { return }
+            guard self.scrollRestoreCoordinator.canApplyRestore(for: scrollRestoreToken) else {
+                self.updateStickyHeaders()
+                self.updateSelectedThreadJumpCapsuleVisibility()
+                return
+            }
+            self.restoreSidebarScrollSnapshot(scrollSnapshot)
+            self.updateStickyHeaders()
+            self.updateSelectedThreadJumpCapsuleVisibility()
+            self.scheduleInitialSelectedThreadCenteringIfNeeded()
         }
 
         // Refresh cached remote availability per project (async, non-blocking).
@@ -1617,6 +1625,7 @@ final class ThreadListViewController: NSViewController {
                 // too, otherwise a fallback row that lives far from the viewport would
                 // still jump the sidebar.
                 if scrollRowToVisible {
+                    scrollRestoreCoordinator.cancelPendingRestore()
                     outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                     outlineView.scrollRowToVisible(row)
                 } else {
@@ -1747,6 +1756,8 @@ final class ThreadListViewController: NSViewController {
         guard row >= 0 else { return }
         let rowRect = outlineView.rect(ofRow: row)
         guard rowRect.height > 0 else { return }
+
+        scrollRestoreCoordinator.cancelPendingRestore()
 
         let clipView = scrollView.contentView
         let visibleHeight = clipView.bounds.height
