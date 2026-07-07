@@ -446,6 +446,84 @@ private final class ContextChipView: NSView {
     }
 }
 
+private final class RoundedLaunchTextFieldCell: NSTextFieldCell {
+    private let horizontalInset: CGFloat = 9
+
+    override func drawingRect(forBounds rect: NSRect) -> NSRect {
+        super.drawingRect(forBounds: rect).insetBy(dx: horizontalInset, dy: 0)
+    }
+
+    override func edit(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, event: NSEvent?) {
+        super.edit(
+            withFrame: drawingRect(forBounds: rect),
+            in: controlView,
+            editor: textObj,
+            delegate: delegate,
+            event: event
+        )
+    }
+
+    override func select(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
+        super.select(
+            withFrame: drawingRect(forBounds: rect),
+            in: controlView,
+            editor: textObj,
+            delegate: delegate,
+            start: selStart,
+            length: selLength
+        )
+    }
+}
+
+private final class RoundedLaunchTextField: NSTextField {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        cell = RoundedLaunchTextFieldCell()
+        isBezeled = false
+        isBordered = false
+        drawsBackground = false
+        focusRingType = .none
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
+        }
+        layer?.borderWidth = 1
+        layer?.cornerRadius = 8
+    }
+}
+
+private final class RoundedLaunchPromptScrollView: NSScrollView {
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
+        }
+        layer?.borderWidth = 1
+        layer?.cornerRadius = 10
+        layer?.masksToBounds = true
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        if let nextResponder {
+            nextResponder.scrollWheel(with: event)
+        } else {
+            super.scrollWheel(with: event)
+        }
+    }
+}
+
 final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelegate, NSTextViewDelegate, NSComboBoxDelegate {
     private static var activeControllers: [ObjectIdentifier: AgentLaunchPromptSheetController] = [:]
     private static let formLabelWidth: CGFloat = 80
@@ -455,11 +533,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let config: AgentLaunchSheetConfig
     private let agentPicker = NSPopUpButton()
     private let promptTextView = NSTextView()
-    private let descriptionField = NSTextField()
-    private let branchField = NSTextField()
+    private let descriptionField = RoundedLaunchTextField()
+    private let branchField = RoundedLaunchTextField()
     private let baseBranchField = NSComboBox()
     private let baseBranchErrorLabel = NSTextField(labelWithString: "")
-    private let titleField = NSTextField()
+    private let titleField = RoundedLaunchTextField()
     private let draftCheckbox = NSButton(checkboxWithTitle: "Draft", target: nil, action: nil)
     private var draftCheckboxRow: NSView?
     private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
@@ -830,10 +908,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             promptTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
             promptTextView.delegate = self
 
-            promptScrollView = NonCapturingScrollView()
+            promptScrollView = RoundedLaunchPromptScrollView()
             promptScrollView.translatesAutoresizingMaskIntoConstraints = false
             promptScrollView.drawsBackground = false
-            promptScrollView.borderType = .bezelBorder
+            promptScrollView.borderType = .noBorder
             promptScrollView.hasVerticalScroller = true
             promptScrollView.autohidesScrollers = true
             promptScrollView.documentView = promptTextView
@@ -1184,6 +1262,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         field.translatesAutoresizingMaskIntoConstraints = false
         row.addArrangedSubview(field)
+        NSLayoutConstraint.activate([field.heightAnchor.constraint(equalToConstant: 28)])
 
         return row
     }
