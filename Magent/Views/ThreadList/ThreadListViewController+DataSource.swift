@@ -1163,7 +1163,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     directlyRateLimitedAgentTypes: thread.directlyRateLimitedAgentTypes,
                     currentBranch: currentBranch,
                     busyStateSince: thread.busyStateSince,
-                    leadingOffset: 0
+                    leadingOffset: 0,
+                    showThreadIcon: currentSettings.showThreadIcons
                 )
                 return cell
             }
@@ -1208,6 +1209,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 sectionColor: sectionColor,
                 leadingOffset: threadLeadingOffset(for: thread, in: outlineView),
                 maxDescriptionLines: settings.sidebarDescriptionLineLimit,
+                showThreadIcon: settings.showThreadIcons,
                 isAutoRenaming: threadManager.autoRenameInProgress.contains(thread.id)
             )
             cell.onArchive = { [weak self] in
@@ -1556,7 +1558,8 @@ extension ThreadListViewController: ThreadManagerDelegate {
                         directlyRateLimitedAgentTypes: updated.directlyRateLimitedAgentTypes,
                         currentBranch: currentBranch,
                         busyStateSince: updated.busyStateSince,
-                        leadingOffset: 0
+                        leadingOffset: 0,
+                        showThreadIcon: settings.showThreadIcons
                     )
                 } else {
                     let shouldUseSections = settings.shouldUseThreadSections(for: updated.projectId)
@@ -1578,6 +1581,7 @@ extension ThreadListViewController: ThreadManagerDelegate {
                         sectionColor: sectionColor,
                         leadingOffset: threadLeadingOffset(for: updated, in: outlineView),
                         maxDescriptionLines: settings.sidebarDescriptionLineLimit,
+                        showThreadIcon: settings.showThreadIcons,
                         isAutoRenaming: threadManager.autoRenameInProgress.contains(updated.id)
                     )
                 }

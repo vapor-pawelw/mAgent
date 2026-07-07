@@ -12,6 +12,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var autoRenameBranchCheckbox: NSButton!
     private var autoSetDescriptionCheckbox: NSButton!
     private var autoSetIconFromWorkTypeCheckbox: NSButton!
+    private var showThreadIconsCheckbox: NSButton!
     private var wideThreadsCheckbox: NSButton!
     private var showPRStatusBadgesCheckbox: NSButton!
     private var showJiraStatusBadgesCheckbox: NSButton!
@@ -223,6 +224,21 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         wideThreadsDesc.font = .systemFont(ofSize: 11)
         wideThreadsDesc.textColor = NSColor(resource: .textSecondary)
         sidebarSection.addArrangedSubview(wideThreadsDesc)
+
+        showThreadIconsCheckbox = NSButton(
+            checkboxWithTitle: String(localized: .SettingsStrings.settingsThreadsShowThreadIcons),
+            target: self,
+            action: #selector(showThreadIconsToggled)
+        )
+        showThreadIconsCheckbox.state = settings.showThreadIcons ? .on : .off
+        sidebarSection.addArrangedSubview(showThreadIconsCheckbox)
+
+        let showThreadIconsDesc = NSTextField(
+            wrappingLabelWithString: String(localized: .SettingsStrings.settingsThreadsShowThreadIconsDescription)
+        )
+        showThreadIconsDesc.font = .systemFont(ofSize: 11)
+        showThreadIconsDesc.textColor = NSColor(resource: .textSecondary)
+        sidebarSection.addArrangedSubview(showThreadIconsDesc)
 
         autoReorderOnCompletionCheckbox = NSButton(
             checkboxWithTitle: "Move completed threads to top",
@@ -836,6 +852,12 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     @objc private func wideThreadsToggled() {
         persistSettings(notify: true) { settings in
             settings.wideThreads = wideThreadsCheckbox.state == .on
+        }
+    }
+
+    @objc private func showThreadIconsToggled() {
+        persistSettings(notify: true) { settings in
+            settings.showThreadIcons = showThreadIconsCheckbox.state == .on
         }
     }
 

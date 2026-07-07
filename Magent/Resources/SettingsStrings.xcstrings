@@ -375,6 +375,28 @@
         }
       }
     },
+    "settingsThreadsShowThreadIcons": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show thread icons"
+          }
+        }
+      }
+    },
+    "settingsThreadsShowThreadIconsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When off, thread names and badges shift left and the icon picker is hidden from thread menus."
+          }
+        }
+      }
+    },
     "settingsThreadsStatusBarBusy": {
       "extractionState": "manual",
       "localizations": {

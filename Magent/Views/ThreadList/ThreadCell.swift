@@ -637,6 +637,7 @@ final class ThreadCell: NSTableCellView {
         sectionColor: NSColor?,
         leadingOffset: CGFloat = 0,
         maxDescriptionLines: Int = 2,
+        showThreadIcon: Bool = true,
         isAutoRenaming: Bool = false
     ) {
         isConfiguredAsMain = false
@@ -791,6 +792,7 @@ final class ThreadCell: NSTableCellView {
 
         imageView?.image = Self.cachedSymbolImage(thread.threadIcon.symbolName)
             ?? Self.cachedSymbolImage("terminal")
+        imageView?.isHidden = !showThreadIcon
         hasUnreadCompletion = thread.hasUnreadAgentCompletion
         hasWaitingForInput = thread.hasWaitingForInput
         hasAllDead = thread.hasAllSessionsDead
@@ -878,7 +880,8 @@ final class ThreadCell: NSTableCellView {
         directlyRateLimitedAgentTypes: Set<AgentType> = [],
         currentBranch: String? = nil,
         busyStateSince: Date? = nil,
-        leadingOffset: CGFloat = 0
+        leadingOffset: CGFloat = 0,
+        showThreadIcon: Bool = true
     ) {
         isConfiguredAsMain = true
         ensureTrailingStack()
@@ -910,7 +913,7 @@ final class ThreadCell: NSTableCellView {
 
         imageView?.image = nil
         imageView?.image = Self.cachedSymbolImage("house.fill")
-        imageView?.isHidden = false
+        imageView?.isHidden = !showThreadIcon
         updateMainIconTintForSelection()
 
         setDirtyDot(primaryDirtyDot, visible: false)

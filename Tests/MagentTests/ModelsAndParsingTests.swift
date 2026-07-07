@@ -804,6 +804,39 @@ struct AppSettingsThreadRowWidthTests {
     }
 }
 
+// MARK: - AppSettings thread icons
+
+@Suite("AppSettings thread icons")
+struct AppSettingsThreadIconVisibilityTests {
+
+    @Test("New settings show thread icons by default")
+    func defaultsToShowingThreadIcons() {
+        #expect(AppSettings().showThreadIcons)
+    }
+
+    @Test("Missing thread icon visibility setting decodes to visible")
+    func decodesMissingThreadIconVisibilityToVisible() throws {
+        let baselineData = try JSONEncoder().encode(AppSettings())
+        var baselineObject = try #require(JSONSerialization.jsonObject(with: baselineData) as? [String: Any])
+        baselineObject.removeValue(forKey: "showThreadIcons")
+        let data = try JSONSerialization.data(withJSONObject: baselineObject)
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(decoded.showThreadIcons)
+    }
+
+    @Test("Thread icon visibility setting round-trips")
+    func threadIconVisibilityRoundTrips() throws {
+        let data = try JSONEncoder().encode(AppSettings(showThreadIcons: false))
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(object["showThreadIcons"] as? Bool == false)
+        #expect(!decoded.showThreadIcons)
+    }
+}
+
 // MARK: - AppSettings terminal surface cache
 
 @Suite("AppSettings terminal surface cache")

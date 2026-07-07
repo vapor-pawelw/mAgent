@@ -1036,6 +1036,7 @@ final class ThreadListViewController: NSViewController {
         capsuleContent.orientation = .horizontal
         capsuleContent.alignment = .centerY
         capsuleContent.spacing = 8
+        capsuleContent.detachesHiddenViews = true
 
         selectedThreadJumpCapsule.addSubview(capsuleContent)
         view.addSubview(selectedThreadJumpCapsule)
@@ -1797,6 +1798,7 @@ final class ThreadListViewController: NSViewController {
             accessibilityDescription: iconAccessibilityDescription
         )
         selectedThreadJumpIconView.contentTintColor = NSColor(resource: .primaryBrand)
+        selectedThreadJumpIconView.isHidden = !persistence.loadSettings().showThreadIcons
         selectedThreadJumpTitleLabel.stringValue = SelectedThreadJumpPresenter.title(for: selectedThread)
 
         let row = outlineView.row(forItem: selectedThread)

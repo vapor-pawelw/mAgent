@@ -243,16 +243,18 @@ extension ThreadListViewController {
         aiRenameItem.representedObject = thread
         submenu.addItem(aiRenameItem)
 
-        submenu.addItem(.separator())
+        if settings.showThreadIcons {
+            submenu.addItem(.separator())
 
-        // Icon
-        let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadIconMenuTitle), action: nil, keyEquivalent: "")
-        iconItem.image = NSImage(
-            systemSymbolName: thread.threadIcon.symbolName,
-            accessibilityDescription: thread.threadIcon.accessibilityDescription
-        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
-        iconItem.submenu = buildThreadIconSubmenu(for: thread)
-        submenu.addItem(iconItem)
+            // Icon
+            let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadIconMenuTitle), action: nil, keyEquivalent: "")
+            iconItem.image = NSImage(
+                systemSymbolName: thread.threadIcon.symbolName,
+                accessibilityDescription: thread.threadIcon.accessibilityDescription
+            ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
+            iconItem.submenu = buildThreadIconSubmenu(for: thread)
+            submenu.addItem(iconItem)
+        }
 
         submenu.addItem(.separator())
 

@@ -138,6 +138,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var autoRenameBranches: Bool
     public var autoSetThreadDescription: Bool
     public var autoSetThreadIconFromWorkType: Bool
+    public var showThreadIcons: Bool
     public var wideThreads: Bool
     public var showPRStatusBadges: Bool
     public var showJiraStatusBadges: Bool
@@ -207,6 +208,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoRenameBranches: Bool = true,
         autoSetThreadDescription: Bool = true,
         autoSetThreadIconFromWorkType: Bool = true,
+        showThreadIcons: Bool = true,
         wideThreads: Bool = false,
         showPRStatusBadges: Bool = true,
         showJiraStatusBadges: Bool = true,
@@ -275,6 +277,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.autoRenameBranches = autoRenameBranches
         self.autoSetThreadDescription = autoSetThreadDescription
         self.autoSetThreadIconFromWorkType = autoSetThreadIconFromWorkType
+        self.showThreadIcons = showThreadIcons
         self.wideThreads = wideThreads
         self.showPRStatusBadges = showPRStatusBadges
         self.showJiraStatusBadges = showJiraStatusBadges
@@ -349,6 +352,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoRenameBranches = try container.decodeIfPresent(Bool.self, forKey: .autoRenameBranches) ?? legacyAutoRename ?? true
         autoSetThreadDescription = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadDescription) ?? legacyAutoRename ?? true
         autoSetThreadIconFromWorkType = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadIconFromWorkType) ?? true
+        showThreadIcons = try container.decodeIfPresent(Bool.self, forKey: .showThreadIcons) ?? true
         if let decodedWideThreads = try container.decodeIfPresent(Bool.self, forKey: .wideThreads) {
             wideThreads = decodedWideThreads
         } else if let legacyNarrowThreads = try container.decodeIfPresent(Bool.self, forKey: .narrowThreads) {
@@ -437,6 +441,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoRenameBranches, forKey: .autoRenameBranches)
         try container.encode(autoSetThreadDescription, forKey: .autoSetThreadDescription)
         try container.encode(autoSetThreadIconFromWorkType, forKey: .autoSetThreadIconFromWorkType)
+        try container.encode(showThreadIcons, forKey: .showThreadIcons)
         try container.encode(wideThreads, forKey: .wideThreads)
         try container.encode(showPRStatusBadges, forKey: .showPRStatusBadges)
         try container.encode(showJiraStatusBadges, forKey: .showJiraStatusBadges)
@@ -681,6 +686,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case autoRenameBranches
         case autoSetThreadDescription
         case autoSetThreadIconFromWorkType
+        case showThreadIcons
         case wideThreads
         case showPRStatusBadges
         case showJiraStatusBadges
