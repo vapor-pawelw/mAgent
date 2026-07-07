@@ -52,7 +52,7 @@
 
 - Prevented newly created thread selection from being undone by stale sidebar scroll restores.
 - Fixed collapsed sidebar sections corrupting row geometry after reloads, which could leave huge gaps or overlap project and section headers.
-- Fixed project headers overlapping earlier sidebar sections and leaving a gap before the main worktree after creating threads.
+- Fixed sidebar rows and headers overlapping during new-thread creation.
 - Fixed sticky section headers not blurring the sidebar content underneath.
 - Fixed sticky repository headers disappearing in the gap before the next repository header takes over.
 - Kept the add-thread `+` button visible on sticky repository headers.

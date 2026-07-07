@@ -385,6 +385,7 @@ final class ThreadListViewController: NSViewController {
     private var hasSidebarAppeared = false
     private var didCenterInitialSelectedThreadOnLaunch = false
     private var pendingInitialSelectedThreadCenteringWorkItem: DispatchWorkItem?
+    private var structuralReloadGeometryGeneration = 0
     private var scrollRestoreCoordinator = SidebarScrollRestoreCoordinator()
 
     private enum SidebarScrollAnchor: Equatable {
@@ -1234,6 +1235,7 @@ final class ThreadListViewController: NSViewController {
         }
         refreshVisibleSectionDisclosureButtons()
         settleSidebarOutlineGeometryAfterStructuralReload()
+        scheduleDeferredStructuralReloadGeometrySettlement()
 
         // Restore selection
         var restoredSelection = false
@@ -1264,10 +1266,12 @@ final class ThreadListViewController: NSViewController {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             guard self.scrollRestoreCoordinator.canApplyRestore(for: scrollRestoreToken) else {
+                self.settleSidebarOutlineGeometryAfterStructuralReload()
                 self.updateStickyHeaders()
                 self.updateSelectedThreadJumpCapsuleVisibility()
                 return
             }
+            self.settleSidebarOutlineGeometryAfterStructuralReload()
             self.restoreSidebarScrollSnapshot(scrollSnapshot)
             self.updateStickyHeaders()
             self.updateSelectedThreadJumpCapsuleVisibility()
@@ -1303,6 +1307,29 @@ final class ThreadListViewController: NSViewController {
         outlineView.noteNumberOfRowsChanged()
         outlineView.layoutSubtreeIfNeeded()
         scrollView.layoutSubtreeIfNeeded()
+    }
+
+    private func scheduleDeferredStructuralReloadGeometrySettlement() {
+        structuralReloadGeometryGeneration &+= 1
+        let generation = structuralReloadGeometryGeneration
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard self.structuralReloadGeometryGeneration == generation else { return }
+            self.applyDeferredStructuralReloadGeometrySettlement()
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else { return }
+            guard self.structuralReloadGeometryGeneration == generation else { return }
+            self.applyDeferredStructuralReloadGeometrySettlement()
+        }
+    }
+
+    private func applyDeferredStructuralReloadGeometrySettlement() {
+        settleSidebarOutlineGeometryAfterStructuralReload()
+        updateStickyHeaders()
+        updateSelectedThreadJumpCapsuleVisibility()
     }
 
     private func scheduleInitialSelectedThreadCenteringIfNeeded() {
