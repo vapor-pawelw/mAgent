@@ -465,7 +465,7 @@ private final class RoundedLaunchPromptScrollView: NSScrollView {
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
-            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.2).cgColor
         }
         layer?.borderWidth = 1
         layer?.cornerRadius = 10
