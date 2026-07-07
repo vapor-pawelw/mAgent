@@ -1041,15 +1041,34 @@ final class ThreadDetailViewController: NSViewController {
         )
 
         let initialSessionName = sessionDisplayOrder[initialIndex]
-        let initialAgentType = await threadManager.loadingOverlayAgentType(
-            for: thread,
-            sessionName: initialSessionName
+        let canFastPathInitialSession = await MainActor.run {
+            threadManager.isSessionPreparedFastPath(
+                sessionName: initialSessionName,
+                thread: thread,
+                hasReusableTerminalSurface: reusableSurfacePreparedSessions.contains(initialSessionName)
+            )
+        }
+        let startupOverlayAction = ThreadStartupOverlayDecision.action(
+            isRestoringTerminalTab: nonTerminalSlotIndex == nil,
+            requiresStartupOverlay: requireStartupOverlayForInitialSession,
+            canFastPathSelectedSession: canFastPathInitialSession
         )
+        let initialAgentType = startupOverlayAction == .skip
+            ? nil
+            : await threadManager.loadingOverlayAgentType(
+                for: thread,
+                sessionName: initialSessionName
+            )
 
         await MainActor.run {
             // Only show terminal loading overlay if we're actually restoring to a terminal tab.
             if nonTerminalSlotIndex == nil {
-                startLoadingOverlayTracking(sessionName: initialSessionName, agentType: initialAgentType)
+                switch startupOverlayAction {
+                case .skip:
+                    dismissLoadingOverlay()
+                case .track:
+                    startLoadingOverlayTracking(sessionName: initialSessionName, agentType: initialAgentType)
+                }
 
                 if requireStartupOverlayForInitialSession {
                     requireStartupOverlay(for: initialSessionName)

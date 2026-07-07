@@ -22,6 +22,7 @@
 
 #### Bug Fixes
 
+- Fixed recent thread switches flashing a loading overlay even when the selected terminal session was already cached and healthy.
 - Fixed lost-prompt recovery controls showing a generic button label, kept recovery banners out of the toolbar area, added confirmation before discarding recovered prompts, and made `Esc` dismiss banners that show an `X`.
 
 ### Terminal
