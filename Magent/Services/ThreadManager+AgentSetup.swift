@@ -445,7 +445,8 @@ extension ThreadManager {
         workingDirectory: String,
         resumeSessionID: String? = nil,
         modelId: String? = nil,
-        reasoningLevel: String? = nil
+        reasoningLevel: String? = nil,
+        codexFastMode: Bool = false
     ) -> String {
         agentSetupService.agentStartCommand(
             settings: settings,
@@ -455,7 +456,8 @@ extension ThreadManager {
             workingDirectory: workingDirectory,
             resumeSessionID: resumeSessionID,
             modelId: modelId,
-            reasoningLevel: reasoningLevel
+            reasoningLevel: reasoningLevel,
+            codexFastMode: codexFastMode
         )
     }
 

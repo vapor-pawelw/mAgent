@@ -21,7 +21,7 @@ final class ThreadLifecycleService {
 
     // Agent setup
     var resolveAgentType: ((UUID, AgentType?, AppSettings) -> AgentType?)?
-    var agentStartCommand: ((AppSettings, UUID?, AgentType?, String, String, String?, String?) -> String)?
+    var agentStartCommand: ((AppSettings, UUID?, AgentType?, String, String, String?, String?, Bool) -> String)?
     var terminalStartCommand: ((String, String) -> String)?
     var trustDirectoryIfNeeded: ((String, AgentType?) -> Void)?
     var effectiveAgentType: ((UUID) -> AgentType?)?
@@ -133,6 +133,7 @@ final class ThreadLifecycleService {
         initialWebURL: URL? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
+        codexFastMode: Bool = false,
         localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil
     ) async throws -> MagentThread {
         var name = ""
@@ -409,7 +410,7 @@ final class ThreadLifecycleService {
             let envExports = shellExportCommand?(sessionEnvironment) ?? ""
             let startCmd: String
             if useAgentCommand {
-                startCmd = agentStartCommand?(settings, project.id, selectedAgentType, envExports, worktreePath, modelId, reasoningLevel) ?? ""
+                startCmd = agentStartCommand?(settings, project.id, selectedAgentType, envExports, worktreePath, modelId, reasoningLevel, codexFastMode) ?? ""
             } else {
                 startCmd = terminalStartCommand?(envExports, worktreePath) ?? ""
             }
@@ -589,7 +590,7 @@ final class ThreadLifecycleService {
             selectedAgentType
         ) ?? []
         let envExports = shellExportCommand?(sessionEnvironment) ?? ""
-        let startCmd = agentStartCommand?(settings, project.id, selectedAgentType, envExports, project.repoPath, nil, nil) ?? ""
+        let startCmd = agentStartCommand?(settings, project.id, selectedAgentType, envExports, project.repoPath, nil, nil, false) ?? ""
         try await tmux.createSession(
             name: tmuxSessionName,
             workingDirectory: project.repoPath,

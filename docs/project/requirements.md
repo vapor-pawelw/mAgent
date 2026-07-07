@@ -250,7 +250,7 @@ For the main thread, the sidebar uses these rules:
 - **Worktrees path**: Per-project or global path for worktrees (default: `<parent>/<repo>-worktrees/`)
 - **Local sync paths** (per project): Line-separated repo-relative files/directories copied into new thread worktrees and merged back on archive
 - **Agent command**: The command to run in new threads (e.g. `claude`, `aider`, custom)
-- **Model / Reasoning**: Per-agent model and reasoning-effort selection shown in the launch sheet; populated from the bundled/cached `agent-models.json` manifest (refreshed from GitHub in the background). Last selection per agent is persisted and reused for fast-path thread creation (Option+click, context menu, keyboard shortcut).
+- **Model / Reasoning / Fast mode**: Per-agent model and reasoning-effort selection shown in the launch sheet; populated from the bundled/cached `agent-models.json` manifest (refreshed from GitHub in the background). Codex also exposes a launch-sheet Fast mode toggle. Last selections are persisted and reused for fast-path thread creation (Option+click, context menu, keyboard shortcut).
 - **Dependencies**: Check/install tmux, verify ghostty availability
 - **tmux configuration**: Optional custom tmux config or prefix key
 

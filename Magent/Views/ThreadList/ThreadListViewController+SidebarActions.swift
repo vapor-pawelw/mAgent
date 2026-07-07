@@ -21,7 +21,8 @@ extension ThreadListViewController {
             let resolvedAgent = threadManager.effectiveAgentType(for: project.id)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
             let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
-            createThread(for: project, requestedAgentType: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
+            let codexFastMode = resolvedAgent.map { AgentLastSelectionStore.lastCodexFastMode(for: $0) } ?? false
+            createThread(for: project, requestedAgentType: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning, codexFastMode: codexFastMode)
         } else {
             presentNewThreadSheet(for: project, anchorView: sender)
         }
@@ -544,6 +545,7 @@ extension ThreadListViewController {
                 draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "", result.modelId, result.reasoningLevel) } : nil,
                 modelId: result.modelId,
                 reasoningLevel: result.reasoningLevel,
+                codexFastMode: result.codexFastMode,
                 localFileSyncEntriesOverride: isFork ? capturedSourceThread?.localFileSyncEntriesSnapshot : nil
             )
         }
@@ -586,7 +588,8 @@ extension ThreadListViewController {
         case .agent(let agentType):
             let modelId = AgentLastSelectionStore.lastModel(for: agentType)
             let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
-            createThread(for: project, requestedAgentType: agentType, useAgentCommand: true, baseBranch: baseBranch, modelId: modelId, reasoningLevel: reasoning)
+            let codexFastMode = AgentLastSelectionStore.lastCodexFastMode(for: agentType)
+            createThread(for: project, requestedAgentType: agentType, useAgentCommand: true, baseBranch: baseBranch, modelId: modelId, reasoningLevel: reasoning, codexFastMode: codexFastMode)
         case .chat(let agentType):
             let modelId = AgentLastSelectionStore.lastModel(for: agentType)
             let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
@@ -610,7 +613,8 @@ extension ThreadListViewController {
             let resolvedAgent = threadManager.effectiveAgentType(for: project.id)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
             let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
-            createThread(for: project, requestedAgentType: nil, useAgentCommand: true, baseBranch: baseBranch, modelId: modelId, reasoningLevel: reasoning)
+            let codexFastMode = resolvedAgent.map { AgentLastSelectionStore.lastCodexFastMode(for: $0) } ?? false
+            createThread(for: project, requestedAgentType: nil, useAgentCommand: true, baseBranch: baseBranch, modelId: modelId, reasoningLevel: reasoning, codexFastMode: codexFastMode)
         case .web:
             presentNewThreadSheet(for: project, anchorView: outlineView)
         }
@@ -670,6 +674,7 @@ extension ThreadListViewController {
             let resolvedAgent = threadManager.effectiveAgentType(for: project.id)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
             let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
+            let codexFastMode = resolvedAgent.map { AgentLastSelectionStore.lastCodexFastMode(for: $0) } ?? false
             createThread(
                 for: project,
                 requestedAgentType: nil,
@@ -678,7 +683,8 @@ extension ThreadListViewController {
                 insertAfterThreadId: isPinnedSource ? nil : sourceInSameProject?.id,
                 insertAtTopOfVisibleGroup: isPinnedSource,
                 modelId: modelId,
-                reasoningLevel: reasoning
+                reasoningLevel: reasoning,
+                codexFastMode: codexFastMode
             )
         } else {
             presentNewThreadSheet(
@@ -709,6 +715,7 @@ extension ThreadListViewController {
         draftPrompt: (agentType: AgentType, prompt: String, modelId: String?, reasoningLevel: String?)? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
+        codexFastMode: Bool = false,
         localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil
     ) {
         isCreatingThread = true
@@ -741,6 +748,7 @@ extension ThreadListViewController {
                     initialWebURL: initialWebURL,
                     modelId: modelId,
                     reasoningLevel: reasoningLevel,
+                    codexFastMode: codexFastMode,
                     localFileSyncEntriesOverride: localFileSyncEntriesOverride
                 )
                 if let desc = taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1107,7 +1115,8 @@ extension ThreadListViewController {
                 requestedBranchName: result.branchName,
                 pendingPromptFileURL: result.pendingPromptFileURL,
                 modelId: result.modelId,
-                reasoningLevel: result.reasoningLevel
+                reasoningLevel: result.reasoningLevel,
+                codexFastMode: result.codexFastMode
             )
         }
     }

@@ -378,7 +378,7 @@ Non-critical caches (Jira, PR, rate-limit, etc.) keep silent fallback to empty �
 | `chat-tabs.json` | Sidecar map of `thread.id` → `[PersistedChatTab]`, used to recover chat tabs when older builds rewrite `threads.json` without preserving inline chat-tab fields |
 | `settings.json` | Versioned envelope containing `AppSettings` (projects, sections, preferences) |
 | `agent-launch-prompt-drafts.json` | Draft prompts for agent launch sheets |
-| `agent-last-selections.json` | Last-used agent type, model, and reasoning effort per scope (managed by `AgentLastSelectionStore`) |
+| `agent-last-selections.json` | Last-used agent type, model, reasoning effort, and Codex Fast mode per scope (managed by `AgentLastSelectionStore`) |
 | `agent-models.json` | Cached remote agent model/reasoning manifest (written by `AgentModelsService`; sourced from `config/agent-models.json` in the app bundle as a fallback) |
 | `rate-limit-cache.json` | Fingerprint → resetAt cache (auto-pruned on load) |
 | `ignored-rate-limit-fingerprints.json` | User-ignored rate-limit reset timestamps per agent |
@@ -412,8 +412,8 @@ User Action (+ button)
 
 - **Load order**: App Support cache → bundled `config/agent-models.json` → hardcoded fallback.
 - **Remote refresh**: Fetched from `vapor-pawelw/mAgent` on GitHub at launch (`refreshOnLaunch`) and throttled to once per 10 minutes when the launch sheet calls `refreshIfThrottled`.
-- **Per-agent last selection**: `AgentLastSelectionStore` (in `PersistenceCore`) persists the last-chosen model and reasoning effort per agent type in `agent-last-selections.json`. Fast paths (Option+click, context menu, keyboard create) use these stored values.
-- **Command injection**: `freshAgentCommand` validates the selection against the manifest before appending `--model`/`--effort` (Claude) or `-m`/`-c` (Codex) flags. Invalid or missing selections fall through without flags.
+- **Per-agent last selection**: `AgentLastSelectionStore` (in `PersistenceCore`) persists the last-chosen model, reasoning effort, and Codex Fast mode in `agent-last-selections.json`. Fast paths (Option+click, context menu, keyboard create) use these stored values.
+- **Command injection**: `freshAgentCommand` validates the selection against the manifest before appending `--model`/`--effort` (Claude) or `-m`/`-c` (Codex) flags. Codex Fast mode appends `-c service_tier="fast"` for fresh launches. Invalid or missing selections fall through without flags.
 - **Crash recovery**: Pending initial prompts preserve model and reasoning alongside the prompt text so the correct flags are restored after an app crash.
 
 ## Review Button Agent Selection

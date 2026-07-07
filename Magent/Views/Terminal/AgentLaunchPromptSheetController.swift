@@ -292,6 +292,7 @@ enum AgentLastSelectionStore {
         }
         return "reasoning:\(agentType.rawValue)"
     }
+    private static func codexFastModeKey(for agentType: AgentType) -> String { "fastMode:\(agentType.rawValue)" }
 
     static func lastModel(for agentType: AgentType) -> String? {
         persistence.loadAgentLastSelections()[modelKey(for: agentType)]
@@ -299,6 +300,10 @@ enum AgentLastSelectionStore {
 
     static func lastReasoning(for agentType: AgentType, modelId: String?) -> String? {
         persistence.loadAgentLastSelections()[reasoningKey(for: agentType, modelId: modelId)]
+    }
+
+    static func lastCodexFastMode(for agentType: AgentType) -> Bool {
+        persistence.loadAgentLastSelections()[codexFastModeKey(for: agentType)] == "true"
     }
 
     static func saveModel(_ modelId: String?, for agentType: AgentType) {
@@ -310,6 +315,12 @@ enum AgentLastSelectionStore {
     static func saveReasoning(_ level: String?, for agentType: AgentType, modelId: String?) {
         var selections = persistence.loadAgentLastSelections()
         selections[reasoningKey(for: agentType, modelId: modelId)] = level
+        persistence.saveAgentLastSelections(selections)
+    }
+
+    static func saveCodexFastMode(_ enabled: Bool, for agentType: AgentType) {
+        var selections = persistence.loadAgentLastSelections()
+        selections[codexFastModeKey(for: agentType)] = enabled ? "true" : "false"
         persistence.saveAgentLastSelections(selections)
     }
 }
@@ -432,6 +443,8 @@ struct AgentLaunchSheetResult {
     let modelId: String?
     /// Selected reasoning level (e.g. "high", "max"), nil means use agent default.
     let reasoningLevel: String?
+    /// When true, fresh Codex terminal sessions request the Fast service tier.
+    let codexFastMode: Bool
 }
 
 /// A rounded chip view that shows accent-tinted background, adapting correctly to light/dark mode.
@@ -545,7 +558,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let switchToNewTabCheckbox = NSButton(checkboxWithTitle: "Switch to new tab", target: nil, action: nil)
     private let modelPicker = NSPopUpButton()
     private let reasoningPicker = NSPopUpButton()
+    private let codexFastModeButton = NSButton()
     private var modelReasoningViews: [NSView] = []
+    private var codexFastModeViews: [NSView] = []
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     private let acceptButton: NSButton
     private var promptScrollView: NSScrollView!
@@ -879,11 +894,25 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         reasoningPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
         agentRow.addArrangedSubview(reasoningPicker)
 
+        codexFastModeButton.bezelStyle = .texturedRounded
+        codexFastModeButton.setButtonType(.toggle)
+        codexFastModeButton.isBordered = false
+        codexFastModeButton.imagePosition = .imageOnly
+        codexFastModeButton.target = self
+        codexFastModeButton.action = #selector(codexFastModeButtonTapped)
+        codexFastModeButton.toolTip = String(localized: .ThreadStrings.chatSlashCommandFastDescription)
+        codexFastModeButton.setContentHuggingPriority(.required, for: .horizontal)
+        codexFastModeButton.widthAnchor.constraint(equalToConstant: 24).isActive = true
+        codexFastModeButton.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        agentRow.addArrangedSubview(codexFastModeButton)
+
         modelReasoningViews = [modelLabel, modelPicker, reasoningLabel, reasoningPicker]
+        codexFastModeViews = [codexFastModeButton]
 
         stack.addArrangedSubview(agentRow)
         populateModelReasoningPickers()
         applyLastModelReasoningSelection()
+        updateCodexFastModeSelection()
         updateModelReasoningVisibility()
 
         let promptFont = NSFont.systemFont(ofSize: 13)
@@ -1769,6 +1798,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         return reasoningPicker.selectedItem?.representedObject as? String
     }
 
+    private var selectedCodexFastMode: Bool {
+        selectedAgentTypeForModelPicker == .codex && codexFastModeButton.state == .on
+    }
+
     private func populateModelReasoningPickers() {
         modelPicker.removeAllItems()
         reasoningPicker.removeAllItems()
@@ -1837,6 +1870,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         for view in modelReasoningViews {
             view.isHidden = !visible
         }
+        let showCodexFastMode = selectedAgentTypeForModelPicker == .codex
+        for view in codexFastModeViews {
+            view.isHidden = !showCodexFastMode
+        }
+        updateCodexFastModeButtonImage()
     }
 
     /// Resync model/reasoning pickers after programmatic agent picker changes
@@ -1844,7 +1882,27 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private func syncModelReasoningToCurrentAgent() {
         populateModelReasoningPickers()
         applyLastModelReasoningSelection()
+        updateCodexFastModeSelection()
         updateModelReasoningVisibility()
+    }
+
+    private func updateCodexFastModeSelection() {
+        guard let agentType = selectedAgentTypeForModelPicker else {
+            codexFastModeButton.state = .off
+            updateCodexFastModeButtonImage()
+            return
+        }
+        codexFastModeButton.state = AgentLastSelectionStore.lastCodexFastMode(for: agentType) ? .on : .off
+        updateCodexFastModeButtonImage()
+    }
+
+    private func updateCodexFastModeButtonImage() {
+        let symbolName = codexFastModeButton.state == .on ? "bolt.fill" : "bolt"
+        codexFastModeButton.image = NSImage(
+            systemSymbolName: symbolName,
+            accessibilityDescription: String(localized: .ThreadStrings.chatSlashCommandFastDescription)
+        )
+        codexFastModeButton.contentTintColor = codexFastModeButton.state == .on ? .systemYellow : .secondaryLabelColor
     }
 
     @objc private func modelPickerChanged() {
@@ -1864,6 +1922,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     @objc private func reasoningPickerChanged() {
         guard let agentType = selectedAgentTypeForModelPicker else { return }
         AgentLastSelectionStore.saveReasoning(selectedReasoningLevel, for: agentType, modelId: selectedModelId)
+    }
+
+    @objc private func codexFastModeButtonTapped() {
+        updateCodexFastModeButtonImage()
+        guard let agentType = selectedAgentTypeForModelPicker, agentType == .codex else { return }
+        AgentLastSelectionStore.saveCodexFastMode(codexFastModeButton.state == .on, for: agentType)
     }
 
     // MARK: - NSTextViewDelegate
@@ -1996,6 +2060,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         if let agentType = selectedAgentTypeForModelPicker {
             AgentLastSelectionStore.saveModel(chosenModelId, for: agentType)
             AgentLastSelectionStore.saveReasoning(chosenReasoningLevel, for: agentType, modelId: chosenModelId)
+            if agentType == .codex {
+                AgentLastSelectionStore.saveCodexFastMode(selectedCodexFastMode, for: agentType)
+            }
         }
 
         // Write crash-recovery temp file before clearing the draft, so the submitted
@@ -2068,7 +2135,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 initialWebURL: nil,
                 isDraft: false,
                 modelId: nil,
-                reasoningLevel: nil
+                reasoningLevel: nil,
+                codexFastMode: false
             ))
         case .agent(let type, let surface, _):
             finish(with: AgentLaunchSheetResult(
@@ -2086,7 +2154,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 initialWebURL: nil,
                 isDraft: isDraft,
                 modelId: chosenModelId,
-                reasoningLevel: chosenReasoningLevel
+                reasoningLevel: chosenReasoningLevel,
+                codexFastMode: type == .codex && selectedCodexFastMode
             ))
         case .web:
             let url = WebURLNormalizer.normalize(rawPrompt) ?? URL(string: "about:blank")!
@@ -2105,7 +2174,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 initialWebURL: url,
                 isDraft: false,
                 modelId: nil,
-                reasoningLevel: nil
+                reasoningLevel: nil,
+                codexFastMode: false
             ))
         }
     }

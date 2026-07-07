@@ -372,7 +372,7 @@ final class ThreadManager {
         svc.resolveAgentType = { [weak self] projectId, requested, settings in
             self?.resolveAgentType(for: projectId, requestedAgentType: requested, settings: settings)
         }
-        svc.agentStartCommand = { [weak self] settings, projectId, agentType, envExports, workingDir, modelId, reasoningLevel in
+        svc.agentStartCommand = { [weak self] settings, projectId, agentType, envExports, workingDir, modelId, reasoningLevel, codexFastMode in
             self?.agentStartCommand(
                 settings: settings,
                 projectId: projectId,
@@ -380,7 +380,8 @@ final class ThreadManager {
                 envExports: envExports,
                 workingDirectory: workingDir,
                 modelId: modelId,
-                reasoningLevel: reasoningLevel
+                reasoningLevel: reasoningLevel,
+                codexFastMode: codexFastMode
             ) ?? ""
         }
         svc.terminalStartCommand = { [weak self] envExports, workingDir in
