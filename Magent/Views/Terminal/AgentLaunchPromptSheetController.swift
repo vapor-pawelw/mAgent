@@ -773,7 +773,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(titleLabel)
-        stack.setCustomSpacing(8, after: titleLabel)
+        stack.setCustomSpacing(16, after: titleLabel)
 
         // Project picker (multiple projects) or subtitle chip (e.g. thread context for new tab).
         var contextChip: NSView?
