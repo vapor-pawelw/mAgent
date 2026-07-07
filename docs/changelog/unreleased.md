@@ -30,6 +30,7 @@
 - Refresh missing-repository status when Magent returns to the foreground.
 - Center the missing-repository recovery row content within its sidebar box.
 - Sticky sidebar headers now use a stronger live blur instead of an opaque fill.
+- Hid the thread-list scrollbar so it no longer cuts through sticky header blur.
 
 #### Bug Fixes
 

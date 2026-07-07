@@ -560,11 +560,9 @@ final class ThreadListViewController: NSViewController {
     private func refitOutlineColumnIfNeeded(force: Bool = false) {
         guard let outlineView, let scrollView else { return }
         // Use the scroll view's outer width rather than `contentView.bounds.width`
-        // so column/row widths don't flicker when the overlay scroller fades in/out
-        // (notably on window deactivate/reactivate, where macOS can briefly promote
-        // the overlay scroller to a space-reserving state and shrink the clip view).
-        // The overlay scroller floats over the capsule's 12pt trailing inset region,
-        // so the capsule itself is never covered.
+        // so column/row widths stay stable if AppKit ever reserves clip-view space
+        // for scrollers or window chrome. The thread-list scroller is intentionally
+        // disabled, but this keeps the column sizing robust across OS behavior.
         let targetWidth = scrollView.bounds.width
         guard targetWidth > 0 else { return }
 
@@ -874,11 +872,8 @@ final class ThreadListViewController: NSViewController {
         outlineView.indentationPerLevel = 0
         outlineView.rowSizeStyle = .custom
         outlineView.backgroundColor = .clear
-        // Keep column width fully manual (see `refitOutlineColumnIfNeeded`). AppKit's
-        // last-column autoresizing otherwise shrinks the column whenever the enclosing
-        // clip view briefly narrows — e.g. when the overlay scroller hover-expands or
-        // legacy scroller toggles visibility on window activate/deactivate — causing
-        // every capsule to resize along with the scroller.
+        // Keep column width fully manual (see `refitOutlineColumnIfNeeded`) so rows
+        // do not resize during window/sidebar layout churn.
         outlineView.columnAutoresizingStyle = .noColumnAutoresizing
         outlineView.intercellSpacing = NSSize(width: 0, height: 0)
         // Suppress AppKit's built-in selection drawing so right-click context menus
@@ -912,8 +907,8 @@ final class ThreadListViewController: NSViewController {
 
         scrollView = NonFlashingScrollView()
         scrollView.documentView = outlineView
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
+        scrollView.hasVerticalScroller = false
+        scrollView.autohidesScrollers = false
         scrollView.scrollerStyle = .overlay
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.drawsBackground = false

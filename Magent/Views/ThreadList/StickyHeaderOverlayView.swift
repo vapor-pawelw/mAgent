@@ -12,7 +12,7 @@ final class StickyHeaderOverlayView: NSView {
     private static let leadingInset: CGFloat = ThreadListViewController.capsuleAlignedLeading
     private static let trailingInset: CGFloat = ThreadListViewController.capsuleAlignedTrailing
     private static let topInset: CGFloat = 6
-    private static let fadeHeight: CGFloat = 12
+    private static let fadeHeight: CGFloat = 28
 
     // MARK: - Subviews
 
