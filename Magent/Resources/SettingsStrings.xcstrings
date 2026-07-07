@@ -353,6 +353,28 @@
         }
       }
     },
+    "settingsThreadsWideThreads": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wide threads"
+          }
+        }
+      }
+    },
+    "settingsThreadsWideThreadsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow thread descriptions to use two lines and size thread rows for the roomier layout."
+          }
+        }
+      }
+    },
     "settingsThreadsStatusBarBusy": {
       "extractionState": "manual",
       "localizations": {

@@ -416,7 +416,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             descriptionLines: descLines,
             hasSubtitle: hasSubtitle,
             hasPRRow: hasPRRow,
-            narrowThreads: settings.narrowThreads
+            narrowThreads: !settings.wideThreads
         )
     }
 

@@ -138,7 +138,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var autoRenameBranches: Bool
     public var autoSetThreadDescription: Bool
     public var autoSetThreadIconFromWorkType: Bool
-    public var narrowThreads: Bool
+    public var wideThreads: Bool
     public var showPRStatusBadges: Bool
     public var showJiraStatusBadges: Bool
     public var showBusyStateDuration: Bool
@@ -207,7 +207,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoRenameBranches: Bool = true,
         autoSetThreadDescription: Bool = true,
         autoSetThreadIconFromWorkType: Bool = true,
-        narrowThreads: Bool = false,
+        wideThreads: Bool = false,
         showPRStatusBadges: Bool = true,
         showJiraStatusBadges: Bool = true,
         showBusyStateDuration: Bool = true,
@@ -275,7 +275,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.autoRenameBranches = autoRenameBranches
         self.autoSetThreadDescription = autoSetThreadDescription
         self.autoSetThreadIconFromWorkType = autoSetThreadIconFromWorkType
-        self.narrowThreads = narrowThreads
+        self.wideThreads = wideThreads
         self.showPRStatusBadges = showPRStatusBadges
         self.showJiraStatusBadges = showJiraStatusBadges
         self.showBusyStateDuration = showBusyStateDuration
@@ -349,7 +349,13 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoRenameBranches = try container.decodeIfPresent(Bool.self, forKey: .autoRenameBranches) ?? legacyAutoRename ?? true
         autoSetThreadDescription = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadDescription) ?? legacyAutoRename ?? true
         autoSetThreadIconFromWorkType = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadIconFromWorkType) ?? true
-        narrowThreads = try container.decodeIfPresent(Bool.self, forKey: .narrowThreads) ?? false
+        if let decodedWideThreads = try container.decodeIfPresent(Bool.self, forKey: .wideThreads) {
+            wideThreads = decodedWideThreads
+        } else if let legacyNarrowThreads = try container.decodeIfPresent(Bool.self, forKey: .narrowThreads) {
+            wideThreads = !legacyNarrowThreads
+        } else {
+            wideThreads = false
+        }
         showPRStatusBadges = try container.decodeIfPresent(Bool.self, forKey: .showPRStatusBadges) ?? true
         showJiraStatusBadges = try container.decodeIfPresent(Bool.self, forKey: .showJiraStatusBadges) ?? true
         showBusyStateDuration = try container.decodeIfPresent(Bool.self, forKey: .showBusyStateDuration) ?? true
@@ -431,7 +437,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoRenameBranches, forKey: .autoRenameBranches)
         try container.encode(autoSetThreadDescription, forKey: .autoSetThreadDescription)
         try container.encode(autoSetThreadIconFromWorkType, forKey: .autoSetThreadIconFromWorkType)
-        try container.encode(narrowThreads, forKey: .narrowThreads)
+        try container.encode(wideThreads, forKey: .wideThreads)
         try container.encode(showPRStatusBadges, forKey: .showPRStatusBadges)
         try container.encode(showJiraStatusBadges, forKey: .showJiraStatusBadges)
         try container.encode(expandedStatusBarThreadStatuses, forKey: .expandedStatusBarThreadStatuses)
@@ -547,7 +553,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     }
 
     public var sidebarDescriptionLineLimit: Int {
-        narrowThreads ? 1 : 2
+        wideThreads ? 2 : 1
     }
 
     public var isTabDetachFeatureEnabled: Bool {
@@ -675,7 +681,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case autoRenameBranches
         case autoSetThreadDescription
         case autoSetThreadIconFromWorkType
-        case narrowThreads
+        case wideThreads
         case showPRStatusBadges
         case showJiraStatusBadges
         case showBusyStateDuration
@@ -735,5 +741,6 @@ public nonisolated struct AppSettings: Codable, Sendable {
         // Legacy keys kept for migration.
         case agentCommand
         case agentType
+        case narrowThreads
     }
 }

@@ -38,6 +38,7 @@
 - Sticky sidebar headers now use a stronger live blur instead of an opaque fill.
 - Hid the thread-list scrollbar so it no longer cuts through sticky header blur.
 - Added breathing room between repository headers and main worktree rows.
+- Made compact thread rows the default and replaced the old `Narrow threads` setting with an opt-in `Wide threads` setting.
 
 #### Bug Fixes
 
