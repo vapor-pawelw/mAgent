@@ -49,6 +49,10 @@ class SidebarSection {
         }
         return result
     }
+
+    var outlineChildCount: Int {
+        items.count
+    }
 }
 
 final class SidebarSpacer {}

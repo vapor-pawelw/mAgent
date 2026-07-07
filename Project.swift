@@ -142,6 +142,7 @@ let project = Project(
                 "Magent/Services/SidebarScrollRestoreCoordinator.swift",
                 "Magent/Services/TabNameAllocator.swift",
                 "Magent/Services/TabPinningState.swift",
+                "Magent/Views/ThreadList/SidebarModels.swift",
                 "Magent/Views/ThreadList/StickyHeaderBackdropMask.swift",
                 "Tests/MagentTests/**",
             ],
