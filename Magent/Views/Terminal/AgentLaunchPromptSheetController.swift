@@ -861,8 +861,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         let promptFont = NSFont.systemFont(ofSize: 13)
         var lastFieldView: NSView = agentRow
+        var promptAreaLastView: NSView?
         if config.showPromptInputArea {
-            stack.setCustomSpacing(8, after: agentRow)
+            stack.setCustomSpacing(16, after: agentRow)
             promptLabel = makePromptHeadingLabel(promptLabelText)
             stack.addArrangedSubview(promptLabel)
             stack.setCustomSpacing(4, after: promptLabel)
@@ -931,11 +932,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 stack.setCustomSpacing(8, after: promptScrollView)
                 stack.addArrangedSubview(draftRow)
                 NSLayoutConstraint.activate([draftRow.widthAnchor.constraint(equalTo: stack.widthAnchor)])
-                stack.setCustomSpacing(14, after: draftRow)
+                stack.setCustomSpacing(16, after: draftRow)
                 draftCheckboxRow = draftRow
                 updateDraftCheckboxVisibility()
                 lastFieldView = draftRow
+            } else {
+                stack.setCustomSpacing(16, after: promptScrollView)
             }
+            promptAreaLastView = lastFieldView
         }
 
         let lineHeight = promptFont.ascender + abs(promptFont.descender) + promptFont.leading
@@ -944,7 +948,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         // Title field (for tab title)
         var titleRow: NSStackView?
         if config.showTitleField {
-            stack.setCustomSpacing(12, after: lastFieldView)
+            stack.setCustomSpacing(lastFieldView === promptAreaLastView ? 16 : 12, after: lastFieldView)
 
             let tr = makeTextFieldRow(label: "Title", field: titleField, placeholder: "Optional")
             stack.addArrangedSubview(tr)
@@ -963,7 +967,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         var branchRow: NSStackView?
         var baseBranchRow: NSStackView?
         if config.showDescriptionAndBranchFields {
-            stack.setCustomSpacing(12, after: lastFieldView)
+            stack.setCustomSpacing(lastFieldView === promptAreaLastView ? 16 : 12, after: lastFieldView)
 
             let dr = makeTextFieldRow(label: "Description", field: descriptionField, placeholder: "Optional")
             stack.addArrangedSubview(dr)
@@ -1149,7 +1153,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     private func makePromptHeadingLabel(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
         label.textColor = NSColor(resource: .textSecondary)
         label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         return label
