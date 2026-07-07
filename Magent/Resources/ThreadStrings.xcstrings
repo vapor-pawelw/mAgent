@@ -331,6 +331,17 @@
         }
       }
     },
+    "threadArchiveSectionMenuTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive All Threads..."
+          }
+        }
+      }
+    },
     "threadArchiveReasonCommitsNotIn": {
       "extractionState": "manual",
       "localizations": {

@@ -1003,6 +1003,14 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
+        if section.hasArchivableThreads {
+            let archiveItem = NSMenuItem(title: String(localized: .ThreadStrings.threadArchiveSectionMenuTitle), action: #selector(archiveSectionThreads(_:)), keyEquivalent: "")
+            archiveItem.target = self
+            archiveItem.image = NSImage(systemSymbolName: "archivebox", accessibilityDescription: nil)
+            archiveItem.representedObject = section.threads
+            menu.addItem(archiveItem)
+        }
+
         let addItem = NSMenuItem(title: "Add Section…", action: #selector(addSectionFromMenu(_:)), keyEquivalent: "")
         addItem.target = self
         addItem.image = NSImage(systemSymbolName: "plus.circle", accessibilityDescription: nil)
@@ -1663,6 +1671,13 @@ extension ThreadListViewController {
     @objc private func archiveThread(_ sender: NSMenuItem) {
         guard let thread = sender.representedObject as? MagentThread else { return }
         triggerArchive(for: thread)
+    }
+
+    @objc private func archiveSectionThreads(_ sender: NSMenuItem) {
+        guard let threads = sender.representedObject as? [MagentThread] else { return }
+        for thread in threads {
+            triggerArchive(for: thread)
+        }
     }
 
     func triggerArchive(for thread: MagentThread) {

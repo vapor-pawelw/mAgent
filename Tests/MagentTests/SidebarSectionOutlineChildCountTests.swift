@@ -23,6 +23,28 @@ struct SidebarSectionOutlineChildCountTests {
         #expect(renderedItems.count > section.threads.count)
     }
 
+    @Test
+    func archivableThreadAvailabilityMatchesSectionMembership() {
+        let projectId = UUID()
+        let emptySection = SidebarSection(
+            projectId: projectId,
+            sectionId: UUID(),
+            name: "Empty",
+            color: .systemBlue,
+            threads: []
+        )
+        let populatedSection = SidebarSection(
+            projectId: projectId,
+            sectionId: UUID(),
+            name: "Work",
+            color: .systemBlue,
+            threads: [makeThread(projectId: projectId, name: "work")]
+        )
+
+        #expect(!emptySection.hasArchivableThreads)
+        #expect(populatedSection.hasArchivableThreads)
+    }
+
     private func makeThread(
         projectId: UUID,
         name: String,
