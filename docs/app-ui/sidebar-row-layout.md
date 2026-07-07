@@ -8,8 +8,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
   - **Selected**: accent-colored border and fill.
   - **Completion (unread)**: green border and fill.
   - **Waiting for input**: orange border and fill.
-  - **Default**: subtle white border and fill.
-- In dark mode, the thread-list area uses a slightly darker explicit fill than the global app background so row capsules stay visually grounded.
+  - **Default**: subtle white border and a lightly tinted fill that stays above the sidebar background.
 - Status badges (favorite, pinned, Jira-sync, keep-alive, rate-limit) are bare-icon badges sitting on the capsule's top border with a circular background on selected/completed rows. The Jira-sync badge uses the colored `JiraIcon` brand asset (not template-tinted) and appears whenever the thread has the per-thread "Sync description and priority from Jira" toggle enabled.
 - Rate-limit top-border badges can show a tiny 2pt red corner dot to indicate a directly-detected local source (non-propagated marker) for that agent on this thread.
 - Duration badge is a pill on the capsule's bottom-right with a persistent border. The duration label tints with a color gradient based on thread age: light blue (<15 min), green (<8 hrs), yellow (<1 day), orange (<3 days), red (3+ days). This provides at-a-glance visual feedback on activity age.

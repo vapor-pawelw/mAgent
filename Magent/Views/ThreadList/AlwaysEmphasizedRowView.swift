@@ -257,7 +257,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 ? NSColor.white.withAlphaComponent(0.12)
                 : NSColor.black.withAlphaComponent(0.08)
             let fillColor = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                ? NSColor.white.withAlphaComponent(0.05)
+                ? NSColor.white.withAlphaComponent(0.035)
                 : NSColor.black.withAlphaComponent(0.03)
             return CapsuleStyle(fill: fillColor, border: borderColor)
         }

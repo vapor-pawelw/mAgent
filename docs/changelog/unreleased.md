@@ -18,7 +18,7 @@
 
 - Reopen cached recent threads immediately more often and let users tune how many terminal views Magent keeps for fast switching.
 - Added a toolbar reminder with a first-time hint to reopen dismissed lost-prompt recovery banners without discarding the saved prompt.
-- Rounded the text inputs in the new thread and new tab sheets.
+- Rounded the initial prompt input in the new thread and new tab sheets.
 
 #### Bug Fixes
 
@@ -42,7 +42,7 @@
 - Keep moved or missing repositories visible with recovery and discard actions.
 - Refresh missing-repository status when Magent returns to the foreground.
 - Center the missing-repository recovery row content within its sidebar box.
-- Made the thread-list background slightly darker in dark mode.
+- Made default thread pills subtler in dark mode while keeping them lighter than the sidebar.
 - Sticky sidebar headers now use a stronger live blur instead of an opaque fill.
 - Hid the thread-list scrollbar so it no longer cuts through sticky header blur.
 - Added breathing room between repository headers and main worktree rows.

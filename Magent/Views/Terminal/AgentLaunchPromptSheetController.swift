@@ -459,69 +459,13 @@ private final class ContextChipView: NSView {
     }
 }
 
-private final class RoundedLaunchTextFieldCell: NSTextFieldCell {
-    private let horizontalInset: CGFloat = 9
-
-    override func drawingRect(forBounds rect: NSRect) -> NSRect {
-        super.drawingRect(forBounds: rect).insetBy(dx: horizontalInset, dy: 0)
-    }
-
-    override func edit(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, event: NSEvent?) {
-        super.edit(
-            withFrame: drawingRect(forBounds: rect),
-            in: controlView,
-            editor: textObj,
-            delegate: delegate,
-            event: event
-        )
-    }
-
-    override func select(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
-        super.select(
-            withFrame: drawingRect(forBounds: rect),
-            in: controlView,
-            editor: textObj,
-            delegate: delegate,
-            start: selStart,
-            length: selLength
-        )
-    }
-}
-
-private final class RoundedLaunchTextField: NSTextField {
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        cell = RoundedLaunchTextFieldCell()
-        isBezeled = false
-        isBordered = false
-        drawsBackground = false
-        focusRingType = .none
-        wantsLayer = true
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override var wantsUpdateLayer: Bool { true }
-
-    override func updateLayer() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
-            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
-        }
-        layer?.borderWidth = 1
-        layer?.cornerRadius = 8
-    }
-}
-
 private final class RoundedLaunchPromptScrollView: NSScrollView {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
-            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.2).cgColor
         }
         layer?.borderWidth = 1
         layer?.cornerRadius = 10
@@ -546,11 +490,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let config: AgentLaunchSheetConfig
     private let agentPicker = NSPopUpButton()
     private let promptTextView = NSTextView()
-    private let descriptionField = RoundedLaunchTextField()
-    private let branchField = RoundedLaunchTextField()
+    private let descriptionField = NSTextField()
+    private let branchField = NSTextField()
     private let baseBranchField = NSComboBox()
     private let baseBranchErrorLabel = NSTextField(labelWithString: "")
-    private let titleField = RoundedLaunchTextField()
+    private let titleField = NSTextField()
     private let draftCheckbox = NSButton(checkboxWithTitle: "Draft", target: nil, action: nil)
     private var draftCheckboxRow: NSView?
     private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
@@ -829,7 +773,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(titleLabel)
-        stack.setCustomSpacing(8, after: titleLabel)
+        stack.setCustomSpacing(16, after: titleLabel)
 
         // Project picker (multiple projects) or subtitle chip (e.g. thread context for new tab).
         var contextChip: NSView?
@@ -917,9 +861,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         let promptFont = NSFont.systemFont(ofSize: 13)
         var lastFieldView: NSView = agentRow
+        var promptAreaLastView: NSView?
         if config.showPromptInputArea {
-            // Prompt label
-            promptLabel = makeFormLabel(promptLabelText)
+            stack.setCustomSpacing(16, after: agentRow)
+            promptLabel = makePromptHeadingLabel(promptLabelText)
             stack.addArrangedSubview(promptLabel)
             stack.setCustomSpacing(4, after: promptLabel)
 
@@ -984,14 +929,17 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 draftRow.addArrangedSubview(draftSpacer)
                 draftRow.addArrangedSubview(draftCheckbox)
 
-                stack.setCustomSpacing(4, after: promptScrollView)
+                stack.setCustomSpacing(8, after: promptScrollView)
                 stack.addArrangedSubview(draftRow)
                 NSLayoutConstraint.activate([draftRow.widthAnchor.constraint(equalTo: stack.widthAnchor)])
-                stack.setCustomSpacing(14, after: draftRow)
+                stack.setCustomSpacing(16, after: draftRow)
                 draftCheckboxRow = draftRow
                 updateDraftCheckboxVisibility()
                 lastFieldView = draftRow
+            } else {
+                stack.setCustomSpacing(16, after: promptScrollView)
             }
+            promptAreaLastView = lastFieldView
         }
 
         let lineHeight = promptFont.ascender + abs(promptFont.descender) + promptFont.leading
@@ -1000,7 +948,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         // Title field (for tab title)
         var titleRow: NSStackView?
         if config.showTitleField {
-            stack.setCustomSpacing(12, after: lastFieldView)
+            stack.setCustomSpacing(lastFieldView === promptAreaLastView ? 16 : 12, after: lastFieldView)
 
             let tr = makeTextFieldRow(label: "Title", field: titleField, placeholder: "Optional")
             stack.addArrangedSubview(tr)
@@ -1019,7 +967,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         var branchRow: NSStackView?
         var baseBranchRow: NSStackView?
         if config.showDescriptionAndBranchFields {
-            stack.setCustomSpacing(12, after: lastFieldView)
+            stack.setCustomSpacing(lastFieldView === promptAreaLastView ? 16 : 12, after: lastFieldView)
 
             let dr = makeTextFieldRow(label: "Description", field: descriptionField, placeholder: "Optional")
             stack.addArrangedSubview(dr)
@@ -1203,6 +1151,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         return label
     }
 
+    private func makePromptHeadingLabel(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.textColor = NSColor(resource: .textSecondary)
+        label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        return label
+    }
+
     private func makeComboBoxRow(label labelText: String, comboBox: NSComboBox, placeholder: String) -> NSStackView {
         let row = NSStackView()
         row.orientation = .horizontal
@@ -1291,7 +1247,6 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         field.translatesAutoresizingMaskIntoConstraints = false
         row.addArrangedSubview(field)
-        NSLayoutConstraint.activate([field.heightAnchor.constraint(equalToConstant: 28)])
 
         return row
     }
