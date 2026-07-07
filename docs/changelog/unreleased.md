@@ -13,6 +13,7 @@
 
 - Reopen cached recent threads immediately more often and let users tune how many terminal views Magent keeps for fast switching.
 - Added a toolbar reminder with a first-time hint to reopen dismissed lost-prompt recovery banners without discarding the saved prompt.
+- Rounded the text inputs in the new thread and new tab sheets.
 
 #### Bug Fixes
 
