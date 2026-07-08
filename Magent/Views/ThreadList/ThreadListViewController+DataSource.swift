@@ -1308,11 +1308,13 @@ extension ThreadListViewController: ThreadManagerDelegate {
     }
 
     func threadManager(_ manager: ThreadManager, didArchiveThread thread: MagentThread) {
+        clearRemovedThreadState(threadId: thread.id)
         reloadData()
         delegate?.threadList(self, didArchiveThread: thread)
     }
 
     func threadManager(_ manager: ThreadManager, didDeleteThread thread: MagentThread) {
+        clearRemovedThreadState(threadId: thread.id)
         reloadData()
         delegate?.threadList(self, didDeleteThread: thread)
     }

@@ -1980,6 +1980,28 @@ final class ThreadListViewController: NSViewController {
         setDiffInspectionContextToSelectedThread()
     }
 
+    func clearRemovedThreadState(threadId: UUID) {
+        var state = ThreadRemovalSelectionState(
+            selectedThreadID: selectedThreadID,
+            diffInspectionThreadID: diffInspectionThreadID,
+            isDiffInspectionPopoutContext: isDiffInspectionPopoutContext
+        )
+        guard state.clearRemovedThread(threadId) else { return }
+
+        selectedThreadID = state.selectedThreadID
+        diffInspectionThreadID = state.diffInspectionThreadID
+        isDiffInspectionPopoutContext = state.isDiffInspectionPopoutContext
+
+        if selectedThreadID == nil {
+            diffPanelView?.clear()
+            branchMismatchView?.clear()
+        } else {
+            refreshDiffPanelContextForSelectedThread()
+            refreshDiffPanelForSelectedThread()
+        }
+        updateSelectedThreadJumpCapsuleVisibility()
+    }
+
     func clearSelectedThreadState() {
         selectedThreadID = nil
         diffInspectionThreadID = nil
