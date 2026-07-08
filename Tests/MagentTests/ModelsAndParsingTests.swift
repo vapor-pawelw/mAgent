@@ -1652,6 +1652,41 @@ struct ChatMessageDisplayPlannerTests {
     }
 }
 
+// MARK: - ChatTranscriptDisplayCompactor
+
+@Suite("ChatTranscriptDisplayCompactor")
+struct ChatTranscriptDisplayCompactorTests {
+    @Test("Compacts consecutive tool rows using action summaries and SF symbol tokens")
+    func compactsToolRunsUsingActionSummaries() {
+        let call = PersistedChatMessage(
+            role: .assistant,
+            text: "",
+            toolEvent: PersistedChatToolEvent(
+                kind: .call,
+                name: "exec_command",
+                arguments: "{\"cmd\":\"git status --short\"}"
+            )
+        )
+        let result = PersistedChatMessage(
+            role: .assistant,
+            text: "",
+            toolEvent: PersistedChatToolEvent(
+                kind: .result,
+                name: "exec_command",
+                arguments: "{\"cmd\":\"git status --short\"}",
+                output: "M file.swift"
+            )
+        )
+
+        let compacted = ChatTranscriptDisplayCompactor.compactedMessages([call, result])
+
+        #expect(compacted.count == 1)
+        #expect(compacted[0].text.contains("play.circle Run command: git status --short"))
+        #expect(compacted[0].text.contains("checkmark.circle Command finished: git status --short"))
+        #expect(!compacted[0].text.contains("Command finished: M file.swift"))
+    }
+}
+
 // MARK: - PersistedDraftTab
 
 @Suite("PersistedDraftTab")

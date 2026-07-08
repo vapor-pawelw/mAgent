@@ -8,17 +8,19 @@ struct ChatBusyStateRecoveryTests {
     @Test("Converts stale assistant loading placeholders after relaunch")
     func convertsLoadingPlaceholders() {
         let assistantThinking = PersistedChatMessage(role: .assistant, text: "Thinking...")
+        let assistantContinued = PersistedChatMessage(role: .assistant, text: "Still working...")
         let assistantWorking = PersistedChatMessage(role: .assistant, text: "Working (42s • esc to interrupt)")
         let userMessage = PersistedChatMessage(role: .user, text: "hello")
 
         let result = ChatBusyStateRecovery.normalizedMessagesForAppRelaunch(
-            [assistantThinking, assistantWorking, userMessage]
+            [assistantThinking, assistantContinued, assistantWorking, userMessage]
         )
 
         #expect(result.didMutate)
         #expect(result.messages[0].text == ChatBusyStateRecovery.cancelledPlaceholderText)
         #expect(result.messages[1].text == ChatBusyStateRecovery.cancelledPlaceholderText)
-        #expect(result.messages[2].text == "hello")
+        #expect(result.messages[2].text == ChatBusyStateRecovery.cancelledPlaceholderText)
+        #expect(result.messages[3].text == "hello")
     }
 
     @Test("Leaves non-loading assistant text unchanged")
@@ -64,10 +66,11 @@ struct ChatBusyStateRecoveryTests {
         let loadingOne = PersistedChatMessage(role: .assistant, text: "Thinking...")
         let assistantDone = PersistedChatMessage(role: .assistant, text: "done")
         let loadingTwo = PersistedChatMessage(role: .assistant, text: "Working (9s • esc to interrupt)")
+        let loadingThree = PersistedChatMessage(role: .assistant, text: "Still working...")
         let cancelled = PersistedChatMessage(role: .assistant, text: ChatBusyStateRecovery.cancelledPlaceholderText)
 
         let result = ChatBusyStateRecovery.normalizedMessagesForNewRequest(
-            [userOne, loadingOne, assistantDone, loadingTwo, cancelled]
+            [userOne, loadingOne, assistantDone, loadingTwo, loadingThree, cancelled]
         )
 
         #expect(result.didMutate)

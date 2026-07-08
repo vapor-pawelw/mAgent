@@ -798,6 +798,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private var toolExpanded = false
     private var toolDisclosureFontSize: CGFloat = 12
     private var toolDisclosureTextColor: NSColor = .labelColor
+    private let loadingPlaceholderText: String
 
     private enum AssistantDisplayState {
         case normal
@@ -824,6 +825,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         self.isQueuedSubmissionPending = queuedSubmissionPending
         self.rendersAsSeparator = message.role == .system
         self.isLoadingIndicatorBubble = message.role == .assistant && Self.isThinkingPlaceholderText(message.text)
+        self.loadingPlaceholderText = message.text
         let displayPlan = ChatMessageDisplayPlanner.plan(for: message)
         switch displayPlan.kind {
         case .message:
@@ -910,7 +912,10 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             loadingStatusLabel.font = .systemFont(ofSize: fontSize, weight: .regular)
             loadingStatusLabel.textColor = baseTextColor.withAlphaComponent(0.6)
             loadingStatusLabel.lineBreakMode = .byTruncatingTail
-            loadingStatusLabel.stringValue = Self.loadingStatusText(startedAt: createdAt)
+            loadingStatusLabel.stringValue = Self.loadingStatusText(
+                placeholderText: loadingPlaceholderText,
+                startedAt: createdAt
+            )
             container.addSubview(loadingStatusLabel)
             NSLayoutConstraint.activate([
                 loadingStatusLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
@@ -949,6 +954,8 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 renderedMessageText = toolPresentation.body
             } else if let statusPresentation {
                 renderedMessageText = Self.statusMessageText(statusPresentation)
+            } else if ChatTranscriptDisplayCompactor.isActivitySummary(message) {
+                renderedMessageText = ChatTranscriptDisplayCompactor.plainText(fromActivitySummary: message.text)
             } else if displayRole == .user, isQueuedSubmissionPending {
                 renderedMessageText = "\(message.text)\(queuedSuffix)"
             } else {
@@ -967,6 +974,14 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             if toolPresentation != nil {
                 Self.applyToolTranscriptStyle(to: attributedMessage, baseColor: baseTextColor, baseFontSize: fontSize)
                 Self.applyDiffLineHighlights(to: attributedMessage, baseFontSize: fontSize)
+            }
+            if ChatTranscriptDisplayCompactor.isActivitySummary(message) {
+                Self.applyActivitySummaryStyle(
+                    to: attributedMessage,
+                    rawText: message.text,
+                    baseColor: baseTextColor,
+                    baseFontSize: fontSize
+                )
             }
             if displayRole == .user, isQueuedSubmissionPending {
                 let suffixLength = (queuedSuffix as NSString).length
@@ -1158,7 +1173,11 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     func refreshRelativeTimestamp(now: Date = Date()) {
         guard !rendersAsSeparator else { return }
         if isLoadingIndicatorBubble {
-            let statusText = Self.loadingStatusText(startedAt: createdAt, now: now)
+            let statusText = Self.loadingStatusText(
+                placeholderText: loadingPlaceholderText,
+                startedAt: createdAt,
+                now: now
+            )
             guard loadingStatusLabel.stringValue != statusText else { return }
 
             loadingStatusLabel.stringValue = statusText
@@ -1670,6 +1689,66 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         }
     }
 
+    private static func applyActivitySummaryStyle(
+        to attributed: NSMutableAttributedString,
+        rawText: String,
+        baseColor: NSColor,
+        baseFontSize: CGFloat
+    ) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        guard fullRange.length > 0 else { return }
+
+        attributed.addAttributes(
+            [
+                .font: NSFont.systemFont(ofSize: baseFontSize, weight: .regular),
+                .foregroundColor: baseColor.withAlphaComponent(0.9),
+            ],
+            range: fullRange
+        )
+
+        let headlineRange = (attributed.string as NSString).range(of: "Activity")
+        if headlineRange.location != NSNotFound {
+            attributed.addAttributes(
+                [
+                    .font: NSFont.systemFont(ofSize: baseFontSize, weight: .semibold),
+                    .foregroundColor: baseColor,
+                ],
+                range: headlineRange
+            )
+        }
+
+        let rawLines = rawText.components(separatedBy: "\n")
+        let plainLines = ChatTranscriptDisplayCompactor.plainText(fromActivitySummary: rawText)
+            .components(separatedBy: "\n")
+        var searchLocation = 0
+        var insertionOffset = 0
+        let currentString = attributed.string as NSString
+        for (rawLine, plainLine) in zip(rawLines, plainLines) {
+            guard let icon = ChatTranscriptDisplayCompactor.sfSymbolName(fromActivitySummaryLine: rawLine) else {
+                searchLocation += (plainLine as NSString).length + 1
+                continue
+            }
+            let plainLineLength = (plainLine as NSString).length
+            let searchRange = NSRange(
+                location: min(searchLocation, currentString.length),
+                length: max(0, currentString.length - min(searchLocation, currentString.length))
+            )
+            let lineRange = currentString.range(of: plainLine, options: [], range: searchRange)
+            guard lineRange.location != NSNotFound, lineRange.length > 0 else { continue }
+
+            let attachment = NSTextAttachment()
+            let image = NSImage(systemSymbolName: icon.symbolName, accessibilityDescription: nil)
+            image?.isTemplate = true
+            attachment.image = image
+            attachment.bounds = NSRect(x: 0, y: -2, width: baseFontSize, height: baseFontSize)
+            let iconString = NSMutableAttributedString(attachment: attachment)
+            iconString.append(NSAttributedString(string: " "))
+            attributed.insert(iconString, at: lineRange.location + insertionOffset)
+            insertionOffset += iconString.length
+            searchLocation = lineRange.location + plainLineLength + 1
+        }
+    }
+
     private static func formattedTimestamp(_ date: Date, now: Date = Date()) -> String {
         let age = now.timeIntervalSince(date)
         if age >= 0, age < 60 {
@@ -1722,9 +1801,16 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         return formatter
     }()
 
-    private static func loadingStatusText(startedAt: Date, now: Date = Date()) -> String {
+    private static func loadingStatusText(
+        placeholderText: String,
+        startedAt: Date,
+        now: Date = Date()
+    ) -> String {
         let elapsed = max(0, now.timeIntervalSince(startedAt))
-        return "Working (\(formattedElapsedDuration(elapsed)) • esc to interrupt)"
+        let verb = placeholderText.trimmingCharacters(in: .whitespacesAndNewlines) == ChatBusyStateRecovery.continuedWorkPlaceholderText
+            ? "Still working"
+            : "Working"
+        return "\(verb) (\(formattedElapsedDuration(elapsed)) • esc to interrupt)"
     }
 
     private static func formattedElapsedDuration(_ duration: TimeInterval) -> String {
@@ -1802,7 +1888,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private var chatFontSize: CGFloat
     private var pendingQueuedUserMessageIDs: Set<UUID>
     private var draftAttachments: [PersistedChatAttachment]
-    private var renderedMessages: [PersistedChatMessage] = []
+    private var renderedDisplayMessages: [PersistedChatMessage] = []
     private var messageRenderGeneration = UUID()
     private var postMessageLayoutUpdateScheduled = false
     private var pendingPostMessageScrollToBottom = false
@@ -2488,7 +2574,10 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         }
     }
 
-    private func applyIncrementalMessageRenderPlan(_ plan: ChatMessageRenderPlan) {
+    private func applyIncrementalMessageRenderPlan(
+        _ plan: ChatMessageRenderPlan,
+        displayMessages: [PersistedChatMessage]
+    ) {
         guard case .incremental(let removeTailCount, let appendRange, let changedIndices) = plan else { return }
 
         if removeTailCount > 0 {
@@ -2500,19 +2589,19 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         }
 
         for index in changedIndices {
-            guard messages.indices.contains(index) else { continue }
+            guard displayMessages.indices.contains(index) else { continue }
             guard messagesStack.arrangedSubviews.indices.contains(index) else { continue }
             let old = messagesStack.arrangedSubviews[index]
             messagesStack.removeArrangedSubview(old)
             old.removeFromSuperview()
-            let bubble = makeMessageBubble(for: messages[index])
+            let bubble = makeMessageBubble(for: displayMessages[index])
             messagesStack.insertArrangedSubview(bubble, at: index)
             pinMessageBubbleWidth(bubble)
         }
 
         if !appendRange.isEmpty {
-            for index in appendRange where messages.indices.contains(index) {
-                let bubble = makeMessageBubble(for: messages[index])
+            for index in appendRange where displayMessages.indices.contains(index) {
+                let bubble = makeMessageBubble(for: displayMessages[index])
                 messagesStack.addArrangedSubview(bubble)
                 pinMessageBubbleWidth(bubble)
             }
@@ -2532,7 +2621,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         inputTextView.font = .systemFont(ofSize: chatFontSize)
         updateComposerHeight()
 
-        let plan = ChatMessageRenderPlanner.plan(previous: renderedMessages, next: messages)
+        let displayMessages = ChatTranscriptDisplayCompactor.compactedMessages(messages)
+        let plan = ChatMessageRenderPlanner.plan(previous: renderedDisplayMessages, next: displayMessages)
         let shouldFullReload: Bool = {
             switch plan {
             case .fullReload:
@@ -2542,10 +2632,10 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             }
         }()
 
-        if shouldFullReload && messages.count > Self.progressiveFullReloadThreshold {
-            let snapshot = messages
+        if shouldFullReload && displayMessages.count > Self.progressiveFullReloadThreshold {
+            let snapshot = displayMessages
             removeAllRenderedBubbles()
-            renderedMessages = []
+            renderedDisplayMessages = []
             renderMessageBubblesProgressively(
                 snapshot: snapshot,
                 nextIndex: 0,
@@ -2558,16 +2648,16 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         switch plan {
         case .fullReload:
             removeAllRenderedBubbles()
-            appendRenderedBubbles(from: messages, in: messages.indices)
+            appendRenderedBubbles(from: displayMessages, in: displayMessages.indices)
         case .incremental:
             if forceFullReload {
                 removeAllRenderedBubbles()
-                appendRenderedBubbles(from: messages, in: messages.indices)
+                appendRenderedBubbles(from: displayMessages, in: displayMessages.indices)
             } else {
-                applyIncrementalMessageRenderPlan(plan)
+                applyIncrementalMessageRenderPlan(plan, displayMessages: displayMessages)
             }
         }
-        renderedMessages = messages
+        renderedDisplayMessages = displayMessages
         refreshVisibleRelativeTimestamps()
 
         schedulePostMessageLayoutUpdate(shouldScrollToBottom: shouldAutoScroll)
@@ -2596,7 +2686,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             return
         }
 
-        renderedMessages = snapshot
+        renderedDisplayMessages = snapshot
         refreshVisibleRelativeTimestamps()
 
         schedulePostMessageLayoutUpdate(shouldScrollToBottom: shouldScrollToBottom, generation: generation)

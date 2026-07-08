@@ -2,7 +2,7 @@ import Cocoa
 import MagentCore
 
 extension ThreadDetailViewController {
-    private static let chatLoadingPlaceholder = "Thinking..."
+    private static let chatLoadingPlaceholder = ChatBusyStateRecovery.loadingPlaceholderText
 
     private func automaticChatTabTitle(
         agentType: AgentType,
@@ -944,6 +944,11 @@ extension ThreadDetailViewController {
             identifier: identifier,
             pendingAssistantID: pendingAssistantID,
             metadata: metadata
+        )
+        setPendingAssistantMessage(
+            identifier: identifier,
+            pendingAssistantID: pendingAssistantID,
+            text: ChatBusyStateRecovery.continuedWorkPlaceholderText
         )
 
         if activeChatTabId != identifier {
