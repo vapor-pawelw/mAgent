@@ -72,7 +72,8 @@ final class AgentModelsService: @unchecked Sendable {
 
     /// Validates a reasoning level against the current manifest for a given agent+model, returning nil if stale/unknown.
     func validatedReasoningLevel(_ level: String?, for agentType: AgentType, modelId: String?) -> String? {
-        guard let level, let agentConfig = config(for: agentType) else { return nil }
+        guard let level = AgentReasoningLevelPresentation.storageValue(level, for: agentType),
+              let agentConfig = config(for: agentType) else { return nil }
         let validLevels = agentConfig.effectiveReasoningLevels(for: modelId)
         return validLevels.contains(level) ? level : nil
     }
@@ -157,7 +158,7 @@ final class AgentModelsService: @unchecked Sendable {
                         AgentModel(id: "gpt-5.4-mini", label: "GPT 5.4 Mini"),
                         AgentModel(id: "gpt-5.3-codex", label: "GPT 5.3 Codex"),
                     ],
-                    reasoningLevels: ["low", "medium", "high", "xhigh"]
+                    reasoningLevels: ["none", "low", "medium", "high", "xhigh"]
                 ),
             ]
         )

@@ -64,7 +64,7 @@ enum AgentMenuBuilder {
                 details.append(modelLabel)
             }
             if let reasoning, !reasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                details.append(reasoning.lowercased())
+                details.append(AgentReasoningLevelPresentation.verboseTitle(for: reasoning, agentType: agent))
             }
 
             for surface in agent.supportedSurfaces(chatsEnabled: includeChatOption) {

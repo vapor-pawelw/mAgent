@@ -533,6 +533,12 @@ struct TmuxSessionNamingTests {
         #expect(TmuxSessionNaming.defaultTabDisplayName(for: .codex, reasoningLevel: "ultra") == "Codex (Ultra)")
     }
 
+    @Test("Codex tab name shows fast reasoning as lightning")
+    func codexFastEffort() {
+        #expect(TmuxSessionNaming.defaultTabDisplayName(for: .codex, reasoningLevel: "none") == "Codex (⚡)")
+        #expect(TmuxSessionNaming.defaultTabDisplayName(for: .codex, modelLabel: "GPT 5.5", reasoningLevel: "none") == "Codex (5.5, ⚡)")
+    }
+
     @Test("Claude combines model and effort with comma")
     func claudeCombined() {
         let name = TmuxSessionNaming.defaultTabDisplayName(for: .claude, modelLabel: "Sonnet 4.6", reasoningLevel: "high")
@@ -599,6 +605,7 @@ struct TmuxSessionNamingTests {
         #expect(TmuxSessionNaming.looksLikeDefaultTabName("Claude (Sonnet 4.6)", for: .claude))
         #expect(TmuxSessionNaming.looksLikeDefaultTabName("Claude (Sonnet 4.6, H)", for: .claude))
         #expect(TmuxSessionNaming.looksLikeDefaultTabName("Codex (5.3-codex)", for: .codex))
+        #expect(TmuxSessionNaming.looksLikeDefaultTabName("Codex (5.5, ⚡)", for: .codex))
     }
 
     @Test("Allocator suffix matching stays separate from migration-safe defaults")

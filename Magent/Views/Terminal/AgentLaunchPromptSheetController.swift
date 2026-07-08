@@ -1984,17 +1984,18 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
 
         // Reasoning picker: populated based on current model
-        populateReasoningPicker(agentConfig: agentConfig, modelId: nil)
+        populateReasoningPicker(agentConfig: agentConfig, modelId: nil, agentType: agentType)
     }
 
-    private func populateReasoningPicker(agentConfig: AgentModelConfig, modelId: String?) {
+    private func populateReasoningPicker(agentConfig: AgentModelConfig, modelId: String?, agentType: AgentType? = nil) {
         let previousSelection = reasoningPicker.selectedItem?.representedObject as? String
+        let displayAgentType = agentType ?? selectedAgentTypeForModelPicker ?? .custom
         reasoningPicker.removeAllItems()
         reasoningPicker.addItem(withTitle: "Auto")
         reasoningPicker.lastItem?.representedObject = nil
         let levels = agentConfig.effectiveReasoningLevels(for: modelId)
         for level in levels {
-            reasoningPicker.addItem(withTitle: level.capitalized)
+            reasoningPicker.addItem(withTitle: AgentReasoningLevelPresentation.pickerTitle(for: level, agentType: displayAgentType))
             reasoningPicker.lastItem?.representedObject = level as NSString
         }
         // Restore previous selection if still valid

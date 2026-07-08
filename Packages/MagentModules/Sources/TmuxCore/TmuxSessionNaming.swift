@@ -51,7 +51,7 @@ public enum TmuxSessionNaming {
         if let modelLabel = displayModelLabel(modelLabel, for: agentType) {
             details.append(modelLabel)
         }
-        if let reasoningLabel = displayReasoningLevelLabel(reasoningLevel) {
+        if let reasoningLabel = AgentReasoningLevelPresentation.compactTitle(for: reasoningLevel, agentType: agentType) {
             details.append(reasoningLabel)
         }
 
@@ -99,28 +99,6 @@ public enum TmuxSessionNaming {
         }
     }
 
-    private static func displayReasoningLevelLabel(_ reasoningLevel: String?) -> String? {
-        let trimmed = reasoningLevel?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let trimmed, !trimmed.isEmpty else { return nil }
-
-        switch trimmed.lowercased() {
-        case "low":
-            return "L"
-        case "medium":
-            return "M"
-        case "high":
-            return "H"
-        case "xhigh":
-            return "xH"
-        case "max":
-            return "Max"
-        case "ultra":
-            return "Ultra"
-        default:
-            return trimmed
-        }
-    }
-
     public static func reviewTabDisplayName(for agentType: AgentType?, showAgentName: Bool) -> String {
         guard showAgentName else { return "Review" }
         return "Review (\(defaultTabDisplayName(for: agentType)))"
@@ -144,7 +122,7 @@ public enum TmuxSessionNaming {
         guard name.hasPrefix(base + " (") && name.hasSuffix(")") else { return false }
         let inner = name.dropFirst(base.count + 2).dropLast() // strip "<base> (" and trailing ")"
         guard !inner.isEmpty else { return false }
-        let validChars = CharacterSet.alphanumerics.union(.init(charactersIn: " ,-."))
+        let validChars = CharacterSet.alphanumerics.union(.init(charactersIn: " ,-.⚡"))
         return inner.unicodeScalars.allSatisfy { validChars.contains($0) }
     }
 

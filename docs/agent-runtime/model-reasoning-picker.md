@@ -39,7 +39,7 @@ A JSON file defines available models and reasoning levels per agent. The file li
         { "id": "gpt-5.4-mini", "label": "GPT 5.4 Mini" },
         { "id": "gpt-5.3-codex", "label": "GPT 5.3 Codex" }
       ],
-      "reasoningLevels": ["low", "medium", "high", "xhigh"]
+      "reasoningLevels": ["none", "low", "medium", "high", "xhigh"]
     }
   }
 }
@@ -86,7 +86,7 @@ Switching models within the same agent restores that model's own last-used reaso
 
 If the user's last-selected model no longer exists in the current JSON (after a remote update), silently fall back to "Auto."
 
-When a new thread or agent tab is created without an explicit custom title, Magent keeps the default title focused on the agent name and appends a single suffix for any visible model label plus reasoning. Built-in reasoning labels are abbreviated to `L`, `M`, `H`, and `xH`, while `Max` and `Ultra` keep their names; any other value is left as-is.
+When a new thread or agent tab is created without an explicit custom title, Magent keeps the default title focused on the agent name and appends a single suffix for any visible model label plus reasoning. Built-in reasoning labels are abbreviated to `⚡` (Codex `none`/fast), `L`, `M`, `H`, and `xH`, while `Max` and `Ultra` keep their names; any other value is left as-is.
 
 ## Auto-Sync Tab Name from `/model` Output
 
@@ -134,7 +134,7 @@ The launch sheet uses a wider default content width so the three pickers have en
 
 - **Type picker**: built from `AgentType.capabilities` in `Packages/MagentModules/Sources/MagentModels/AgentType.swift` (single source of truth for agent/surface support). Agents with multiple surfaces render as separate rows (for example `Claude (Terminal)`, `Claude (Chat)`).
 - **Model picker**: "Auto" + models from JSON for the selected agent.
-- **Reasoning picker**: "Auto" + reasoning levels. Items update when:
+- **Reasoning picker**: "Auto" + reasoning levels. Codex `none` renders as `⚡ Fast` while still passing/storing `none`. Items update when:
   - Agent changes (load that agent's reasoning levels).
   - Model changes, if the selected model has a per-model `reasoningLevels` override.
 - **Codex Fast mode button**: a lightning icon shown only when Codex is selected. Filled means launch fresh Codex terminal sessions with the Fast service tier; unfilled means no Fast override is passed. The button has a tooltip and saves immediately so fast-path creation reuses it.
@@ -185,7 +185,7 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 
 Uses last-selected model + reasoning + Codex Fast mode for the relevant agent. No sheet shown. Equivalent to accepting the sheet with last-used values.
 
-The right-click context menu on the "+" (new tab) button and the sidebar "New Thread" submenu list agent types directly — the default agent appears first with a "(Default)" suffix. Each agent's menu item shows its last-used model and reasoning verbatim in a verbose form (e.g., `Claude (Sonnet, high) (Default)`, `Codex (GPT 5.3 Codex, xhigh)`, `Claude` when both are Auto). Any part set to Auto is omitted individually. This is intentionally different from the compact tab-name formatter in `TmuxSessionNaming.defaultTabDisplayName(for:modelLabel:reasoningLevel:)` — the compact form strips the `GPT` vendor prefix for Codex (so `GPT 5.3 Codex` becomes `5.3-codex`, `GPT 5.4 Mini` becomes `5.4-mini`) and abbreviates reasoning to single letters, producing tab titles like `Codex (5.3-codex, M)` or `Claude (Opus, H)`. The verbose form is built inline in `AgentMenuBuilder.populate` and must not be replaced with the compact helper.
+The right-click context menu on the "+" (new tab) button and the sidebar "New Thread" submenu list agent types directly — the default agent appears first with a "(Default)" suffix. Each agent's menu item shows its last-used model and reasoning verbatim in a verbose form (e.g., `Claude (Sonnet, high) (Default)`, `Codex (GPT 5.3 Codex, xhigh)`, `Claude` when both are Auto). Any part set to Auto is omitted individually. This is intentionally different from the compact tab-name formatter in `TmuxSessionNaming.defaultTabDisplayName(for:modelLabel:reasoningLevel:)` — the compact form strips the `GPT` vendor prefix for Codex (so `GPT 5.3 Codex` becomes `5.3-codex`, `GPT 5.4 Mini` becomes `5.4-mini`) and abbreviates reasoning to compact labels, producing tab titles like `Codex (5.3-codex, M)`, `Codex (5.5, ⚡)`, or `Claude (Opus, H)`. The verbose form is built inline in `AgentMenuBuilder.populate` and must not be replaced with the compact helper.
 
 ### Draft Tabs
 
@@ -194,6 +194,10 @@ Draft tabs reuse the same picker semantics as the launch sheet:
 - The draft editor shows `Model` and `Reasoning` pickers with the same `Auto` behavior.
 - Changing the agent swaps the visible model/reasoning choices to that agent's own remembered values.
 - Starting the draft later passes the persisted explicit selections into normal agent-tab creation, so the launched session matches the draft sheet state instead of re-reading the current global last-used values.
+
+### Chat Tabs
+
+Chat tabs use the same model/reasoning manifest as launch sheets and draft tabs. Codex fast mode is stored as `reasoningLevel: "none"` and rendered as `⚡ Fast` in the bottom-left picker. `/fast` is a Codex chat shortcut for setting that same effort; `/effort fast` is accepted as an alias for `/effort none`.
 
 ## Command Building
 
@@ -217,6 +221,7 @@ codex -m <id> -c model_reasoning_effort=<level>
 - `-m` omitted when "Auto"
 - `-c model_reasoning_effort=...` omitted when "Auto"
 - For example, GPT 5.6 Sol with Ultra launches as `codex -m gpt-5.6-sol -c 'model_reasoning_effort="ultra"'`
+- Codex reasoning `none` / `⚡ Fast` is passed as `-c model_reasoning_effort="none"`
 - `-c service_tier="fast"` appended when the Codex Fast mode lightning toggle is filled
 
 ### Resume

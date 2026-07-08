@@ -2305,7 +2305,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         let selectedModelId = selectedModelIdFromPicker
         reasoningPicker.removeAllItems()
         for level in agentConfig.effectiveReasoningLevels(for: selectedModelId) {
-            reasoningPicker.addItem(withTitle: level.capitalized)
+            reasoningPicker.addItem(withTitle: AgentReasoningLevelPresentation.pickerTitle(for: level, agentType: agentType))
             reasoningPicker.lastItem?.representedObject = level as NSString
         }
 
@@ -2747,6 +2747,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         [
             slashCommand("/help", detail: String(localized: .ThreadStrings.chatSlashCommandHelpDescription)),
             slashCommand("/clear", detail: String(localized: .ThreadStrings.chatSlashCommandClearDescription)),
+            slashCommand("/fast", detail: String(localized: .ThreadStrings.chatSlashCommandFastDescription)),
             slashCommand("/model", detail: String(localized: .ThreadStrings.chatSlashCommandModelDescription)),
             slashCommand("/effort", detail: String(localized: .ThreadStrings.chatSlashCommandEffortDescription)),
         ]

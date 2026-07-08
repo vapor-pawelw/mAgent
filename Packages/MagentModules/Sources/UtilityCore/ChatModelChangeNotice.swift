@@ -44,6 +44,9 @@ public enum ChatModelChangeNotice {
     private static func normalizedDisplay(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let trimmed, !trimmed.isEmpty else { return nil }
+        if trimmed.lowercased() == "none" {
+            return "fast"
+        }
         return trimmed
     }
 }

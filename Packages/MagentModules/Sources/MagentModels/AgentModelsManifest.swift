@@ -48,3 +48,54 @@ public struct AgentModel: Codable, Sendable, Equatable {
         self.reasoningLevels = reasoningLevels
     }
 }
+
+public enum AgentReasoningLevelPresentation {
+    public static func storageValue(_ level: String?, for agentType: AgentType) -> String? {
+        guard let level else { return nil }
+        let normalized = level.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+
+        if agentType == .codex, normalized == "fast" {
+            return "none"
+        }
+        return normalized
+    }
+
+    public static func pickerTitle(for level: String, agentType: AgentType) -> String {
+        let normalized = storageValue(level, for: agentType) ?? level
+        if agentType == .codex, normalized == "none" {
+            return "⚡ Fast"
+        }
+        return normalized.capitalized
+    }
+
+    public static func verboseTitle(for level: String, agentType: AgentType) -> String {
+        let normalized = storageValue(level, for: agentType) ?? level
+        if agentType == .codex, normalized == "none" {
+            return "fast"
+        }
+        return normalized.lowercased()
+    }
+
+    public static func compactTitle(for level: String?, agentType: AgentType?) -> String? {
+        let trimmed = level?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else { return nil }
+
+        switch trimmed.lowercased() {
+        case "none", "fast":
+            return agentType == .codex ? "⚡" : trimmed
+        case "low":
+            return "L"
+        case "medium":
+            return "M"
+        case "high":
+            return "H"
+        case "xhigh":
+            return "xH"
+        case "max":
+            return "Max"
+        default:
+            return trimmed
+        }
+    }
+}

@@ -1039,6 +1039,9 @@ extension ThreadDetailViewController {
             return applyChatSlashModelCommand(identifier: identifier, chatIndex: chatIndex, args: args)
         case "/effort":
             return applyChatSlashEffortCommand(identifier: identifier, chatIndex: chatIndex, args: args)
+        case "/fast":
+            guard agentType == .codex else { return false }
+            return applyChatSlashEffortCommand(identifier: identifier, chatIndex: chatIndex, args: ["fast"])
         case "/help":
             appendChatSlashHelpMessage(chatIndex: chatIndex)
             return true
@@ -1046,7 +1049,7 @@ extension ThreadDetailViewController {
             if agentType == .codex {
                 appendChatAssistantMessage(
                     identifier: identifier,
-                    text: "Codex chat supports /help, /clear, /model, and /effort."
+                    text: "Codex chat supports /help, /clear, /fast, /model, and /effort."
                 )
                 return true
             }
@@ -1059,7 +1062,7 @@ extension ThreadDetailViewController {
         let commands: [String]
         switch agentType {
         case .codex:
-            commands = ["/help", "/clear", "/model <id>", "/effort <low|medium|high>"]
+            commands = ["/help", "/clear", "/fast", "/model <id>", "/effort <fast|low|medium|high|xhigh>"]
         case .claude:
             commands = ["/help", "/clear", "/model <id>", "/effort <low|medium|high>"]
         case .custom:
@@ -1118,7 +1121,8 @@ extension ThreadDetailViewController {
         guard agentType != .custom else { return false }
         guard let requestedEffort = args.first?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !requestedEffort.isEmpty else {
             if let currentEffort = chatTabs[chatIndex].reasoningLevel {
-                appendChatAssistantMessage(identifier: identifier, text: "Current reasoning effort: \(currentEffort).")
+                let displayEffort = AgentReasoningLevelPresentation.verboseTitle(for: currentEffort, agentType: agentType)
+                appendChatAssistantMessage(identifier: identifier, text: "Current reasoning effort: \(displayEffort).")
             } else {
                 appendChatAssistantMessage(identifier: identifier, text: "No reasoning effort selected.")
             }
@@ -1142,7 +1146,8 @@ extension ThreadDetailViewController {
         )
         persistChatTabs()
         refreshChatTabView(chatIndex: chatIndex)
-        appendChatAssistantMessage(identifier: identifier, text: "Reasoning effort set to \(validatedEffort).")
+        let displayEffort = AgentReasoningLevelPresentation.verboseTitle(for: validatedEffort, agentType: agentType)
+        appendChatAssistantMessage(identifier: identifier, text: "Reasoning effort set to \(displayEffort).")
         return true
     }
 

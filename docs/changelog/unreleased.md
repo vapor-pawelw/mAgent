@@ -23,6 +23,7 @@
 
 #### Improvements
 
+- Added Codex fast mode to chat reasoning controls and the `/fast` chat shortcut.
 - Made chat tool activity cleaner by showing concise action summaries and keeping successful tool output collapsed by default.
 - Show chat cancellations, errors, and approval-blocked Codex turns as clearer status bubbles.
 

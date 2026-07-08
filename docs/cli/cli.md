@@ -40,7 +40,7 @@ magent-cli create-thread --project <name> [options]
 | `--project <name>` | **Required.** Project to create the thread in. |
 | `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`; use `codex:chat` to start the thread on a Codex chat tab. Defaults to project/global setting. Errors if the requested agent is disabled in Settings. |
 | `--model <id>` | Model ID to launch the initial tab with (e.g. `claude-opus-4-5`). Falls back to the agent's configured default when omitted. |
-| `--reasoning <level>` | Reasoning level for the initial tab: `low`, `medium`, `high`, `max` (Claude), `low`, `medium`, `high`, `xhigh` (older Codex), or `none`, `low`, `medium`, `high`, `xhigh`, `max` for GPT 5.6 Codex models, plus `ultra` for GPT 5.6 Sol and Terra. Omit to use the agent's default. |
+| `--reasoning <level>` | Reasoning level for the initial tab: `low`, `medium`, `high`, `max` (Claude), `low`, `medium`, `high`, `xhigh` (older Codex), or `fast`/`none`, `low`, `medium`, `high`, `xhigh`, `max` for GPT 5.6 Codex models, plus `ultra` for GPT 5.6 Sol and Terra. Omit to use the agent's default. |
 | `--prompt <text>` | Initial prompt to send to the agent after creation. |
 | `--prompt-file <path>` | Read the initial prompt from a file. Useful for multi-line prompts with special characters. |
 | `--name <slug>` | Exact thread name (must be unique). |
@@ -91,7 +91,7 @@ Each element in the specs array is an object with optional keys:
 | `name` | Exact git branch/thread name (sets the branch name directly, no AI generation). Takes precedence over `description`. |
 | `agentType` | `claude`, `codex`, `custom`, or `terminal`; use `codex:chat` to start the thread on a Codex chat tab. Errors if the agent is disabled in Settings. |
 | `modelId` | Model ID to launch with (e.g. `claude-opus-4-5`). Falls back to the agent's configured default. |
-| `reasoningLevel` | Reasoning level: `low`, `medium`, `high`, `max` (Claude), `low`, `medium`, `high`, `xhigh` (older Codex), or `none`, `low`, `medium`, `high`, `xhigh`, `max` for GPT 5.6 Codex models, plus `ultra` for GPT 5.6 Sol and Terra. |
+| `reasoningLevel` | Reasoning level: `low`, `medium`, `high`, `max` (Claude), `low`, `medium`, `high`, `xhigh` (older Codex), or `fast`/`none`, `low`, `medium`, `high`, `xhigh`, `max` for GPT 5.6 Codex models, plus `ultra` for GPT 5.6 Sol and Terra. |
 | `sectionName` | Place thread in this section (case-insensitive). |
 | `baseThreadName` | Branch from an existing thread. |
 | `baseBranch` | Branch from an explicit branch. |
@@ -423,14 +423,14 @@ magent-cli move-thread --thread <name> --section <name>
 Add a tab to an existing thread.
 
 ```bash
-magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning <level>] [--name <text> | --title <text>] [--fresh|--no-resume] [--prompt <text>]
+magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning fast|low|medium|high|xhigh|max|ultra] [--name <text> | --title <text>] [--fresh|--no-resume] [--prompt <text>]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`. Defaults to project/global setting. |
 | `--model <id>` | Model ID to launch with. Falls back to the agent's configured default when omitted. |
-| `--reasoning <level>` | Reasoning level: `low`, `medium`, `high`, `max` (Claude), `low`, `medium`, `high`, `xhigh` (older Codex), or `none`, `low`, `medium`, `high`, `xhigh`, `max` for GPT 5.6 Codex models, plus `ultra` for GPT 5.6 Sol and Terra. |
+| `--reasoning <level>` | Reasoning level: `low`, `medium`, `high`, `max` (Claude), `low`, `medium`, `high`, `xhigh` (older Codex), or `fast`/`none`, `low`, `medium`, `high`, `xhigh`, `max` for GPT 5.6 Codex models, plus `ultra` for GPT 5.6 Sol and Terra. |
 | `--name <text>` | Optional tab title shown in the tab bar. |
 | `--title <text>` | Legacy alias for `--name`. |
 | `--fresh`, `--no-resume` | Start an isolated Claude/Codex tab that should not adopt an older conversation from the same worktree path during later recovery. |

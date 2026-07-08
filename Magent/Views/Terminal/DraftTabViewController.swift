@@ -320,7 +320,7 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
         reasoningPicker.lastItem?.representedObject = nil
 
         for level in agentConfig.effectiveReasoningLevels(for: modelId) {
-            reasoningPicker.addItem(withTitle: level.capitalized)
+            reasoningPicker.addItem(withTitle: AgentReasoningLevelPresentation.pickerTitle(for: level, agentType: agentType))
             reasoningPicker.lastItem?.representedObject = level as NSString
         }
 

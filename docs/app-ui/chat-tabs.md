@@ -3,6 +3,7 @@
 ## User-facing behavior
 
 - Chat tabs render agent messages, user prompts, attachments, model-change markers, and restored tool activity from Claude/Codex transcripts.
+- Codex chat tabs expose fast mode from the bottom-left reasoning picker as `⚡ Fast`; it is stored and passed as Codex `reasoningLevel: "none"`.
 - Tool activity should read like concise actions first: `Run command`, `Read file`, `Search`, or `Tool output`.
 - Successful tool output stays collapsed by default so long transcripts remain scannable.
 - Failed tool output and still-running command output expand by default because those states usually need immediate attention.
@@ -18,6 +19,7 @@
 - `ChatFinalAssistantMessageReconciler` attaches `toolEvent` when final assistant text is itself a tool transcript, so live completions and restored transcripts follow the same presentation path.
 - `CodexChatTranscriptReconciler` and `ClaudeChatTranscriptReconciler` pair matching tool calls/results into one persisted message when transcript IDs are available, falling back to standalone output messages when a pair cannot be found.
   Restored tool messages should carry both backward-compatible transcript text and `toolEvent`.
+- Codex `/fast` is handled by Magent as a shortcut for setting the same `none` effort used by the `⚡ Fast` picker entry; `/effort fast` is accepted as an alias.
 
 ## Gotchas
 
