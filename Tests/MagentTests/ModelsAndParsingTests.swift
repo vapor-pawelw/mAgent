@@ -1567,6 +1567,84 @@ struct PersistedChatMessageTests {
     }
 }
 
+// MARK: - ChatMessageDisplayPlanner
+
+@Suite("ChatMessageDisplayPlanner")
+struct ChatMessageDisplayPlannerTests {
+
+    @Test("Plans persisted tool events as assistant tool displays")
+    func plansPersistedToolEventsAsAssistantToolDisplays() {
+        let message = PersistedChatMessage(
+            role: .assistant,
+            text: ChatToolTranscriptFormatter.toolCallText(
+                name: "exec_command",
+                arguments: "{\"cmd\":\"rg hello\"}"
+            ),
+            toolEvent: PersistedChatToolEvent(
+                kind: .call,
+                name: "exec_command",
+                arguments: "{\"cmd\":\"rg hello\"}"
+            )
+        )
+
+        let plan = ChatMessageDisplayPlanner.plan(for: message)
+
+        #expect(plan.role == .assistant)
+        guard case .tool(let presentation) = plan.kind else {
+            Issue.record("Expected tool display plan")
+            return
+        }
+        #expect(presentation.title == "Run command")
+        #expect(presentation.detail == "rg hello")
+    }
+
+    @Test("Plans cancelled assistant text as cancellation status")
+    func plansCancelledAssistantTextAsCancellationStatus() {
+        let message = PersistedChatMessage(
+            role: .assistant,
+            text: ChatBusyStateRecovery.cancelledPlaceholderText
+        )
+
+        let plan = ChatMessageDisplayPlanner.plan(for: message)
+
+        guard case .status(let status) = plan.kind else {
+            Issue.record("Expected status display plan")
+            return
+        }
+        #expect(status.kind == .cancellation)
+        #expect(status.title == ChatBusyStateRecovery.cancelledPlaceholderText)
+        #expect(status.detail == nil)
+    }
+
+    @Test("Plans Codex approval failures as approval-required status")
+    func plansCodexApprovalFailuresAsApprovalRequiredStatus() {
+        let message = PersistedChatMessage(
+            role: .assistant,
+            text: "Codex app-server failed: Blocked: Codex requested approval for network access. Chat tabs cannot approve yet."
+        )
+
+        let plan = ChatMessageDisplayPlanner.plan(for: message)
+
+        guard case .status(let status) = plan.kind else {
+            Issue.record("Expected status display plan")
+            return
+        }
+        #expect(status.kind == .approvalRequired)
+        #expect(status.title == "Blocked: Codex requested approval for network access. Chat tabs cannot approve yet.")
+        #expect(status.detail == nil)
+    }
+
+    @Test("Plans ordinary user text as message display")
+    func plansOrdinaryUserTextAsMessageDisplay() {
+        let message = PersistedChatMessage(role: .user, text: "hello")
+
+        let plan = ChatMessageDisplayPlanner.plan(for: message)
+
+        #expect(plan.role == .user)
+        #expect(plan.kind == .message)
+    }
+}
+
 // MARK: - PersistedDraftTab
 
 @Suite("PersistedDraftTab")

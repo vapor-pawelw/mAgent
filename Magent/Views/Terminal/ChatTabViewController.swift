@@ -794,6 +794,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private var messageAttachmentStripHeight: CGFloat = 0
     private var messageTextHidden = false
     private var toolPresentation: ChatToolTranscriptPresentation?
+    private var statusPresentation: ChatMessageStatusPresentation?
     private var toolExpanded = false
     private var toolDisclosureFontSize: CGFloat = 12
     private var toolDisclosureTextColor: NSColor = .labelColor
@@ -823,15 +824,19 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         self.isQueuedSubmissionPending = queuedSubmissionPending
         self.rendersAsSeparator = message.role == .system
         self.isLoadingIndicatorBubble = message.role == .assistant && Self.isThinkingPlaceholderText(message.text)
-        if let persistedToolEvent = message.toolEvent {
-            self.toolPresentation = ChatToolTranscriptFormatter.presentation(for: persistedToolEvent)
-        } else if case .tool(let parsedToolEvent) = ChatToolTranscriptFormatter.event(for: message.text) {
-            self.toolPresentation = ChatToolTranscriptFormatter.presentation(for: parsedToolEvent)
+        let displayPlan = ChatMessageDisplayPlanner.plan(for: message)
+        switch displayPlan.kind {
+        case .message:
+            break
+        case .tool(let presentation):
+            self.toolPresentation = presentation
+        case .status(let presentation):
+            self.statusPresentation = presentation
         }
         self.toolExpanded = self.toolPresentation?.isExpandedByDefault ?? false
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        let displayRole: ChatMessageRole = toolPresentation == nil ? message.role : .assistant
+        let displayRole = displayPlan.role
         if rendersAsSeparator {
             configureSeparatorMessage(text: message.text, fontSize: fontSize)
             return
@@ -884,8 +889,13 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 let bubbleColor = isLoadingIndicatorBubble ? NSColor(resource: .appBackground) : appearance.agentBubbleColor
                 container.layer?.backgroundColor = bubbleColor.cgColor
             }
-            let isCancelledMessage = Self.isCancelledPlaceholderText(message.text)
-            if isCancelledMessage {
+            if statusPresentation?.kind == .cancellation {
+                baseTextColor = NSColor(calibratedRed: 0.62, green: 0.12, blue: 0.12, alpha: 1.0)
+                codeColor = baseTextColor.withAlphaComponent(0.85)
+            } else if statusPresentation?.kind == .approvalRequired {
+                baseTextColor = NSColor(resource: .primaryBrand)
+                codeColor = NSColor(resource: .textSecondary)
+            } else if statusPresentation?.kind == .error {
                 baseTextColor = NSColor(calibratedRed: 0.62, green: 0.12, blue: 0.12, alpha: 1.0)
                 codeColor = baseTextColor.withAlphaComponent(0.85)
             } else {
@@ -937,6 +947,8 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             let renderedMessageText: String
             if let toolPresentation {
                 renderedMessageText = toolPresentation.body
+            } else if let statusPresentation {
+                renderedMessageText = Self.statusMessageText(statusPresentation)
             } else if displayRole == .user, isQueuedSubmissionPending {
                 renderedMessageText = "\(message.text)\(queuedSuffix)"
             } else {
@@ -1738,8 +1750,12 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         ChatBusyStateRecovery.isAssistantLoadingPlaceholder(text)
     }
 
-    private static func isCancelledPlaceholderText(_ text: String) -> Bool {
-        text.trimmingCharacters(in: .whitespacesAndNewlines) == ChatBusyStateRecovery.cancelledPlaceholderText
+    private static func statusMessageText(_ status: ChatMessageStatusPresentation) -> String {
+        guard let detail = status.detail?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !detail.isEmpty else {
+            return status.title
+        }
+        return "\(status.title)\n\(detail)"
     }
 }
 
