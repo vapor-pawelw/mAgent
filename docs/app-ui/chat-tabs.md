@@ -5,6 +5,7 @@
 - Chat tabs render agent messages, user prompts, attachments, model-change markers, and restored tool activity from Claude/Codex transcripts.
 - Codex chat tabs expose fast mode from the bottom-left reasoning picker as `⚡ Fast`; it is stored and passed as Codex `reasoningLevel: "none"`.
 - Tool activity should read like concise actions first: `Run command`, `Read file`, `Search`, or `Tool output`.
+- Patch edits should read as `Apply patch` / `Patch applied` and summarize changed files instead of rendering the raw patch inline.
 - Consecutive internal activity rows are compacted in the visible chat transcript into one assistant-side activity summary with SF Symbol icons. The saved transcript remains unmodified for export, restore, and agent handoff.
 - Successful tool output stays collapsed by default so long transcripts remain scannable.
 - Failed tool output and still-running command output expand by default because those states usually need immediate attention.
@@ -29,5 +30,6 @@
 - Keep raw persisted transcript text as the compatibility boundary even when `toolEvent` is present. Existing IPC/read-tab flows and older app versions still rely on readable text.
 - New UI code should consume `ChatMessageDisplayPlanner` or `toolEvent`/`ChatTranscriptEvent` rather than reparsing display strings in view code.
 - Do not expand successful tool output by default. Long command logs quickly bury the conversation and make restored sessions hard to scan.
+- Do not surface successful exit-code metadata (`Exit code: 0`, `Process exited with code 0`) in titles or details; keep it as parsed metadata only.
 - Do not let display compaction change persisted chat messages. The compact activity row is only a view-layer artifact.
 - Do not drop raw details from persisted tool messages; users still need to inspect exact commands, arguments, and output when debugging agent behavior.

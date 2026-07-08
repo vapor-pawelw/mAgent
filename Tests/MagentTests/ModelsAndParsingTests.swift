@@ -2053,6 +2053,78 @@ struct AgentChatRuntimeParsingTests {
         #expect(presentation?.isExpandedByDefault == false)
     }
 
+    @Test("Tool transcript formatter hides successful short exit-code envelopes")
+    func toolTranscriptFormatterHidesSuccessfulShortExitCodeEnvelopes() {
+        let presentation = ChatToolTranscriptFormatter.presentation(
+            for: ChatToolTranscriptFormatter.toolOutputText(
+                """
+                Exit code: 0
+                done
+                """
+            )
+        )
+
+        #expect(presentation?.kind == .output)
+        #expect(presentation?.title == "Tool output: done")
+        #expect(presentation?.detail == nil)
+        #expect(presentation?.body.contains("Exit code: 0") == false)
+        #expect(presentation?.body.contains("Output\ndone") == true)
+    }
+
+    @Test("Tool transcript formatter summarizes apply patch calls")
+    func toolTranscriptFormatterSummarizesApplyPatchCalls() {
+        let patch = """
+        *** Begin Patch
+        *** Update File: Packages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift
+        @@
+        -    public static func compactTitle(for level: String?) -> String? {
+        +    public static func compactTitle(for level: String?, agentType: AgentType?) -> String? {
+        *** End Patch
+        """
+        let presentation = ChatToolTranscriptFormatter.presentation(
+            for: ChatToolTranscriptFormatter.toolCallText(
+                name: "apply_patch",
+                arguments: patch
+            )
+        )
+
+        #expect(presentation?.kind == .call)
+        #expect(presentation?.title == "Apply patch")
+        #expect(presentation?.detail == "Packages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift")
+        #expect(presentation?.body.contains("Changed files\nPackages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift") == true)
+        #expect(presentation?.body.contains("*** Begin Patch") == false)
+    }
+
+    @Test("Tool transcript formatter summarizes successful apply patch results")
+    func toolTranscriptFormatterSummarizesSuccessfulApplyPatchResults() {
+        let patch = """
+        *** Begin Patch
+        *** Update File: Packages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift
+        @@
+        -    public static func compactTitle(for level: String?) -> String? {
+        +    public static func compactTitle(for level: String?, agentType: AgentType?) -> String? {
+        *** End Patch
+        """
+        let presentation = ChatToolTranscriptFormatter.presentation(
+            for: ChatToolTranscriptFormatter.toolResultText(
+                name: "apply_patch",
+                arguments: patch,
+                output: """
+                Exit code: 0
+                Success. Updated the following files:
+                M Packages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift
+                """
+            )
+        )
+
+        #expect(presentation?.kind == .result)
+        #expect(presentation?.title == "Patch applied")
+        #expect(presentation?.detail == "Packages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift")
+        #expect(presentation?.body.contains("Changed files\nPackages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift") == true)
+        #expect(presentation?.body.contains("Exit code: 0") == false)
+        #expect(presentation?.body.contains("*** Begin Patch") == false)
+    }
+
     @Test("Tool transcript parser exposes running output status")
     func toolTranscriptParserExposesRunningOutputStatus() {
         let event = ChatToolTranscriptFormatter.event(

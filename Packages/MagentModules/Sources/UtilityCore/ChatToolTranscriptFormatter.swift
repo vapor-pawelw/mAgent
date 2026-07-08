@@ -147,6 +147,9 @@ public enum ChatToolTranscriptFormatter {
         case .call:
             let name = event.name?.nilIfBlank ?? "tool"
             let rawBody = event.arguments ?? ""
+            if name == "apply_patch" {
+                return applyPatchCallPresentation(arguments: rawBody)
+            }
             let formatted = formattedToolCallArguments(rawBody)
             let summary = toolActionSummary(name: name, arguments: rawBody)
             return ChatToolTranscriptPresentation(
@@ -159,6 +162,9 @@ public enum ChatToolTranscriptFormatter {
             let name = event.name?.nilIfBlank ?? "tool"
             let arguments = event.arguments ?? ""
             let envelope = envelope(from: event, fallbackOutput: event.output ?? "")
+            if name == "apply_patch" {
+                return applyPatchResultPresentation(arguments: arguments, envelope: envelope)
+            }
             let outputBody = formattedToolOutput(envelope)
             let argumentsBody = formattedToolResultArguments(arguments, toolName: name)
             let actionSummary = toolActionSummary(name: name, arguments: arguments)
@@ -324,7 +330,7 @@ public enum ChatToolTranscriptFormatter {
         let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
         if toolName == "apply_patch" {
-            return section("Patch", trimmed)
+            return section("Changed files", changedFilesSummary(fromPatch: trimmed))
         }
         return formattedToolCallArguments(trimmed)
     }
@@ -386,9 +392,15 @@ public enum ChatToolTranscriptFormatter {
             } else if let value = line.value(afterPrefix: "Process exited with code") {
                 envelope.exitCode = value
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+                hasEnvelope = true
+            } else if let value = line.value(afterPrefix: "Exit code:") {
+                envelope.exitCode = value
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                hasEnvelope = true
             } else if let value = line.value(afterPrefix: "Process running with session ID") {
                 envelope.sessionID = value
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+                hasEnvelope = true
             } else if let value = line.value(afterPrefix: "Total output lines:") {
                 envelope.outputLineCount = value
                 hasEnvelope = true
@@ -434,6 +446,62 @@ public enum ChatToolTranscriptFormatter {
             sections.append(section("Output", "(No output)"))
         }
         return sections.joined(separator: "\n\n")
+    }
+
+    private static func applyPatchCallPresentation(arguments: String) -> ChatToolTranscriptPresentation {
+        let files = changedFiles(fromPatch: arguments)
+        return ChatToolTranscriptPresentation(
+            kind: .call,
+            title: "Apply patch",
+            detail: changedFilesInlineSummary(files),
+            body: section("Changed files", changedFilesSummary(files))
+        )
+    }
+
+    private static func applyPatchResultPresentation(
+        arguments: String,
+        envelope: ToolOutputEnvelope
+    ) -> ChatToolTranscriptPresentation {
+        let files = changedFiles(fromPatch: arguments)
+        let title: String
+        if let exitCode = envelope.exitCode, exitCode != "0" {
+            title = "Patch failed"
+        } else {
+            title = "Patch applied"
+        }
+
+        var sections = [section("Changed files", changedFilesSummary(files))]
+        if let exitCode = envelope.exitCode, exitCode != "0" {
+            sections.append(section("Status", "Exit code: \(exitCode)"))
+        }
+        if let message = applyPatchResultMessage(from: envelope.output) {
+            sections.append(section("Result", message))
+        }
+
+        return ChatToolTranscriptPresentation(
+            kind: .result,
+            title: title,
+            detail: changedFilesInlineSummary(files),
+            body: sections.joined(separator: "\n\n"),
+            isExpandedByDefault: shouldExpandOutput(envelope)
+        )
+    }
+
+    private static func applyPatchResultMessage(from output: String) -> String? {
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let lines = trimmed
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+            .filter { line in
+                let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                return !trimmedLine.hasPrefix("Success. Updated the following files:")
+                    && !trimmedLine.hasPrefix("M ")
+                    && !trimmedLine.hasPrefix("A ")
+                    && !trimmedLine.hasPrefix("D ")
+            }
+        let message = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.nilIfEmpty
     }
 
     private static func section(_ title: String, _ body: String) -> String {
@@ -515,6 +583,10 @@ public enum ChatToolTranscriptFormatter {
     }
 
     private static func toolActionSummary(name: String, arguments: String) -> (title: String, completedTitle: String, detail: String?) {
+        if name == "apply_patch" {
+            return ("Apply patch", "Patch applied", changedFilesInlineSummary(changedFiles(fromPatch: arguments)))
+        }
+
         guard let dictionary = jsonObject(from: arguments) as? [String: Any] else {
             let cleanName = humanizedToolName(name)
             return (cleanName, "\(cleanName) finished", nil)
@@ -555,6 +627,43 @@ public enum ChatToolTranscriptFormatter {
             return "Search"
         }
         return fallback
+    }
+
+    private static func changedFilesSummary(fromPatch patch: String) -> String {
+        changedFilesSummary(changedFiles(fromPatch: patch))
+    }
+
+    private static func changedFilesSummary(_ files: [String]) -> String {
+        guard !files.isEmpty else { return "No files detected" }
+        return files.joined(separator: "\n")
+    }
+
+    private static func changedFilesInlineSummary(_ files: [String]) -> String? {
+        guard !files.isEmpty else { return nil }
+        if files.count == 1 {
+            return files[0]
+        }
+        return "\(files.count) files"
+    }
+
+    private static func changedFiles(fromPatch patch: String) -> [String] {
+        var files: [String] = []
+        for line in patch.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            let candidates = [
+                "*** Add File: ",
+                "*** Update File: ",
+                "*** Delete File: ",
+            ]
+            for prefix in candidates where trimmed.hasPrefix(prefix) {
+                let file = String(trimmed.dropFirst(prefix.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !file.isEmpty, !files.contains(file) {
+                    files.append(file)
+                }
+            }
+        }
+        return files
     }
 
     private static func humanizedToolName(_ name: String) -> String {
