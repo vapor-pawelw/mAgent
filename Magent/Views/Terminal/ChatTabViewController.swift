@@ -823,7 +823,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         self.isQueuedSubmissionPending = queuedSubmissionPending
         self.rendersAsSeparator = message.role == .system
         self.isLoadingIndicatorBubble = message.role == .assistant && Self.isThinkingPlaceholderText(message.text)
-        self.toolPresentation = ChatToolTranscriptFormatter.presentation(for: message.text)
+        if case .tool(let parsedToolEvent) = ChatToolTranscriptFormatter.event(for: message.text) {
+            self.toolPresentation = ChatToolTranscriptFormatter.presentation(for: parsedToolEvent)
+        }
         self.toolExpanded = self.toolPresentation?.isExpandedByDefault ?? false
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false

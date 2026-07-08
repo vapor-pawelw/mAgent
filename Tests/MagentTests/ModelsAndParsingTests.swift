@@ -1815,6 +1815,54 @@ struct AgentChatRuntimeParsingTests {
         #expect(presentation?.isExpandedByDefault == false)
     }
 
+    @Test("Tool transcript parser exposes structured call events")
+    func toolTranscriptParserExposesStructuredCallEvents() {
+        let event = ChatToolTranscriptFormatter.event(
+            for: ChatToolTranscriptFormatter.toolCallText(
+                name: "exec_command",
+                arguments: "{\"cmd\":\"rg hello\",\"yield_time_ms\":1000}"
+            )
+        )
+
+        guard case .tool(let toolEvent) = event else {
+            Issue.record("Expected a tool event")
+            return
+        }
+
+        #expect(toolEvent.kind == .call)
+        #expect(toolEvent.name == "exec_command")
+        #expect(toolEvent.arguments == "{\"cmd\":\"rg hello\",\"yield_time_ms\":1000}")
+        #expect(toolEvent.output == nil)
+    }
+
+    @Test("Tool transcript parser exposes structured result status")
+    func toolTranscriptParserExposesStructuredResultStatus() {
+        let event = ChatToolTranscriptFormatter.event(
+            for: ChatToolTranscriptFormatter.toolResultText(
+                name: "exec_command",
+                arguments: "{\"cmd\":\"swift test\"}",
+                output: """
+                Wall time: 1.2 seconds
+                Process exited with code 1
+                Output:
+                error: failed
+                """
+            )
+        )
+
+        guard case .tool(let toolEvent) = event else {
+            Issue.record("Expected a tool event")
+            return
+        }
+
+        #expect(toolEvent.kind == .result)
+        #expect(toolEvent.name == "exec_command")
+        #expect(toolEvent.arguments == "{\"cmd\":\"swift test\"}")
+        #expect(toolEvent.output == "error: failed")
+        #expect(toolEvent.exitCode == "1")
+        #expect(toolEvent.wallTime == "1.2 seconds")
+    }
+
     @Test("Tool transcript formatter summarizes command output envelopes")
     func toolTranscriptFormatterSummarizesCommandOutputEnvelopes() {
         let presentation = ChatToolTranscriptFormatter.presentation(
@@ -1851,6 +1899,30 @@ struct AgentChatRuntimeParsingTests {
         #expect(presentation?.detail == "exec_command")
         #expect(presentation?.body.contains("Output\nfound") == true)
         #expect(presentation?.isExpandedByDefault == false)
+    }
+
+    @Test("Tool transcript parser exposes running output status")
+    func toolTranscriptParserExposesRunningOutputStatus() {
+        let event = ChatToolTranscriptFormatter.event(
+            for: ChatToolTranscriptFormatter.toolOutputText(
+                """
+                Process running with session ID 42
+                Output:
+                still working
+                """,
+                name: "exec_command"
+            )
+        )
+
+        guard case .tool(let toolEvent) = event else {
+            Issue.record("Expected a tool event")
+            return
+        }
+
+        #expect(toolEvent.kind == .output)
+        #expect(toolEvent.outputName == "exec_command")
+        #expect(toolEvent.output == "still working")
+        #expect(toolEvent.runningSessionID == "42")
     }
 
     @Test("Tool transcript formatter expands failed command output")

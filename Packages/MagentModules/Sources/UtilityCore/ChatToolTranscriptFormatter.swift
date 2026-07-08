@@ -28,6 +28,51 @@ public struct ChatToolTranscriptPresentation: Sendable, Equatable {
     }
 }
 
+public enum ChatTranscriptEvent: Sendable, Equatable {
+    case message(role: ChatTranscriptMessageRole, text: String)
+    case tool(ChatToolTranscriptEvent)
+}
+
+public enum ChatTranscriptMessageRole: String, Sendable, Equatable {
+    case user
+    case assistant
+    case system
+}
+
+public struct ChatToolTranscriptEvent: Sendable, Equatable {
+    public var kind: ChatToolTranscriptKind
+    public var name: String?
+    public var arguments: String?
+    public var output: String?
+    public var outputName: String?
+    public var exitCode: String?
+    public var runningSessionID: String?
+    public var wallTime: String?
+    public var outputLineCount: String?
+
+    public init(
+        kind: ChatToolTranscriptKind,
+        name: String? = nil,
+        arguments: String? = nil,
+        output: String? = nil,
+        outputName: String? = nil,
+        exitCode: String? = nil,
+        runningSessionID: String? = nil,
+        wallTime: String? = nil,
+        outputLineCount: String? = nil
+    ) {
+        self.kind = kind
+        self.name = name
+        self.arguments = arguments
+        self.output = output
+        self.outputName = outputName
+        self.exitCode = exitCode
+        self.runningSessionID = runningSessionID
+        self.wallTime = wallTime
+        self.outputLineCount = outputLineCount
+    }
+}
+
 public enum ChatToolTranscriptFormatter {
     private struct ToolOutputEnvelope {
         var chunkID: String?
@@ -37,6 +82,32 @@ public enum ChatToolTranscriptFormatter {
         var tokenCount: String?
         var outputLineCount: String?
         var output: String
+
+        init(
+            chunkID: String? = nil,
+            wallTime: String? = nil,
+            exitCode: String? = nil,
+            sessionID: String? = nil,
+            tokenCount: String? = nil,
+            outputLineCount: String? = nil,
+            output: String
+        ) {
+            self.chunkID = chunkID
+            self.wallTime = wallTime
+            self.exitCode = exitCode
+            self.sessionID = sessionID
+            self.tokenCount = tokenCount
+            self.outputLineCount = outputLineCount
+            self.output = output
+        }
+    }
+
+    public static func event(for text: String) -> ChatTranscriptEvent? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let toolEvent = toolEvent(forTrimmedText: trimmed) {
+            return .tool(toolEvent)
+        }
+        return nil
     }
 
     public static func toolCallText(name: String, arguments: String) -> String {
@@ -61,12 +132,16 @@ public enum ChatToolTranscriptFormatter {
     }
 
     public static func presentation(for text: String) -> ChatToolTranscriptPresentation? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("Tool call:") {
-            let remainder = String(trimmed.dropFirst("Tool call:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-            let parts = remainder.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
-            let name = parts.first.map(String.init)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "tool"
-            let rawBody = parts.count > 1 ? String(parts[1]) : ""
+        guard let event = event(for: text),
+              case .tool(let toolEvent) = event else { return nil }
+        return presentation(for: toolEvent)
+    }
+
+    public static func presentation(for event: ChatToolTranscriptEvent) -> ChatToolTranscriptPresentation {
+        switch event.kind {
+        case .call:
+            let name = event.name?.nilIfBlank ?? "tool"
+            let rawBody = event.arguments ?? ""
             let formatted = formattedToolCallArguments(rawBody)
             let summary = toolActionSummary(name: name, arguments: rawBody)
             return ChatToolTranscriptPresentation(
@@ -74,6 +149,48 @@ public enum ChatToolTranscriptFormatter {
                 title: summary.title,
                 detail: summary.detail ?? jsonSummary(from: rawBody),
                 body: formatted
+            )
+        case .result:
+            let name = event.name?.nilIfBlank ?? "tool"
+            let arguments = event.arguments ?? ""
+            let envelope = envelope(from: event, fallbackOutput: event.output ?? "")
+            let outputBody = formattedToolOutput(envelope)
+            let argumentsBody = formattedToolResultArguments(arguments, toolName: name)
+            let actionSummary = toolActionSummary(name: name, arguments: arguments)
+            let outputSummary = outputContentSummary(from: envelope, fallbackText: event.output ?? "")
+            let title = outputSummary.map { "\(actionSummary.completedTitle): \($0)" } ?? actionSummary.completedTitle
+            return ChatToolTranscriptPresentation(
+                kind: .result,
+                title: abbreviated(title, maxLength: 140),
+                detail: statusSummary(from: envelope, fallbackText: event.output ?? "", prefix: actionSummary.detail),
+                body: [outputBody, argumentsBody].filter { !$0.isEmpty }.joined(separator: "\n\n"),
+                isExpandedByDefault: shouldExpandOutput(envelope)
+            )
+        case .output:
+            let envelope = envelope(from: event, fallbackOutput: event.output ?? "")
+            let formatted = formattedToolOutput(envelope)
+            let summary = outputContentSummary(from: envelope, fallbackText: event.output ?? "")
+            let status = statusSummary(from: envelope, fallbackText: event.output ?? "", prefix: event.outputName)
+            return ChatToolTranscriptPresentation(
+                kind: .output,
+                title: abbreviated(summary.map { "Tool output: \($0)" } ?? event.outputName ?? "Tool output", maxLength: 140),
+                detail: status,
+                body: formatted,
+                isExpandedByDefault: shouldExpandOutput(envelope)
+            )
+        }
+    }
+
+    private static func toolEvent(forTrimmedText trimmed: String) -> ChatToolTranscriptEvent? {
+        if trimmed.hasPrefix("Tool call:") {
+            let remainder = String(trimmed.dropFirst("Tool call:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let parts = remainder.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+            let name = parts.first.map(String.init)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "tool"
+            let rawBody = parts.count > 1 ? String(parts[1]) : ""
+            return ChatToolTranscriptEvent(
+                kind: .call,
+                name: name,
+                arguments: rawBody
             )
         }
         if trimmed.hasPrefix("Tool result:") {
@@ -83,17 +200,15 @@ public enum ChatToolTranscriptFormatter {
             let rawBody = parts.count > 1 ? String(parts[1]) : ""
             let split = splitToolResultBody(rawBody)
             let envelope = parseToolOutputEnvelope(split.output)
-            let outputBody = formattedToolOutput(envelope)
-            let argumentsBody = formattedToolResultArguments(split.arguments, toolName: name)
-            let actionSummary = toolActionSummary(name: name, arguments: split.arguments)
-            let outputSummary = outputContentSummary(from: envelope, fallbackText: split.output)
-            let title = outputSummary.map { "\(actionSummary.completedTitle): \($0)" } ?? actionSummary.completedTitle
-            return ChatToolTranscriptPresentation(
+            return ChatToolTranscriptEvent(
                 kind: .result,
-                title: abbreviated(title, maxLength: 140),
-                detail: statusSummary(from: envelope, fallbackText: split.output, prefix: actionSummary.detail),
-                body: [outputBody, argumentsBody].filter { !$0.isEmpty }.joined(separator: "\n\n"),
-                isExpandedByDefault: shouldExpandOutput(envelope)
+                name: name,
+                arguments: split.arguments,
+                output: envelope.output,
+                exitCode: envelope.exitCode,
+                runningSessionID: envelope.sessionID,
+                wallTime: envelope.wallTime,
+                outputLineCount: envelope.outputLineCount
             )
         }
         if trimmed.hasPrefix("Tool output:") {
@@ -115,18 +230,27 @@ public enum ChatToolTranscriptFormatter {
                 rawBody = remainder
             }
             let envelope = parseToolOutputEnvelope(rawBody)
-            let formatted = formattedToolOutput(envelope)
-            let summary = outputContentSummary(from: envelope, fallbackText: rawBody)
-            let status = statusSummary(from: envelope, fallbackText: rawBody, prefix: outputName)
-            return ChatToolTranscriptPresentation(
+            return ChatToolTranscriptEvent(
                 kind: .output,
-                title: abbreviated(summary.map { "Tool output: \($0)" } ?? outputName ?? "Tool output", maxLength: 140),
-                detail: status,
-                body: formatted,
-                isExpandedByDefault: shouldExpandOutput(envelope)
+                output: envelope.output,
+                outputName: outputName,
+                exitCode: envelope.exitCode,
+                runningSessionID: envelope.sessionID,
+                wallTime: envelope.wallTime,
+                outputLineCount: envelope.outputLineCount
             )
         }
         return nil
+    }
+
+    private static func envelope(from event: ChatToolTranscriptEvent, fallbackOutput: String) -> ToolOutputEnvelope {
+        ToolOutputEnvelope(
+            wallTime: event.wallTime,
+            exitCode: event.exitCode,
+            sessionID: event.runningSessionID,
+            outputLineCount: event.outputLineCount,
+            output: event.output ?? fallbackOutput
+        )
     }
 
     private static func splitToolResultBody(_ text: String) -> (arguments: String, output: String) {
@@ -496,6 +620,10 @@ public enum ChatToolTranscriptFormatter {
 
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 
     func value(afterPrefix prefix: String) -> String? {
         guard hasPrefix(prefix) else { return nil }
