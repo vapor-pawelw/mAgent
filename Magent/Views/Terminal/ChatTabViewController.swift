@@ -975,7 +975,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 Self.applyToolTranscriptStyle(to: attributedMessage, baseColor: baseTextColor, baseFontSize: fontSize)
                 Self.applyDiffLineHighlights(to: attributedMessage, baseFontSize: fontSize)
             }
-            if ChatTranscriptDisplayCompactor.isActivitySummary(message) {
+            if toolPresentation == nil, ChatTranscriptDisplayCompactor.isActivitySummary(message) {
                 Self.applyActivitySummaryStyle(
                     to: attributedMessage,
                     rawText: message.text,

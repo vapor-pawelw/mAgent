@@ -25,7 +25,7 @@
 
 - Added Codex fast mode to chat reasoning controls and the `/fast` chat shortcut.
 - Show patch edits in chat as clean changed-file summaries instead of raw patch/output text.
-- Compacted consecutive chat activity rows into a cleaner icon-led summary so restored agent work is easier to scan.
+- Compacted consecutive chat activity rows into a collapsed expandable summary so restored agent work is easier to scan.
 - Made chat tool activity cleaner by showing concise action summaries and keeping successful tool output collapsed by default.
 - Show chat cancellations, errors, and approval-blocked Codex turns as clearer status bubbles.
 

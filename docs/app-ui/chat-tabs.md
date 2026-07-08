@@ -6,7 +6,7 @@
 - Codex chat tabs expose fast mode from the bottom-left reasoning picker as `⚡ Fast`; it is stored and passed as Codex `reasoningLevel: "none"`.
 - Tool activity should read like concise actions first: `Run command`, `Read file`, `Search`, or `Tool output`.
 - Patch edits should read as `Apply patch` / `Patch applied` and summarize changed files instead of rendering the raw patch inline.
-- Consecutive internal activity rows are compacted in the visible chat transcript into one assistant-side activity summary with SF Symbol icons. The saved transcript remains unmodified for export, restore, and agent handoff.
+- Consecutive internal activity rows are compacted in the visible chat transcript into one collapsed assistant-side activity disclosure. The saved transcript remains unmodified for export, restore, and agent handoff.
 - Successful tool output stays collapsed by default so long transcripts remain scannable.
 - Failed tool output and still-running command output expand by default because those states usually need immediate attention.
 - Tool details keep the raw command, arguments, output, and status available behind disclosure.
@@ -17,7 +17,7 @@
 - `ChatToolTranscriptFormatter.event(for:)` normalizes persisted tool transcript text into `ChatTranscriptEvent.tool(ChatToolTranscriptEvent)` before presentation.
 - `ChatToolTranscriptFormatter.presentation(for:)` is the presentation adapter from structured tool events to the disclosure UI copy/body.
 - `ChatMessageDisplayPlanner.plan(for:)` is the UI-facing classification boundary. It turns persisted messages into ordinary message, tool, or status display plans.
-- `ChatTranscriptDisplayCompactor.compactedMessages(_:)` is display-only. It summarizes consecutive tool/status messages before rendering and must not be used for persistence, export, or resume context.
+- `ChatTranscriptDisplayCompactor.compactedMessages(_:)` is display-only. It summarizes consecutive tool/status messages before rendering and exposes activity summaries through `ChatMessageDisplayPlanner` as collapsed disclosure rows; it must not be used for persistence, export, or resume context.
 - `ChatMessageBubbleView` consumes `ChatMessageDisplayPlanner` output, renders tool plans as assistant-side disclosure rows, renders cancellation/error/approval-block states as status-styled assistant bubbles, and hides tool detail bodies while collapsed.
 - `ChatFinalAssistantMessageReconciler` attaches `toolEvent` when final assistant text is itself a tool transcript, so live completions and restored transcripts follow the same presentation path.
 - `CodexChatTranscriptReconciler` and `ClaudeChatTranscriptReconciler` pair matching tool calls/results into one persisted message when transcript IDs are available, falling back to standalone output messages when a pair cannot be found.

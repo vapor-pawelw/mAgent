@@ -3,7 +3,8 @@ import MagentModels
 
 public enum ChatTranscriptDisplayCompactor {
     private static let minimumRunLength = 2
-    private static let maximumVisibleItems = 6
+    private static let maximumVisibleItems = 12
+    private static let maximumSummaryLineLength = 96
 
     public static func compactedMessages(_ messages: [PersistedChatMessage]) -> [PersistedChatMessage] {
         var compacted: [PersistedChatMessage] = []
@@ -175,8 +176,36 @@ public enum ChatTranscriptDisplayCompactor {
             .joined(separator: "\n")
     }
 
+    public static func activityPresentation(for message: PersistedChatMessage) -> ChatToolTranscriptPresentation? {
+        guard isActivitySummary(message) else { return nil }
+        let lines = message.text.components(separatedBy: "\n")
+        let detail = lines.dropFirst().first?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rows = lines.dropFirst(2).compactMap(activityRowText)
+        return ChatToolTranscriptPresentation(
+            kind: .output,
+            title: "Activity",
+            detail: detail?.isEmpty == false ? detail : nil,
+            body: rows.isEmpty ? "No activity details." : rows.joined(separator: "\n"),
+            isExpandedByDefault: false
+        )
+    }
+
     private static func normalizedNonEmpty(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func activityRowText(from line: String) -> String? {
+        let parsed = sfSymbolName(fromActivitySummaryLine: line)
+        let rawText = parsed?.text ?? line
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return "• \(abbreviatedActivityText(trimmed))"
+    }
+
+    private static func abbreviatedActivityText(_ text: String) -> String {
+        guard text.count > maximumSummaryLineLength else { return text }
+        let end = text.index(text.startIndex, offsetBy: max(0, maximumSummaryLineLength - 1))
+        return String(text[..<end]) + "…"
     }
 }

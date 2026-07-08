@@ -37,6 +37,12 @@ public struct ChatMessageDisplayPlan: Sendable, Equatable {
 
 public enum ChatMessageDisplayPlanner {
     public static func plan(for message: PersistedChatMessage) -> ChatMessageDisplayPlan {
+        if let activityPresentation = ChatTranscriptDisplayCompactor.activityPresentation(for: message) {
+            return ChatMessageDisplayPlan(
+                role: .assistant,
+                kind: .tool(activityPresentation)
+            )
+        }
         if let persistedToolEvent = message.toolEvent {
             return ChatMessageDisplayPlan(
                 role: .assistant,
