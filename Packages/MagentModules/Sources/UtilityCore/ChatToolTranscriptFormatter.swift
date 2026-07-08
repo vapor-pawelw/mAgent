@@ -1,4 +1,5 @@
 import Foundation
+import MagentModels
 
 public enum ChatToolTranscriptKind: String, Sendable, Equatable {
     case call
@@ -137,6 +138,10 @@ public enum ChatToolTranscriptFormatter {
         return presentation(for: toolEvent)
     }
 
+    public static func presentation(for event: PersistedChatToolEvent) -> ChatToolTranscriptPresentation {
+        presentation(for: toolEvent(from: event))
+    }
+
     public static func presentation(for event: ChatToolTranscriptEvent) -> ChatToolTranscriptPresentation {
         switch event.kind {
         case .call:
@@ -179,6 +184,20 @@ public enum ChatToolTranscriptFormatter {
                 isExpandedByDefault: shouldExpandOutput(envelope)
             )
         }
+    }
+
+    public static func persistedEvent(from event: ChatToolTranscriptEvent) -> PersistedChatToolEvent {
+        PersistedChatToolEvent(
+            kind: persistedKind(from: event.kind),
+            name: event.name,
+            arguments: event.arguments,
+            output: event.output,
+            outputName: event.outputName,
+            exitCode: event.exitCode,
+            runningSessionID: event.runningSessionID,
+            wallTime: event.wallTime,
+            outputLineCount: event.outputLineCount
+        )
     }
 
     private static func toolEvent(forTrimmedText trimmed: String) -> ChatToolTranscriptEvent? {
@@ -251,6 +270,42 @@ public enum ChatToolTranscriptFormatter {
             outputLineCount: event.outputLineCount,
             output: event.output ?? fallbackOutput
         )
+    }
+
+    private static func toolEvent(from event: PersistedChatToolEvent) -> ChatToolTranscriptEvent {
+        ChatToolTranscriptEvent(
+            kind: transcriptKind(from: event.kind),
+            name: event.name,
+            arguments: event.arguments,
+            output: event.output,
+            outputName: event.outputName,
+            exitCode: event.exitCode,
+            runningSessionID: event.runningSessionID,
+            wallTime: event.wallTime,
+            outputLineCount: event.outputLineCount
+        )
+    }
+
+    private static func persistedKind(from kind: ChatToolTranscriptKind) -> PersistedChatToolEventKind {
+        switch kind {
+        case .call:
+            return .call
+        case .output:
+            return .output
+        case .result:
+            return .result
+        }
+    }
+
+    private static func transcriptKind(from kind: PersistedChatToolEventKind) -> ChatToolTranscriptKind {
+        switch kind {
+        case .call:
+            return .call
+        case .output:
+            return .output
+        case .result:
+            return .result
+        }
     }
 
     private static func splitToolResultBody(_ text: String) -> (arguments: String, output: String) {

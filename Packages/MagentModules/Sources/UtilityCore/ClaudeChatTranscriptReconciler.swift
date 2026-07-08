@@ -72,7 +72,12 @@ public enum ClaudeChatTranscriptReconciler {
         var pendingToolsByID: [String: (name: String, arguments: String, messageIndex: Int)] = [:]
         var pendingToolsInOrder: [(name: String, arguments: String, messageIndex: Int)] = []
 
-        func appendMessage(role: ChatMessageRole, text: String, createdAt: Date?) {
+        func appendMessage(
+            role: ChatMessageRole,
+            text: String,
+            createdAt: Date?,
+            toolEvent: PersistedChatToolEvent? = nil
+        ) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             if lastAppended?.role == role, lastAppended?.text == trimmed {
@@ -92,15 +97,22 @@ public enum ClaudeChatTranscriptReconciler {
                 attachments: existing?.attachments ?? [],
                 createdAt: existing?.createdAt ?? createdAt ?? Date(),
                 modelId: existing?.modelId,
-                reasoningLevel: existing?.reasoningLevel
+                reasoningLevel: existing?.reasoningLevel,
+                toolEvent: existing?.toolEvent ?? toolEvent
             ))
         }
 
         func appendToolCall(name: String, arguments: String, id: String?, createdAt: Date?) {
+            let text = ChatToolTranscriptFormatter.toolCallText(name: name, arguments: arguments)
+            let toolEvent = ChatToolTranscriptFormatter.event(for: text).flatMap { event -> PersistedChatToolEvent? in
+                guard case .tool(let parsedToolEvent) = event else { return nil }
+                return ChatToolTranscriptFormatter.persistedEvent(from: parsedToolEvent)
+            }
             appendMessage(
                 role: .assistant,
-                text: ChatToolTranscriptFormatter.toolCallText(name: name, arguments: arguments),
-                createdAt: createdAt
+                text: text,
+                createdAt: createdAt,
+                toolEvent: toolEvent
             )
             guard let messageIndex = messages.indices.last else { return }
             if let id, !id.isEmpty {
@@ -121,17 +133,29 @@ public enum ClaudeChatTranscriptReconciler {
             }
 
             if let pending, messages.indices.contains(pending.messageIndex) {
-                messages[pending.messageIndex].text = ChatToolTranscriptFormatter.toolResultText(
+                let text = ChatToolTranscriptFormatter.toolResultText(
                     name: pending.name,
                     arguments: pending.arguments,
                     output: content
                 )
+                let toolEvent = ChatToolTranscriptFormatter.event(for: text).flatMap { event -> PersistedChatToolEvent? in
+                    guard case .tool(let parsedToolEvent) = event else { return nil }
+                    return ChatToolTranscriptFormatter.persistedEvent(from: parsedToolEvent)
+                }
+                messages[pending.messageIndex].text = text
+                messages[pending.messageIndex].toolEvent = toolEvent
                 lastAppended = (messages[pending.messageIndex].role, messages[pending.messageIndex].text)
             } else {
+                let text = ChatToolTranscriptFormatter.toolOutputText(content)
+                let toolEvent = ChatToolTranscriptFormatter.event(for: text).flatMap { event -> PersistedChatToolEvent? in
+                    guard case .tool(let parsedToolEvent) = event else { return nil }
+                    return ChatToolTranscriptFormatter.persistedEvent(from: parsedToolEvent)
+                }
                 appendMessage(
                     role: .assistant,
-                    text: ChatToolTranscriptFormatter.toolOutputText(content),
-                    createdAt: createdAt
+                    text: text,
+                    createdAt: createdAt,
+                    toolEvent: toolEvent
                 )
             }
         }

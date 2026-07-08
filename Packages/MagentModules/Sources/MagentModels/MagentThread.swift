@@ -144,6 +144,46 @@ public nonisolated enum PersistedChatAttachmentKind: String, Codable, Sendable {
     case video
 }
 
+public nonisolated enum PersistedChatToolEventKind: String, Codable, Sendable {
+    case call
+    case output
+    case result
+}
+
+public nonisolated struct PersistedChatToolEvent: Codable, Sendable, Equatable {
+    public var kind: PersistedChatToolEventKind
+    public var name: String?
+    public var arguments: String?
+    public var output: String?
+    public var outputName: String?
+    public var exitCode: String?
+    public var runningSessionID: String?
+    public var wallTime: String?
+    public var outputLineCount: String?
+
+    public init(
+        kind: PersistedChatToolEventKind,
+        name: String? = nil,
+        arguments: String? = nil,
+        output: String? = nil,
+        outputName: String? = nil,
+        exitCode: String? = nil,
+        runningSessionID: String? = nil,
+        wallTime: String? = nil,
+        outputLineCount: String? = nil
+    ) {
+        self.kind = kind
+        self.name = name
+        self.arguments = arguments
+        self.output = output
+        self.outputName = outputName
+        self.exitCode = exitCode
+        self.runningSessionID = runningSessionID
+        self.wallTime = wallTime
+        self.outputLineCount = outputLineCount
+    }
+}
+
 public nonisolated struct PersistedChatAttachment: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public var filePath: String
@@ -168,6 +208,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
     public let createdAt: Date
     public var modelId: String?
     public var reasoningLevel: String?
+    public var toolEvent: PersistedChatToolEvent?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -177,6 +218,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         case createdAt
         case modelId
         case reasoningLevel
+        case toolEvent
     }
 
     public init(
@@ -186,7 +228,8 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         attachments: [PersistedChatAttachment] = [],
         createdAt: Date = Date(),
         modelId: String? = nil,
-        reasoningLevel: String? = nil
+        reasoningLevel: String? = nil,
+        toolEvent: PersistedChatToolEvent? = nil
     ) {
         self.id = id
         self.role = role
@@ -195,6 +238,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         self.createdAt = createdAt
         self.modelId = modelId
         self.reasoningLevel = reasoningLevel
+        self.toolEvent = toolEvent
     }
 
     public init(from decoder: Decoder) throws {
@@ -206,6 +250,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
         reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
+        toolEvent = try container.decodeIfPresent(PersistedChatToolEvent.self, forKey: .toolEvent)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -219,6 +264,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         try container.encode(createdAt, forKey: .createdAt)
         try container.encodeIfPresent(modelId, forKey: .modelId)
         try container.encodeIfPresent(reasoningLevel, forKey: .reasoningLevel)
+        try container.encodeIfPresent(toolEvent, forKey: .toolEvent)
     }
 }
 

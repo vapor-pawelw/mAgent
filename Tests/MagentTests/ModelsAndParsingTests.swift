@@ -1537,6 +1537,34 @@ struct PersistedChatMessageTests {
         #expect(decoded.reasoningLevel == "high")
         #expect(decoded.attachments == [attachment])
     }
+
+    @Test("Round-trip preserves structured tool event")
+    func roundTripPreservesStructuredToolEvent() throws {
+        let original = PersistedChatMessage(
+            role: .assistant,
+            text: ChatToolTranscriptFormatter.toolCallText(
+                name: "exec_command",
+                arguments: "{\"cmd\":\"rg hello\"}"
+            ),
+            createdAt: Date(timeIntervalSince1970: 1_750_000_000),
+            toolEvent: PersistedChatToolEvent(
+                kind: .call,
+                name: "exec_command",
+                arguments: "{\"cmd\":\"rg hello\"}"
+            )
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(original)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(PersistedChatMessage.self, from: data)
+
+        #expect(decoded.toolEvent?.kind == .call)
+        #expect(decoded.toolEvent?.name == "exec_command")
+        #expect(decoded.toolEvent?.arguments == "{\"cmd\":\"rg hello\"}")
+    }
 }
 
 // MARK: - PersistedDraftTab
@@ -1794,6 +1822,10 @@ struct AgentChatRuntimeParsingTests {
         #expect(messages[2].text.contains("Tool result: exec_command"))
         #expect(messages[2].text.contains("rg hello"))
         #expect(messages[2].text.contains("Output:\nfound"))
+        #expect(messages[2].toolEvent?.kind == .result)
+        #expect(messages[2].toolEvent?.name == "exec_command")
+        #expect(messages[2].toolEvent?.arguments == "{\"cmd\":\"rg hello\"}")
+        #expect(messages[2].toolEvent?.output == "found")
         #expect(messages[3].text == "Done.")
     }
 
@@ -2061,6 +2093,11 @@ struct AgentChatRuntimeParsingTests {
         #expect(messages[1].text.contains("Tool result: Read"))
         #expect(messages[1].text.contains("file_path"))
         #expect(messages[1].text.contains("Output:\nfile contents"))
+        #expect(messages[1].toolEvent?.kind == .result)
+        #expect(messages[1].toolEvent?.name == "Read")
+        #expect(messages[1].toolEvent?.arguments?.contains("file_path") == true)
+        #expect(messages[1].toolEvent?.arguments?.contains("/tmp/file.swift") == true)
+        #expect(messages[1].toolEvent?.output == "file contents")
         #expect(messages[2].text == "Done.")
     }
 

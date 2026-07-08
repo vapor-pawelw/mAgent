@@ -78,7 +78,13 @@ public enum CodexChatTranscriptReconciler {
         var seenUserMessagesByCanonicalText: [String: Date] = [:]
         var suppressMessagesForDuplicateUserReplay = false
 
-        func appendMessage(role: ChatMessageRole, text: String, createdAt: Date?, attachments: [PersistedChatAttachment] = []) {
+        func appendMessage(
+            role: ChatMessageRole,
+            text: String,
+            createdAt: Date?,
+            attachments: [PersistedChatAttachment] = [],
+            toolEvent: PersistedChatToolEvent? = nil
+        ) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             if lastAppended?.role == role, lastAppended?.text == trimmed {
@@ -98,15 +104,22 @@ public enum CodexChatTranscriptReconciler {
                 attachments: existing?.attachments ?? attachments,
                 createdAt: existing?.createdAt ?? createdAt ?? Date(),
                 modelId: existing?.modelId,
-                reasoningLevel: existing?.reasoningLevel
+                reasoningLevel: existing?.reasoningLevel,
+                toolEvent: existing?.toolEvent ?? toolEvent
             ))
         }
 
         func appendToolCall(name: String, arguments: String, callID: String?, createdAt: Date?) {
+            let text = ChatToolTranscriptFormatter.toolCallText(name: name, arguments: arguments)
+            let toolEvent = ChatToolTranscriptFormatter.event(for: text).flatMap { event -> PersistedChatToolEvent? in
+                guard case .tool(let parsedToolEvent) = event else { return nil }
+                return ChatToolTranscriptFormatter.persistedEvent(from: parsedToolEvent)
+            }
             appendMessage(
                 role: .assistant,
-                text: ChatToolTranscriptFormatter.toolCallText(name: name, arguments: arguments),
-                createdAt: createdAt
+                text: text,
+                createdAt: createdAt,
+                toolEvent: toolEvent
             )
             guard let messageIndex = messages.indices.last else { return }
             if let callID, !callID.isEmpty {
@@ -127,17 +140,29 @@ public enum CodexChatTranscriptReconciler {
             }
 
             if let pending, messages.indices.contains(pending.messageIndex) {
-                messages[pending.messageIndex].text = ChatToolTranscriptFormatter.toolResultText(
+                let text = ChatToolTranscriptFormatter.toolResultText(
                     name: pending.name,
                     arguments: pending.arguments,
                     output: output
                 )
+                let toolEvent = ChatToolTranscriptFormatter.event(for: text).flatMap { event -> PersistedChatToolEvent? in
+                    guard case .tool(let parsedToolEvent) = event else { return nil }
+                    return ChatToolTranscriptFormatter.persistedEvent(from: parsedToolEvent)
+                }
+                messages[pending.messageIndex].text = text
+                messages[pending.messageIndex].toolEvent = toolEvent
                 lastAppended = (messages[pending.messageIndex].role, messages[pending.messageIndex].text)
             } else {
+                let text = ChatToolTranscriptFormatter.toolOutputText(output)
+                let toolEvent = ChatToolTranscriptFormatter.event(for: text).flatMap { event -> PersistedChatToolEvent? in
+                    guard case .tool(let parsedToolEvent) = event else { return nil }
+                    return ChatToolTranscriptFormatter.persistedEvent(from: parsedToolEvent)
+                }
                 appendMessage(
                     role: .assistant,
-                    text: ChatToolTranscriptFormatter.toolOutputText(output),
-                    createdAt: createdAt
+                    text: text,
+                    createdAt: createdAt,
+                    toolEvent: toolEvent
                 )
             }
         }
