@@ -16,12 +16,14 @@ public enum ChatFinalAssistantMessageReconciler {
 
         var updated = messages
         let streamedIndices = updated.indices.filter { streamedMessageIDs.contains(updated[$0].id) }
+        let toolEvent = persistedToolEvent(from: normalizedFinalText)
         guard let firstStreamedIndex = streamedIndices.first else {
             updated.append(PersistedChatMessage(
                 role: .assistant,
                 text: normalizedFinalText,
                 modelId: modelId,
-                reasoningLevel: reasoningLevel
+                reasoningLevel: reasoningLevel,
+                toolEvent: toolEvent
             ))
             return (updated, true)
         }
@@ -50,13 +52,18 @@ public enum ChatFinalAssistantMessageReconciler {
                 role: .assistant,
                 text: normalizedFinalText,
                 modelId: modelId,
-                reasoningLevel: reasoningLevel
+                reasoningLevel: reasoningLevel,
+                toolEvent: toolEvent
             ))
             return (updated, true)
         }
 
         if streamedText != normalizedFinalText || updated[firstStreamedIndex].text != normalizedFinalText {
             updated[firstStreamedIndex].text = normalizedFinalText
+            updated[firstStreamedIndex].toolEvent = toolEvent
+            didMutate = true
+        } else if updated[firstStreamedIndex].toolEvent != toolEvent {
+            updated[firstStreamedIndex].toolEvent = toolEvent
             didMutate = true
         }
         if updated[firstStreamedIndex].modelId != modelId {
@@ -74,5 +81,12 @@ public enum ChatFinalAssistantMessageReconciler {
         }
 
         return (updated, didMutate)
+    }
+
+    private static func persistedToolEvent(from text: String) -> PersistedChatToolEvent? {
+        guard case .tool(let toolEvent) = ChatToolTranscriptFormatter.event(for: text) else {
+            return nil
+        }
+        return ChatToolTranscriptFormatter.persistedEvent(from: toolEvent)
     }
 }

@@ -867,7 +867,7 @@ extension ThreadDetailViewController {
         if let pendingMessageID = chatPendingAssistantMessageIDsByIdentifier.removeValue(forKey: identifier),
            let entryIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }),
            let messageIndex = chatTabs[entryIndex].messages.firstIndex(where: { $0.id == pendingMessageID }) {
-            chatTabs[entryIndex].messages[messageIndex].text = "Request cancelled."
+            chatTabs[entryIndex].messages[messageIndex].text = ChatBusyStateRecovery.cancelledPlaceholderText
             persistChatTabs()
             refreshChatTabView(chatIndex: entryIndex)
         }

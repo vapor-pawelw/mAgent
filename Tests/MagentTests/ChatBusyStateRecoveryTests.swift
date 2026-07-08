@@ -157,4 +157,48 @@ struct ChatFinalAssistantMessageReconcilerTests {
         #expect(result.messages[1].id == second.id)
         #expect(result.messages[2].text == "Done.")
     }
+
+    @Test("appends structured tool event for final tool transcript")
+    func appendsStructuredToolEventForFinalToolTranscript() {
+        let user = PersistedChatMessage(role: .user, text: "run tests")
+        let finalText = ChatToolTranscriptFormatter.toolResultText(
+            name: "exec_command",
+            arguments: "{\"cmd\":\"swift test\"}",
+            output: "passed"
+        )
+
+        let result = ChatFinalAssistantMessageReconciler.messagesByReconcilingFinalAssistantText(
+            [user],
+            streamedMessageIDs: [],
+            finalText: finalText,
+            modelId: nil,
+            reasoningLevel: nil
+        )
+
+        #expect(result.didMutate)
+        #expect(result.messages.last?.toolEvent?.kind == .result)
+        #expect(result.messages.last?.toolEvent?.name == "exec_command")
+        #expect(result.messages.last?.toolEvent?.output == "passed")
+    }
+
+    @Test("updates streamed message with structured tool event for final tool transcript")
+    func updatesStreamedMessageWithStructuredToolEventForFinalToolTranscript() {
+        let streamed = PersistedChatMessage(role: .assistant, text: "running")
+        let finalText = ChatToolTranscriptFormatter.toolOutputText("done", name: "exec_command")
+
+        let result = ChatFinalAssistantMessageReconciler.messagesByReconcilingFinalAssistantText(
+            [streamed],
+            streamedMessageIDs: [streamed.id],
+            finalText: finalText,
+            modelId: nil,
+            reasoningLevel: nil
+        )
+
+        #expect(result.didMutate)
+        #expect(result.messages.count == 1)
+        #expect(result.messages[0].id == streamed.id)
+        #expect(result.messages[0].toolEvent?.kind == .output)
+        #expect(result.messages[0].toolEvent?.outputName == "exec_command")
+        #expect(result.messages[0].toolEvent?.output == "done")
+    }
 }

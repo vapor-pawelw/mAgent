@@ -15,6 +15,7 @@
 - `ChatToolTranscriptFormatter.presentation(for:)` is the presentation adapter from structured tool events to the disclosure UI copy/body.
 - `ChatMessageDisplayPlanner.plan(for:)` is the UI-facing classification boundary. It turns persisted messages into ordinary message, tool, or status display plans.
 - `ChatMessageBubbleView` consumes `ChatMessageDisplayPlanner` output, renders tool plans as assistant-side disclosure rows, renders cancellation/error/approval-block states as status-styled assistant bubbles, and hides tool detail bodies while collapsed.
+- `ChatFinalAssistantMessageReconciler` attaches `toolEvent` when final assistant text is itself a tool transcript, so live completions and restored transcripts follow the same presentation path.
 - `CodexChatTranscriptReconciler` and `ClaudeChatTranscriptReconciler` pair matching tool calls/results into one persisted message when transcript IDs are available, falling back to standalone output messages when a pair cannot be found.
   Restored tool messages should carry both backward-compatible transcript text and `toolEvent`.
 
