@@ -266,12 +266,15 @@ final class StickyHeaderOverlayView: NSView {
     }
 
     func configureProjectAddButton(
+        projectId: UUID?,
         target: AnyObject?,
         action: Selector,
         toolTip: String?,
         menu: NSMenu?,
         isEnabled: Bool
     ) {
+        projectAddButton.objectValue = projectId?.uuidString
+        projectAddButton.isHidden = projectId == nil
         projectAddButton.target = target
         projectAddButton.action = action
         projectAddButton.toolTip = toolTip
@@ -373,6 +376,15 @@ final class StickyHeaderOverlayView: NSView {
     }
 
     // MARK: - Click Handling
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden else { return nil }
+        let buttonPoint = projectAddButton.convert(point, from: self)
+        if let hitView = projectAddButton.hitTest(buttonPoint) {
+            return hitView
+        }
+        return super.hitTest(point)
+    }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)

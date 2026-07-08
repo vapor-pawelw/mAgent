@@ -730,6 +730,7 @@ final class ThreadListViewController: NSViewController {
         guard let sidebarProject,
               let project = currentSettings.projects.first(where: { $0.id == sidebarProject.projectId }) else {
             stickyHeaderOverlay.configureProjectAddButton(
+                projectId: nil,
                 target: nil,
                 action: #selector(addThreadForProjectTapped(_:)),
                 toolTip: nil,
@@ -740,6 +741,7 @@ final class ThreadListViewController: NSViewController {
         }
 
         stickyHeaderOverlay.configureProjectAddButton(
+            projectId: project.id,
             target: self,
             action: #selector(addThreadForProjectTapped(_:)),
             toolTip: "Add thread to \(project.name). Right-click for agent options. Option-click to use project default.",

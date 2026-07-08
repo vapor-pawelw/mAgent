@@ -59,5 +59,6 @@
 - Fixed sticky section headers not blurring the sidebar content underneath.
 - Fixed sticky repository headers disappearing in the gap before the next repository header takes over.
 - Kept the add-thread `+` button visible on sticky repository headers.
+- Fixed the add-thread `+` button on sticky repository headers not responding to clicks.
 - Fixed sidebar thread clicks getting ignored after interrupted drag interactions.
 - Fixed the sidebar add-repository menu so create and import actions open reliably.
