@@ -11,6 +11,7 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
     case popOutThread
     case detachTab
     case toggleSidebar
+    case recenterCurrentThread
 
     public var displayName: String {
         switch self {
@@ -24,6 +25,7 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
         case .popOutThread: "Pop Out Thread"
         case .detachTab: "Detach Tab"
         case .toggleSidebar: "Toggle Sidebar"
+        case .recenterCurrentThread: "Recenter Current Thread"
         }
     }
 
@@ -39,6 +41,7 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
         case .popOutThread: KeyBinding(keyCode: 31, modifiers: [.command, .shift]) // Cmd+Shift+O
         case .detachTab: KeyBinding(keyCode: 2, modifiers: [.command, .shift]) // Cmd+Shift+D
         case .toggleSidebar: KeyBinding(keyCode: 1, modifiers: [.command, .control]) // Cmd+Ctrl+S
+        case .recenterCurrentThread: KeyBinding(keyCode: 38, modifiers: [.command]) // Cmd+J
         }
     }
 }

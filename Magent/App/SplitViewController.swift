@@ -348,6 +348,10 @@ final class SplitViewController: NSSplitViewController {
             toggleSidebar(nil)
             return nil
         }
+        if matchesBinding(.recenterCurrentThread, keyCode: event.keyCode, modifiers: eventModifiers) {
+            performRecenterCurrentThreadShortcut(contextThreadId: nil)
+            return nil
+        }
 
         return event
     }
@@ -576,6 +580,18 @@ final class SplitViewController: NSSplitViewController {
 
         guard let currentDetailVC else { return false }
         currentDetailVC.detachCurrentTabFromKeyboard()
+        return true
+    }
+
+    @discardableResult
+    func performRecenterCurrentThreadShortcut(contextThreadId: UUID?) -> Bool {
+        guard let threadId = contextThreadId ?? selectedThreadForContextRouting()?.id else {
+            NSSound.beep()
+            return false
+        }
+
+        revealSidebarIfHidden()
+        threadListVC.centerAndPulseThreadRow(byId: threadId)
         return true
     }
 

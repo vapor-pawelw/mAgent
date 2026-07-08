@@ -10,6 +10,7 @@
 - Periodic sidebar refreshes should not scroll the thread list back to the top while the user is reading older rows.
 - Periodic sidebar refreshes should not yank the current selection back into view if the user has intentionally scrolled elsewhere in the list.
 - On app launch, once the sidebar has finished loading and layout has settled, the selected thread may be centered once so startup focus lands on the active context.
+- `Cmd+J` and `View > Recenter Current Thread` recenter the sidebar on the active thread, matching the current-thread strip and bottom selected-thread jump capsule behavior.
 
 ## Implementation Notes
 

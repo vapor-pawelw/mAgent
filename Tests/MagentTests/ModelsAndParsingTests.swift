@@ -3,6 +3,22 @@ import Foundation
 import Testing
 import MagentCore
 
+// MARK: - KeyBinding
+
+@Suite("KeyBinding defaults")
+struct KeyBindingDefaultsTests {
+
+    @Test("Recenter current thread defaults to Cmd+J")
+    func recenterCurrentThreadDefaultsToCommandJ() {
+        let binding = KeyBindingSettings().binding(for: .recenterCurrentThread)
+
+        #expect(binding.keyCode == 38)
+        #expect(binding.modifiers == [.command])
+        #expect(binding.menuKeyEquivalent == "j")
+        #expect(binding.displayString == "\u{2318}J")
+    }
+}
+
 // MARK: - SemanticVersion
 
 @Suite("SemanticVersion parsing")
