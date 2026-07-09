@@ -62,6 +62,8 @@ A JSON file defines available models and reasoning levels per agent. The file li
 
 Each agent independently remembers its last-selected model. Reasoning level is remembered **per model** (not just per agent), so switching between e.g. Opus and Sonnet restores each model's own last-used reasoning level.
 
+When no previous Codex model/reasoning selection exists, Magent defaults Codex launches to `gpt-5.6-sol` with `low` reasoning. Saved user selections still take precedence after the first explicit picker or slash-command change.
+
 Storage keys in `agent-last-selections.json`:
 - `model:<agent>` — e.g. `model:claude` → `"fable"`
 - `reasoning:<agent>:<model>` — e.g. `reasoning:claude:fable` → `"high"`

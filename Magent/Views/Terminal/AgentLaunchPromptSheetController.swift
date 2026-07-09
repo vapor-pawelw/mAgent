@@ -267,6 +267,8 @@ struct AgentLaunchSheetPrefill {
 enum AgentLastSelectionStore {
     private static let persistence = PersistenceService.shared
     private static let globalKey = "global"
+    private static let defaultCodexModel = "gpt-5.6-sol"
+    private static let defaultCodexReasoning = "low"
 
     static func lastSelection(for scope: AgentLaunchPromptDraftScope) -> String? {
         let selections = persistence.loadAgentLastSelections()
@@ -295,11 +297,19 @@ enum AgentLastSelectionStore {
     private static func codexFastModeKey(for agentType: AgentType) -> String { "fastMode:\(agentType.rawValue)" }
 
     static func lastModel(for agentType: AgentType) -> String? {
-        persistence.loadAgentLastSelections()[modelKey(for: agentType)]
+        let selections = persistence.loadAgentLastSelections()
+        if let model = selections[modelKey(for: agentType)] {
+            return model
+        }
+        return agentType == .codex ? defaultCodexModel : nil
     }
 
     static func lastReasoning(for agentType: AgentType, modelId: String?) -> String? {
-        persistence.loadAgentLastSelections()[reasoningKey(for: agentType, modelId: modelId)]
+        let selections = persistence.loadAgentLastSelections()
+        if let reasoning = selections[reasoningKey(for: agentType, modelId: modelId)] {
+            return reasoning
+        }
+        return agentType == .codex && modelId == defaultCodexModel ? defaultCodexReasoning : nil
     }
 
     static func lastCodexFastMode(for agentType: AgentType) -> Bool {
