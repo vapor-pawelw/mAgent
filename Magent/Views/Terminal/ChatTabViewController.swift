@@ -730,38 +730,6 @@ private final class ChatMessageTextView: NSTextView {
     }
 }
 
-private final class ChatTimestampLabel: NSTextField {
-    var fullTimestampText: String = ""
-    var onPrimaryClick: (() -> Void)?
-
-    override func mouseDown(with event: NSEvent) {
-        if event.type == .leftMouseDown, event.clickCount == 1 {
-            onPrimaryClick?()
-            return
-        }
-        super.mouseDown(with: event)
-    }
-
-    override func menu(for event: NSEvent) -> NSMenu? {
-        let menu = NSMenu()
-        let copyItem = NSMenuItem(
-            title: String(localized: .ThreadStrings.chatTimestampCopyFullTimeAction),
-            action: #selector(copyFullTimestamp(_:)),
-            keyEquivalent: ""
-        )
-        copyItem.target = self
-        copyItem.isEnabled = !fullTimestampText.isEmpty
-        menu.addItem(copyItem)
-        return menu
-    }
-
-    @objc private func copyFullTimestamp(_ sender: Any?) {
-        guard !fullTimestampText.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(fullTimestampText, forType: .string)
-    }
-}
-
 private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private let container = NSView()
     private let contentStack = NSStackView()
@@ -771,10 +739,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private let toolDisclosureButton = NSButton(title: "", target: nil, action: nil)
     private let loadingProgressIndicator = NSProgressIndicator()
     private let loadingStatusLabel = NSTextField(labelWithString: "")
-    private let timestampLabel = ChatTimestampLabel(labelWithString: "")
     private let createdAt: Date
-    private let sentModelLabel: String?
-    private let sentReasoningLevel: String?
     private let onOpenLink: ((String) -> Void)?
     private let onOpenAttachment: ((PersistedChatAttachment) -> Void)?
     private let isQueuedSubmissionPending: Bool
@@ -787,9 +752,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private let minBubbleWidth: CGFloat = 44
     private var bubbleHorizontalPadding: CGFloat { isUnboxedAssistant ? 0 : 24 }
     private var bubbleVerticalPadding: CGFloat { isUnboxedAssistant ? 8 : 20 }
-    private var bubbleHoverTrackingArea: NSTrackingArea?
-    private var isPointerHoveringBubble = false
-    private var timestampDisplayMode: ChatTimestampDisplayMode = .relative
     private var messageAttachmentStripHeight: CGFloat = 0
     private var messageTextHidden = false
     private var toolPresentation: ChatToolTranscriptPresentation?
@@ -817,8 +779,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         onOpenAttachment: ((PersistedChatAttachment) -> Void)? = nil
     ) {
         self.createdAt = message.createdAt
-        self.sentModelLabel = Self.resolvedModelLabel(for: message.modelId, agentType: agentType)
-        self.sentReasoningLevel = message.reasoningLevel
         self.onOpenLink = onOpenLink
         self.onOpenAttachment = onOpenAttachment
         self.isQueuedSubmissionPending = queuedSubmissionPending
@@ -850,18 +810,17 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         container.layer?.masksToBounds = true
         addSubview(container)
 
-        timestampLabel.stringValue = Self.formattedTimestamp(message.createdAt)
-        timestampLabel.font = .systemFont(ofSize: max(8, fontSize - 6), weight: .regular)
-        timestampLabel.textColor = .secondaryLabelColor
-        timestampLabel.isSelectable = false
-        timestampLabel.allowsEditingTextAttributes = false
-        timestampLabel.isHidden = isLoadingIndicatorBubble
-        timestampLabel.onPrimaryClick = { [weak self] in
-            self?.toggleTimestampDisplayMode()
-        }
         let exactTimestampTooltip = Self.exactTimestampTooltip(message.createdAt)
-        timestampLabel.fullTimestampText = exactTimestampTooltip
-        timestampLabel.toolTip = exactTimestampTooltip
+        let metadataText = Self.hoverMetadataText(
+            modelLabel: Self.resolvedModelLabel(for: message.modelId, agentType: agentType),
+            reasoningLevel: message.reasoningLevel
+        )
+        let metadataTooltip = ChatTimestampPresentation.metadataTooltip(
+            exactText: exactTimestampTooltip,
+            metadataText: metadataText
+        )
+        toolTip = metadataTooltip
+        container.toolTip = metadataTooltip
 
         let baseTextColor: NSColor
         let codeColor: NSColor
@@ -875,7 +834,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             if isQueuedSubmissionPending {
                 container.alphaValue = 0.65
             }
-            timestampLabel.alignment = .right
         case .system:
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 container.layer?.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.10).cgColor
@@ -884,8 +842,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             }
             baseTextColor = NSColor(resource: .textSecondary)
             codeColor = baseTextColor
-            timestampLabel.alignment = .center
-            timestampLabel.isHidden = true
         case .assistant:
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 let bubbleColor = isUnboxedAssistant
@@ -906,7 +862,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 baseTextColor = appearance.agentTextColor
                 codeColor = NSColor(resource: .textSecondary)
             }
-            timestampLabel.alignment = .left
         }
 
         if isLoadingIndicatorBubble {
@@ -920,6 +875,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             loadingProgressIndicator.style = .spinning
             loadingProgressIndicator.controlSize = .small
             loadingProgressIndicator.isIndeterminate = true
+            loadingProgressIndicator.toolTip = metadataTooltip
             loadingProgressIndicator.startAnimation(nil)
             loadingStack.addArrangedSubview(loadingProgressIndicator)
 
@@ -927,6 +883,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             loadingStatusLabel.font = .systemFont(ofSize: fontSize, weight: .regular)
             loadingStatusLabel.textColor = baseTextColor.withAlphaComponent(0.6)
             loadingStatusLabel.lineBreakMode = .byTruncatingTail
+            loadingStatusLabel.toolTip = metadataTooltip
             loadingStatusLabel.stringValue = Self.loadingStatusText(
                 placeholderText: loadingPlaceholderText,
                 startedAt: createdAt
@@ -959,6 +916,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             messageTextView.textContainer?.widthTracksTextView = false
             messageTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
             messageTextView.delegate = self
+            messageTextView.toolTip = metadataTooltip
             messageTextView.linkTextAttributes = [
                 .foregroundColor: NSColor.appPrimary,
                 .font: NSFont.systemFont(ofSize: fontSize, weight: .regular),
@@ -1025,6 +983,8 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
             if let toolPresentation {
                 configureToolDisclosureButton(presentation: toolPresentation, fontSize: fontSize, textColor: baseTextColor)
+                toolDisclosureButton.toolTip = metadataTooltip
+                toolKindImageView.toolTip = metadataTooltip
                 contentStack.addArrangedSubview(toolHeaderStack)
                 toolHeaderStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
             }
@@ -1044,22 +1004,11 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             }
         }
 
-        let timestampRow = NSStackView()
-        timestampRow.translatesAutoresizingMaskIntoConstraints = false
-        timestampRow.orientation = .horizontal
-        timestampRow.alignment = .centerY
-        timestampRow.spacing = 0
-
         let bubbleRow = NSStackView()
         bubbleRow.translatesAutoresizingMaskIntoConstraints = false
         bubbleRow.orientation = .horizontal
         bubbleRow.alignment = .centerY
         bubbleRow.spacing = 8
-
-        let timestampSpacer = NSView()
-        timestampSpacer.translatesAutoresizingMaskIntoConstraints = false
-        timestampSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        timestampSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let bubbleSpacer = NSView()
         bubbleSpacer.translatesAutoresizingMaskIntoConstraints = false
@@ -1068,19 +1017,12 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
         switch displayRole {
         case .user:
-            timestampRow.addArrangedSubview(timestampSpacer)
-            timestampRow.addArrangedSubview(timestampLabel)
             bubbleRow.addArrangedSubview(bubbleSpacer)
             bubbleRow.addArrangedSubview(container)
         case .assistant:
-            timestampRow.addArrangedSubview(timestampLabel)
-            timestampRow.addArrangedSubview(timestampSpacer)
             bubbleRow.addArrangedSubview(container)
             bubbleRow.addArrangedSubview(bubbleSpacer)
         case .system:
-            timestampRow.addArrangedSubview(timestampSpacer)
-            timestampRow.addArrangedSubview(timestampLabel)
-            timestampRow.addArrangedSubview(NSView())
             bubbleRow.addArrangedSubview(bubbleSpacer)
             bubbleRow.addArrangedSubview(container)
             let trailingSpacer = NSView()
@@ -1090,22 +1032,15 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             bubbleRow.addArrangedSubview(trailingSpacer)
         }
 
-        let outer = NSStackView()
-        outer.translatesAutoresizingMaskIntoConstraints = false
-        outer.orientation = .vertical
-        outer.alignment = .leading
-        outer.spacing = 4
-        outer.addArrangedSubview(bubbleRow)
-        outer.addArrangedSubview(timestampRow)
-        addSubview(outer)
+        addSubview(bubbleRow)
 
         NSLayoutConstraint.activate([
             container.widthAnchor.constraint(lessThanOrEqualToConstant: maxBubbleWidth),
 
-            outer.topAnchor.constraint(equalTo: topAnchor),
-            outer.leadingAnchor.constraint(equalTo: leadingAnchor),
-            outer.trailingAnchor.constraint(equalTo: trailingAnchor),
-            outer.bottomAnchor.constraint(equalTo: bottomAnchor),
+            bubbleRow.topAnchor.constraint(equalTo: topAnchor),
+            bubbleRow.leadingAnchor.constraint(equalTo: leadingAnchor),
+            bubbleRow.trailingAnchor.constraint(equalTo: trailingAnchor),
+            bubbleRow.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
         if !isLoadingIndicatorBubble {
@@ -1129,34 +1064,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
-        if let bubbleHoverTrackingArea {
-            removeTrackingArea(bubbleHoverTrackingArea)
-        }
-        let trackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        bubbleHoverTrackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
-        isPointerHoveringBubble = true
-        refreshTimestampPresentation()
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
-        isPointerHoveringBubble = false
-        refreshTimestampPresentation()
     }
 
     override func layout() {
@@ -1214,8 +1121,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             needsUpdateConstraints = true
             needsLayout = true
             layoutSubtreeIfNeeded()
-        } else {
-            refreshTimestampPresentation(now: now)
         }
     }
 
@@ -1265,27 +1170,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             line.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.65).cgColor
         }
         return line
-    }
-
-    private func refreshTimestampPresentation(now: Date = Date()) {
-        let hoverText: String?
-        if isPointerHoveringBubble {
-            hoverText = Self.hoverMetadataText(modelLabel: sentModelLabel, reasoningLevel: sentReasoningLevel)
-        } else {
-            hoverText = nil
-        }
-        timestampLabel.stringValue = ChatTimestampPresentation.displayText(
-            mode: timestampDisplayMode,
-            relativeText: Self.formattedTimestamp(createdAt, now: now),
-            exactText: Self.exactTimestampTooltip(createdAt),
-            hoverText: hoverText
-        )
-    }
-
-    private func toggleTimestampDisplayMode() {
-        guard !isLoadingIndicatorBubble else { return }
-        timestampDisplayMode.toggle()
-        refreshTimestampPresentation()
     }
 
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
@@ -1704,14 +1588,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         }
     }
 
-    private static func formattedTimestamp(_ date: Date, now: Date = Date()) -> String {
-        let age = now.timeIntervalSince(date)
-        if age >= 0, age < 60 {
-            return String(localized: .ThreadStrings.chatRelativeTimeLessThanMinuteAgo)
-        }
-        return relativeTimestampFormatter.localizedString(for: date, relativeTo: now)
-    }
-
     private static func exactTimestampTooltip(_ date: Date) -> String {
         exactTimestampFormatter.string(from: date)
     }
@@ -1745,14 +1621,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         formatter.timeZone = .autoupdatingCurrent
         formatter.dateStyle = .long
         formatter.timeStyle = .medium
-        return formatter
-    }()
-
-    private static let relativeTimestampFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = .autoupdatingCurrent
-        formatter.dateTimeStyle = .named
-        formatter.unitsStyle = .full
         return formatter
     }()
 
@@ -1989,7 +1857,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         messagesStack.translatesAutoresizingMaskIntoConstraints = false
         messagesStack.orientation = .vertical
         messagesStack.alignment = .leading
-        messagesStack.spacing = 8
+        messagesStack.spacing = 12
 
         doc.addSubview(messagesStack)
         scrollView.documentView = doc

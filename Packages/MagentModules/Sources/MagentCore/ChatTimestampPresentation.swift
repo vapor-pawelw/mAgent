@@ -1,34 +1,14 @@
 import Foundation
 
-public enum ChatTimestampDisplayMode: Sendable, Equatable {
-    case relative
-    case exact
-
-    public mutating func toggle() {
-        switch self {
-        case .relative:
-            self = .exact
-        case .exact:
-            self = .relative
-        }
-    }
-}
-
 public enum ChatTimestampPresentation {
-    public static func displayText(
-        mode: ChatTimestampDisplayMode,
-        relativeText: String,
+    public static func metadataTooltip(
         exactText: String,
-        hoverText: String?
+        metadataText: String?
     ) -> String {
-        switch mode {
-        case .exact:
-            return exactText
-        case .relative:
-            if let hoverText, !hoverText.isEmpty {
-                return hoverText
-            }
-            return relativeText
+        if let metadataText = metadataText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !metadataText.isEmpty {
+            return "\(exactText)\n\(metadataText)"
         }
+        return exactText
     }
 }
