@@ -39,6 +39,7 @@
 
 #### Improvements
 
+- Added a default `Cmd+J` shortcut and View menu action to recenter the sidebar on the current thread.
 - Keep moved or missing repositories visible with recovery and discard actions.
 - Refresh missing-repository status when Magent returns to the foreground.
 - Center the missing-repository recovery row content within its sidebar box.

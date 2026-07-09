@@ -313,6 +313,17 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             return nil
         }
 
+        let recenterBinding = bindings.binding(for: .recenterCurrentThread)
+        if event.keyCode == recenterBinding.keyCode
+            && flags == recenterBinding.modifiers.nsEventFlags {
+            if let appDelegate = NSApp.delegate as? AppDelegate,
+               appDelegate.handleRecenterCurrentThreadShortcutFromActiveContext() {
+                return nil
+            }
+            NSSound.beep()
+            return nil
+        }
+
         return event
     }
 

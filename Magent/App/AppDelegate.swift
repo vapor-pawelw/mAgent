@@ -311,6 +311,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             action: #selector(NSSplitViewController.toggleSidebar(_:)),
             keyEquivalent: ""
         )
+        viewMenu.addItem(
+            withTitle: "Recenter Current Thread",
+            action: #selector(recenterCurrentThreadFromActiveContext(_:)),
+            keyEquivalent: ""
+        )
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
@@ -459,6 +464,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         guard let split = coordinator?.mainSplitViewController() else { return false }
         let context = activeThreadActionContext()
         return split.performReopenLastClosedTabShortcut(contextThreadId: context.contextThreadId)
+    }
+
+    @objc func recenterCurrentThreadFromActiveContext(_ sender: Any?) {
+        guard handleRecenterCurrentThreadShortcutFromActiveContext() else {
+            NSSound.beep()
+            return
+        }
+    }
+
+    func handleRecenterCurrentThreadShortcutFromActiveContext() -> Bool {
+        guard let split = coordinator?.mainSplitViewController() else { return false }
+        let context = activeThreadActionContext()
+        return split.performRecenterCurrentThreadShortcut(contextThreadId: context.contextThreadId)
     }
 
     @objc private func showAboutPanel(_ sender: Any?) {
