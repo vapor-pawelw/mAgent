@@ -763,15 +763,13 @@ private final class ChatTimestampLabel: NSTextField {
 }
 
 private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
-    private static let loadingBorderRotationAnimationKey = "chat-loading-border-rotation"
-    private static var sharedLoadingBorderAnimationEpoch: CFTimeInterval = 0
-
     private let container = NSView()
     private let contentStack = NSStackView()
     private let messageTextView = ChatMessageTextView()
     private let toolHeaderStack = NSStackView()
     private let toolKindImageView = NSImageView()
     private let toolDisclosureButton = NSButton(title: "", target: nil, action: nil)
+    private let loadingProgressIndicator = NSProgressIndicator()
     private let loadingStatusLabel = NSTextField(labelWithString: "")
     private let timestampLabel = ChatTimestampLabel(labelWithString: "")
     private let createdAt: Date
@@ -785,12 +783,10 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private var bubbleWidthConstraint: NSLayoutConstraint?
     private let isLoadingIndicatorBubble: Bool
     private let isUnboxedAssistant: Bool
-    private let loadingBubbleCornerRadius: CGFloat = 10
     private var maxBubbleWidth: CGFloat { isUnboxedAssistant ? 760 : 560 }
     private let minBubbleWidth: CGFloat = 44
     private var bubbleHorizontalPadding: CGFloat { isUnboxedAssistant ? 0 : 24 }
     private var bubbleVerticalPadding: CGFloat { isUnboxedAssistant ? 8 : 20 }
-    private var loadingBorderContainerLayer: CALayer?
     private var bubbleHoverTrackingArea: NSTrackingArea?
     private var isPointerHoveringBubble = false
     private var timestampDisplayMode: ChatTimestampDisplayMode = .relative
@@ -838,9 +834,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         case .status(let presentation):
             self.statusPresentation = presentation
         }
-        self.isUnboxedAssistant = displayPlan.role == .assistant
-            && !self.isLoadingIndicatorBubble
-            && self.statusPresentation == nil
+        self.isUnboxedAssistant = displayPlan.role == .assistant && self.statusPresentation == nil
         self.toolExpanded = self.toolPresentation?.isExpandedByDefault ?? false
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -852,7 +846,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
         container.translatesAutoresizingMaskIntoConstraints = false
         container.wantsLayer = true
-        container.layer?.cornerRadius = isLoadingIndicatorBubble ? loadingBubbleCornerRadius : 14
+        container.layer?.cornerRadius = isUnboxedAssistant ? 0 : 14
         container.layer?.masksToBounds = true
         addSubview(container)
 
@@ -916,6 +910,19 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         }
 
         if isLoadingIndicatorBubble {
+            let loadingStack = NSStackView()
+            loadingStack.translatesAutoresizingMaskIntoConstraints = false
+            loadingStack.orientation = .horizontal
+            loadingStack.alignment = .centerY
+            loadingStack.spacing = 7
+
+            loadingProgressIndicator.translatesAutoresizingMaskIntoConstraints = false
+            loadingProgressIndicator.style = .spinning
+            loadingProgressIndicator.controlSize = .small
+            loadingProgressIndicator.isIndeterminate = true
+            loadingProgressIndicator.startAnimation(nil)
+            loadingStack.addArrangedSubview(loadingProgressIndicator)
+
             loadingStatusLabel.translatesAutoresizingMaskIntoConstraints = false
             loadingStatusLabel.font = .systemFont(ofSize: fontSize, weight: .regular)
             loadingStatusLabel.textColor = baseTextColor.withAlphaComponent(0.6)
@@ -924,14 +931,14 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 placeholderText: loadingPlaceholderText,
                 startedAt: createdAt
             )
-            container.addSubview(loadingStatusLabel)
+            loadingStack.addArrangedSubview(loadingStatusLabel)
+            container.addSubview(loadingStack)
             NSLayoutConstraint.activate([
-                loadingStatusLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-                loadingStatusLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-                loadingStatusLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
-                loadingStatusLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
+                loadingStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                loadingStack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                loadingStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
+                loadingStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -4),
             ])
-            configureLoadingBubbleBorderAnimation()
         } else {
             contentStack.translatesAutoresizingMaskIntoConstraints = false
             contentStack.orientation = .vertical
@@ -1155,9 +1162,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     override func layout() {
         super.layout()
         guard !rendersAsSeparator else { return }
-        if isLoadingIndicatorBubble {
-            layoutLoadingBorderAnimationLayer()
-        } else {
+        if !isLoadingIndicatorBubble {
             updateBubbleLayout()
         }
     }
@@ -1204,12 +1209,11 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             loadingStatusLabel.stringValue = statusText
             loadingStatusLabel.invalidateIntrinsicContentSize()
 
-            // Loading bubbles do not use `updateBubbleLayout()`, so force an Auto Layout
-            // pass here before recomputing the animated border geometry.
+            // Loading rows do not use `updateBubbleLayout()`, so force an Auto Layout
+            // pass after the elapsed-time label changes.
             needsUpdateConstraints = true
             needsLayout = true
             layoutSubtreeIfNeeded()
-            layoutLoadingBorderAnimationLayer()
         } else {
             refreshTimestampPresentation(now: now)
         }
@@ -1534,116 +1538,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             glyphIndex = NSMaxRange(effectiveRange)
         }
         return maxWidth
-    }
-
-    private func configureLoadingBubbleBorderAnimation() {
-        guard let layer = container.layer else { return }
-        layer.borderWidth = 0
-        layer.borderColor = NSColor.clear.cgColor
-
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            effectiveAppearance.performAsCurrentDrawingAppearance {
-                layer.borderWidth = 1
-                layer.borderColor = NSColor.appPrimary.withAlphaComponent(0.35).cgColor
-            }
-            return
-        }
-
-        if let existing = loadingBorderContainerLayer {
-            if let gradient = existing.sublayers?.first as? CAGradientLayer,
-               gradient.animation(forKey: Self.loadingBorderRotationAnimationKey) == nil {
-                gradient.add(makeLoadingBorderRotationAnimation(), forKey: Self.loadingBorderRotationAnimationKey)
-            }
-            return
-        }
-
-        let borderContainer = CALayer()
-        borderContainer.frame = container.bounds
-        borderContainer.zPosition = 1
-        layer.addSublayer(borderContainer)
-
-        let gradient = CAGradientLayer()
-        gradient.type = .conic
-        gradient.startPoint = CGPoint(x: 0.5, y: 0.5)
-        gradient.endPoint = CGPoint(x: 0.5, y: 0)
-        gradient.locations = [0.0, 0.08, 0.16, 0.5, 0.84, 0.92, 1.0]
-        applyLoadingBorderGradientColors(gradient)
-        borderContainer.addSublayer(gradient)
-
-        let borderMask = CAShapeLayer()
-        borderMask.fillColor = nil
-        borderMask.strokeColor = NSColor.white.cgColor
-        borderMask.lineWidth = 1.5
-        borderContainer.mask = borderMask
-
-        if Self.sharedLoadingBorderAnimationEpoch == 0 {
-            Self.sharedLoadingBorderAnimationEpoch = CACurrentMediaTime()
-        }
-        gradient.add(makeLoadingBorderRotationAnimation(), forKey: Self.loadingBorderRotationAnimationKey)
-
-        loadingBorderContainerLayer = borderContainer
-        layoutLoadingBorderAnimationLayer()
-    }
-
-    private func makeLoadingBorderRotationAnimation() -> CABasicAnimation {
-        let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
-        rotation.fromValue = 0.0
-        rotation.toValue = CGFloat.pi * 2
-        rotation.duration = 2.2
-        rotation.repeatCount = .infinity
-        rotation.timingFunction = CAMediaTimingFunction(name: .linear)
-        rotation.beginTime = Self.sharedLoadingBorderAnimationEpoch
-        return rotation
-    }
-
-    private func applyLoadingBorderGradientColors(_ gradientLayer: CAGradientLayer) {
-        let bright = NSColor.appPrimary.withAlphaComponent(0.85)
-        let mid = NSColor.appPrimary.withAlphaComponent(0.45)
-        let dim = NSColor.appPrimary.withAlphaComponent(0.12)
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            gradientLayer.colors = [
-                bright.cgColor,
-                mid.cgColor,
-                dim.cgColor,
-                dim.cgColor,
-                dim.cgColor,
-                mid.cgColor,
-                bright.cgColor,
-            ]
-        }
-    }
-
-    private func layoutLoadingBorderAnimationLayer() {
-        guard let borderContainer = loadingBorderContainerLayer else { return }
-        guard !container.bounds.isEmpty else { return }
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-
-        borderContainer.frame = container.bounds
-        if let gradient = borderContainer.sublayers?.first as? CAGradientLayer {
-            let rect = container.bounds
-            let diagonal = sqrt(rect.width * rect.width + rect.height * rect.height)
-            gradient.frame = CGRect(
-                x: rect.midX - diagonal / 2,
-                y: rect.midY - diagonal / 2,
-                width: diagonal,
-                height: diagonal
-            )
-        }
-
-        if let borderMask = borderContainer.mask as? CAShapeLayer {
-            let borderRect = container.bounds.insetBy(dx: 0.75, dy: 0.75)
-            let cornerRadius = max(0, loadingBubbleCornerRadius - 0.75)
-            borderMask.path = CGPath(
-                roundedRect: borderRect,
-                cornerWidth: cornerRadius,
-                cornerHeight: cornerRadius,
-                transform: nil
-            )
-        }
-
-        CATransaction.commit()
     }
 
     private static func styledMarkdownText(
