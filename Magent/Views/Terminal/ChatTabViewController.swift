@@ -1940,14 +1940,6 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         composerContentStack.addArrangedSubview(attachmentsScrollView)
         attachmentsScrollView.widthAnchor.constraint(equalTo: composerContentStack.widthAnchor).isActive = true
 
-        let composerStack = NSStackView()
-        composerStack.translatesAutoresizingMaskIntoConstraints = false
-        composerStack.orientation = .horizontal
-        composerStack.alignment = .bottom
-        composerStack.spacing = 6
-        composerContentStack.addArrangedSubview(composerStack)
-        composerStack.widthAnchor.constraint(equalTo: composerContentStack.widthAnchor).isActive = true
-
         let inputScroll = NSScrollView()
         inputScroll.translatesAutoresizingMaskIntoConstraints = false
         inputScroll.drawsBackground = false
@@ -1991,7 +1983,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         inputScroll.documentView = inputTextView
 
         inputScrollView = inputScroll
-        composerStack.addArrangedSubview(inputScroll)
+        composerContentStack.addArrangedSubview(inputScroll)
+        inputScroll.widthAnchor.constraint(equalTo: composerContentStack.widthAnchor).isActive = true
 
         attachButton.translatesAutoresizingMaskIntoConstraints = false
         attachButton.title = ""
@@ -2002,7 +1995,6 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         attachButton.contentTintColor = .secondaryLabelColor
         attachButton.target = self
         attachButton.action = #selector(attachFilesTapped)
-        composerStack.insertArrangedSubview(attachButton, at: 0)
 
         sendButton.translatesAutoresizingMaskIntoConstraints = false
         sendButton.title = ""
@@ -2016,7 +2008,6 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         sendButton.target = self
         sendButton.action = #selector(sendTapped)
         sendButton.toolTip = "Return sends. Shift+Return inserts newline. Esc or Ctrl+C cancels running request."
-        composerStack.addArrangedSubview(sendButton)
 
         NSLayoutConstraint.activate([
             {
@@ -2058,15 +2049,15 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             object: scrollView.contentView
         )
 
-        setupModelReasoningRow(rootStack: rootStack)
+        setupModelReasoningRow(parentStack: composerContentStack)
     }
 
-    private func setupModelReasoningRow(rootStack: NSStackView) {
+    private func setupModelReasoningRow(parentStack: NSStackView) {
         modelReasoningRow.translatesAutoresizingMaskIntoConstraints = false
         modelReasoningRow.orientation = .horizontal
         modelReasoningRow.alignment = .centerY
-        modelReasoningRow.spacing = 8
-        rootStack.addArrangedSubview(modelReasoningRow)
+        modelReasoningRow.spacing = 6
+        parentStack.addArrangedSubview(modelReasoningRow)
 
         modelPicker.translatesAutoresizingMaskIntoConstraints = false
         modelPicker.controlSize = .small
@@ -2085,14 +2076,20 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
+        modelReasoningRow.addArrangedSubview(attachButton)
         modelReasoningRow.addArrangedSubview(modelPicker)
         modelReasoningRow.addArrangedSubview(reasoningPicker)
         modelReasoningRow.addArrangedSubview(spacer)
+        modelReasoningRow.addArrangedSubview(sendButton)
 
+        let preferredModelWidth = modelPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 180)
+        preferredModelWidth.priority = .defaultHigh
+        let preferredReasoningWidth = reasoningPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 116)
+        preferredReasoningWidth.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            modelReasoningRow.widthAnchor.constraint(equalTo: rootStack.widthAnchor),
-            modelPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
-            reasoningPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 116),
+            modelReasoningRow.widthAnchor.constraint(equalTo: parentStack.widthAnchor),
+            preferredModelWidth,
+            preferredReasoningWidth,
         ])
     }
 
