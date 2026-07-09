@@ -15,6 +15,7 @@ public struct ChatMarkdownFileLocation: Equatable {
 public enum ChatMarkdownLinkTarget: Equatable {
     case web(URL)
     case localFile(ChatMarkdownFileLocation)
+    case diffFile(String)
 }
 
 public enum ChatMarkdownLinkResolver {
@@ -29,6 +30,15 @@ public enum ChatMarkdownLinkResolver {
     public static func resolve(_ rawTarget: String, workingDirectory: String?) -> ChatMarkdownLinkTarget? {
         let trimmed = rawTarget.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
+
+        if let components = URLComponents(string: trimmed),
+           components.scheme?.lowercased() == "magent-diff",
+           components.host == "file",
+           let path = components.queryItems?.first(where: { $0.name == "path" })?.value?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !path.isEmpty {
+            return .diffFile(path)
+        }
 
         if let url = URL(string: trimmed),
            let scheme = url.scheme?.lowercased(),

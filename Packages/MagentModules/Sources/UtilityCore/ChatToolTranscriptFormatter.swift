@@ -168,11 +168,10 @@ public enum ChatToolTranscriptFormatter {
             let outputBody = formattedToolOutput(envelope)
             let argumentsBody = formattedToolResultArguments(arguments, toolName: name)
             let actionSummary = toolActionSummary(name: name, arguments: arguments)
-            let outputSummary = outputContentSummary(from: envelope, fallbackText: event.output ?? "")
-            let title = outputSummary.map { "\(actionSummary.completedTitle): \($0)" } ?? actionSummary.completedTitle
+            let title = resultTitle(actionSummary.completedTitle, exitCode: envelope.exitCode)
             return ChatToolTranscriptPresentation(
                 kind: .result,
-                title: abbreviated(title, maxLength: 140),
+                title: title,
                 detail: statusSummary(from: envelope, fallbackText: event.output ?? "", prefix: actionSummary.detail),
                 body: [outputBody, argumentsBody].filter { !$0.isEmpty }.joined(separator: "\n\n"),
                 isExpandedByDefault: shouldExpandOutput(envelope)
@@ -351,7 +350,13 @@ public enum ChatToolTranscriptFormatter {
             lines.append(section("Working directory", workdir))
         }
 
-        let primaryKeys = Set(["cmd", "command", "workdir"])
+        let hiddenTransportKeys = Set([
+            "login",
+            "max_output_tokens",
+            "tty",
+            "yield_time_ms",
+        ])
+        let primaryKeys = Set(["cmd", "command", "workdir"]).union(hiddenTransportKeys)
         let remaining = dictionary.keys
             .filter { !primaryKeys.contains($0) }
             .sorted()
@@ -635,7 +640,20 @@ public enum ChatToolTranscriptFormatter {
 
     private static func changedFilesSummary(_ files: [String]) -> String {
         guard !files.isEmpty else { return "No files detected" }
-        return files.joined(separator: "\n")
+        return files.map(changedFileLink).joined(separator: "\n")
+    }
+
+    private static func changedFileLink(_ path: String) -> String {
+        var components = URLComponents()
+        components.scheme = "magent-diff"
+        components.host = "file"
+        components.queryItems = [URLQueryItem(name: "path", value: path)]
+        guard let target = components.string else { return path }
+        let label = path
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "[", with: "\\[")
+            .replacingOccurrences(of: "]", with: "\\]")
+        return "[\(label)](\(target))"
     }
 
     private static func changedFilesInlineSummary(_ files: [String]) -> String? {
@@ -723,8 +741,8 @@ public enum ChatToolTranscriptFormatter {
         }
         if let exitCode = envelope.exitCode, exitCode != "0" {
             parts.append("exit \(exitCode)")
-        } else if let sessionID = envelope.sessionID {
-            parts.append("running \(sessionID)")
+        } else if envelope.sessionID != nil {
+            parts.append("running")
         }
         if !parts.isEmpty, let wallTime = envelope.wallTime {
             parts.append(wallTime)
@@ -757,6 +775,14 @@ public enum ChatToolTranscriptFormatter {
             return true
         }
         return false
+    }
+
+    private static func resultTitle(_ completedTitle: String, exitCode: String?) -> String {
+        guard let exitCode, exitCode != "0" else { return completedTitle }
+        if completedTitle.hasSuffix(" finished") {
+            return String(completedTitle.dropLast(" finished".count)) + " failed"
+        }
+        return "\(completedTitle) failed"
     }
 
     private static func abbreviated(_ text: String, maxLength: Int) -> String {

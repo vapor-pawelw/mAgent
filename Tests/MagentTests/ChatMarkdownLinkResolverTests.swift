@@ -71,6 +71,16 @@ struct ChatMarkdownLinkResolverTests {
         )
     }
 
+    @Test("Resolves an internal focused diff target without requiring the file to exist")
+    func resolvesFocusedDiffTarget() {
+        let resolved = ChatMarkdownLinkResolver.resolve(
+            "magent-diff://file?path=Packages%2FMagentModules%2FSources%2FChat%20UI.swift",
+            workingDirectory: nil
+        )
+
+        #expect(resolved == .diffFile("Packages/MagentModules/Sources/Chat UI.swift"))
+    }
+
     @Test("Rejects unsupported non-web URL schemes")
     func rejectsUnsupportedSchemes() {
         #expect(ChatMarkdownLinkResolver.resolve("mailto:test@example.com", workingDirectory: nil) == nil)

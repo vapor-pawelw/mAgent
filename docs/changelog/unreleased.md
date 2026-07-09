@@ -25,9 +25,10 @@
 
 - Added Codex fast mode to chat reasoning controls and the `/fast` chat shortcut.
 - Made assistant replies easier to read with a wider unboxed layout while keeping user prompts and important statuses visually distinct.
-- Show patch edits in chat as clean changed-file summaries instead of raw patch/output text.
+- Show patch edits in chat as clean changed-file links that open the focused diff instead of rendering raw patch/output text.
 - Compacted consecutive chat activity rows into a collapsed expandable summary with clear system icons so restored agent work is easier to scan.
 - Made chat tool activity cleaner by showing concise action summaries and keeping successful tool output collapsed by default.
+- Hid internal command transport settings and kept command results from replacing useful action summaries with arbitrary output text.
 - Show chat cancellations, errors, and approval-blocked Codex turns as clearer status bubbles.
 
 ### Terminal

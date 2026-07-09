@@ -548,6 +548,15 @@ extension ThreadDetailViewController {
             openChatMarkdownWebTab(url)
         case .localFile(let location):
             openChatMarkdownFileDestination(location)
+        case .diffFile(let relativePath):
+            NotificationCenter.default.post(
+                name: .magentShowDiffViewer,
+                object: nil,
+                userInfo: [
+                    "threadId": thread.id,
+                    "filePath": relativePath,
+                ]
+            )
         case nil:
             NSSound.beep()
         }

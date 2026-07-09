@@ -1984,7 +1984,7 @@ struct AgentChatRuntimeParsingTests {
         #expect(presentation?.title == "Run command")
         #expect(presentation?.detail == "rg hello")
         #expect(presentation?.body.contains("Command\nrg hello") == true)
-        #expect(presentation?.body.contains("Yield time: 1000 ms") == true)
+        #expect(presentation?.body.contains("Yield time") == false)
         #expect(presentation?.isExpandedByDefault == false)
     }
 
@@ -2061,6 +2061,23 @@ struct AgentChatRuntimeParsingTests {
         #expect(presentation?.isExpandedByDefault == false)
     }
 
+    @Test("Completed command presentation uses the command rather than output as its summary")
+    func completedCommandPresentationUsesCommandSummary() throws {
+        let presentation = try #require(ChatToolTranscriptFormatter.presentation(
+            for: ChatToolTranscriptFormatter.toolResultText(
+                name: "exec_command",
+                arguments: "{\"cmd\":\"git status --short\",\"yield_time_ms\":1000,\"max_output_tokens\":12000}",
+                output: "Exit code: 0\nOutput:\nM misleading-output.swift"
+            )
+        ))
+
+        #expect(presentation.title == "Command finished")
+        #expect(presentation.detail == "git status --short")
+        #expect(presentation.body.contains("Yield time") == false)
+        #expect(presentation.body.contains("Max output tokens") == false)
+        #expect(presentation.body.contains("M misleading-output.swift"))
+    }
+
     @Test("Tool transcript formatter labels paired tool output")
     func toolTranscriptFormatterLabelsPairedToolOutput() {
         let presentation = ChatToolTranscriptFormatter.presentation(
@@ -2112,7 +2129,8 @@ struct AgentChatRuntimeParsingTests {
         #expect(presentation?.kind == .call)
         #expect(presentation?.title == "Apply patch")
         #expect(presentation?.detail == "Packages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift")
-        #expect(presentation?.body.contains("Changed files\nPackages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift") == true)
+        #expect(presentation?.body.contains("Changed files\n[Packages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift]") == true)
+        #expect(presentation?.body.contains("(magent-diff://file?path=") == true)
         #expect(presentation?.body.contains("*** Begin Patch") == false)
     }
 
@@ -2141,7 +2159,8 @@ struct AgentChatRuntimeParsingTests {
         #expect(presentation?.kind == .result)
         #expect(presentation?.title == "Patch applied")
         #expect(presentation?.detail == "Packages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift")
-        #expect(presentation?.body.contains("Changed files\nPackages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift") == true)
+        #expect(presentation?.body.contains("Changed files\n[Packages/MagentModules/Sources/MagentModels/AgentModelsManifest.swift]") == true)
+        #expect(presentation?.body.contains("(magent-diff://file?path=") == true)
         #expect(presentation?.body.contains("Exit code: 0") == false)
         #expect(presentation?.body.contains("*** Begin Patch") == false)
     }
@@ -2186,7 +2205,7 @@ struct AgentChatRuntimeParsingTests {
         )
 
         #expect(presentation?.kind == .result)
-        #expect(presentation?.title == "Command finished: error: failed")
+        #expect(presentation?.title == "Command failed")
         #expect(presentation?.detail == "swift test · exit 1 · 1.2 seconds")
         #expect(presentation?.isExpandedByDefault == true)
     }
