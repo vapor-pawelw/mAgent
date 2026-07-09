@@ -212,6 +212,7 @@ private final class ChatAttachmentDropOverlayView: NSView {
 private final class ChatSurfaceDropView: NSView {
     var canAcceptDrop: ((NSPasteboard) -> Bool)?
     var onPerformDrop: ((NSPasteboard) -> Bool)?
+    var onAppearanceChanged: (() -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -226,6 +227,7 @@ private final class ChatSurfaceDropView: NSView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateBackgroundColor()
+        onAppearanceChanged?()
     }
 
     func updateBackgroundColor() {
@@ -1758,6 +1760,11 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     override func loadView() {
         rootDropView.wantsLayer = true
         rootDropView.updateBackgroundColor()
+        rootDropView.onAppearanceChanged = { [weak self] in
+            self?.updateComposerAppearance()
+            self?.updateSlashAutocompleteAppearance()
+            self?.updateScrollToBottomButtonAppearance()
+        }
         view = rootDropView
     }
 
@@ -1880,6 +1887,10 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
 
         let composerContainer = composerContainerView
         composerContainer.translatesAutoresizingMaskIntoConstraints = false
+        composerContainer.wantsLayer = true
+        composerContainer.layer?.cornerRadius = 12
+        composerContainer.layer?.borderWidth = 1
+        composerContainer.layer?.masksToBounds = true
         rootStack.addArrangedSubview(composerContainer)
 
         let composerContentStack = NSStackView()
@@ -1890,10 +1901,10 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         composerContainer.addSubview(composerContentStack)
 
         NSLayoutConstraint.activate([
-            composerContentStack.leadingAnchor.constraint(equalTo: composerContainer.leadingAnchor),
-            composerContentStack.trailingAnchor.constraint(equalTo: composerContainer.trailingAnchor),
-            composerContentStack.topAnchor.constraint(equalTo: composerContainer.topAnchor),
-            composerContentStack.bottomAnchor.constraint(equalTo: composerContainer.bottomAnchor),
+            composerContentStack.leadingAnchor.constraint(equalTo: composerContainer.leadingAnchor, constant: 8),
+            composerContentStack.trailingAnchor.constraint(equalTo: composerContainer.trailingAnchor, constant: -8),
+            composerContentStack.topAnchor.constraint(equalTo: composerContainer.topAnchor, constant: 6),
+            composerContentStack.bottomAnchor.constraint(equalTo: composerContainer.bottomAnchor, constant: -6),
         ])
 
         composerContainer.addSubview(attachmentDropOverlayView)
@@ -1932,20 +1943,21 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         let composerStack = NSStackView()
         composerStack.translatesAutoresizingMaskIntoConstraints = false
         composerStack.orientation = .horizontal
-        composerStack.alignment = .centerY
-        composerStack.spacing = 8
+        composerStack.alignment = .bottom
+        composerStack.spacing = 6
         composerContentStack.addArrangedSubview(composerStack)
         composerStack.widthAnchor.constraint(equalTo: composerContentStack.widthAnchor).isActive = true
 
         let inputScroll = NSScrollView()
         inputScroll.translatesAutoresizingMaskIntoConstraints = false
         inputScroll.drawsBackground = false
-        inputScroll.borderType = .bezelBorder
+        inputScroll.borderType = .noBorder
         inputScroll.hasVerticalScroller = true
         inputScroll.autohidesScrollers = true
         inputScroll.scrollerStyle = .legacy
 
         inputTextView.isRichText = false
+        inputTextView.drawsBackground = false
         inputTextView.isEditable = true
         inputTextView.isSelectable = true
         inputTextView.font = .systemFont(ofSize: chatFontSize)
@@ -1985,17 +1997,20 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         attachButton.title = ""
         attachButton.image = NSImage(systemSymbolName: "paperclip", accessibilityDescription: "Attach")
         attachButton.imagePosition = .imageOnly
-        attachButton.bezelStyle = .rounded
+        attachButton.isBordered = false
         attachButton.controlSize = .regular
+        attachButton.contentTintColor = .secondaryLabelColor
         attachButton.target = self
         attachButton.action = #selector(attachFilesTapped)
-        composerStack.addArrangedSubview(attachButton)
+        composerStack.insertArrangedSubview(attachButton, at: 0)
 
         sendButton.translatesAutoresizingMaskIntoConstraints = false
         sendButton.title = ""
-        sendButton.image = NSImage(systemSymbolName: "arrow.up.circle.fill", accessibilityDescription: "Send")
+        let sendIconConfig = NSImage.SymbolConfiguration(pointSize: 22, weight: .semibold)
+        sendButton.image = NSImage(systemSymbolName: "arrow.up.circle.fill", accessibilityDescription: "Send")?
+            .withSymbolConfiguration(sendIconConfig)
         sendButton.imagePosition = .imageOnly
-        sendButton.bezelStyle = .rounded
+        sendButton.isBordered = false
         sendButton.controlSize = .large
         sendButton.contentTintColor = .appPrimary
         sendButton.target = self
@@ -2014,6 +2029,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             sendButton.widthAnchor.constraint(equalToConstant: 34),
             sendButton.heightAnchor.constraint(equalToConstant: 34),
         ])
+        updateComposerAppearance()
         reloadAttachmentChips()
 
         scrollToBottomButton.translatesAutoresizingMaskIntoConstraints = false
@@ -2145,6 +2161,17 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             slashAutocompleteContainer.layer?.backgroundColor = NSColor(resource: .surface).cgColor
             slashAutocompleteContainer.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+        }
+    }
+
+    private func updateComposerAppearance() {
+        composerContainerView.effectiveAppearance.performAsCurrentDrawingAppearance {
+            composerContainerView.layer?.backgroundColor = NSColor(resource: .surface)
+                .withAlphaComponent(0.82)
+                .cgColor
+            composerContainerView.layer?.borderColor = NSColor.separatorColor
+                .withAlphaComponent(0.55)
+                .cgColor
         }
     }
 
@@ -3226,6 +3253,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         reloadMessages(shouldScrollToBottom: false, forceFullReload: true)
         updateSlashAutocompleteAppearance()
         updateScrollToBottomButtonAppearance()
+        updateComposerAppearance()
         setAttachmentDropHoverActive(false)
         reloadAttachmentChips()
         configureModelReasoningPickers()
