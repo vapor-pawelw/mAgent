@@ -180,7 +180,7 @@ public enum ChatTranscriptDisplayCompactor {
         guard isActivitySummary(message) else { return nil }
         let lines = message.text.components(separatedBy: "\n")
         let detail = lines.dropFirst().first?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rows = lines.dropFirst(2).compactMap(activityRowText)
+        let rows = lines.dropFirst(2).compactMap(abbreviatedActivityRow)
         return ChatToolTranscriptPresentation(
             kind: .output,
             title: "Activity",
@@ -195,12 +195,13 @@ public enum ChatTranscriptDisplayCompactor {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func activityRowText(from line: String) -> String? {
+    private static func abbreviatedActivityRow(from line: String) -> String? {
         let parsed = sfSymbolName(fromActivitySummaryLine: line)
         let rawText = parsed?.text ?? line
         let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return "• \(abbreviatedActivityText(trimmed))"
+        guard let parsed else { return abbreviatedActivityText(trimmed) }
+        return "\(parsed.symbolName) \(abbreviatedActivityText(trimmed))"
     }
 
     private static func abbreviatedActivityText(_ text: String) -> String {

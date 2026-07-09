@@ -1685,6 +1685,27 @@ struct ChatTranscriptDisplayCompactorTests {
         #expect(compacted[0].text.contains("checkmark.circle Command finished: git status --short"))
         #expect(!compacted[0].text.contains("Command finished: M file.swift"))
     }
+
+    @Test("Activity disclosure preserves row symbols while hiding details by default")
+    func activityDisclosurePreservesProgressiveDetail() throws {
+        let message = PersistedChatMessage(
+            role: .assistant,
+            text: """
+            Activity
+            2 internal steps completed.
+            play.circle Run command: git status --short
+            checkmark.circle Command finished: git status --short
+            """
+        )
+
+        let presentation = try #require(ChatTranscriptDisplayCompactor.activityPresentation(for: message))
+
+        #expect(presentation.title == "Activity")
+        #expect(presentation.detail == "2 internal steps completed.")
+        #expect(presentation.body.contains("play.circle Run command: git status --short"))
+        #expect(presentation.body.contains("checkmark.circle Command finished: git status --short"))
+        #expect(!presentation.isExpandedByDefault)
+    }
 }
 
 // MARK: - PersistedDraftTab

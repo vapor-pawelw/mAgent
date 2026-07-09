@@ -769,6 +769,8 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private let container = NSView()
     private let contentStack = NSStackView()
     private let messageTextView = ChatMessageTextView()
+    private let toolHeaderStack = NSStackView()
+    private let toolKindImageView = NSImageView()
     private let toolDisclosureButton = NSButton(title: "", target: nil, action: nil)
     private let loadingStatusLabel = NSTextField(labelWithString: "")
     private let timestampLabel = ChatTimestampLabel(labelWithString: "")
@@ -782,11 +784,12 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private var bubbleHeightConstraint: NSLayoutConstraint?
     private var bubbleWidthConstraint: NSLayoutConstraint?
     private let isLoadingIndicatorBubble: Bool
+    private let isUnboxedAssistant: Bool
     private let loadingBubbleCornerRadius: CGFloat = 10
-    private let maxBubbleWidth: CGFloat = 560
+    private var maxBubbleWidth: CGFloat { isUnboxedAssistant ? 760 : 560 }
     private let minBubbleWidth: CGFloat = 44
-    private let bubbleHorizontalPadding: CGFloat = 24
-    private let bubbleVerticalPadding: CGFloat = 20
+    private var bubbleHorizontalPadding: CGFloat { isUnboxedAssistant ? 0 : 24 }
+    private var bubbleVerticalPadding: CGFloat { isUnboxedAssistant ? 8 : 20 }
     private var loadingBorderContainerLayer: CALayer?
     private var bubbleHoverTrackingArea: NSTrackingArea?
     private var isPointerHoveringBubble = false
@@ -835,6 +838,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         case .status(let presentation):
             self.statusPresentation = presentation
         }
+        self.isUnboxedAssistant = displayPlan.role == .assistant
+            && !self.isLoadingIndicatorBubble
+            && self.statusPresentation == nil
         self.toolExpanded = self.toolPresentation?.isExpandedByDefault ?? false
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -888,7 +894,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             timestampLabel.isHidden = true
         case .assistant:
             effectiveAppearance.performAsCurrentDrawingAppearance {
-                let bubbleColor = isLoadingIndicatorBubble ? NSColor(resource: .appBackground) : appearance.agentBubbleColor
+                let bubbleColor = isUnboxedAssistant
+                    ? NSColor.clear
+                    : (isLoadingIndicatorBubble ? NSColor(resource: .appBackground) : appearance.agentBubbleColor)
                 container.layer?.backgroundColor = bubbleColor.cgColor
             }
             if statusPresentation?.kind == .cancellation {
@@ -964,14 +972,23 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             messageTextHidden = renderedMessageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (toolPresentation != nil && !toolExpanded)
             let attributedMessage = NSMutableAttributedString(
                 attributedString: Self.styledMarkdownText(
-                    renderedMessageText,
+                    toolPresentation?.title == "Activity"
+                        ? ChatTranscriptDisplayCompactor.plainText(fromActivitySummary: renderedMessageText)
+                        : renderedMessageText,
                     baseColor: baseTextColor,
                     codeColor: codeColor,
                     linkColor: NSColor.appPrimary,
                     baseFontSize: fontSize
                 )
             )
-            if toolPresentation != nil {
+            if let toolPresentation, toolPresentation.title == "Activity" {
+                Self.applyActivitySummaryStyle(
+                    to: attributedMessage,
+                    rawText: toolPresentation.body,
+                    baseColor: baseTextColor,
+                    baseFontSize: fontSize
+                )
+            } else if toolPresentation != nil {
                 Self.applyToolTranscriptStyle(to: attributedMessage, baseColor: baseTextColor, baseFontSize: fontSize)
                 Self.applyDiffLineHighlights(to: attributedMessage, baseFontSize: fontSize)
             }
@@ -1001,7 +1018,8 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
             if let toolPresentation {
                 configureToolDisclosureButton(presentation: toolPresentation, fontSize: fontSize, textColor: baseTextColor)
-                contentStack.addArrangedSubview(toolDisclosureButton)
+                contentStack.addArrangedSubview(toolHeaderStack)
+                toolHeaderStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
             }
 
             messageTextView.translatesAutoresizingMaskIntoConstraints = false
@@ -1087,12 +1105,15 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             bubbleHeightConstraint = container.heightAnchor.constraint(equalToConstant: 20)
             bubbleHeightConstraint?.isActive = true
             bubbleWidthConstraint = container.widthAnchor.constraint(equalToConstant: maxBubbleWidth)
+            bubbleWidthConstraint?.priority = .defaultHigh
             bubbleWidthConstraint?.isActive = true
+            let horizontalInset: CGFloat = isUnboxedAssistant ? 0 : 12
+            let verticalInset: CGFloat = isUnboxedAssistant ? 4 : 10
             NSLayoutConstraint.activate([
-                contentStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-                contentStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-                contentStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
-                contentStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
+                contentStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: horizontalInset),
+                contentStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -horizontalInset),
+                contentStack.topAnchor.constraint(equalTo: container.topAnchor, constant: verticalInset),
+                contentStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -verticalInset),
                 messageTextView.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             ])
         }
@@ -1418,6 +1439,21 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private func configureToolDisclosureButton(presentation: ChatToolTranscriptPresentation, fontSize: CGFloat, textColor: NSColor) {
         toolDisclosureFontSize = fontSize
         toolDisclosureTextColor = textColor
+        toolHeaderStack.translatesAutoresizingMaskIntoConstraints = false
+        toolHeaderStack.orientation = .horizontal
+        toolHeaderStack.alignment = .firstBaseline
+        toolHeaderStack.spacing = 7
+
+        let iconConfig = NSImage.SymbolConfiguration(pointSize: max(11, fontSize - 1), weight: .medium)
+        toolKindImageView.translatesAutoresizingMaskIntoConstraints = false
+        toolKindImageView.image = NSImage(
+            systemSymbolName: Self.toolSymbolName(for: presentation),
+            accessibilityDescription: presentation.title
+        )?.withSymbolConfiguration(iconConfig)
+        toolKindImageView.contentTintColor = textColor.withAlphaComponent(0.68)
+        toolKindImageView.setContentHuggingPriority(.required, for: .horizontal)
+        toolHeaderStack.addArrangedSubview(toolKindImageView)
+
         toolDisclosureButton.translatesAutoresizingMaskIntoConstraints = false
         toolDisclosureButton.isBordered = false
         toolDisclosureButton.alignment = .left
@@ -1430,16 +1466,18 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         toolDisclosureButton.action = #selector(toggleToolExpanded)
         toolDisclosureButton.setButtonType(.momentaryChange)
         toolDisclosureButton.toolTip = "Click to expand tool details"
+        toolDisclosureButton.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        toolDisclosureButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        toolHeaderStack.addArrangedSubview(toolDisclosureButton)
         refreshToolDisclosureTitle()
     }
 
     private func refreshToolDisclosureTitle() {
         guard let toolPresentation else { return }
-        let chevron = toolExpanded ? "▾" : "▸"
         let title = NSMutableAttributedString()
         let baseFontSize = max(11, toolDisclosureFontSize - 1)
         title.append(NSAttributedString(
-            string: "\(chevron) \(toolPresentation.title)",
+            string: toolPresentation.title,
             attributes: [
                 .font: NSFont.systemFont(ofSize: baseFontSize, weight: .semibold),
                 .foregroundColor: toolDisclosureTextColor,
@@ -1457,6 +1495,26 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             ))
         }
         toolDisclosureButton.attributedTitle = title
+        let chevronName = toolExpanded ? "chevron.down" : "chevron.right"
+        toolDisclosureButton.image = NSImage(
+            systemSymbolName: chevronName,
+            accessibilityDescription: nil
+        )?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold))
+        toolDisclosureButton.imagePosition = .imageLeading
+        toolDisclosureButton.contentTintColor = toolDisclosureTextColor.withAlphaComponent(0.72)
+    }
+
+    private static func toolSymbolName(for presentation: ChatToolTranscriptPresentation) -> String {
+        if presentation.title == "Activity" { return "bolt.horizontal.circle" }
+        let title = presentation.title.lowercased()
+        if title.contains("patch") || title.contains("edit") { return "pencil.and.outline" }
+        if title.contains("read") { return "doc.text.magnifyingglass" }
+        if title.contains("command") { return presentation.kind == .result ? "terminal.fill" : "terminal" }
+        switch presentation.kind {
+        case .call: return "hammer"
+        case .output: return "text.alignleft"
+        case .result: return "checkmark.circle"
+        }
     }
 
     private static func maxLineWidth(in layoutManager: NSLayoutManager, textContainer: NSTextContainer) -> CGFloat {
@@ -1737,8 +1795,11 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             guard lineRange.location != NSNotFound, lineRange.length > 0 else { continue }
 
             let attachment = NSTextAttachment()
-            let image = NSImage(systemSymbolName: icon.symbolName, accessibilityDescription: nil)
-            image?.isTemplate = true
+            let symbolConfiguration = NSImage.SymbolConfiguration(
+                paletteColors: [baseColor.withAlphaComponent(0.62)]
+            )
+            let image = NSImage(systemSymbolName: icon.symbolName, accessibilityDescription: nil)?
+                .withSymbolConfiguration(symbolConfiguration)
             attachment.image = image
             attachment.bounds = NSRect(x: 0, y: -2, width: baseFontSize, height: baseFontSize)
             let iconString = NSMutableAttributedString(attachment: attachment)
