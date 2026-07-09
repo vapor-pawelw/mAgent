@@ -348,6 +348,20 @@ struct TmuxSessionNamingTests {
         #expect(name == "Codex (5.5)")
     }
 
+    @Test("GPT 5.6 Codex models expose expanded reasoning levels")
+    func codex56ReasoningOverrides() {
+        let config = AgentModelConfig(
+            models: [
+                AgentModel(id: "gpt-5.6-sol", label: "GPT 5.6 Sol", reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max"]),
+                AgentModel(id: "gpt-5.5", label: "GPT 5.5"),
+            ],
+            reasoningLevels: ["low", "medium", "high", "xhigh"]
+        )
+
+        #expect(config.effectiveReasoningLevels(for: "gpt-5.6-sol") == ["none", "low", "medium", "high", "xhigh", "max"])
+        #expect(config.effectiveReasoningLevels(for: "gpt-5.5") == ["low", "medium", "high", "xhigh"])
+    }
+
     @Test("Codex collapses multiple spaces and trims")
     func codexCollapse() {
         let name = TmuxSessionNaming.defaultTabDisplayName(for: .codex, modelLabel: "  gpt   5.4-mini  ")

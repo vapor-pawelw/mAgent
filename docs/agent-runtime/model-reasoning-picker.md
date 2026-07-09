@@ -31,6 +31,9 @@ A JSON file defines available models and reasoning levels per agent. The file li
     },
     "codex": {
       "models": [
+        { "id": "gpt-5.6-sol", "label": "GPT 5.6 Sol", "reasoningLevels": ["none", "low", "medium", "high", "xhigh", "max"] },
+        { "id": "gpt-5.6-terra", "label": "GPT 5.6 Terra", "reasoningLevels": ["none", "low", "medium", "high", "xhigh", "max"] },
+        { "id": "gpt-5.6-luna", "label": "GPT 5.6 Luna", "reasoningLevels": ["none", "low", "medium", "high", "xhigh", "max"] },
         { "id": "gpt-5.5", "label": "GPT 5.5" },
         { "id": "gpt-5.4", "label": "GPT 5.4" },
         { "id": "gpt-5.4-mini", "label": "GPT 5.4 Mini" },
@@ -43,7 +46,7 @@ A JSON file defines available models and reasoning levels per agent. The file li
 ```
 
 - **Agent-level `reasoningLevels`** — default reasoning options for all models under that agent.
-- **Per-model `reasoningLevels` override** — optional. When present on a model object, replaces the agent-level list for that model. Example:
+- **Per-model `reasoningLevels` override** — optional. When present on a model object, replaces the agent-level list for that model. GPT 5.6 Codex models use this to expose `none` and `max` while older Codex models keep the default `low`/`medium`/`high`/`xhigh` set. Example:
   ```json
   { "id": "gpt-5.1-codex-mini", "label": "GPT 5.1 Codex Mini", "reasoningLevels": ["medium", "high"] }
   ```
