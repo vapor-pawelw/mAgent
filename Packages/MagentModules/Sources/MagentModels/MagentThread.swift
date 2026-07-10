@@ -1,5 +1,10 @@
 import Foundation
 
+public nonisolated enum ThreadActivityDurationState: Sendable, Equatable {
+    case busy
+    case lastActivity
+}
+
 public nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
     case feature
     case fix
@@ -753,6 +758,12 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         } else {
             return "\(elapsed / 86400)d"
         }
+    }
+
+    /// Describes whether the elapsed sidebar duration represents active work or idle time.
+    public var activityDurationState: ThreadActivityDurationState? {
+        guard busyStateSince != nil else { return nil }
+        return isAnyBusy ? .busy : .lastActivity
     }
 
     /// Sentinel value inserted into `magentBusySessions` during thread creation (phase 2),

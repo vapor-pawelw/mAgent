@@ -288,6 +288,7 @@ final class ThreadCell: NSTableCellView {
     private var durationLabel: NSTextField?
     private var durationTimer: Timer?
     private var currentDurationSince: Date?
+    private var isCurrentDurationBusy = false
     /// 5-dot priority capsule rendered at the bottom border, immediately left of the duration badge.
     /// Hidden (detached from the stack) when the thread has no priority set.
     private var priorityCapsule: PriorityCapsuleView?
@@ -859,7 +860,10 @@ final class ThreadCell: NSTableCellView {
             directlyRateLimitedAgentTypes: thread.directlyRateLimitedAgentTypes
         )
 
-        configureDuration(since: cellSettings.showBusyStateDuration ? thread.busyStateSince : nil)
+        configureDuration(
+            since: cellSettings.showBusyStateDuration ? thread.busyStateSince : nil,
+            isBusy: thread.activityDurationState == .busy
+        )
         configurePriority(thread.priority)
 
         syncRowVisibility()
@@ -952,7 +956,7 @@ final class ThreadCell: NSTableCellView {
         )
 
         let showDuration = PersistenceService.shared.loadSettings().showBusyStateDuration
-        configureDuration(since: showDuration ? busyStateSince : nil)
+        configureDuration(since: showDuration ? busyStateSince : nil, isBusy: isBusy)
         // The main worktree row doesn't carry a priority.
         configurePriority(nil)
 
@@ -1320,14 +1324,14 @@ final class ThreadCell: NSTableCellView {
     }
 
 
-    private func configureDuration(since: Date?) {
+    private func configureDuration(since: Date?, isBusy: Bool) {
         ensureDurationLabel()
         currentDurationSince = since
+        isCurrentDurationBusy = isBusy
         if let since {
             refreshDurationText(since: since)
             durationLabel?.isHidden = false
             durationBadge?.isHidden = false
-            durationBadge?.toolTip = "Busy duration"
             startDurationTimer()
         } else {
             durationLabel?.stringValue = ""
@@ -1353,7 +1357,12 @@ final class ThreadCell: NSTableCellView {
         durationLabel?.stringValue = text
         let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed, isDark: isDark)
-        durationBadge?.toolTip = "Busy for \(text)"
+        if isCurrentDurationBusy {
+            durationBadge?.toolTip = String(localized: .ThreadStrings.threadBusyDurationTooltip(text))
+        } else {
+            let relative = RelativeDateTimeFormatter().localizedString(for: since, relativeTo: Date())
+            durationBadge?.toolTip = String(localized: .ThreadStrings.threadLastActivityTooltip(relative))
+        }
     }
 
     /// Returns a subtle tint for the duration label based on elapsed seconds.

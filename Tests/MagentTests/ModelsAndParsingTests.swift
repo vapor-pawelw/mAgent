@@ -19,6 +19,37 @@ struct KeyBindingDefaultsTests {
     }
 }
 
+@Suite("MagentThread activity duration state")
+struct MagentThreadActivityDurationStateTests {
+
+    @Test("Describes an idle duration as last activity")
+    func idleDurationIsLastActivity() {
+        var thread = MagentThread(
+            projectId: UUID(),
+            name: "thread",
+            worktreePath: "/tmp/thread",
+            branchName: "thread"
+        )
+        thread.busyStateSince = Date().addingTimeInterval(-11 * 86_400)
+
+        #expect(thread.activityDurationState == .lastActivity)
+    }
+
+    @Test("Describes a working duration as busy")
+    func busyDurationIsBusy() {
+        var thread = MagentThread(
+            projectId: UUID(),
+            name: "thread",
+            worktreePath: "/tmp/thread",
+            branchName: "thread"
+        )
+        thread.busyStateSince = Date().addingTimeInterval(-60)
+        thread.busySessions.insert("session")
+
+        #expect(thread.activityDurationState == .busy)
+    }
+}
+
 // MARK: - SemanticVersion
 
 @Suite("SemanticVersion parsing")

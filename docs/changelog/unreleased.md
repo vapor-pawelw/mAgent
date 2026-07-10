@@ -54,6 +54,7 @@
 
 #### Bug Fixes
 
+- Fixed idle sidebar thread-duration tooltips incorrectly claiming the thread was busy; they now show the last activity time.
 - Fixed section-header `Rename Section` context-menu actions failing to enter inline rename mode.
 - Fixed a crash that could happen after archiving or deleting the selected thread.
 - Prevented newly created thread selection from being undone by stale sidebar scroll restores.

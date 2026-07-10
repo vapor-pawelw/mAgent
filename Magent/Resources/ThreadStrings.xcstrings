@@ -188,6 +188,17 @@
         }
       }
     },
+    "threadBusyDurationTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Busy for %@"
+          }
+        }
+      }
+    },
     "threadArchiveCompletedWithoutLocalSync": {
       "extractionState": "manual",
       "localizations": {
@@ -613,6 +624,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Branch: %@"
+          }
+        }
+      }
+    },
+    "threadLastActivityTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last activity: %@"
           }
         }
       }
