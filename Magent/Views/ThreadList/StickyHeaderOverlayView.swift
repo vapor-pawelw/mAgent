@@ -26,8 +26,7 @@ final class StickyHeaderOverlayView: NSView {
     private let projectPinIcon = NSImageView()
     private let projectAddButton = NSButton()
 
-    private let sectionContainer = NSView()
-    private let sectionDotView = NSImageView()
+    private let sectionContainer = SectionHeaderStripView()
     private let sectionNameLabel = NSTextField(labelWithString: "")
 
     private let fadeSpacerView = NSView()
@@ -115,10 +114,7 @@ final class StickyHeaderOverlayView: NSView {
         sectionContainer.translatesAutoresizingMaskIntoConstraints = false
         addSubview(sectionContainer)
 
-        sectionDotView.translatesAutoresizingMaskIntoConstraints = false
-        sectionContainer.addSubview(sectionDotView)
-
-        sectionNameLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        sectionNameLabel.font = .systemFont(ofSize: 11, weight: .medium)
         sectionNameLabel.textColor = NSColor(resource: .textSecondary)
         sectionNameLabel.lineBreakMode = .byTruncatingTail
         sectionNameLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -191,15 +187,10 @@ final class StickyHeaderOverlayView: NSView {
             sectionContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
             sectionContainer.heightAnchor.constraint(equalToConstant: Self.sectionRowHeight),
 
-            sectionDotView.leadingAnchor.constraint(
+            sectionNameLabel.leadingAnchor.constraint(
                 equalTo: sectionContainer.leadingAnchor,
                 constant: Self.leadingInset
             ),
-            sectionDotView.centerYAnchor.constraint(equalTo: sectionContainer.centerYAnchor),
-            sectionDotView.widthAnchor.constraint(equalToConstant: 8),
-            sectionDotView.heightAnchor.constraint(equalToConstant: 8),
-
-            sectionNameLabel.leadingAnchor.constraint(equalTo: sectionDotView.trailingAnchor, constant: 6),
             sectionNameLabel.centerYAnchor.constraint(equalTo: sectionContainer.centerYAnchor),
             sectionNameLabel.trailingAnchor.constraint(
                 lessThanOrEqualTo: sectionContainer.trailingAnchor,
@@ -246,9 +237,9 @@ final class StickyHeaderOverlayView: NSView {
         // Section row
         sectionContainer.isHidden = !showSection
         if showSection {
-            sectionNameLabel.stringValue = (state.sectionName ?? "").uppercased()
+            sectionNameLabel.stringValue = state.sectionName ?? ""
             if let color = state.sectionColor {
-                sectionDotView.image = colorDotImage(color: color, size: 8)
+                sectionContainer.sectionColor = color
             }
         }
 

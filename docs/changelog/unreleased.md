@@ -49,6 +49,7 @@
 
 #### Improvements
 
+- Restyled section headers as compact color-tinted strips so section boundaries are clearer without competing with thread cards.
 - Moved thread activity, priority, and status indicators into clearer bottom-left and bottom-right sidebar stacks, including a subdued hidden-thread marker.
 - Replaced sidebar dividers between pinned, normal, and hidden threads with cleaner spacing.
 - Tightened Hidden disclosure spacing while preserving separation from the next section when collapsed.

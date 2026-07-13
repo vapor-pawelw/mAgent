@@ -468,7 +468,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return rowView
         }
         if item is SidebarSection {
-            return ProjectHeaderRowView()
+            let rowView = SectionHeaderRowView()
+            if let section = item as? SidebarSection {
+                rowView.sectionColor = section.color
+            }
+            return rowView
         }
 
         let rowView = AlwaysEmphasizedRowView()
@@ -1038,16 +1042,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
         // Level 1: Section header
         if let section = item as? SidebarSection {
-            let identifier = NSUserInterfaceItemIdentifier("SectionCell")
+            let identifier = NSUserInterfaceItemIdentifier("SectionCellV2")
             let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
                 ?? {
                     let c = NSTableCellView()
                     c.identifier = identifier
-
-                    let iv = NSImageView()
-                    iv.translatesAutoresizingMaskIntoConstraints = false
-                    c.addSubview(iv)
-                    c.imageView = iv
 
                     let tf = NSTextField(labelWithString: "")
                     tf.translatesAutoresizingMaskIntoConstraints = false
@@ -1084,7 +1083,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         shieldView.heightAnchor.constraint(equalToConstant: 12),
                     ])
 
-                    let nameStack = NSStackView(views: [tf, shieldView, badgeContainer])
+                    let nameStack = NSStackView(views: [tf, shieldView])
                     nameStack.identifier = Self.sectionNameStackIdentifier
                     nameStack.translatesAutoresizingMaskIntoConstraints = false
                     nameStack.orientation = .horizontal
@@ -1115,18 +1114,16 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     c.addSubview(editor)
 
                     NSLayoutConstraint.activate([
-                        iv.leadingAnchor.constraint(
+                        nameStack.leadingAnchor.constraint(
                             equalTo: c.leadingAnchor,
                             constant: Self.capsuleAlignedLeading
                         ),
-                        iv.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                        iv.widthAnchor.constraint(equalToConstant: 8),
-                        iv.heightAnchor.constraint(equalToConstant: 8),
-                        nameStack.leadingAnchor.constraint(equalTo: iv.trailingAnchor, constant: 6),
-                        nameStack.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
+                        nameStack.trailingAnchor.constraint(lessThanOrEqualTo: badgeContainer.leadingAnchor, constant: -6),
                         nameStack.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         badgeContainer.heightAnchor.constraint(equalToConstant: 16),
                         badgeContainer.widthAnchor.constraint(greaterThanOrEqualToConstant: 16),
+                        badgeContainer.trailingAnchor.constraint(equalTo: disclosureButton.leadingAnchor, constant: -4),
+                        badgeContainer.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         badgeLabel.leadingAnchor.constraint(equalTo: badgeContainer.leadingAnchor, constant: 5),
                         badgeLabel.trailingAnchor.constraint(equalTo: badgeContainer.trailingAnchor, constant: -5),
                         badgeLabel.centerYAnchor.constraint(equalTo: badgeContainer.centerYAnchor),
@@ -1144,14 +1141,13 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     return c
                 }()
 
-            cell.textField?.stringValue = section.name.uppercased()
-            cell.textField?.font = .systemFont(ofSize: 11, weight: .semibold)
+            cell.textField?.stringValue = section.name
+            cell.textField?.font = .systemFont(ofSize: 11, weight: .medium)
             cell.textField?.textColor = NSColor(resource: .textSecondary)
-            cell.imageView?.image = colorDotImage(color: section.color, size: 8)
             let threadCount = section.threads.count
             if let badgeContainer = cell.subviews.first(where: { $0.identifier == Self.sectionCountBadgeContainerIdentifier }) {
                 badgeContainer.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.18).cgColor
-                badgeContainer.isHidden = threadCount == 0
+                badgeContainer.isHidden = threadCount == 0 || isRenamingSection(section)
                 badgeContainer.toolTip = threadCount > 0 ? "\(threadCount) threads in \(section.name)" : nil
             }
             if let badgeLabel = cell
@@ -1179,7 +1175,6 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             if let nameStack = cell.subviews.first(where: { $0.identifier == Self.sectionNameStackIdentifier }) {
                 let isRenaming = isRenamingSection(section)
                 nameStack.isHidden = isRenaming
-                cell.imageView?.isHidden = isRenaming
             }
             if let editor = cell.subviews.first(where: { $0.identifier == Self.sectionInlineRenameFieldIdentifier }) as? NSTextField {
                 let isRenaming = isRenamingSection(section)

@@ -147,6 +147,7 @@ let project = Project(
                 "Magent/Services/TabNameAllocator.swift",
                 "Magent/Services/TabPinningState.swift",
                 "Magent/Views/ThreadList/SidebarModels.swift",
+                "Magent/Views/ThreadList/SectionHeaderStripStyle.swift",
                 "Magent/Views/ThreadList/StickyHeaderBackdropMask.swift",
                 "Magent/Views/ThreadList/ThreadRowBadgeLayout.swift",
                 "Magent/Views/ThreadList/ThreadRowContentOpacity.swift",

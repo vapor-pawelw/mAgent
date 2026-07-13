@@ -644,6 +644,58 @@ final class ProjectHeaderRowView: NSTableRowView {
     }
 }
 
+class SectionHeaderStripView: NSView {
+    var sectionColor: NSColor = .controlAccentColor { didSet { needsDisplay = true } }
+    var isHovered = false { didSet { needsDisplay = true } }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            SectionHeaderStripStyle.draw(in: bounds, color: sectionColor, isHovered: isHovered)
+        }
+    }
+}
+
+final class SectionHeaderRowView: NSTableRowView {
+    var sectionColor: NSColor = .controlAccentColor { didSet { needsDisplay = true } }
+    private var trackingAreaReference: NSTrackingArea?
+    private var isHovered = false { didSet { needsDisplay = true } }
+
+    override var isEmphasized: Bool {
+        get { true }
+        set {}
+    }
+
+    override func updateTrackingAreas() {
+        if let trackingAreaReference {
+            removeTrackingArea(trackingAreaReference)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow],
+            owner: self
+        )
+        addTrackingArea(area)
+        trackingAreaReference = area
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+    }
+
+    override func drawBackground(in dirtyRect: NSRect) {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            SectionHeaderStripStyle.draw(in: bounds, color: sectionColor, isHovered: isHovered)
+        }
+    }
+}
+
 final class SidebarSpacerRowView: NSTableRowView {
     override var isEmphasized: Bool {
         get { true }
