@@ -3,6 +3,7 @@ import AppKit
 enum SectionHeaderStripStyle {
     static let horizontalInset: CGFloat = 12
     static let verticalInset: CGFloat = 2
+    static let cornerRadius: CGFloat = 6
     static let railWidth: CGFloat = 3
     static let railLeadingInset: CGFloat = 4
     static let railVerticalInset: CGFloat = 5
@@ -24,6 +25,13 @@ enum SectionHeaderStripStyle {
     }
 
     static func draw(in bounds: NSRect, color: NSColor, isHovered: Bool) {
+        NSColor.labelColor.withAlphaComponent(isHovered ? 0.065 : 0.035).setFill()
+        NSBezierPath(
+            roundedRect: stripRect(in: bounds),
+            xRadius: cornerRadius,
+            yRadius: cornerRadius
+        ).fill()
+
         color.withAlphaComponent(isHovered ? 0.95 : 0.78).setFill()
         NSBezierPath(
             roundedRect: railRect(in: bounds),
