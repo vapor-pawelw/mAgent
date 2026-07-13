@@ -15,5 +15,7 @@ struct SectionHeaderStripStyleTests {
         #expect(rail.minX > strip.minX)
         #expect(rail.minY > strip.minY)
         #expect(rail.maxY < strip.maxY)
+        #expect(SectionHeaderStripStyle.contentLeadingInset - rail.maxX >= 8)
+        #expect(strip.maxX - (bounds.maxX - SectionHeaderStripStyle.contentTrailingInset) >= 8)
     }
 }

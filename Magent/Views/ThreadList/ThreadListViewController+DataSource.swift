@@ -1116,7 +1116,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     NSLayoutConstraint.activate([
                         nameStack.leadingAnchor.constraint(
                             equalTo: c.leadingAnchor,
-                            constant: Self.capsuleAlignedLeading
+                            constant: SectionHeaderStripStyle.contentLeadingInset
                         ),
                         nameStack.trailingAnchor.constraint(lessThanOrEqualTo: badgeContainer.leadingAnchor, constant: -6),
                         nameStack.centerYAnchor.constraint(equalTo: c.centerYAnchor),
@@ -1129,7 +1129,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         badgeLabel.centerYAnchor.constraint(equalTo: badgeContainer.centerYAnchor),
                         disclosureButton.trailingAnchor.constraint(
                             equalTo: c.trailingAnchor,
-                            constant: -Self.capsuleAlignedTrailing
+                            constant: -SectionHeaderStripStyle.contentTrailingInset
                         ),
                         disclosureButton.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),

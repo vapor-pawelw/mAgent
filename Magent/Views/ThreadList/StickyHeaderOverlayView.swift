@@ -9,8 +9,8 @@ final class StickyHeaderOverlayView: NSView {
 
     static let projectRowHeight: CGFloat = ThreadListViewController.projectHeaderRowHeight
     static let sectionRowHeight: CGFloat = 28
-    private static let leadingInset: CGFloat = ThreadListViewController.capsuleAlignedLeading
-    private static let trailingInset: CGFloat = ThreadListViewController.capsuleAlignedTrailing
+    private static let leadingInset: CGFloat = SectionHeaderStripStyle.contentLeadingInset
+    private static let trailingInset: CGFloat = SectionHeaderStripStyle.contentTrailingInset
     private static let topInset: CGFloat = 6
     private static let fadeHeight: CGFloat = 28
 
