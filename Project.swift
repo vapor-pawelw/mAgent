@@ -150,6 +150,7 @@ let project = Project(
                 "Magent/Views/ThreadList/StickyHeaderBackdropMask.swift",
                 "Magent/Views/ThreadList/ThreadRowBadgeLayout.swift",
                 "Magent/Views/ThreadList/ThreadRowContentOpacity.swift",
+                "Magent/Views/Settings/ProjectRemovalButtonFactory.swift",
                 "Tests/MagentTests/**",
             ],
             dependencies: [

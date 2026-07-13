@@ -68,6 +68,7 @@ extension SettingsProjectsViewController {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Remove")
         alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }

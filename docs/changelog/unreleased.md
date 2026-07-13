@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Settings
+
+#### Improvements
+
+- Added a clearly destructive Remove Project action at the bottom of each project's settings.
+
 ### Agents
 
 #### Improvements

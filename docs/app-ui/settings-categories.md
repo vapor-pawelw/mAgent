@@ -50,6 +50,7 @@
 - `AppSettings.experimentalEnableChats` gates chat-surface creation options in debug settings and the dedicated `Chat` settings sidebar category. Existing persisted chat tabs can still render; the toggle controls whether new chat entries are offered from agent menus while the feature is being held locally.
 - The recently archived list reads from persisted threads, sorts by `archivedAt`, and listens for a shared archive-state notification so it refreshes while Settings is open.
 - Project overrides use the parallel section editor in `Magent/Views/Settings/SettingsProjectsViewController.swift` and `Magent/Views/Settings/SettingsProjectsViewController+Sections.swift`.
+- A selected project's settings end with a destructive `Remove Project…` button. It uses the same confirmed removal action as the minus button below the project list and does not delete the repository from disk.
 - Both section editors use `NSColorPanel.shared`, so they must set the active `sectionId` and temporarily detach target/action before assigning `panel.color`, then restore the callback after the programmatic update.
 - App appearance is applied centrally from `AppDelegate`: `NSApp.appearance` controls the AppKit chrome, and Ghostty receives the matching light/dark preference through `GhosttyAppManager`.
 

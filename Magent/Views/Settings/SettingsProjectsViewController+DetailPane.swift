@@ -438,6 +438,12 @@ extension SettingsProjectsViewController {
             font: .systemFont(ofSize: 13)
         )
 
+        let removeButton = ProjectRemovalButtonFactory.make(
+            target: self,
+            action: #selector(removeProjectTapped)
+        )
+        stack.addArrangedSubview(removeButton)
+
         // Set up the document view for scrolling
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
