@@ -57,7 +57,7 @@
 
 #### Bug Fixes
 
-- Made secondary sidebar thread metadata 20% dimmer and ensured it compounds with hidden-thread dimming.
+- Made secondary sidebar thread metadata 20% dimmer, with an additional proportional dimming for inactive threads and hidden rows.
 - Fixed the sidebar icon visibility setting so changing it updates thread rows immediately.
 - Fixed idle sidebar thread-duration tooltips incorrectly claiming the thread was busy; they now show the last activity time.
 - Fixed section-header `Rename Section` context-menu actions failing to enter inline rename mode.

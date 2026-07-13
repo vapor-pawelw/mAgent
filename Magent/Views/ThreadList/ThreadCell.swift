@@ -799,6 +799,7 @@ final class ThreadCell: NSTableCellView {
         hasUnreadCompletion = thread.hasUnreadAgentCompletion
         hasWaitingForInput = thread.hasWaitingForInput
         hasAllDead = thread.hasAllSessionsDead
+        secondaryRowStack?.alphaValue = ThreadRowContentOpacity.secondaryLineOpacity(isInactive: hasAllDead)
         configuredSectionColor = sectionColor
         updateLeadingIconTint()
 
