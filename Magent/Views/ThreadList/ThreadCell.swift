@@ -241,7 +241,7 @@ private final class ActivityCircleIndicatorView: NSView {
     var style: ThreadActivityIndicatorStyle = .circle
     var onStyleSelection: ((ThreadActivityIndicatorStyle) -> Void)?
 
-    override var intrinsicContentSize: NSSize { NSSize(width: 11, height: 11) }
+    override var intrinsicContentSize: NSSize { NSSize(width: 9, height: 9) }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
