@@ -23,10 +23,8 @@ struct SidebarSectionOutlineChildCountTests {
         #expect(renderedItems.count == section.threads.count + 2)
         #expect(renderedItems.contains { $0 is SidebarHiddenThreadsToggle })
         #expect(!renderedItems.contains { ($0 as? MagentThread)?.id == hidden.id })
-        #expect(
-            renderedItems.compactMap { $0 as? SidebarGroupSeparator }.last?.height
-                == SidebarGroupSeparator.collapsedHiddenGroupHeight
-        )
+        #expect(renderedItems[renderedItems.count - 2] is SidebarHiddenThreadsToggle)
+        #expect((renderedItems.last as? SidebarGroupSeparator)?.height == SidebarGroupSeparator.standardHeight)
     }
 
     @Test
@@ -49,7 +47,7 @@ struct SidebarSectionOutlineChildCountTests {
     }
 
     @Test
-    func expandedHiddenGroupKeepsStandardSpacingAfterVisibleThreads() {
+    func expandedHiddenGroupAddsNoSpacingBeforeDisclosure() {
         let projectId = UUID()
         let section = SidebarSection(
             projectId: projectId,
@@ -63,10 +61,29 @@ struct SidebarSectionOutlineChildCountTests {
             areHiddenThreadsExpanded: true
         )
 
-        #expect(
-            section.items.compactMap { $0 as? SidebarGroupSeparator }.last?.height
-                == SidebarGroupSeparator.standardHeight
+        #expect(section.items[0] is MagentThread)
+        #expect(section.items[1] is SidebarHiddenThreadsToggle)
+        #expect(section.items[2] is MagentThread)
+        #expect(!section.items.contains { $0 is SidebarGroupSeparator })
+    }
+
+    @Test
+    func collapsedHiddenGroupAddsNoSpacingBeforeDisclosureAndStandardSpacingAfterIt() {
+        let projectId = UUID()
+        let section = SidebarSection(
+            projectId: projectId,
+            sectionId: UUID(),
+            name: "Work",
+            color: .systemBlue,
+            threads: [
+                makeThread(projectId: projectId, name: "visible"),
+                makeThread(projectId: projectId, name: "hidden", isSidebarHidden: true),
+            ]
         )
+
+        #expect(section.items[0] is MagentThread)
+        #expect(section.items[1] is SidebarHiddenThreadsToggle)
+        #expect((section.items[2] as? SidebarGroupSeparator)?.height == SidebarGroupSeparator.standardHeight)
     }
 
     @Test

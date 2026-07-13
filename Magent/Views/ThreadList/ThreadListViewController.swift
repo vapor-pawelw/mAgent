@@ -1157,9 +1157,6 @@ final class ThreadListViewController: NSViewController {
                 let hiddenThreads = sortedThreads.filter(\.isSidebarHidden)
                 if !hiddenThreads.isEmpty {
                     let isExpanded = isHiddenThreadGroupExpanded(projectId: project.id, sectionId: nil)
-                    if lastState != nil {
-                        children.append(SidebarGroupSeparator.beforeHiddenGroup(isExpanded: isExpanded))
-                    }
                     children.append(SidebarHiddenThreadsToggle(
                         projectId: project.id,
                         sectionId: nil,
@@ -1168,6 +1165,8 @@ final class ThreadListViewController: NSViewController {
                     ))
                     if isExpanded {
                         children.append(contentsOf: hiddenThreads)
+                    } else {
+                        children.append(SidebarGroupSeparator())
                     }
                 }
             }

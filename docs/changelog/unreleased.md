@@ -51,6 +51,7 @@
 
 - Moved thread activity, priority, and status indicators into clearer bottom-left and bottom-right sidebar stacks, including a subdued hidden-thread marker.
 - Replaced sidebar dividers between pinned, normal, and hidden threads with cleaner spacing.
+- Tightened Hidden disclosure spacing while preserving separation from the next section when collapsed.
 - Added a default `Cmd+J` shortcut and View menu action to recenter the sidebar on the current thread.
 - Keep moved or missing repositories visible with recovery and discard actions.
 - Refresh missing-repository status when Magent returns to the foreground.
