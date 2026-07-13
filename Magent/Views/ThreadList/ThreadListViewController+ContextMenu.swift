@@ -369,6 +369,7 @@ extension ThreadListViewController {
     ]
 
     func buildPrioritySubmenu(for thread: MagentThread) -> NSMenu {
+        let thread = latestThreadState(for: thread)
         let submenu = NSMenu()
 
         // "None" entry first — clears any existing priority.
