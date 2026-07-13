@@ -6,6 +6,8 @@ Hidden threads let users keep inactive work visible without archiving it.
 
 - Non-main thread context menus expose `Hide` / `Unhide` directly under `Pin` / `Unpin`.
 - Hidden threads stay in the sidebar, but sort to the bottom of their section or flat project list.
+- Hidden groups show a compact disclosure row with their thread count and start collapsed. Expanding a group is remembered independently per section or flat project.
+- Navigating directly to a hidden thread automatically expands its hidden group so selection and scrolling still work.
 - Hidden rows render dimmed (entire cell at 0.5 alpha) so they read as deprioritized rather than active.
 - Dead-session threads use a different visual treatment: gray icon tint + `secondaryLabelColor` description text, keeping the cell at full alpha. This makes hidden vs dead states distinguishable at a glance.
 - Pinning and hiding are mutually exclusive:
@@ -25,6 +27,7 @@ Hidden threads let users keep inactive work visible without archiving it.
   - `hidden`
 - Group ordering is always `pinned`, then normal visible threads, then hidden threads.
 - A blank vertical gap separates adjacent groups; it intentionally has no visible divider.
+- The hidden group replaces its old passive separator with a 24-point disclosure row. Collapsing it removes only hidden thread rows; project and section disclosure state continues to be owned by `NSOutlineView`.
 - In-section `displayOrder` remains local to a single group; reorder logic must not collapse hidden threads back into the normal unpinned group.
 - New-thread placement and cross-section moves route through the same bottom-of-group helper so hidden-state behavior stays consistent after reloads and moves.
 
@@ -35,9 +38,11 @@ Hidden threads let users keep inactive work visible without archiving it.
 - Main threads should never expose or accept the hidden state.
 - The hidden-thread dimming is applied at the cell level (`alphaValue = 0.5`). Dead-session styling is applied per-subview (icon tint + label color) so it composes naturally when a thread is both hidden and dead.
 - Selection background still comes from the row view, which keeps the selected state legible.
+- Keep collapsed hidden threads in structural comparison bookkeeping, or routine metadata refreshes will look like thread removals and force repeated full sidebar reloads.
 
 ## Changes in this thread
 
 - Added persisted hidden-thread state and three-group sidebar ordering.
 - Added right-click hide/unhide actions and matching CLI commands.
 - Added dimmed hidden-row rendering plus IPC/doc/changelog updates.
+- Added collapsed-by-default hidden-group disclosure with persisted expansion and navigation reveal behavior.

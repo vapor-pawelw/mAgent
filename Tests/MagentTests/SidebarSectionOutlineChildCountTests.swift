@@ -5,7 +5,7 @@ import MagentCore
 @Suite
 struct SidebarSectionOutlineChildCountTests {
     @Test
-    func outlineChildCountIncludesSpacersBetweenThreadGroups() {
+    func hiddenThreadsAreCollapsedBehindAGroupToggleByDefault() {
         let projectId = UUID()
         let pinned = makeThread(projectId: projectId, name: "pinned", isPinned: true)
         let visible = makeThread(projectId: projectId, name: "visible")
@@ -21,6 +21,27 @@ struct SidebarSectionOutlineChildCountTests {
 
         #expect(section.outlineChildCount == renderedItems.count)
         #expect(renderedItems.count == section.threads.count + 2)
+        #expect(renderedItems.contains { $0 is SidebarHiddenThreadsToggle })
+        #expect(!renderedItems.contains { ($0 as? MagentThread)?.id == hidden.id })
+    }
+
+    @Test
+    func expandedHiddenGroupRendersItsThreadsWithoutChangingTheirOrder() {
+        let projectId = UUID()
+        let first = makeThread(projectId: projectId, name: "first", isSidebarHidden: true)
+        let second = makeThread(projectId: projectId, name: "second", isSidebarHidden: true)
+        let section = SidebarSection(
+            projectId: projectId,
+            sectionId: UUID(),
+            name: "Work",
+            color: .systemBlue,
+            threads: [first, second],
+            areHiddenThreadsExpanded: true
+        )
+
+        let renderedThreads = section.items.compactMap { $0 as? MagentThread }
+        #expect(renderedThreads.map(\.id) == [first.id, second.id])
+        #expect(section.items.first is SidebarHiddenThreadsToggle)
     }
 
     @Test

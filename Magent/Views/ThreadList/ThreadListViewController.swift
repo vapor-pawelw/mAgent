@@ -261,12 +261,14 @@ final class ThreadListViewController: NSViewController {
     static let lastOpenedProjectDefaultsKey = "MagentLastOpenedProjectID"
     static let collapsedProjectIdsKey = "MagentCollapsedProjectIds"
     static let collapsedSectionIdsKey = "MagentCollapsedSectionIds"
+    static let expandedHiddenThreadGroupIdsKey = "MagentExpandedHiddenThreadGroupIds"
     static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
     static let projectAddButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectAddButton")
     static let missingProjectOpenButtonIdentifier = NSUserInterfaceItemIdentifier("MissingProjectOpenButton")
     static let missingProjectDiscardButtonIdentifier = NSUserInterfaceItemIdentifier("MissingProjectDiscardButton")
     static let missingProjectDetailIdentifier = NSUserInterfaceItemIdentifier("MissingProjectDetail")
     static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
+    static let hiddenThreadsDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("HiddenThreadsDisclosureButton")
     static let sectionNameStackIdentifier = NSUserInterfaceItemIdentifier("SectionNameStack")
     static let sectionCountBadgeContainerIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeContainer")
     static let sectionCountBadgeLabelIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeLabel")
@@ -1131,7 +1133,8 @@ final class ThreadListViewController: NSViewController {
                         name: section.name,
                         color: section.color,
                         isKeepAlive: section.isKeepAlive,
-                        threads: sortedThreads
+                        threads: sortedThreads,
+                        areHiddenThreadsExpanded: isHiddenThreadGroupExpanded(projectId: project.id, sectionId: section.id)
                     ))
                 }
             } else {
@@ -1142,14 +1145,30 @@ final class ThreadListViewController: NSViewController {
                     projectRegularThreads,
                     preferRecentCompletions: settings.autoReorderThreadsOnAgentCompletion
                 )
-                // Insert visual separators at pinned→normal and normal→hidden transitions.
+                // Keep hidden threads behind a compact disclosure row, collapsed by default.
                 var lastState: ThreadSidebarListState? = nil
-                for thread in sortedThreads {
+                for thread in sortedThreads where !thread.isSidebarHidden {
                     if let last = lastState, thread.sidebarListState != last {
                         children.append(SidebarGroupSeparator())
                     }
                     children.append(thread)
                     lastState = thread.sidebarListState
+                }
+                let hiddenThreads = sortedThreads.filter(\.isSidebarHidden)
+                if !hiddenThreads.isEmpty {
+                    if lastState != nil {
+                        children.append(SidebarGroupSeparator())
+                    }
+                    let isExpanded = isHiddenThreadGroupExpanded(projectId: project.id, sectionId: nil)
+                    children.append(SidebarHiddenThreadsToggle(
+                        projectId: project.id,
+                        sectionId: nil,
+                        threads: hiddenThreads,
+                        isExpanded: isExpanded
+                    ))
+                    if isExpanded {
+                        children.append(contentsOf: hiddenThreads)
+                    }
                 }
             }
 
@@ -1722,6 +1741,21 @@ final class ThreadListViewController: NSViewController {
             if collapsedSections.contains(sectionKey) {
                 collapsedSections.remove(sectionKey)
                 UserDefaults.standard.set(Array(collapsedSections), forKey: Self.collapsedSectionIdsKey)
+                didMutateCollapseState = true
+            }
+        }
+
+        if thread.isSidebarHidden {
+            let sectionId = settings.shouldUseThreadSections(for: projectId)
+                ? thread.resolvedSectionId(knownSectionIds: knownSectionIds, fallback: fallbackSectionId)
+                : nil
+            let hiddenGroupKey = hiddenThreadGroupStorageKey(projectId: projectId, sectionId: sectionId)
+            var expandedHiddenGroups = Set(
+                UserDefaults.standard.stringArray(forKey: Self.expandedHiddenThreadGroupIdsKey) ?? []
+            )
+            if !expandedHiddenGroups.contains(hiddenGroupKey) {
+                expandedHiddenGroups.insert(hiddenGroupKey)
+                UserDefaults.standard.set(Array(expandedHiddenGroups), forKey: Self.expandedHiddenThreadGroupIdsKey)
                 didMutateCollapseState = true
             }
         }

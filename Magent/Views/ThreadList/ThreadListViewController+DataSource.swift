@@ -83,10 +83,33 @@ extension ThreadListViewController: NSOutlineViewDataSource {
     }
 
     /// Converts a raw NSOutlineView child index within a section (which accounts
-    /// for inserted `SidebarGroupSeparator` items) to the logical thread-only index.
+    /// for inserted synthetic group rows) to the logical thread-only index.
     private func adjustedDropIndex(_ rawIndex: Int, in section: SidebarSection) -> Int {
-        let separatorsBefore = section.items.prefix(rawIndex).filter { $0 is SidebarGroupSeparator }.count
-        return rawIndex - separatorsBefore
+        let syntheticRowsBefore = section.items.prefix(rawIndex).filter {
+            $0 is SidebarGroupSeparator || $0 is SidebarHiddenThreadsToggle
+        }.count
+        return rawIndex - syntheticRowsBefore
+    }
+
+    func hiddenThreadGroupStorageKey(projectId: UUID, sectionId: UUID?) -> String {
+        "\(projectId.uuidString):\(sectionId?.uuidString ?? "flat")"
+    }
+
+    func isHiddenThreadGroupExpanded(projectId: UUID, sectionId: UUID?) -> Bool {
+        let expanded = Set(UserDefaults.standard.stringArray(forKey: Self.expandedHiddenThreadGroupIdsKey) ?? [])
+        return expanded.contains(hiddenThreadGroupStorageKey(projectId: projectId, sectionId: sectionId))
+    }
+
+    @objc func toggleHiddenThreadsExpanded(_ sender: NSButton) {
+        guard let key = sender.objectValue as? String else { return }
+        var expanded = Set(UserDefaults.standard.stringArray(forKey: Self.expandedHiddenThreadGroupIdsKey) ?? [])
+        if expanded.contains(key) {
+            expanded.remove(key)
+        } else {
+            expanded.insert(key)
+        }
+        UserDefaults.standard.set(Array(expanded), forKey: Self.expandedHiddenThreadGroupIdsKey)
+        reloadData()
     }
 
     private func groupRelativeDropIndex(
@@ -433,6 +456,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarGroupSeparator {
             return SidebarSpacerRowView()
         }
+        if item is SidebarHiddenThreadsToggle {
+            return SidebarSpacerRowView()
+        }
         if item is SidebarBottomPadding {
             return SidebarSpacerRowView()
         }
@@ -566,6 +592,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarGroupSeparator {
             return 12
         }
+        if item is SidebarHiddenThreadsToggle {
+            return 24
+        }
         if let bottomPadding = item as? SidebarBottomPadding {
             return bottomPadding.height
         }
@@ -627,6 +656,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return false
         }
         if item is SidebarGroupSeparator {
+            return false
+        }
+        if item is SidebarHiddenThreadsToggle {
             return false
         }
         if item is SidebarBottomPadding {
@@ -836,6 +868,42 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     c.identifier = identifier
                     return c
                 }()
+            return cell
+        }
+        if let toggle = item as? SidebarHiddenThreadsToggle {
+            let identifier = NSUserInterfaceItemIdentifier("HiddenThreadsToggleCell")
+            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
+                ?? {
+                    let c = NSTableCellView()
+                    c.identifier = identifier
+                    let button = NSButton()
+                    button.identifier = Self.hiddenThreadsDisclosureButtonIdentifier
+                    button.translatesAutoresizingMaskIntoConstraints = false
+                    button.isBordered = false
+                    button.imagePosition = .imageLeading
+                    button.alignment = .left
+                    button.font = .systemFont(ofSize: 11, weight: .medium)
+                    button.contentTintColor = .secondaryLabelColor
+                    button.target = self
+                    button.action = #selector(toggleHiddenThreadsExpanded(_:))
+                    c.addSubview(button)
+                    NSLayoutConstraint.activate([
+                        button.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.capsuleAlignedLeading),
+                        button.trailingAnchor.constraint(lessThanOrEqualTo: c.trailingAnchor, constant: -Self.capsuleAlignedTrailing),
+                        button.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        button.heightAnchor.constraint(equalToConstant: 20),
+                    ])
+                    return c
+                }()
+            if let button = cell.subviews.first(where: { $0.identifier == Self.hiddenThreadsDisclosureButtonIdentifier }) as? NSButton {
+                button.title = "Hidden (\(toggle.count))"
+                button.image = NSImage(
+                    systemSymbolName: toggle.isExpanded ? "chevron.down" : "chevron.right",
+                    accessibilityDescription: toggle.isExpanded ? "Collapse hidden threads" : "Expand hidden threads"
+                )?.withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
+                button.objectValue = hiddenThreadGroupStorageKey(projectId: toggle.projectId, sectionId: toggle.sectionId)
+                button.toolTip = toggle.isExpanded ? "Collapse hidden threads" : "Expand hidden threads"
+            }
             return cell
         }
         if item is SidebarBottomPadding {
@@ -1427,6 +1495,8 @@ extension ThreadListViewController: ThreadManagerDelegate {
                     currentThreads.append(t)
                 } else if let s = child as? SidebarSection {
                     currentThreads.append(contentsOf: s.threads)
+                } else if let hidden = child as? SidebarHiddenThreadsToggle {
+                    currentThreads.append(contentsOf: hidden.threads)
                 }
             }
         }

@@ -36,6 +36,7 @@
 
 #### Features
 
+- Added collapsed-by-default hidden-thread groups that can be expanded independently in each sidebar section or project.
 - Added toolbar and empty-state repository actions for creating, importing, or cloning repositories.
 - Replaced the thread activity pill with a cumulative, color-coded circle and made its Circle/Text style switch available directly from the indicator.
 - Made priority, favorite, pinned, and hidden sidebar badges directly actionable with their matching quick menus.
