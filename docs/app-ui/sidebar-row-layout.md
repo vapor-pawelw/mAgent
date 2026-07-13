@@ -19,7 +19,7 @@ Capsule-style sidebar with state-aware rounded borders, dynamic heights, and bad
 - A 10pt spacer separates each project header from its main worktree row so sticky header blur does not cut directly into the first capsule.
 - Regular thread rows use a three-line vertical stack:
   - line 1 (primary): task description when set; otherwise the branch name.
-  - line 2 (secondary / `subtitleLabel`): branch · worktree when a description is shown; worktree only when no description and the worktree name differs from the branch; hidden otherwise.
+  - line 2 (secondary / `subtitleLabel`): branch · worktree when a description is shown; worktree only when no description and the worktree name differs from the branch; hidden otherwise. It renders at 80% of normal content opacity, compounding with hidden-row dimming.
   - line 3 (PR/ticket row): `jiraTicketLabel` + `jiraStatusBadge` + dot separator + `prNumberLabel` + `prStatusBadge`. Badges gated by `AppSettings.showJiraStatusBadges` / `showPRStatusBadges`. Ticket display gated by `AppSettings.jiraTicketDetectionEnabled`.
 - Row heights are **dynamic** based on actual content (description lines, subtitle, PR row) with a default minimum height matching 1 description line + 2 metadata labels. When `wideThreads` is enabled, the minimum matches 2 description lines + 2 metadata labels.
 - Sign emoji is rendered at the **row view** level (`AlwaysEmphasizedRowView`) inside a circular `SignEmojiBadgeView` anchored to the top-left corner of the row (2pt margin from leading and top edges). The badge self-sizes via `intrinsicContentSize` (text size + 4pt padding, high priority) with a required 1:1 width/height ratio to stay circular. Border color and width mirror the capsule's current state. Not part of `ThreadCell`.

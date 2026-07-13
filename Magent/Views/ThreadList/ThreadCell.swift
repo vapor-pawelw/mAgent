@@ -475,6 +475,7 @@ final class ThreadCell: NSTableCellView {
         secondaryRow.orientation = .horizontal
         secondaryRow.alignment = .centerY
         secondaryRow.spacing = 4
+        secondaryRow.alphaValue = ThreadRowContentOpacity.secondaryLine
         secondaryRow.translatesAutoresizingMaskIntoConstraints = false
 
         // PR row: badge-aware composition. Individual labels + badges for Jira and PR.
@@ -540,7 +541,7 @@ final class ThreadCell: NSTableCellView {
 
     private func setDimmedAppearance(isHidden: Bool, isArchiving: Bool) {
         let dimmed = isHidden || isArchiving
-        let contentAlpha: CGFloat = dimmed ? 0.5 : 1.0
+        let contentAlpha = ThreadRowContentOpacity.contentOpacity(isDimmed: dimmed)
         // Dim content subviews individually so that border badges keep full
         // opacity and don't visually bleed through the capsule border.
         for sub in subviews where sub !== topBorderBadgeStack && sub !== bottomBorderBadgeStack {
@@ -548,6 +549,7 @@ final class ThreadCell: NSTableCellView {
         }
         topBorderBadgeStack?.alphaValue = 1.0
         bottomBorderBadgeStack?.alphaValue = 1.0
+        secondaryRowStack?.alphaValue = ThreadRowContentOpacity.secondaryLine
     }
 
     private func applyRenamePulse(_ active: Bool) {

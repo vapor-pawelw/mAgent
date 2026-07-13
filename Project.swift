@@ -148,6 +148,7 @@ let project = Project(
                 "Magent/Services/TabPinningState.swift",
                 "Magent/Views/ThreadList/SidebarModels.swift",
                 "Magent/Views/ThreadList/StickyHeaderBackdropMask.swift",
+                "Magent/Views/ThreadList/ThreadRowContentOpacity.swift",
                 "Tests/MagentTests/**",
             ],
             dependencies: [
