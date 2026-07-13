@@ -12,6 +12,7 @@ struct SidebarSettingsFingerprint: Equatable {
     let showPRStatusBadges: Bool
     let showJiraStatusBadges: Bool
     let showBusyStateDuration: Bool
+    let threadActivityIndicatorStyle: ThreadActivityIndicatorStyle
     let narrowThreads: Bool
 
     init(settings: AppSettings) {
@@ -24,6 +25,7 @@ struct SidebarSettingsFingerprint: Equatable {
         showPRStatusBadges = settings.showPRStatusBadges
         showJiraStatusBadges = settings.showJiraStatusBadges
         showBusyStateDuration = settings.showBusyStateDuration
+        threadActivityIndicatorStyle = settings.threadActivityIndicatorStyle
         narrowThreads = !settings.wideThreads
     }
 }

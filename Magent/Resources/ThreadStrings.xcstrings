@@ -23,28 +23,6 @@
         }
       }
     },
-    "threadPriorityLevel" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Priority %lld"
-          }
-        }
-      }
-    },
-    "threadPriorityNone" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "None"
-          }
-        }
-      }
-    },
     "tabCloseMessage": {
       "extractionState": "manual",
       "localizations": {

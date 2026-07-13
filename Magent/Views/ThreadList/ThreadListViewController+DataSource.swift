@@ -1215,17 +1215,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.onArchive = { [weak self] in
                 self?.triggerArchive(for: thread)
             }
-            cell.onPriorityChange = { [weak self] priority in
-                do {
-                    try self?.threadManager.setThreadPriority(threadId: thread.id, priority: priority)
-                } catch {
-                    let alert = NSAlert()
-                    alert.messageText = "Could not save priority"
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
-                    alert.runModal()
-                }
+            cell.priorityMenuProvider = { [weak self] in
+                self?.buildPrioritySubmenu(for: thread) ?? NSMenu()
             }
             cell.onUnpin = { [weak self] in self?.threadManager.toggleThreadPin(threadId: thread.id) }
             cell.onRemoveFavorite = { [weak self] in _ = self?.threadManager.toggleThreadFavorite(threadId: thread.id) }

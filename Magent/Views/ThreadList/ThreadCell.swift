@@ -241,7 +241,7 @@ private final class ActivityCircleIndicatorView: NSView {
     var style: ThreadActivityIndicatorStyle = .circle
     var onStyleSelection: ((ThreadActivityIndicatorStyle) -> Void)?
 
-    override var intrinsicContentSize: NSSize { NSSize(width: 15, height: 15) }
+    override var intrinsicContentSize: NSSize { NSSize(width: 11, height: 11) }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -410,7 +410,7 @@ final class ThreadCell: NSTableCellView {
     private static let renamePulseAnimationKey = "rename-label-pulse"
 
     var onArchive: (() -> Void)?
-    var onPriorityChange: ((Int?) -> Void)?
+    var priorityMenuProvider: (() -> NSMenu)?
     var onUnpin: (() -> Void)?
     var onRemoveFavorite: (() -> Void)?
     var onUnhide: (() -> Void)?
@@ -1351,7 +1351,7 @@ final class ThreadCell: NSTableCellView {
 
     private func configureInteractiveBadgeMenus(for thread: MagentThread) {
         priorityCapsule?.contextualMenuProvider = { [weak self] in
-            self?.priorityMenu(currentPriority: thread.priority) ?? NSMenu()
+            self?.priorityMenuProvider?() ?? NSMenu()
         }
         favoriteBadge?.contextualMenuProvider = { [weak self] in
             self?.singleActionMenu(
@@ -1367,44 +1367,12 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
-    private func priorityMenu(currentPriority: Int?) -> NSMenu {
-        let menu = NSMenu()
-        let clearItem = NSMenuItem(
-            title: String(localized: .ThreadStrings.threadPriorityNone),
-            action: #selector(setPriorityFromBadge(_:)),
-            keyEquivalent: ""
-        )
-        clearItem.target = self
-        clearItem.representedObject = NSNull()
-        clearItem.state = currentPriority == nil ? .on : .off
-        menu.addItem(clearItem)
-        menu.addItem(.separator())
-
-        for level in 1...5 {
-            let item = NSMenuItem(
-                title: String(localized: .ThreadStrings.threadPriorityLevel(level)),
-                action: #selector(setPriorityFromBadge(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = level
-            item.state = currentPriority == level ? .on : .off
-            menu.addItem(item)
-        }
-        return menu
-    }
-
     private func singleActionMenu(title: String, action: Selector) -> NSMenu {
         let menu = NSMenu()
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
         menu.addItem(item)
         return menu
-    }
-
-    @objc private func setPriorityFromBadge(_ sender: NSMenuItem) {
-        let selectedPriority = sender.representedObject as? Int
-        onPriorityChange?(selectedPriority)
     }
 
     @objc private func removeFavoriteFromBadge() {
