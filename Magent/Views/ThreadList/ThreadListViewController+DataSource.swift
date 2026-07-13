@@ -101,7 +101,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
     }
 
     @objc func toggleHiddenThreadsExpanded(_ sender: NSButton) {
-        guard let key = sender.objectValue as? String else { return }
+        guard let key = (sender as? HiddenThreadsDisclosureButton)?.storageKey else { return }
         var expanded = Set(UserDefaults.standard.stringArray(forKey: Self.expandedHiddenThreadGroupIdsKey) ?? [])
         if expanded.contains(key) {
             expanded.remove(key)
@@ -589,8 +589,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarProjectMainSpacer {
             return Self.projectHeaderToMainRowGap
         }
-        if item is SidebarGroupSeparator {
-            return 12
+        if let separator = item as? SidebarGroupSeparator {
+            return separator.height
         }
         if item is SidebarHiddenThreadsToggle {
             return 24
@@ -876,7 +876,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 ?? {
                     let c = NSTableCellView()
                     c.identifier = identifier
-                    let button = NSButton()
+                    let button = HiddenThreadsDisclosureButton()
                     button.identifier = Self.hiddenThreadsDisclosureButtonIdentifier
                     button.translatesAutoresizingMaskIntoConstraints = false
                     button.isBordered = false
@@ -889,19 +889,19 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     c.addSubview(button)
                     NSLayoutConstraint.activate([
                         button.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.capsuleAlignedLeading),
-                        button.trailingAnchor.constraint(lessThanOrEqualTo: c.trailingAnchor, constant: -Self.capsuleAlignedTrailing),
+                        button.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -Self.capsuleAlignedTrailing),
                         button.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         button.heightAnchor.constraint(equalToConstant: 20),
                     ])
                     return c
                 }()
-            if let button = cell.subviews.first(where: { $0.identifier == Self.hiddenThreadsDisclosureButtonIdentifier }) as? NSButton {
+            if let button = cell.subviews.first(where: { $0.identifier == Self.hiddenThreadsDisclosureButtonIdentifier }) as? HiddenThreadsDisclosureButton {
                 button.title = "Hidden (\(toggle.count))"
                 button.image = NSImage(
                     systemSymbolName: toggle.isExpanded ? "chevron.down" : "chevron.right",
                     accessibilityDescription: toggle.isExpanded ? "Collapse hidden threads" : "Expand hidden threads"
                 )?.withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
-                button.objectValue = hiddenThreadGroupStorageKey(projectId: toggle.projectId, sectionId: toggle.sectionId)
+                button.storageKey = hiddenThreadGroupStorageKey(projectId: toggle.projectId, sectionId: toggle.sectionId)
                 button.toolTip = toggle.isExpanded ? "Collapse hidden threads" : "Expand hidden threads"
             }
             return cell

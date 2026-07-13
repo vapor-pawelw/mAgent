@@ -52,7 +52,7 @@ class SidebarSection {
         let hiddenThreads = threads.filter(\.isSidebarHidden)
         if !hiddenThreads.isEmpty {
             if lastState != nil {
-                result.append(SidebarGroupSeparator())
+                result.append(SidebarGroupSeparator.beforeHiddenGroup(isExpanded: areHiddenThreadsExpanded))
             }
             result.append(SidebarHiddenThreadsToggle(
                 projectId: projectId,
@@ -98,7 +98,20 @@ final class SidebarMissingProjectRow {
     }
 }
 /// Spacer inserted between pinned / normal / hidden thread groups.
-final class SidebarGroupSeparator {}
+final class SidebarGroupSeparator {
+    static let standardHeight: CGFloat = 12
+    static let collapsedHiddenGroupHeight: CGFloat = 20
+
+    let height: CGFloat
+
+    init(height: CGFloat = standardHeight) {
+        self.height = height
+    }
+
+    static func beforeHiddenGroup(isExpanded: Bool) -> SidebarGroupSeparator {
+        SidebarGroupSeparator(height: isExpanded ? standardHeight : collapsedHiddenGroupHeight)
+    }
+}
 final class SidebarHiddenThreadsToggle {
     let projectId: UUID
     let sectionId: UUID?
@@ -113,6 +126,9 @@ final class SidebarHiddenThreadsToggle {
     }
 
     var count: Int { threads.count }
+}
+final class HiddenThreadsDisclosureButton: NSButton {
+    var storageKey: String?
 }
 final class SidebarBottomPadding {
     let height: CGFloat

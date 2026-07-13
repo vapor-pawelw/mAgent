@@ -23,6 +23,10 @@ struct SidebarSectionOutlineChildCountTests {
         #expect(renderedItems.count == section.threads.count + 2)
         #expect(renderedItems.contains { $0 is SidebarHiddenThreadsToggle })
         #expect(!renderedItems.contains { ($0 as? MagentThread)?.id == hidden.id })
+        #expect(
+            renderedItems.compactMap { $0 as? SidebarGroupSeparator }.last?.height
+                == SidebarGroupSeparator.collapsedHiddenGroupHeight
+        )
     }
 
     @Test
@@ -42,6 +46,27 @@ struct SidebarSectionOutlineChildCountTests {
         let renderedThreads = section.items.compactMap { $0 as? MagentThread }
         #expect(renderedThreads.map(\.id) == [first.id, second.id])
         #expect(section.items.first is SidebarHiddenThreadsToggle)
+    }
+
+    @Test
+    func expandedHiddenGroupKeepsStandardSpacingAfterVisibleThreads() {
+        let projectId = UUID()
+        let section = SidebarSection(
+            projectId: projectId,
+            sectionId: UUID(),
+            name: "Work",
+            color: .systemBlue,
+            threads: [
+                makeThread(projectId: projectId, name: "visible"),
+                makeThread(projectId: projectId, name: "hidden", isSidebarHidden: true),
+            ],
+            areHiddenThreadsExpanded: true
+        )
+
+        #expect(
+            section.items.compactMap { $0 as? SidebarGroupSeparator }.last?.height
+                == SidebarGroupSeparator.standardHeight
+        )
     }
 
     @Test

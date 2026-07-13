@@ -27,7 +27,7 @@ Hidden threads let users keep inactive work visible without archiving it.
   - `hidden`
 - Group ordering is always `pinned`, then normal visible threads, then hidden threads.
 - A blank vertical gap separates adjacent groups; it intentionally has no visible divider.
-- The hidden group replaces its old passive separator with a 24-point disclosure row. Collapsing it removes only hidden thread rows; project and section disclosure state continues to be owned by `NSOutlineView`.
+- The hidden group replaces its old passive separator with a full-width, 24-point disclosure row. Collapsed groups get an additional 8 points of separation from visible threads; expanded groups keep the standard spacing. Collapsing removes only hidden thread rows, while project and section disclosure state continues to be owned by `NSOutlineView`.
 - In-section `displayOrder` remains local to a single group; reorder logic must not collapse hidden threads back into the normal unpinned group.
 - New-thread placement and cross-section moves route through the same bottom-of-group helper so hidden-state behavior stays consistent after reloads and moves.
 
