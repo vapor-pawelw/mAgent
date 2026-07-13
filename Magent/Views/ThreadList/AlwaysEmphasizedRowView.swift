@@ -452,7 +452,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             var hue: CGFloat = 0, sat: CGFloat = 0, bri: CGFloat = 0, alpha: CGFloat = 0
             accentColor.usingColorSpace(.sRGB)?.getHue(&hue, saturation: &sat, brightness: &bri, alpha: &alpha)
             brightColor = NSColor(hue: hue, saturation: max(sat * 0.7, 0.3), brightness: min(bri * 1.1, 1.0), alpha: 0.8)
-            dimColor = NSColor.white.withAlphaComponent(0.12)
+            // Keep unselected busy rows consistent with idle rows: only the moving arc draws a border.
+            dimColor = .clear
         }
         effectiveAppearance.performAsCurrentDrawingAppearance {
             gradientLayer.colors = [
