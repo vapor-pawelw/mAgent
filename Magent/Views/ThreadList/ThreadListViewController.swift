@@ -399,33 +399,6 @@ final class ThreadListViewController: NSViewController {
         let anchorOffsetY: CGFloat
     }
 
-    /// Subset of settings that can affect sidebar structure/layout/metadata rendering.
-    /// Used to avoid unnecessary outline reloads for unrelated settings (for example
-    /// chat font-size changes from Settings > Chat).
-    private struct SidebarSettingsFingerprint: Equatable {
-        let projects: [Project]
-        let threadSections: [ThreadSection]
-        let useThreadSections: Bool
-        let defaultSectionId: UUID?
-        let autoReorderThreadsOnAgentCompletion: Bool
-        let showPRStatusBadges: Bool
-        let showJiraStatusBadges: Bool
-        let showBusyStateDuration: Bool
-        let narrowThreads: Bool
-
-        init(settings: AppSettings) {
-            projects = settings.projects
-            threadSections = settings.threadSections
-            useThreadSections = settings.useThreadSections
-            defaultSectionId = settings.defaultSectionId
-            autoReorderThreadsOnAgentCompletion = settings.autoReorderThreadsOnAgentCompletion
-            showPRStatusBadges = settings.showPRStatusBadges
-            showJiraStatusBadges = settings.showJiraStatusBadges
-            showBusyStateDuration = settings.showBusyStateDuration
-            narrowThreads = !settings.wideThreads
-        }
-    }
-
     // MARK: - Data Model (3-level hierarchy)
     // Level 0: SidebarProject (project name header)
     // Level 1: SidebarProjectMainSpacer, MagentThread (main/flat item), or SidebarSection (section header)
