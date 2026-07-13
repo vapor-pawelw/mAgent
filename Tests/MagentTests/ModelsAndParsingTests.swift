@@ -50,6 +50,27 @@ struct MagentThreadActivityDurationStateTests {
     }
 }
 
+@Suite("Thread activity indicator preference")
+struct ThreadActivityIndicatorPreferenceTests {
+
+    @Test("Migrates saved settings without an explicit preference to the circle")
+    func missingPreferenceDefaultsToCircle() throws {
+        let settings = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"projects":[]}"#.utf8))
+
+        #expect(settings.threadActivityIndicatorStyle == .circle)
+    }
+
+    @Test("Preserves an explicit text preference")
+    func explicitTextPreferenceRoundTrips() throws {
+        var settings = AppSettings()
+        settings.threadActivityIndicatorStyle = .text
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+
+        #expect(decoded.threadActivityIndicatorStyle == .text)
+    }
+}
+
 // MARK: - SemanticVersion
 
 @Suite("SemanticVersion parsing")

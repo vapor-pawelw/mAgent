@@ -14,6 +14,11 @@ public enum AppAppearanceMode: String, Codable, Sendable, CaseIterable {
     }
 }
 
+public enum ThreadActivityIndicatorStyle: String, Codable, Sendable, CaseIterable {
+    case circle
+    case text
+}
+
 public enum TerminalMouseWheelBehavior: String, Codable, Sendable, CaseIterable {
     case magentDefaultScroll
     case inheritGhosttyGlobal
@@ -143,6 +148,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var showPRStatusBadges: Bool
     public var showJiraStatusBadges: Bool
     public var showBusyStateDuration: Bool
+    public var threadActivityIndicatorStyle: ThreadActivityIndicatorStyle
     public var expandedStatusBarThreadStatuses: [StatusBarThreadStatusKind]
     public var autoRenameSlugPrompt: String
     public var useThreadSections: Bool
@@ -213,6 +219,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showPRStatusBadges: Bool = true,
         showJiraStatusBadges: Bool = true,
         showBusyStateDuration: Bool = true,
+        threadActivityIndicatorStyle: ThreadActivityIndicatorStyle = .circle,
         expandedStatusBarThreadStatuses: [StatusBarThreadStatusKind] = StatusBarThreadStatusKind.defaultExpanded,
         autoRenameSlugPrompt: String = AppSettings.defaultSlugPrompt,
         useThreadSections: Bool = true,
@@ -282,6 +289,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.showPRStatusBadges = showPRStatusBadges
         self.showJiraStatusBadges = showJiraStatusBadges
         self.showBusyStateDuration = showBusyStateDuration
+        self.threadActivityIndicatorStyle = threadActivityIndicatorStyle
         self.expandedStatusBarThreadStatuses = StatusBarThreadStatusKind.normalizedExpanded(expandedStatusBarThreadStatuses)
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.useThreadSections = useThreadSections
@@ -363,6 +371,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showPRStatusBadges = try container.decodeIfPresent(Bool.self, forKey: .showPRStatusBadges) ?? true
         showJiraStatusBadges = try container.decodeIfPresent(Bool.self, forKey: .showJiraStatusBadges) ?? true
         showBusyStateDuration = try container.decodeIfPresent(Bool.self, forKey: .showBusyStateDuration) ?? true
+        threadActivityIndicatorStyle = try container.decodeIfPresent(ThreadActivityIndicatorStyle.self, forKey: .threadActivityIndicatorStyle) ?? .circle
         let decodedExpandedStatuses = try container.decodeIfPresent(
             [StatusBarThreadStatusKind].self,
             forKey: .expandedStatusBarThreadStatuses
@@ -445,6 +454,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(wideThreads, forKey: .wideThreads)
         try container.encode(showPRStatusBadges, forKey: .showPRStatusBadges)
         try container.encode(showJiraStatusBadges, forKey: .showJiraStatusBadges)
+        try container.encode(showBusyStateDuration, forKey: .showBusyStateDuration)
+        try container.encode(threadActivityIndicatorStyle, forKey: .threadActivityIndicatorStyle)
         try container.encode(expandedStatusBarThreadStatuses, forKey: .expandedStatusBarThreadStatuses)
         // Keep writing the legacy key for backward compatibility with older builds.
         try container.encode(autoRenameBranches, forKey: .autoRenameWorktrees)
@@ -691,6 +702,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case showPRStatusBadges
         case showJiraStatusBadges
         case showBusyStateDuration
+        case threadActivityIndicatorStyle
         case expandedStatusBarThreadStatuses
         case autoRenameWorktrees
         case autoRenameSlugPrompt

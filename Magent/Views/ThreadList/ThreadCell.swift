@@ -20,6 +20,7 @@ private final class PriorityCapsuleView: NSView {
         tf.setContentCompressionResistancePriority(.required, for: .horizontal)
         return tf
     }()
+    var contextualMenuProvider: (() -> NSMenu)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -40,6 +41,18 @@ private final class PriorityCapsuleView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let menu = contextualMenuProvider?() else {
+            super.mouseDown(with: event)
+            return
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        contextualMenuProvider?()
+    }
 
     /// Matches the border-color logic of `TopBorderBadge.updateColors(...)` so
     /// selection, waiting, and completion highlights stay in sync with the
@@ -74,6 +87,7 @@ private final class TopBorderBadge: NSView {
     /// When true, the badge renders as a bare icon (no pill background/border,
     /// larger icon size). Use for icon-only badges like pin or rate-limit.
     let isBareIcon: Bool
+    var contextualMenuProvider: (() -> NSMenu)?
 
     let label: NSTextField = {
         let tf = NSTextField(labelWithString: "")
@@ -160,6 +174,18 @@ private final class TopBorderBadge: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override func mouseDown(with event: NSEvent) {
+        guard let menu = contextualMenuProvider?() else {
+            super.mouseDown(with: event)
+            return
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        contextualMenuProvider?()
+    }
+
     override func layout() {
         super.layout()
         if isBareIcon {
@@ -203,6 +229,79 @@ private final class TopBorderBadge: NSView {
 
     func setCornerDotVisible(_ isVisible: Bool) {
         cornerDot.isHidden = !isVisible
+    }
+}
+
+/// A compact, clickable pie indicator. Its colored portion advances one sixth
+/// at a time to match the existing activity-age color bands.
+private final class ActivityCircleIndicatorView: NSView {
+    var fillLevel = 1 { didSet { needsDisplay = true } }
+    var fillColor: NSColor = .systemBlue { didSet { needsDisplay = true } }
+    var borderColor: NSColor = .clear { didSet { needsDisplay = true } }
+    var style: ThreadActivityIndicatorStyle = .circle
+    var onStyleSelection: ((ThreadActivityIndicatorStyle) -> Void)?
+
+    override var intrinsicContentSize: NSSize { NSSize(width: 15, height: 15) }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let circleRect = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let center = NSPoint(x: circleRect.midX, y: circleRect.midY)
+        let radius = min(circleRect.width, circleRect.height) / 2
+
+        NSColor.controlBackgroundColor.setFill()
+        NSBezierPath(ovalIn: circleRect).fill()
+
+        let level = min(max(fillLevel, 1), ThreadRowBadgeLayout.activityColorLevelCount)
+        let endAngle = 90 - (360 * CGFloat(level) / CGFloat(ThreadRowBadgeLayout.activityColorLevelCount))
+        let fillPath = NSBezierPath()
+        fillPath.move(to: center)
+        fillPath.appendArc(withCenter: center, radius: radius, startAngle: 90, endAngle: endAngle, clockwise: true)
+        fillPath.close()
+        fillColor.setFill()
+        fillPath.fill()
+
+        borderColor.setStroke()
+        let outline = NSBezierPath(ovalIn: circleRect)
+        outline.lineWidth = 1
+        outline.stroke()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        NSMenu.popUpContextMenu(activityStyleMenu(), with: event, for: self)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        activityStyleMenu()
+    }
+
+    @objc private func selectStyle(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let style = ThreadActivityIndicatorStyle(rawValue: rawValue) else { return }
+        onStyleSelection?(style)
+    }
+
+    func activityStyleMenu() -> NSMenu {
+        let menu = NSMenu()
+        for candidate in ThreadActivityIndicatorStyle.allCases {
+            let title: String = switch candidate {
+            case .circle: String(localized: .ThreadStrings.threadActivityIndicatorCircle)
+            case .text: String(localized: .ThreadStrings.threadActivityIndicatorText)
+            }
+            let item = NSMenuItem(title: title, action: #selector(selectStyle(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = candidate.rawValue
+            item.state = candidate == style ? .on : .off
+            menu.addItem(item)
+        }
+        return menu
     }
 }
 
@@ -286,6 +385,7 @@ final class ThreadCell: NSTableCellView {
     private weak var prRowStack: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
     private var durationLabel: NSTextField?
+    private var durationCircle: ActivityCircleIndicatorView?
     private var durationTimer: Timer?
     private var currentDurationSince: Date?
     private var isCurrentDurationBusy = false
@@ -310,6 +410,10 @@ final class ThreadCell: NSTableCellView {
     private static let renamePulseAnimationKey = "rename-label-pulse"
 
     var onArchive: (() -> Void)?
+    var onPriorityChange: ((Int?) -> Void)?
+    var onUnpin: (() -> Void)?
+    var onRemoveFavorite: (() -> Void)?
+    var onUnhide: (() -> Void)?
 
     private static func descriptionFont() -> NSFont {
         .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
@@ -877,6 +981,7 @@ final class ThreadCell: NSTableCellView {
             isBusy: thread.activityDurationState == .busy
         )
         configurePriority(thread.priority)
+        configureInteractiveBadgeMenus(for: thread)
 
         syncRowVisibility()
         showsRenamePulse = isAutoRenaming
@@ -1123,6 +1228,19 @@ final class ThreadCell: NSTableCellView {
         badge.iconView.isHidden = true
         badge.isHidden = true
 
+        let circle = ActivityCircleIndicatorView()
+        circle.isHidden = true
+        circle.onStyleSelection = { [weak self] style in
+            var settings = PersistenceService.shared.loadSettings()
+            settings.threadActivityIndicatorStyle = style
+            try? PersistenceService.shared.saveSettings(settings)
+            NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+            self?.updateDurationPresentation()
+        }
+        badge.contextualMenuProvider = { [weak circle] in
+            circle?.activityStyleMenu() ?? NSMenu()
+        }
+
         // Priority dots: wrapped in a pill-shaped container with a
         // `windowBackgroundColor` fill (matches the sidebar area behind the
         // row capsules), 2pt inner padding on all edges.
@@ -1160,7 +1278,10 @@ final class ThreadCell: NSTableCellView {
         bottomLeftBadgeStack = stack
         durationBadge = badge
         durationLabel = badge.label
+        durationCircle = circle
         priorityCapsule = capsule
+
+        stack.insertArrangedSubview(circle, at: 0)
 
         updateTopBorderBadgeColors()
     }
@@ -1226,6 +1347,76 @@ final class ThreadCell: NSTableCellView {
         capsule.isHidden = false
         capsule.toolTip = "Priority \(priority): \(Self.priorityLabel(forLevel: priority))"
         capsule.needsDisplay = true
+    }
+
+    private func configureInteractiveBadgeMenus(for thread: MagentThread) {
+        priorityCapsule?.contextualMenuProvider = { [weak self] in
+            self?.priorityMenu(currentPriority: thread.priority) ?? NSMenu()
+        }
+        favoriteBadge?.contextualMenuProvider = { [weak self] in
+            self?.singleActionMenu(
+                title: String(localized: .ThreadStrings.threadRemoveFromFavorites),
+                action: #selector(ThreadCell.removeFavoriteFromBadge)
+            ) ?? NSMenu()
+        }
+        pinnedBadge?.contextualMenuProvider = { [weak self] in
+            self?.singleActionMenu(title: String(localized: .CommonStrings.commonUnpin), action: #selector(ThreadCell.unpinFromBadge)) ?? NSMenu()
+        }
+        hiddenBadge?.contextualMenuProvider = { [weak self] in
+            self?.singleActionMenu(title: String(localized: .CommonStrings.commonUnhide), action: #selector(ThreadCell.unhideFromBadge)) ?? NSMenu()
+        }
+    }
+
+    private func priorityMenu(currentPriority: Int?) -> NSMenu {
+        let menu = NSMenu()
+        let clearItem = NSMenuItem(
+            title: String(localized: .ThreadStrings.threadPriorityNone),
+            action: #selector(setPriorityFromBadge(_:)),
+            keyEquivalent: ""
+        )
+        clearItem.target = self
+        clearItem.representedObject = NSNull()
+        clearItem.state = currentPriority == nil ? .on : .off
+        menu.addItem(clearItem)
+        menu.addItem(.separator())
+
+        for level in 1...5 {
+            let item = NSMenuItem(
+                title: String(localized: .ThreadStrings.threadPriorityLevel(level)),
+                action: #selector(setPriorityFromBadge(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = level
+            item.state = currentPriority == level ? .on : .off
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    private func singleActionMenu(title: String, action: Selector) -> NSMenu {
+        let menu = NSMenu()
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        menu.addItem(item)
+        return menu
+    }
+
+    @objc private func setPriorityFromBadge(_ sender: NSMenuItem) {
+        let selectedPriority = sender.representedObject as? Int
+        onPriorityChange?(selectedPriority)
+    }
+
+    @objc private func removeFavoriteFromBadge() {
+        onRemoveFavorite?()
+    }
+
+    @objc private func unpinFromBadge() {
+        onUnpin?()
+    }
+
+    @objc private func unhideFromBadge() {
+        onUnhide?()
     }
 
     private func ensureKeepAliveBadge() {
@@ -1337,6 +1528,7 @@ final class ThreadCell: NSTableCellView {
         let completion = hasUnreadCompletion && !rowSelected
         let waiting = hasWaitingForInput && !hasUnreadCompletion && !rowSelected
         durationBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        updateDurationCircleColors()
         // Re-apply elapsed-time tint after updateColors resets label to secondaryLabelColor.
         if let since = currentDurationSince {
             let elapsed = max(0, Int(Date().timeIntervalSince(since)))
@@ -1372,13 +1564,13 @@ final class ThreadCell: NSTableCellView {
         isCurrentDurationBusy = isBusy
         if let since {
             refreshDurationText(since: since)
-            durationLabel?.isHidden = false
-            durationBadge?.isHidden = false
+            updateDurationPresentation()
             startDurationTimer()
         } else {
             durationLabel?.stringValue = ""
             durationLabel?.isHidden = true
             durationBadge?.isHidden = true
+            durationCircle?.isHidden = true
             durationBadge?.toolTip = nil
             stopDurationTimer()
         }
@@ -1404,6 +1596,40 @@ final class ThreadCell: NSTableCellView {
         } else {
             let relative = RelativeDateTimeFormatter().localizedString(for: since, relativeTo: Date())
             durationBadge?.toolTip = String(localized: .ThreadStrings.threadLastActivityTooltip(relative))
+        }
+        durationCircle?.toolTip = durationBadge?.toolTip
+        durationCircle?.fillLevel = ThreadRowBadgeLayout.activityColorLevel(forElapsed: elapsed)
+        durationCircle?.fillColor = Self.durationLabelColor(elapsed: elapsed, isDark: isDark)
+        updateDurationCircleColors()
+    }
+
+    private func updateDurationPresentation() {
+        let style = PersistenceService.shared.loadSettings().threadActivityIndicatorStyle
+        let hasDuration = currentDurationSince != nil
+        durationBadge?.isHidden = !hasDuration || style != .text
+        durationLabel?.isHidden = !hasDuration || style != .text
+        durationCircle?.style = style
+        durationCircle?.isHidden = !hasDuration || style != .circle
+    }
+
+    private func updateDurationCircleColors() {
+        guard let circle = durationCircle else { return }
+        let rowSelected = (superview as? NSTableRowView)?.isSelected ?? false
+        let completion = hasUnreadCompletion && !rowSelected
+        let waiting = hasWaitingForInput && !hasUnreadCompletion && !rowSelected
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            if rowSelected {
+                circle.borderColor = .controlAccentColor
+            } else if waiting {
+                circle.borderColor = .systemOrange.withAlphaComponent(0.5)
+            } else if completion {
+                circle.borderColor = .systemGreen.withAlphaComponent(0.5)
+            } else {
+                let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+                circle.borderColor = isDark
+                    ? .white.withAlphaComponent(0.12)
+                    : .black.withAlphaComponent(0.08)
+            }
         }
     }
 
