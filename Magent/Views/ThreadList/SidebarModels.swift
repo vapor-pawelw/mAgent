@@ -34,7 +34,7 @@ class SidebarSection {
         self.threads = threads
     }
 
-    /// Thread items interleaved with `SidebarGroupSeparator` at pinned→normal
+    /// Thread items interleaved with `SidebarGroupSeparator` spacers at pinned→normal
     /// and normal→hidden transitions. Used for datasource rendering only —
     /// all drag-drop / count / filter logic reads `threads` directly.
     var items: [Any] {
@@ -80,7 +80,7 @@ final class SidebarMissingProjectRow {
         self.repoPath = repoPath
     }
 }
-/// Visual separator inserted between pinned / normal / hidden thread groups.
+/// Spacer inserted between pinned / normal / hidden thread groups.
 final class SidebarGroupSeparator {}
 final class SidebarBottomPadding {
     let height: CGFloat

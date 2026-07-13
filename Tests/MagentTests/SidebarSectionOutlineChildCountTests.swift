@@ -5,7 +5,7 @@ import MagentCore
 @Suite
 struct SidebarSectionOutlineChildCountTests {
     @Test
-    func outlineChildCountMatchesRenderedSectionItems() {
+    func outlineChildCountIncludesSpacersBetweenThreadGroups() {
         let projectId = UUID()
         let pinned = makeThread(projectId: projectId, name: "pinned", isPinned: true)
         let visible = makeThread(projectId: projectId, name: "visible")
@@ -20,7 +20,7 @@ struct SidebarSectionOutlineChildCountTests {
         let renderedItems = section.items
 
         #expect(section.outlineChildCount == renderedItems.count)
-        #expect(renderedItems.count > section.threads.count)
+        #expect(renderedItems.count == section.threads.count + 2)
     }
 
     @Test

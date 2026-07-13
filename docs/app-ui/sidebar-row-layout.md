@@ -25,6 +25,7 @@ Capsule-style sidebar with state-aware rounded borders, dynamic heights, and bad
 - Sign emoji is rendered at the **row view** level (`AlwaysEmphasizedRowView`) inside a circular `SignEmojiBadgeView` anchored to the top-left corner of the row (2pt margin from leading and top edges). The badge self-sizes via `intrinsicContentSize` (text size + 4pt padding, high priority) with a required 1:1 width/height ratio to stay circular. Border color and width mirror the capsule's current state. Not part of `ThreadCell`.
 - Project repo names use system bold 20pt font.
 - No separator divider between project groups; vertical gap (`projectHeaderInterProjectGap = 24pt`) handles spacing.
+- Pinned, normal, and hidden thread groups are separated by blank vertical space only; no divider line is drawn.
 - The global "Add repository" button is a toolbar icon next to Recently Archived and Settings.
 - The add-repo toolbar button opens a 3-item menu: `Create New Repository…`, `Import Existing Repository…`, and `Clone Repository…`.
 - When no repositories are configured, the sidebar shows a centered no-content view with direct actions for creating, importing, or cloning a repository.

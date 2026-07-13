@@ -24,6 +24,7 @@ Hidden threads let users keep inactive work visible without archiving it.
   - `visible`
   - `hidden`
 - Group ordering is always `pinned`, then normal visible threads, then hidden threads.
+- A blank vertical gap separates adjacent groups; it intentionally has no visible divider.
 - In-section `displayOrder` remains local to a single group; reorder logic must not collapse hidden threads back into the normal unpinned group.
 - New-thread placement and cross-section moves route through the same bottom-of-group helper so hidden-state behavior stays consistent after reloads and moves.
 

@@ -40,6 +40,7 @@
 
 #### Improvements
 
+- Replaced sidebar dividers between pinned, normal, and hidden threads with cleaner spacing.
 - Added a default `Cmd+J` shortcut and View menu action to recenter the sidebar on the current thread.
 - Keep moved or missing repositories visible with recovery and discard actions.
 - Refresh missing-repository status when Magent returns to the foreground.
