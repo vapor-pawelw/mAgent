@@ -475,7 +475,7 @@ final class ThreadCell: NSTableCellView {
         secondaryRow.orientation = .horizontal
         secondaryRow.alignment = .centerY
         secondaryRow.spacing = 4
-        secondaryRow.alphaValue = ThreadRowContentOpacity.secondaryLine
+        subtitle.alphaValue = ThreadRowContentOpacity.secondaryLine
         secondaryRow.translatesAutoresizingMaskIntoConstraints = false
 
         // PR row: badge-aware composition. Individual labels + badges for Jira and PR.
@@ -549,7 +549,7 @@ final class ThreadCell: NSTableCellView {
         }
         topBorderBadgeStack?.alphaValue = 1.0
         bottomBorderBadgeStack?.alphaValue = 1.0
-        secondaryRowStack?.alphaValue = ThreadRowContentOpacity.secondaryLine
+        subtitleLabel?.alphaValue = ThreadRowContentOpacity.secondaryLine
     }
 
     private func applyRenamePulse(_ active: Bool) {
@@ -799,7 +799,7 @@ final class ThreadCell: NSTableCellView {
         hasUnreadCompletion = thread.hasUnreadAgentCompletion
         hasWaitingForInput = thread.hasWaitingForInput
         hasAllDead = thread.hasAllSessionsDead
-        secondaryRowStack?.alphaValue = ThreadRowContentOpacity.secondaryLineOpacity(isInactive: hasAllDead)
+        subtitleLabel?.alphaValue = ThreadRowContentOpacity.secondaryLineOpacity(isInactive: hasAllDead)
         configuredSectionColor = sectionColor
         updateLeadingIconTint()
 
