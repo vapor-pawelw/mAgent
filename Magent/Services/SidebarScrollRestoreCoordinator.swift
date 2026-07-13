@@ -16,3 +16,15 @@ struct SidebarScrollRestoreCoordinator {
         token == generation
     }
 }
+
+struct SidebarInitialCenteringCoordinator {
+    private(set) var shouldAttempt = true
+
+    mutating func cancelForUserInteraction() {
+        shouldAttempt = false
+    }
+
+    mutating func markCompleted() {
+        shouldAttempt = false
+    }
+}

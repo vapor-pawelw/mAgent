@@ -114,12 +114,14 @@ extension ThreadListViewController {
         }()
         guard let project else { return }
 
+        cancelInitialSidebarCenteringForUserInteraction()
         let willCollapse = !isProjectCollapsed(project)
         setProjectCollapsed(project, isCollapsed: willCollapse)
         reloadData()
     }
 
     func toggleSection(_ section: SidebarSection, animatedDisclosureButton: NSButton? = nil) {
+        cancelInitialSidebarCenteringForUserInteraction()
         let willCollapse = !isSectionCollapsed(section)
         setSectionCollapsed(section, isCollapsed: willCollapse)
 

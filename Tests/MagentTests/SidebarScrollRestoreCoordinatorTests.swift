@@ -31,4 +31,23 @@ struct SidebarScrollRestoreCoordinatorTests {
 
         #expect(!coordinator.canApplyRestore(for: token))
     }
+
+    @Test
+    func initialCenteringStopsAfterExplicitSidebarInteraction() {
+        var coordinator = SidebarInitialCenteringCoordinator()
+
+        #expect(coordinator.shouldAttempt)
+        coordinator.cancelForUserInteraction()
+
+        #expect(!coordinator.shouldAttempt)
+    }
+
+    @Test
+    func completedInitialCenteringDoesNotRunAgain() {
+        var coordinator = SidebarInitialCenteringCoordinator()
+
+        coordinator.markCompleted()
+
+        #expect(!coordinator.shouldAttempt)
+    }
 }

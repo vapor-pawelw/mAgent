@@ -12,6 +12,7 @@ protocol ThreadListDelegate: AnyObject {
 
 final class SidebarOutlineView: NSOutlineView {
     var suppressSelectionAutoScroll = false
+    var onUserNavigationInteraction: (() -> Void)?
     private(set) var isDragInteractionActive = false
 
     func noteLocalDragWillBegin() {
@@ -77,6 +78,7 @@ final class SidebarOutlineView: NSOutlineView {
     /// tapping "archive" does not also select the row (which would trigger a heavyweight
     /// detail-view load that is immediately discarded).
     override func mouseDown(with event: NSEvent) {
+        onUserNavigationInteraction?()
         clearDragInteraction(reason: "mouse-down-reset")
 
         let loc = convert(event.locationInWindow, from: nil)
@@ -92,6 +94,16 @@ final class SidebarOutlineView: NSOutlineView {
             }
         }
         super.mouseDown(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        onUserNavigationInteraction?()
+        super.keyDown(with: event)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        onUserNavigationInteraction?()
+        super.scrollWheel(with: event)
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -384,7 +396,7 @@ final class ThreadListViewController: NSViewController {
     var diffPanelForcedAllChangesThreadId: UUID?
     var diffPanelTabBeforeDiffForce: DiffPanelTab?
     private var hasSidebarAppeared = false
-    private var didCenterInitialSelectedThreadOnLaunch = false
+    private var initialCenteringCoordinator = SidebarInitialCenteringCoordinator()
     private var pendingInitialSelectedThreadCenteringWorkItem: DispatchWorkItem?
     private var structuralReloadGeometryGeneration = 0
     private var scrollRestoreCoordinator = SidebarScrollRestoreCoordinator()
@@ -514,6 +526,12 @@ final class ThreadListViewController: NSViewController {
             name: NSView.boundsDidChangeNotification,
             object: scrollView.contentView
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sidebarWillStartLiveScroll(_:)),
+            name: NSScrollView.willStartLiveScrollNotification,
+            object: scrollView
+        )
     }
 
     override func viewDidAppear() {
@@ -571,6 +589,10 @@ final class ThreadListViewController: NSViewController {
     @objc private func scrollViewDidScroll(_ notification: Notification) {
         updateStickyHeaders()
         updateSelectedThreadJumpCapsuleVisibility()
+    }
+
+    @objc private func sidebarWillStartLiveScroll(_ notification: Notification) {
+        cancelInitialSidebarCenteringForUserInteraction()
     }
 
     @objc private func handleDiffTabDidActivate(_ notification: Notification) {
@@ -847,6 +869,9 @@ final class ThreadListViewController: NSViewController {
 
     private func setupOutlineView() {
         outlineView = SidebarOutlineView()
+        (outlineView as? SidebarOutlineView)?.onUserNavigationInteraction = { [weak self] in
+            self?.cancelInitialSidebarCenteringForUserInteraction()
+        }
         outlineView.style = .plain
         outlineView.headerView = nil
         outlineView.floatsGroupRows = true
@@ -1327,13 +1352,13 @@ final class ThreadListViewController: NSViewController {
 
     private func scheduleInitialSelectedThreadCenteringIfNeeded() {
         guard hasSidebarAppeared else { return }
-        guard !didCenterInitialSelectedThreadOnLaunch else { return }
+        guard initialCenteringCoordinator.shouldAttempt else { return }
         guard selectedThreadID != nil else { return }
         pendingInitialSelectedThreadCenteringWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             guard self.hasSidebarAppeared else { return }
-            guard !self.didCenterInitialSelectedThreadOnLaunch else { return }
+            guard self.initialCenteringCoordinator.shouldAttempt else { return }
             guard self.selectedThreadID != nil else { return }
             self.refreshSidebarLayout(forceColumnRefit: true)
             self.attemptInitialSelectedThreadCentering(remainingAttempts: 8)
@@ -1343,7 +1368,7 @@ final class ThreadListViewController: NSViewController {
     }
 
     private func attemptInitialSelectedThreadCentering(remainingAttempts: Int) {
-        guard !didCenterInitialSelectedThreadOnLaunch else { return }
+        guard initialCenteringCoordinator.shouldAttempt else { return }
         guard hasSidebarAppeared else { return }
         guard let selectedThreadID else { return }
 
@@ -1365,7 +1390,7 @@ final class ThreadListViewController: NSViewController {
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     if self.isSelectedThreadRowVisibleInViewport() {
-                        self.didCenterInitialSelectedThreadOnLaunch = true
+                        self.initialCenteringCoordinator.markCompleted()
                         self.updateSelectedThreadJumpCapsuleVisibility()
                     } else if remainingAttempts > 0 {
                         self.attemptInitialSelectedThreadCentering(remainingAttempts: remainingAttempts - 1)
@@ -1379,6 +1404,11 @@ final class ThreadListViewController: NSViewController {
         DispatchQueue.main.async { [weak self] in
             self?.attemptInitialSelectedThreadCentering(remainingAttempts: remainingAttempts - 1)
         }
+    }
+
+    func cancelInitialSidebarCenteringForUserInteraction() {
+        pendingInitialSelectedThreadCenteringWorkItem?.cancel()
+        initialCenteringCoordinator.cancelForUserInteraction()
     }
 
     private func isSelectedThreadRowVisibleInViewport() -> Bool {

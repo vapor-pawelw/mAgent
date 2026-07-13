@@ -102,6 +102,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
 
     @objc func toggleHiddenThreadsExpanded(_ sender: NSButton) {
         guard let key = (sender as? HiddenThreadsDisclosureButton)?.storageKey else { return }
+        cancelInitialSidebarCenteringForUserInteraction()
         var expanded = Set(UserDefaults.standard.stringArray(forKey: Self.expandedHiddenThreadGroupIdsKey) ?? [])
         if expanded.contains(key) {
             expanded.remove(key)
@@ -671,6 +672,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
             switch projectHeaderHitArea(project) {
             case .name:
+                cancelInitialSidebarCenteringForUserInteraction()
                 setProjectCollapsed(project, isCollapsed: !isProjectCollapsed(project))
                 reloadData()
             case .add, .disclosure, .other:
@@ -880,6 +882,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     button.identifier = Self.hiddenThreadsDisclosureButtonIdentifier
                     button.translatesAutoresizingMaskIntoConstraints = false
                     button.isBordered = false
+                    button.focusRingType = .none
                     button.imagePosition = .imageLeading
                     button.alignment = .left
                     button.font = .systemFont(ofSize: 11, weight: .medium)
