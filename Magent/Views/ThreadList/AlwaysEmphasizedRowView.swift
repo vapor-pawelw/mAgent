@@ -311,24 +311,19 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             fillColor.setFill()
             fillPath.fill()
 
-            // Skip static border when the animated busy border is active.
-            if busyBorderContainer == nil {
+            // Idle rows rely on their fill alone; reserve borders for interactive and status states.
+            if busyBorderContainer == nil, showsContextMenuHighlight {
                 let insetRect = capsuleRect.insetBy(dx: 0.5, dy: 0.5)
                 let borderPath = NSBezierPath(
                     roundedRect: insetRect,
                     xRadius: Self.capsuleCornerRadius,
                     yRadius: Self.capsuleCornerRadius
                 )
-                if showsContextMenuHighlight {
-                    borderPath.lineWidth = 1
-                    let highlightBorderColor = isDark
-                        ? NSColor.white.withAlphaComponent(0.3)
-                        : NSColor.black.withAlphaComponent(0.15)
-                    highlightBorderColor.setStroke()
-                } else {
-                    borderPath.lineWidth = 1
-                    style.border.setStroke()
-                }
+                borderPath.lineWidth = 1
+                let highlightBorderColor = isDark
+                    ? NSColor.white.withAlphaComponent(0.3)
+                    : NSColor.black.withAlphaComponent(0.15)
+                highlightBorderColor.setStroke()
                 borderPath.stroke()
             }
         }

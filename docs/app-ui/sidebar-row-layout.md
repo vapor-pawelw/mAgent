@@ -1,19 +1,19 @@
 # Sidebar Row Layout
 
-Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge overlays.
+Capsule-style sidebar with state-aware rounded borders, dynamic heights, and badge overlays.
 
 ## User-Facing Behavior
 
-- Every thread row is drawn inside a rounded-border capsule (`AlwaysEmphasizedRowView`).
+- Every thread row is drawn inside a rounded capsule (`AlwaysEmphasizedRowView`).
   - **Selected**: accent-colored border and fill.
   - **Completion (unread)**: green border and fill.
   - **Waiting for input**: orange border and fill.
-  - **Default**: subtle white border and a lightly tinted fill that stays above the sidebar background.
+  - **Default**: a lightly tinted fill that stays above the sidebar background, without a border.
 - Status badges (favorite, pinned, Jira-sync, keep-alive, rate-limit) are bare-icon badges sitting on the capsule's top border with a circular background on selected/completed rows. The Jira-sync badge uses the colored `JiraIcon` brand asset (not template-tinted) and appears whenever the thread has the per-thread "Sync description and priority from Jira" toggle enabled.
 - Rate-limit top-border badges can show a tiny 2pt red corner dot to indicate a directly-detected local source (non-propagated marker) for that agent on this thread.
 - Duration badge is a pill on the capsule's bottom-right with a persistent border. It reports `Busy for …` while the agent or Magent is actively working; once idle, the same elapsed value represents the last activity time and its tooltip reads `Last activity: … ago`. The duration label tints with a color gradient based on thread age: light blue (<15 min), green (<8 hrs), yellow (<1 day), orange (<3 days), red (3+ days). This provides at-a-glance visual feedback on activity age.
 - **Priority capsule**: Optional pill sitting immediately to the left of the duration badge on the capsule's bottom-right. Shown only when the thread has an explicit 1–5 priority. Renders cumulative dots (`●○○○○` through `●●●●●`) in a monospaced 9pt font so the string width is stable across levels. Dot color tints by level: 1 blue, 2 green, 3 yellow, 4 orange, 5 red. The capsule is filled with `windowBackgroundColor` (matches the sidebar background behind the row capsules) and uses the same `TopBorderBadge`-style border treatment as the duration pill so both badges read as a matched pair. 2pt inner padding on all sides.
-- The `Main worktree` row uses the same capsule geometry as other rows, but with a very subtle primary-tinted fill/border in its default state (1pt border) so it is visually distinct without a dedicated stripe.
+- The `Main worktree` row uses the same capsule geometry as other rows, but with a very subtle primary-tinted fill in its default state so it is visually distinct without a dedicated stripe.
 - The main row always uses a dedicated non-customizable `house.fill` icon. Tint behavior follows thread-row selection semantics: primary color when unselected, white when selected.
 - `Settings > Threads > Sidebar > Show thread icons` controls whether leading thread icons are rendered. When off, `ThreadCell` hides the arranged leading image view so row text shifts onto the icon rail instead of leaving blank space, and the thread context menu omits `Customize > Icon`.
 - A 10pt spacer separates each project header from its main worktree row so sticky header blur does not cut directly into the first capsule.
