@@ -46,7 +46,7 @@ public enum ChatTranscriptDisplayCompactor {
         let hiddenCount = max(0, run.count - visibleSummaries.count)
         var lines = [
             "Activity",
-            "\(run.count) internal \(run.count == 1 ? "step" : "steps") completed.",
+            "\(run.count) \(run.count == 1 ? "action" : "actions")",
         ]
         lines.append(contentsOf: visibleSummaries.map { "\($0.symbol) \($0.text)" })
         if hiddenCount > 0 {

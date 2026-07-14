@@ -1769,7 +1769,7 @@ struct ChatTranscriptDisplayCompactorTests {
             role: .assistant,
             text: """
             Activity
-            2 internal steps completed.
+            2 actions
             play.circle Run command: git status --short
             checkmark.circle Command finished: git status --short
             """
@@ -1778,7 +1778,7 @@ struct ChatTranscriptDisplayCompactorTests {
         let presentation = try #require(ChatTranscriptDisplayCompactor.activityPresentation(for: message))
 
         #expect(presentation.title == "Activity")
-        #expect(presentation.detail == "2 internal steps completed.")
+        #expect(presentation.detail == "2 actions")
         #expect(presentation.body.contains("play.circle Run command: git status --short"))
         #expect(presentation.body.contains("checkmark.circle Command finished: git status --short"))
         #expect(!presentation.isExpandedByDefault)
