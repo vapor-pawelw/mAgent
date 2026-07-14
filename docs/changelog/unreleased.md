@@ -69,6 +69,7 @@
 
 #### Bug Fixes
 
+- Updated all sidebar tickets immediately when allowed Jira prefixes change, without an unnecessary network refresh.
 - Made secondary sidebar thread metadata 20% dimmer, with an additional proportional dimming for inactive threads and hidden rows.
 - Fixed the sidebar icon visibility setting so changing it updates thread rows immediately.
 - Fixed idle sidebar thread-duration tooltips incorrectly claiming the thread was busy; they now show the last activity time.

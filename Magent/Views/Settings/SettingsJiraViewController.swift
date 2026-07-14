@@ -17,7 +17,6 @@ final class SettingsJiraViewController: NSViewController, NSTextFieldDelegate {
     private var siteURLField: NSTextField!
     private var ticketDetectionCheckbox: NSButton!
     private var ticketPrefixFilterField: NSTextField!
-    private var pendingTicketPrefixRefreshWorkItem: DispatchWorkItem?
 
     // Views that should be hidden when integration is off
     private var integrationDependentViews: [NSView] = []
@@ -397,23 +396,6 @@ final class SettingsJiraViewController: NSViewController, NSTextFieldDelegate {
             persistSettings(notify: true) { settings in
                 settings.jiraTicketDetectionPrefixes = field.stringValue
             }
-            scheduleTicketPrefixRefresh()
         }
-    }
-
-    private func scheduleTicketPrefixRefresh() {
-        pendingTicketPrefixRefreshWorkItem?.cancel()
-
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            if settings.jiraIntegrationEnabled && settings.jiraTicketDetectionEnabled {
-                ThreadManager.shared.enableAndRefreshJiraDetection()
-            } else {
-                ThreadManager.shared.clearAllJiraDetectionState()
-            }
-        }
-
-        pendingTicketPrefixRefreshWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 }

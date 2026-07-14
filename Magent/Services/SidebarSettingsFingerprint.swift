@@ -11,6 +11,7 @@ struct SidebarSettingsFingerprint: Equatable {
     let showThreadIcons: Bool
     let showPRStatusBadges: Bool
     let showJiraStatusBadges: Bool
+    let jiraTicketDetectionPrefixes: Set<String>
     let showBusyStateDuration: Bool
     let threadActivityIndicatorStyle: ThreadActivityIndicatorStyle
     let narrowThreads: Bool
@@ -24,6 +25,7 @@ struct SidebarSettingsFingerprint: Equatable {
         showThreadIcons = settings.showThreadIcons
         showPRStatusBadges = settings.showPRStatusBadges
         showJiraStatusBadges = settings.showJiraStatusBadges
+        jiraTicketDetectionPrefixes = settings.jiraTicketDetectionPrefixFilterSet
         showBusyStateDuration = settings.showBusyStateDuration
         threadActivityIndicatorStyle = settings.threadActivityIndicatorStyle
         narrowThreads = !settings.wideThreads
