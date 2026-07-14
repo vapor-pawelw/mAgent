@@ -210,6 +210,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             worktreePaths: knownWorktreePaths,
             worktreesBasePaths: knownWorktreesBasePaths
         )
+        ThreadManager.shared.cacheThreadSessionState()
         ThreadManager.shared.cleanupManagedZdotdir()
     }
 

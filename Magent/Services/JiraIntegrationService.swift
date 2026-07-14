@@ -39,6 +39,12 @@ final class JiraIntegrationService {
         jiraTicketCacheLoaded = true
     }
 
+    /// Restores the last displayed Jira status before the first live refresh.
+    func populateJiraInfoFromCache() {
+        loadJiraTicketCacheIfNeeded()
+        populateVerifiedTicketsFromCache()
+    }
+
     // MARK: - Verification
 
     /// Verifies detected Jira ticket keys against Jira via acli.

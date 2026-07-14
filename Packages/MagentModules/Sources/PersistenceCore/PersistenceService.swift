@@ -863,6 +863,22 @@ public final class PersistenceService {
         try? data.write(to: prCacheURL, options: .atomic)
     }
 
+    // MARK: - Thread Session State Cache
+
+    private var threadSessionStateCacheURL: URL {
+        appSupportURL.appendingPathComponent("thread-session-state-cache.json")
+    }
+
+    public func loadThreadSessionStateCache() -> ThreadSessionStateCache? {
+        guard let data = try? Data(contentsOf: threadSessionStateCacheURL) else { return nil }
+        return try? decoder.decode(ThreadSessionStateCache.self, from: data)
+    }
+
+    public func saveThreadSessionStateCache(_ cache: ThreadSessionStateCache) {
+        guard let data = try? encoder.encode(cache) else { return }
+        try? data.write(to: threadSessionStateCacheURL, options: .atomic)
+    }
+
     public func loadIgnoredRateLimitFingerprints() -> [AgentType: Set<String>] {
         let url = ignoredRateLimitFingerprintsURL
         guard let data = try? Data(contentsOf: url) else { return [:] }

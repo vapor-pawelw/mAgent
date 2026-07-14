@@ -156,7 +156,11 @@ final class ThreadManager {
         let svc = SessionLifecycleService(store: store, sessionTracker: sessionTracker, persistence: persistence, tmux: tmux)
         svc.onThreadsChanged = { [weak self] in
             guard let self else { return }
+            self.cacheThreadSessionState()
             self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        svc.onSessionStateChanged = { [weak self] in
+            self?.cacheThreadSessionState()
         }
         svc.recreateSession = { [weak self] sessionName, thread in
             await self?.recreateSessionIfNeeded(sessionName: sessionName, thread: thread) ?? false
@@ -237,6 +241,7 @@ final class ThreadManager {
         let svc = SessionRecreationService(store: store, sessionTracker: sessionTracker, persistence: persistence, tmux: tmux)
         svc.onThreadsChanged = { [weak self] in
             guard let self else { return }
+            self.cacheThreadSessionState()
             self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
         }
         svc.agentType = { [weak self] thread, sessionName in
@@ -757,6 +762,8 @@ final class ThreadManager {
     /// Human-readable summary of the most recent sync failure, used by the status bar.
     var lastStatusSyncFailureSummary: String?
     var _cachedRemoteByProjectId: [UUID: GitRemote] = [:]
+    private var lastCachedThreadSessionState: ThreadSessionStateCache?
+    private var hasPrimedThreadsForPendingRestore = false
     /// Non-persisted per-thread stack of recently closed tabs used by Cmd+Shift+T.
     var closedTabHistoryByThreadId: [UUID: ClosedTabHistoryBuffer] = [:]
 
@@ -766,14 +773,40 @@ final class ThreadManager {
         threads = persistence.loadThreads().filter { !$0.isArchived }
     }
 
+    private func restoreCachedSidebarStatus() {
+        populateJiraInfoFromCache()
+        populatePRInfoFromCache()
+
+        guard let cache = persistence.loadThreadSessionStateCache() else { return }
+        evictedIdleSessions = cache.restore(into: &threads)
+        lastCachedThreadSessionState = cache
+    }
+
+    func cacheThreadSessionState() {
+        let cache = ThreadSessionStateCache(
+            threads: threads,
+            evictedSessions: evictedIdleSessions
+        )
+        guard cache != lastCachedThreadSessionState else { return }
+        lastCachedThreadSessionState = cache
+        persistence.saveThreadSessionStateCache(cache)
+    }
+
     func primePersistedThreadsForLaunch() {
         loadThreads()
+        restoreCachedSidebarStatus()
+        hasPrimedThreadsForPendingRestore = true
         delegate?.threadManager(self, didUpdateThreads: threads)
         NotificationCenter.default.post(name: .magentThreadsDidChange, object: nil)
     }
 
     func restoreThreads() async {
-        loadThreads()
+        if hasPrimedThreadsForPendingRestore {
+            hasPrimedThreadsForPendingRestore = false
+        } else {
+            loadThreads()
+            restoreCachedSidebarStatus()
+        }
         installClaudeHooksSettings()
         ensureCodexBellNotification()
         installCodexIPCInstructions()

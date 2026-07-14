@@ -35,6 +35,9 @@ final class SessionLifecycleService {
     /// Called whenever the service mutates thread state that the UI needs to reflect.
     var onThreadsChanged: (() -> Void)?
 
+    /// Called when cached-only session availability changes without a visible thread mutation.
+    var onSessionStateChanged: (() -> Void)?
+
     /// Provided by ThreadManager so the service can trigger session recreation without
     /// importing or referencing the full agent-setup machinery.
     var recreateSession: ((String, MagentThread) async -> Bool)?
@@ -735,6 +738,7 @@ final class SessionLifecycleService {
         if let identifier {
             sessionTracker.sessionLastVisitedAt[identifier] = Date()
             sessionTracker.evictedIdleSessions.remove(identifier)
+            onSessionStateChanged?()
         }
         if store.threads[index].lastSelectedTabIdentifier == identifier { return }
         store.threads[index].lastSelectedTabIdentifier = identifier
@@ -785,6 +789,7 @@ final class SessionLifecycleService {
                 sessionTracker.evictedIdleSessions.remove(session)
             }
         }
+        onSessionStateChanged?()
     }
 
     func registerFallbackSession(
@@ -1063,10 +1068,11 @@ final class SessionLifecycleService {
             let currentDead = Set(thread.tmuxSessionNames.filter {
                 !liveSessions.contains($0)
             })
-            guard currentDead != thread.deadSessions else { continue }
+            guard currentDead != thread.deadSessions || !thread.cachedDeadSessions.isEmpty else { continue }
 
             let newlyDead = currentDead.subtracting(thread.deadSessions)
             store.threads[index].deadSessions = currentDead
+            store.threads[index].cachedDeadSessions = []
             changed = true
 
             // Auto-recreate the currently visible session so the user isn't

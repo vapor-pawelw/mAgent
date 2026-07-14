@@ -9,6 +9,10 @@ extension ThreadManager {
         jiraIntegrationService.loadJiraTicketCacheIfNeeded()
     }
 
+    func populateJiraInfoFromCache() {
+        jiraIntegrationService.populateJiraInfoFromCache()
+    }
+
     func verifyDetectedJiraTickets(
         forThreadIds: Set<UUID>? = nil,
         reason: JiraTicketRefreshReason = .detectedTicketChange

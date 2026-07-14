@@ -54,3 +54,5 @@ See `docs/agent-runtime/libghostty-integration.md` → "Surface Lifecycle: Threa
 ## Startup Recovery
 
 If `threads.json` records are reassigned onto an existing project during `settings.json` recovery, do not keep multiple active threads that resolve to the same normalized `worktreePath`. Merge their tabs/state into one canonical thread and de-duplicate terminal tab titles (especially for the main worktree).
+
+Before the first live status refresh completes, launch restores the last-known Jira, PR/MR, dead-session, and intentionally-evicted-session state from cache. This keeps the initial sidebar visually stable across relaunches. The cache is display-only: Jira/PR sync and `checkForDeadSessions` remain authoritative and replace stale values after launch. Hidden-thread state is not duplicated in this cache because it is already authoritative in `threads.json`.
