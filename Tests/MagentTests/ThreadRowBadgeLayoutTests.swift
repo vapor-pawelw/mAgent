@@ -19,6 +19,13 @@ struct ThreadRowBadgeLayoutTests {
         #expect(ThreadRowBadgeLayout.LeadingStatusItem.allCases == [.priority])
     }
 
+    @Test("Priority menus identify the level matching Jira")
+    func priorityMenuIdentifiesJiraPriority() {
+        #expect(ThreadRowBadgeLayout.priorityOptionLabel("Priority 3", level: 3, jiraPriority: 3, jiraAnnotation: "(Jira)") == "Priority 3 (Jira)")
+        #expect(ThreadRowBadgeLayout.priorityOptionLabel("Priority 2", level: 2, jiraPriority: 3, jiraAnnotation: "(Jira)") == "Priority 2")
+        #expect(ThreadRowBadgeLayout.priorityOptionLabel("Priority 3", level: 3, jiraPriority: nil, jiraAnnotation: "(Jira)") == "Priority 3")
+    }
+
     @Test("Trailing status indicators preserve their established order")
     func trailingStatusOrderPreservesStateIndicatorOrder() {
         #expect(ThreadRowBadgeLayout.TrailingStatusItem.allCases == [.favorite, .pinned, .hidden, .jiraSync, .activityDuration])

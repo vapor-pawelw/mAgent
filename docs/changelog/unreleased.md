@@ -49,6 +49,7 @@
 
 #### Improvements
 
+- Mark the priority matching a thread's Jira ticket in sidebar priority menus.
 - Restyled section headers with subtle neutral backgrounds, compact colored leading rails, and balanced content padding so section boundaries are clearer without competing with thread cards.
 - Moved thread priority and flat, borderless status indicators into a full-width in-capsule row below each thread's text, with activity shown as the final trailing indicator.
 - Replaced sidebar dividers between pinned, normal, and hidden threads with cleaner spacing.

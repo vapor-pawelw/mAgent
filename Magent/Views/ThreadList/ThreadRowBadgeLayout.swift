@@ -1,4 +1,14 @@
 enum ThreadRowBadgeLayout {
+    static func priorityOptionLabel(
+        _ label: String,
+        level: Int,
+        jiraPriority: Int?,
+        jiraAnnotation: String
+    ) -> String {
+        guard level == jiraPriority else { return label }
+        return "\(label) \(jiraAnnotation)"
+    }
+
     static let activityColorLevelCount = 6
 
     static func activityColorLevel(forElapsed elapsed: Int) -> Int {

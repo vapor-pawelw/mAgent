@@ -1112,6 +1112,17 @@
         }
       }
     },
+    "threadPriorityJiraAnnotation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(Jira)"
+          }
+        }
+      }
+    },
     "threadSyncWithJira": {
       "extractionState": "manual",
       "localizations": {

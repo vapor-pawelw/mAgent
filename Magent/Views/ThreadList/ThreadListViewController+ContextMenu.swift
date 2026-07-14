@@ -384,8 +384,15 @@ extension ThreadListViewController {
 
         submenu.addItem(.separator())
 
+        let jiraAnnotation = String(localized: .ThreadStrings.threadPriorityJiraAnnotation)
         for option in Self.priorityOptions {
             let isSelected = thread.priority == option.level
+            let label = ThreadRowBadgeLayout.priorityOptionLabel(
+                option.label,
+                level: option.level,
+                jiraPriority: thread.verifiedJiraTicket?.priority,
+                jiraAnnotation: jiraAnnotation
+            )
             let item = NSMenuItem(title: "", action: #selector(setThreadPriority(_:)), keyEquivalent: "")
             item.target = self
             item.state = isSelected ? .on : .off
@@ -396,7 +403,7 @@ extension ThreadListViewController {
                 attributes: [.foregroundColor: option.tint, .font: menuFont]
             )
             attributed.append(NSAttributedString(
-                string: "  \(option.label)",
+                string: "  \(label)",
                 attributes: [.font: menuFont]
             ))
             item.attributedTitle = attributed
