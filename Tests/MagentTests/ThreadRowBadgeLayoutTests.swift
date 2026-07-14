@@ -14,13 +14,13 @@ struct ThreadRowBadgeLayoutTests {
         #expect(ThreadRowBadgeLayout.activityColorLevel(forElapsed: 259_200) == 6)
     }
 
-    @Test("Leading status items keep activity before priority")
-    func leadingStatusOrderKeepsActivityBeforePriority() {
-        #expect(ThreadRowBadgeLayout.LeadingStatusItem.allCases == [.activityDuration, .priority])
+    @Test("Priority remains the leading status item")
+    func priorityRemainsLeading() {
+        #expect(ThreadRowBadgeLayout.LeadingStatusItem.allCases == [.priority])
     }
 
     @Test("Trailing status indicators preserve their established order")
     func trailingStatusOrderPreservesStateIndicatorOrder() {
-        #expect(ThreadRowBadgeLayout.TrailingStatusItem.allCases == [.favorite, .pinned, .hidden, .jiraSync])
+        #expect(ThreadRowBadgeLayout.TrailingStatusItem.allCases == [.favorite, .pinned, .hidden, .jiraSync, .activityDuration])
     }
 }

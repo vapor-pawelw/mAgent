@@ -13,7 +13,6 @@ enum ThreadRowBadgeLayout {
     }
 
     enum LeadingStatusItem: CaseIterable {
-        case activityDuration
         case priority
     }
 
@@ -22,5 +21,6 @@ enum ThreadRowBadgeLayout {
         case pinned
         case hidden
         case jiraSync
+        case activityDuration
     }
 }

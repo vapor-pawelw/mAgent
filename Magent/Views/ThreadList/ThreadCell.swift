@@ -1,12 +1,8 @@
 import Cocoa
 import MagentCore
 
-/// A pill-shaped container for the priority dots label. Paints a
-/// `windowBackgroundColor` background (matching the sidebar area behind the
-/// row capsules) and wears the same 1pt border + 5/2 padding + cornerRadius 7
-/// as `TopBorderBadge` so it visually sits next to the activity-duration badge as a
-/// matching sibling.
-private final class PriorityCapsuleView: NSView {
+/// A compact, borderless priority indicator.
+private final class PriorityIndicatorView: NSView {
     let label: NSTextField = {
         let tf = NSTextField(labelWithString: "")
         tf.translatesAutoresizingMaskIntoConstraints = false
@@ -29,15 +25,12 @@ private final class PriorityCapsuleView: NSView {
         setContentHuggingPriority(.required, for: .horizontal)
         setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(label)
-        // Match TopBorderBadge: 5pt horizontal, 2pt vertical inner padding.
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor),
+            label.topAnchor.constraint(equalTo: topAnchor),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-        layer?.cornerRadius = 7
-        layer?.borderWidth = 1
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -54,39 +47,11 @@ private final class PriorityCapsuleView: NSView {
         contextualMenuProvider?()
     }
 
-    /// Matches the border-color logic of `TopBorderBadge.updateColors(...)` so
-    /// selection, waiting, and completion highlights stay in sync with the
-    /// adjacent duration badge. NSColor dynamic resolution runs inside the
-    /// drawing appearance block per the CALayer convention in AGENTS.md.
-    func updateColors(isRowSelected: Bool, hasCompletionHighlight: Bool, hasWaitingHighlight: Bool, appearance: NSAppearance) {
-        appearance.performAsCurrentDrawingAppearance {
-            let borderColor: CGColor
-            if isRowSelected {
-                borderColor = NSColor.controlAccentColor.cgColor
-            } else if hasWaitingHighlight {
-                borderColor = NSColor.systemOrange.withAlphaComponent(0.5).cgColor
-            } else if hasCompletionHighlight {
-                borderColor = NSColor.systemGreen.withAlphaComponent(0.5).cgColor
-            } else {
-                let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                let color = isDark
-                    ? NSColor.white.withAlphaComponent(0.12)
-                    : NSColor.black.withAlphaComponent(0.08)
-                borderColor = color.cgColor
-            }
-            self.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-            self.layer?.borderColor = borderColor
-            self.layer?.borderWidth = 1
-        }
-    }
 }
 
-/// A small pill badge used in the capsule row's bottom metadata stacks.
+/// A flat status item used in the capsule's status row.
 /// Hosts either a text label or an icon image view (or both).
 private final class TopBorderBadge: NSView {
-    /// When true, the badge renders as a bare icon (no pill background/border,
-    /// larger icon size). Use for icon-only badges like pin or rate-limit.
-    let isBareIcon: Bool
     var contextualMenuProvider: (() -> NSMenu)?
 
     let label: NSTextField = {
@@ -122,14 +87,13 @@ private final class TopBorderBadge: NSView {
 
     private let contentStack: NSStackView
 
-    init(bareIcon: Bool = false) {
-        self.isBareIcon = bareIcon
+    override init(frame frameRect: NSRect) {
         contentStack = NSStackView(views: [])
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         contentStack.orientation = .horizontal
         contentStack.alignment = .centerY
         contentStack.spacing = 3
-        super.init(frame: .zero)
+        super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
 
@@ -138,38 +102,18 @@ private final class TopBorderBadge: NSView {
         addSubview(contentStack)
         addSubview(cornerDot)
 
-        if bareIcon {
-            // Bare icon: larger icon with circular background when selected.
-            let iconSize: CGFloat = 13
-            let padding: CGFloat = 3
-            NSLayoutConstraint.activate([
-                iconView.widthAnchor.constraint(equalToConstant: iconSize),
-                iconView.heightAnchor.constraint(equalToConstant: iconSize),
-                contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
-                contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding),
-                contentStack.topAnchor.constraint(equalTo: topAnchor, constant: padding),
-                contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -padding),
-                cornerDot.widthAnchor.constraint(equalToConstant: 2),
-                cornerDot.heightAnchor.constraint(equalToConstant: 2),
-                cornerDot.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
-                cornerDot.topAnchor.constraint(equalTo: topAnchor, constant: 1),
-            ])
-        } else {
-            layer?.cornerRadius = 7
-            layer?.borderWidth = 1
-            NSLayoutConstraint.activate([
-                iconView.widthAnchor.constraint(equalToConstant: 8),
-                iconView.heightAnchor.constraint(equalToConstant: 8),
-                contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
-                contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
-                contentStack.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-                contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
-                cornerDot.widthAnchor.constraint(equalToConstant: 2),
-                cornerDot.heightAnchor.constraint(equalToConstant: 2),
-                cornerDot.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
-                cornerDot.topAnchor.constraint(equalTo: topAnchor, constant: 1),
-            ])
-        }
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 13),
+            iconView.heightAnchor.constraint(equalToConstant: 13),
+            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            contentStack.topAnchor.constraint(equalTo: topAnchor),
+            contentStack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            cornerDot.widthAnchor.constraint(equalToConstant: 2),
+            cornerDot.heightAnchor.constraint(equalToConstant: 2),
+            cornerDot.trailingAnchor.constraint(equalTo: trailingAnchor),
+            cornerDot.topAnchor.constraint(equalTo: topAnchor),
+        ])
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -186,41 +130,11 @@ private final class TopBorderBadge: NSView {
         contextualMenuProvider?()
     }
 
-    override func layout() {
-        super.layout()
-        if isBareIcon {
-            layer?.cornerRadius = bounds.height / 2
-        }
-    }
-
-    func updateColors(isRowSelected: Bool, hasCompletionHighlight: Bool, hasWaitingHighlight: Bool = false, appearance: NSAppearance) {
+    func updateColors(appearance: NSAppearance) {
         appearance.performAsCurrentDrawingAppearance {
-            // Border color mirrors the capsule row border.
-            let borderColor: CGColor
-            if isRowSelected {
-                borderColor = NSColor.controlAccentColor.cgColor
-            } else if hasWaitingHighlight {
-                borderColor = NSColor.systemOrange.withAlphaComponent(0.5).cgColor
-            } else if hasCompletionHighlight {
-                borderColor = NSColor.systemGreen.withAlphaComponent(0.5).cgColor
-            } else {
-                let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                let color = isDark
-                    ? NSColor.white.withAlphaComponent(0.12)
-                    : NSColor.black.withAlphaComponent(0.08)
-                borderColor = color.cgColor
-            }
-
-            if self.isBareIcon {
-                self.layer?.cornerRadius = self.bounds.height / 2
-                self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-                self.layer?.borderColor = borderColor
-                self.layer?.borderWidth = 1
-            } else {
-                self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-                self.layer?.borderColor = borderColor
-                self.layer?.borderWidth = 1
-            }
+            self.layer?.backgroundColor = NSColor.clear.cgColor
+            self.layer?.borderColor = NSColor.clear.cgColor
+            self.layer?.borderWidth = 0
             self.label.textColor = NSColor.secondaryLabelColor
             self.cornerDot.layer?.backgroundColor = NSColor.systemRed.cgColor
             self.cornerDot.layer?.cornerRadius = 1
@@ -392,7 +306,7 @@ final class ThreadCell: NSTableCellView {
     private var isCurrentDurationBusy = false
     /// 5-dot priority capsule rendered beside the duration badge in the leading status group.
     /// Hidden (detached from the stack) when the thread has no priority set.
-    private var priorityCapsule: PriorityCapsuleView?
+    private var priorityCapsule: PriorityIndicatorView?
     private var claudeRateLimitBadge: TopBorderBadge?
     private var codexRateLimitBadge: TopBorderBadge?
     private var keepAliveBadge: TopBorderBadge?
@@ -629,9 +543,9 @@ final class ThreadCell: NSTableCellView {
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
         ]
         if let trailingStack = trailingStackView {
-            constraints.append(stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingStack.leadingAnchor, constant: -6))
+            constraints.append(verticalStack.trailingAnchor.constraint(equalTo: trailingStack.leadingAnchor, constant: -6))
         } else {
-            constraints.append(stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -ThreadListViewController.sidebarTrailingInset))
+            constraints.append(verticalStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -ThreadListViewController.sidebarTrailingInset))
         }
         NSLayoutConstraint.activate(constraints)
     }
@@ -954,8 +868,6 @@ final class ThreadCell: NSTableCellView {
             jiraSyncBadge?.isHidden = true
             jiraSyncBadge?.toolTip = nil
         }
-        updateBottomRightBadgeOrder()
-
         // Show shield when thread has Keep Alive, but hide it when pinned threads
         // are already implicitly protected via the protectPinnedFromEviction setting.
         let showKeepAliveShield = thread.isKeepAlive
@@ -990,6 +902,7 @@ final class ThreadCell: NSTableCellView {
             isBusy: thread.activityDurationState == .busy
         )
         configurePriority(thread.priority)
+        updateTrailingStatusOrder()
         configureInteractiveBadgeMenus(for: thread)
 
         syncRowVisibility()
@@ -1085,6 +998,7 @@ final class ThreadCell: NSTableCellView {
         configureDuration(since: showDuration ? busyStateSince : nil, isBusy: isBusy)
         // The main worktree row doesn't carry a priority.
         configurePriority(nil)
+        updateTrailingStatusOrder()
 
         syncRowVisibility()
     }
@@ -1113,7 +1027,7 @@ final class ThreadCell: NSTableCellView {
 
     // MARK: - Rate limit badge
 
-    /// Shows/hides rate limit badges on the top border, one per rate-limited agent type.
+    /// Shows/hides one trailing rate-limit icon per rate-limited agent type.
     private func configureRateLimitBadge(
         isExpiredAndResumable: Bool,
         isBlocked: Bool,
@@ -1170,7 +1084,7 @@ final class ThreadCell: NSTableCellView {
     }
 
     private var durationBadge: TopBorderBadge?
-    /// Holds activity duration then priority on the leading side of the status row.
+    /// Holds priority on the leading side of the status row.
     private weak var bottomLeftBadgeStack: NSStackView?
     /// Holds state indicators on the trailing side of the status row.
     private var bottomRightBadgeStack: NSStackView?
@@ -1198,7 +1112,7 @@ final class ThreadCell: NSTableCellView {
         }
 
         ensureBottomRightBadgeStack()
-        let badge = TopBorderBadge(bareIcon: true)
+        let badge = TopBorderBadge()
         badge.label.isHidden = true
         badge.isHidden = true
         bottomRightBadgeStack?.insertArrangedSubview(badge, at: 0)
@@ -1241,25 +1155,15 @@ final class ThreadCell: NSTableCellView {
             circle?.activityStyleMenu() ?? NSMenu()
         }
 
-        // Priority dots: wrapped in a pill-shaped container with a
-        // `windowBackgroundColor` fill (matches the sidebar area behind the
-        // row capsules), 2pt inner padding on all edges.
-        let capsule = PriorityCapsuleView()
+        let capsule = PriorityIndicatorView()
         capsule.label.font = Self.priorityDotsFont()
         capsule.isHidden = true
 
-        let stack = NSStackView(views: ThreadRowBadgeLayout.LeadingStatusItem.allCases.map { item in
-            switch item {
-            case .activityDuration: badge
-            case .priority: capsule
-            }
-        })
+        let stack = NSStackView(views: [capsule])
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 4
-        // Critical: hidden views must collapse so priority can sit flush against
-        // the trailing edge when the duration badge is hidden (and vice versa).
         stack.detachesHiddenViews = true
         stack.setContentHuggingPriority(.required, for: .horizontal)
         stack.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -1277,7 +1181,9 @@ final class ThreadCell: NSTableCellView {
         durationCircle = circle
         priorityCapsule = capsule
 
-        stack.insertArrangedSubview(circle, at: 0)
+        ensureBottomRightBadgeStack()
+        bottomRightBadgeStack?.addArrangedSubview(badge)
+        bottomRightBadgeStack?.addArrangedSubview(circle)
 
         updateTopBorderBadgeColors()
     }
@@ -1386,7 +1292,7 @@ final class ThreadCell: NSTableCellView {
     private func ensureKeepAliveBadge() {
         guard keepAliveBadge == nil else { return }
         ensureBottomRightBadgeStack()
-        let badge = TopBorderBadge(bareIcon: true)
+        let badge = TopBorderBadge()
         badge.label.isHidden = true
         badge.iconView.image = Self.cachedSymbolImage("shield.righthalf.filled")
         badge.iconView.contentTintColor = .systemCyan
@@ -1399,7 +1305,7 @@ final class ThreadCell: NSTableCellView {
     private func ensureFavoriteBadge() {
         ensureBottomRightBadgeStack()
         if favoriteBadge == nil {
-            let badge = TopBorderBadge(bareIcon: true)
+            let badge = TopBorderBadge()
             badge.label.isHidden = true
             badge.iconView.image = Self.cachedSymbolImage("heart.fill")
             badge.iconView.contentTintColor = NSColor(resource: .primaryBrand)
@@ -1415,7 +1321,7 @@ final class ThreadCell: NSTableCellView {
     private func ensurePinnedBadge() {
         ensureBottomRightBadgeStack()
         if pinnedBadge == nil {
-            let badge = TopBorderBadge(bareIcon: true)
+            let badge = TopBorderBadge()
             badge.label.isHidden = true
             badge.iconView.image = Self.cachedSymbolImage("pin.fill")
             badge.iconView.contentTintColor = NSColor(resource: .primaryBrand)
@@ -1431,7 +1337,7 @@ final class ThreadCell: NSTableCellView {
     private func ensureHiddenBadge() {
         ensureBottomRightBadgeStack()
         if hiddenBadge == nil {
-            let badge = TopBorderBadge(bareIcon: true)
+            let badge = TopBorderBadge()
             badge.label.isHidden = true
             badge.iconView.image = Self.cachedSymbolImage("eye.slash.fill")
             badge.iconView.contentTintColor = .secondaryLabelColor
@@ -1447,7 +1353,7 @@ final class ThreadCell: NSTableCellView {
     private func ensureJiraSyncBadge() {
         ensureBottomRightBadgeStack()
         if jiraSyncBadge == nil {
-            let badge = TopBorderBadge(bareIcon: true)
+            let badge = TopBorderBadge()
             badge.label.isHidden = true
             badge.iconView.image = Self.jiraBadgeIconImage()
             // Brand asset — do NOT set contentTintColor or the colored mark
@@ -1462,36 +1368,39 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
-    private func updateBottomRightBadgeOrder() {
+    private func updateTrailingStatusOrder() {
         guard let stack = bottomRightBadgeStack else { return }
 
-        let trailingBadges = ThreadRowBadgeLayout.TrailingStatusItem.allCases.compactMap { item -> TopBorderBadge? in
-            let badge: TopBorderBadge?
+        let leadingTrailingItems: [NSView?] = [
+            claudeRateLimitBadge,
+            codexRateLimitBadge,
+            keepAliveBadge,
+        ]
+        let orderedStatusItems = ThreadRowBadgeLayout.TrailingStatusItem.allCases.flatMap { item -> [NSView?] in
             switch item {
-            case .favorite: badge = favoriteBadge
-            case .pinned: badge = pinnedBadge
-            case .hidden: badge = hiddenBadge
-            case .jiraSync: badge = jiraSyncBadge
+            case .favorite: [favoriteBadge]
+            case .pinned: [pinnedBadge]
+            case .hidden: [hiddenBadge]
+            case .jiraSync: [jiraSyncBadge]
+            case .activityDuration: [durationBadge, durationCircle]
             }
-            guard let badge, badge.superview === stack else { return nil }
-            return badge
         }
-        guard !trailingBadges.isEmpty else { return }
+        let attachedItems = (leadingTrailingItems + orderedStatusItems)
+            .compactMap { $0 }
+            .filter { $0.superview === stack }
 
-        for badge in trailingBadges {
-            stack.removeArrangedSubview(badge)
-            badge.removeFromSuperview()
+        for item in attachedItems {
+            stack.removeArrangedSubview(item)
+            item.removeFromSuperview()
         }
-        for badge in trailingBadges {
-            stack.addArrangedSubview(badge)
+        for item in attachedItems {
+            stack.addArrangedSubview(item)
         }
     }
 
     private func updateTopBorderBadgeColors() {
         let rowSelected = (superview as? NSTableRowView)?.isSelected ?? false
-        let completion = hasUnreadCompletion && !rowSelected
-        let waiting = hasWaitingForInput && !hasUnreadCompletion && !rowSelected
-        durationBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        durationBadge?.updateColors(appearance: effectiveAppearance)
         updateDurationCircleColors()
         // Re-apply elapsed-time tint after updateColors resets label to secondaryLabelColor.
         if let since = currentDurationSince {
@@ -1499,14 +1408,13 @@ final class ThreadCell: NSTableCellView {
             let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed, isDark: isDark)
         }
-        claudeRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        codexRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        keepAliveBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        favoriteBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        pinnedBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        hiddenBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        jiraSyncBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        priorityCapsule?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        claudeRateLimitBadge?.updateColors(appearance: effectiveAppearance)
+        codexRateLimitBadge?.updateColors(appearance: effectiveAppearance)
+        keepAliveBadge?.updateColors(appearance: effectiveAppearance)
+        favoriteBadge?.updateColors(appearance: effectiveAppearance)
+        pinnedBadge?.updateColors(appearance: effectiveAppearance)
+        hiddenBadge?.updateColors(appearance: effectiveAppearance)
+        jiraSyncBadge?.updateColors(appearance: effectiveAppearance)
         // Pin/favorite icons: primary brand by default, white when selected in dark mode.
         let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         if let favorite = favoriteBadge {
@@ -1578,23 +1486,7 @@ final class ThreadCell: NSTableCellView {
 
     private func updateDurationCircleColors() {
         guard let circle = durationCircle else { return }
-        let rowSelected = (superview as? NSTableRowView)?.isSelected ?? false
-        let completion = hasUnreadCompletion && !rowSelected
-        let waiting = hasWaitingForInput && !hasUnreadCompletion && !rowSelected
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            if rowSelected {
-                circle.borderColor = .controlAccentColor
-            } else if waiting {
-                circle.borderColor = .systemOrange.withAlphaComponent(0.5)
-            } else if completion {
-                circle.borderColor = .systemGreen.withAlphaComponent(0.5)
-            } else {
-                let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                circle.borderColor = isDark
-                    ? .white.withAlphaComponent(0.12)
-                    : .black.withAlphaComponent(0.08)
-            }
-        }
+        circle.borderColor = .clear
     }
 
     /// Returns a subtle tint for the duration label based on elapsed seconds.

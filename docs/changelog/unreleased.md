@@ -50,7 +50,7 @@
 #### Improvements
 
 - Restyled section headers with subtle neutral backgrounds, compact colored leading rails, and balanced content padding so section boundaries are clearer without competing with thread cards.
-- Moved thread activity, priority, and status indicators into a dedicated in-capsule row below each thread's text, including a subdued hidden-thread marker.
+- Moved thread priority and flat, borderless status indicators into a full-width in-capsule row below each thread's text, with activity shown as the final trailing indicator.
 - Replaced sidebar dividers between pinned, normal, and hidden threads with cleaner spacing.
 - Tightened Hidden disclosure spacing while preserving separation from the next section when collapsed.
 - Added a default `Cmd+J` shortcut and View menu action to recenter the sidebar on the current thread.
