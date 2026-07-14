@@ -12,12 +12,12 @@ enum ThreadRowBadgeLayout {
         }
     }
 
-    enum BottomLeftItem: CaseIterable {
+    enum LeadingStatusItem: CaseIterable {
         case activityDuration
         case priority
     }
 
-    enum BottomRightItem: CaseIterable {
+    enum TrailingStatusItem: CaseIterable {
         case favorite
         case pinned
         case hidden

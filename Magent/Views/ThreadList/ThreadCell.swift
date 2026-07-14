@@ -382,6 +382,7 @@ final class ThreadCell: NSTableCellView {
     private(set) var archiveButton: NSButton?
     private var trailingStackView: NSStackView?
     private weak var secondaryRowStack: NSStackView?
+    private weak var statusRowStack: NSStackView?
     private weak var prRowStack: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
     private var durationLabel: NSTextField?
@@ -389,7 +390,7 @@ final class ThreadCell: NSTableCellView {
     private var durationTimer: Timer?
     private var currentDurationSince: Date?
     private var isCurrentDurationBusy = false
-    /// 5-dot priority capsule rendered beside the duration badge in the bottom-left stack.
+    /// 5-dot priority capsule rendered beside the duration badge in the leading status group.
     /// Hidden (detached from the stack) when the thread has no priority set.
     private var priorityCapsule: PriorityCapsuleView?
     private var claudeRateLimitBadge: TopBorderBadge?
@@ -439,11 +440,11 @@ final class ThreadCell: NSTableCellView {
         return min(lines, max(1, maxLines))
     }
 
-    /// Minimum content height: description lines (based on narrow setting) + 2 metadata labels.
+    /// Minimum content height: description lines, status row, and 2 metadata labels.
     static func minimumContentHeight(narrowThreads: Bool) -> CGFloat {
         let descLines = narrowThreads ? 1 : 2
         let minBlock = lineHeight(for: descriptionFont()) * CGFloat(descLines)
-            + (lineHeight(for: metadataFont()) * 2)
+            + (lineHeight(for: metadataFont()) * 3)
             + primarySecondaryRowSpacing
         return max(leadingIconSize, minBlock)
     }
@@ -460,6 +461,7 @@ final class ThreadCell: NSTableCellView {
         if hasSubtitle {
             titleBlockHeight += lineHeight(for: metadataFont()) + primarySecondaryRowSpacing
         }
+        titleBlockHeight += lineHeight(for: metadataFont()) + primarySecondaryRowSpacing
         if hasPRRow {
             titleBlockHeight += lineHeight(for: metadataFont()) + primarySecondaryRowSpacing
         }
@@ -590,7 +592,13 @@ final class ThreadCell: NSTableCellView {
         prRow.detachesHiddenViews = true
         prRow.translatesAutoresizingMaskIntoConstraints = false
 
-        let verticalStack = NSStackView(views: [primaryRow, secondaryRow, prRow])
+        let statusRow = NSStackView()
+        statusRow.orientation = .horizontal
+        statusRow.alignment = .centerY
+        statusRow.spacing = 4
+        statusRow.translatesAutoresizingMaskIntoConstraints = false
+
+        let verticalStack = NSStackView(views: [primaryRow, secondaryRow, statusRow, prRow])
         verticalStack.orientation = .vertical
         verticalStack.alignment = .leading
         verticalStack.spacing = Self.primarySecondaryRowSpacing
@@ -599,7 +607,9 @@ final class ThreadCell: NSTableCellView {
         verticalStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         verticalStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
         secondaryRowStack = secondaryRow
+        statusRowStack = statusRow
         prRowStack = prRow
+        statusRow.widthAnchor.constraint(equalTo: verticalStack.widthAnchor).isActive = true
         let stack = NSStackView(views: [iv, verticalStack])
         stack.orientation = .horizontal
         stack.spacing = 6
@@ -646,9 +656,8 @@ final class ThreadCell: NSTableCellView {
     private func setDimmedAppearance(isHidden: Bool, isArchiving: Bool) {
         let dimmed = isHidden || isArchiving
         let contentAlpha = ThreadRowContentOpacity.contentOpacity(isDimmed: dimmed)
-        // Dim content subviews individually so that border badges keep full
-        // opacity and don't visually bleed through the capsule border.
-        for sub in subviews where sub !== bottomRightBadgeStack && sub !== bottomLeftBadgeStack {
+        // The status row now follows the same dimming as the rest of the in-capsule content.
+        for sub in subviews {
             sub.alphaValue = contentAlpha
         }
         bottomRightBadgeStack?.alphaValue = 1.0
@@ -966,7 +975,7 @@ final class ThreadCell: NSTableCellView {
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
-        // Rate limit uses the bottom-right agent glyph badge.
+        // Rate limit uses the trailing agent glyph badge.
         configureRateLimitBadge(
             isExpiredAndResumable: thread.isRateLimitExpiredAndResumable,
             isBlocked: thread.isBlockedByRateLimit,
@@ -1062,7 +1071,7 @@ final class ThreadCell: NSTableCellView {
         primaryDirtyDot?.toolTip = detailedTooltip
         secondaryDirtyDot?.toolTip = detailedTooltip
 
-        // Rate limit uses the same bottom-right agent glyph badge as non-main threads.
+        // Rate limit uses the same trailing agent glyph badge as non-main threads.
         configureRateLimitBadge(
             isExpiredAndResumable: isRateLimitExpiredAndResumable,
             isBlocked: isBlockedByRateLimit,
@@ -1161,9 +1170,9 @@ final class ThreadCell: NSTableCellView {
     }
 
     private var durationBadge: TopBorderBadge?
-    /// Holds activity duration then priority at the bottom-left capsule border.
+    /// Holds activity duration then priority on the leading side of the status row.
     private weak var bottomLeftBadgeStack: NSStackView?
-    /// Holds the former top-right state indicators at the bottom-right capsule border.
+    /// Holds state indicators on the trailing side of the status row.
     private var bottomRightBadgeStack: NSStackView?
 
     private func ensureBottomRightBadgeStack() {
@@ -1173,16 +1182,7 @@ final class ThreadCell: NSTableCellView {
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 4
-        addSubview(stack)
-
-        let capsuleBottomY = AlwaysEmphasizedRowView.capsuleVerticalInset
-        NSLayoutConstraint.activate([
-            stack.centerYAnchor.constraint(equalTo: bottomAnchor, constant: -capsuleBottomY),
-            stack.trailingAnchor.constraint(
-                equalTo: trailingAnchor,
-                constant: -(AlwaysEmphasizedRowView.capsuleTrailingInset + AlwaysEmphasizedRowView.capsuleContentHPadding)
-            ),
-        ])
+        statusRowStack?.addArrangedSubview(stack)
         bottomRightBadgeStack = stack
     }
 
@@ -1248,7 +1248,7 @@ final class ThreadCell: NSTableCellView {
         capsule.label.font = Self.priorityDotsFont()
         capsule.isHidden = true
 
-        let stack = NSStackView(views: ThreadRowBadgeLayout.BottomLeftItem.allCases.map { item in
+        let stack = NSStackView(views: ThreadRowBadgeLayout.LeadingStatusItem.allCases.map { item in
             switch item {
             case .activityDuration: badge
             case .priority: capsule
@@ -1263,17 +1263,13 @@ final class ThreadCell: NSTableCellView {
         stack.detachesHiddenViews = true
         stack.setContentHuggingPriority(.required, for: .horizontal)
         stack.setContentCompressionResistancePriority(.required, for: .horizontal)
-        addSubview(stack)
-
-        let capsuleBottomY = AlwaysEmphasizedRowView.capsuleVerticalInset
-        let leadingInset = AlwaysEmphasizedRowView.capsuleLeadingInset + AlwaysEmphasizedRowView.capsuleContentHPadding
-        NSLayoutConstraint.activate([
-            stack.centerYAnchor.constraint(equalTo: bottomAnchor, constant: -capsuleBottomY),
-            stack.leadingAnchor.constraint(
-                equalTo: leadingAnchor,
-                constant: leadingInset
-            ),
-        ])
+        if let statusRowStack {
+            statusRowStack.insertArrangedSubview(stack, at: 0)
+            let spacer = NSView()
+            spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            statusRowStack.insertArrangedSubview(spacer, at: 1)
+        }
 
         bottomLeftBadgeStack = stack
         durationBadge = badge
@@ -1469,7 +1465,7 @@ final class ThreadCell: NSTableCellView {
     private func updateBottomRightBadgeOrder() {
         guard let stack = bottomRightBadgeStack else { return }
 
-        let trailingBadges = ThreadRowBadgeLayout.BottomRightItem.allCases.compactMap { item -> TopBorderBadge? in
+        let trailingBadges = ThreadRowBadgeLayout.TrailingStatusItem.allCases.compactMap { item -> TopBorderBadge? in
             let badge: TopBorderBadge?
             switch item {
             case .favorite: badge = favoriteBadge
