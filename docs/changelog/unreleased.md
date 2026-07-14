@@ -34,6 +34,10 @@
 - Hid internal command transport settings and kept command results from replacing useful action summaries with arbitrary output text.
 - Show chat cancellations, errors, and approval-blocked Codex turns as clearer status bubbles.
 
+#### Bug Fixes
+
+- Keep failed or still-running tools and action-required chat statuses visible instead of hiding them inside collapsed activity summaries.
+
 ### Terminal
 
 #### Bug Fixes

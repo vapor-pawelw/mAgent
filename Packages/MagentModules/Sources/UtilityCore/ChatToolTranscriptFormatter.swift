@@ -168,7 +168,7 @@ public enum ChatToolTranscriptFormatter {
             let outputBody = formattedToolOutput(envelope)
             let argumentsBody = formattedToolResultArguments(arguments, toolName: name)
             let actionSummary = toolActionSummary(name: name, arguments: arguments)
-            let title = resultTitle(actionSummary.completedTitle, exitCode: envelope.exitCode)
+            let title = resultTitle(actionSummary.completedTitle, envelope: envelope)
             return ChatToolTranscriptPresentation(
                 kind: .result,
                 title: title,
@@ -469,7 +469,7 @@ public enum ChatToolTranscriptFormatter {
     ) -> ChatToolTranscriptPresentation {
         let files = changedFiles(fromPatch: arguments)
         let title: String
-        if let exitCode = envelope.exitCode, exitCode != "0" {
+        if indicatesFailure(envelope) {
             title = "Patch failed"
         } else {
             title = "Patch applied"
@@ -768,7 +768,7 @@ public enum ChatToolTranscriptFormatter {
     }
 
     private static func shouldExpandOutput(_ envelope: ToolOutputEnvelope) -> Bool {
-        if let exitCode = envelope.exitCode, exitCode != "0" {
+        if indicatesFailure(envelope) {
             return true
         }
         if envelope.sessionID != nil {
@@ -777,12 +777,51 @@ public enum ChatToolTranscriptFormatter {
         return false
     }
 
-    private static func resultTitle(_ completedTitle: String, exitCode: String?) -> String {
-        guard let exitCode, exitCode != "0" else { return completedTitle }
+    private static func resultTitle(_ completedTitle: String, envelope: ToolOutputEnvelope) -> String {
+        guard indicatesFailure(envelope) else { return completedTitle }
         if completedTitle.hasSuffix(" finished") {
             return String(completedTitle.dropLast(" finished".count)) + " failed"
         }
         return "\(completedTitle) failed"
+    }
+
+    private static func indicatesFailure(_ envelope: ToolOutputEnvelope) -> Bool {
+        if let exitCode = envelope.exitCode, exitCode != "0" {
+            return true
+        }
+        if let dictionary = jsonObject(from: envelope.output) as? [String: Any],
+           ["error", "failure", "exception"].contains(where: { key in
+               guard let value = dictionary[key] else { return false }
+               switch value {
+               case is NSNull:
+                   return false
+               case let string as String:
+                   return !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+               case let boolean as Bool:
+                   return boolean
+               default:
+                   return true
+               }
+           }) {
+            return true
+        }
+        guard let firstLine = envelope.output
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() else { return false }
+        return [
+            "error:",
+            "failed:",
+            "failed ",
+            "failure:",
+            "fatal:",
+            "exception:",
+            "permission denied",
+            "invalid context",
+            "tests failed",
+        ]
+            .contains { firstLine.hasPrefix($0) }
     }
 
     private static func abbreviated(_ text: String, maxLength: Int) -> String {

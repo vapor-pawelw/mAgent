@@ -34,9 +34,9 @@ public enum ChatTranscriptDisplayCompactor {
     private static func isCompactable(_ message: PersistedChatMessage) -> Bool {
         guard message.role == .assistant, message.attachments.isEmpty else { return false }
         switch ChatMessageDisplayPlanner.plan(for: message).kind {
-        case .tool, .status:
-            return true
-        case .message:
+        case .tool(let presentation):
+            return !presentation.isExpandedByDefault
+        case .status, .message:
             return false
         }
     }

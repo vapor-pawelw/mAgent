@@ -1686,6 +1686,83 @@ struct ChatTranscriptDisplayCompactorTests {
         #expect(!compacted[0].text.contains("Command finished: M file.swift"))
     }
 
+    @Test("Keeps failures and attention-required statuses visible")
+    func preservesAttentionRequiredRows() {
+        let failedCommand = PersistedChatMessage(
+            role: .assistant,
+            text: "",
+            toolEvent: PersistedChatToolEvent(
+                kind: .result,
+                name: "exec_command",
+                arguments: "{\"cmd\":\"swift test\"}",
+                output: "Tests failed",
+                exitCode: "1"
+            )
+        )
+        let approvalRequired = PersistedChatMessage(
+            role: .assistant,
+            text: "Codex app-server failed: Blocked: Codex requested approval for network access. Chat tabs cannot approve yet."
+        )
+        let unstructuredFailure = PersistedChatMessage(
+            role: .assistant,
+            text: "",
+            toolEvent: PersistedChatToolEvent(
+                kind: .result,
+                name: "exec_command",
+                arguments: "{\"cmd\":\"cat protected.txt\"}",
+                output: "Error: permission denied"
+            )
+        )
+        let structuredFailure = PersistedChatMessage(
+            role: .assistant,
+            text: "",
+            toolEvent: PersistedChatToolEvent(
+                kind: .result,
+                name: "read_file",
+                arguments: "{\"path\":\"protected.txt\"}",
+                output: "{\"error\":\"permission denied\"}"
+            )
+        )
+        let patchFailure = PersistedChatMessage(
+            role: .assistant,
+            text: "",
+            toolEvent: PersistedChatToolEvent(
+                kind: .result,
+                name: "apply_patch",
+                arguments: "*** Begin Patch\n*** Update File: file.swift\n*** End Patch",
+                output: "Failed to find expected lines in file.swift"
+            )
+        )
+
+        let compacted = ChatTranscriptDisplayCompactor.compactedMessages([
+            failedCommand,
+            approvalRequired,
+            unstructuredFailure,
+            structuredFailure,
+            patchFailure,
+        ])
+
+        #expect(compacted == [failedCommand, approvalRequired, unstructuredFailure, structuredFailure, patchFailure])
+        guard case .tool(let presentation) = ChatMessageDisplayPlanner.plan(for: unstructuredFailure).kind else {
+            Issue.record("Expected tool display plan")
+            return
+        }
+        #expect(presentation.title == "Command failed")
+        #expect(presentation.isExpandedByDefault)
+        guard case .tool(let structuredPresentation) = ChatMessageDisplayPlanner.plan(for: structuredFailure).kind else {
+            Issue.record("Expected structured failure tool display plan")
+            return
+        }
+        #expect(structuredPresentation.title == "Read file failed")
+        #expect(structuredPresentation.isExpandedByDefault)
+        guard case .tool(let patchPresentation) = ChatMessageDisplayPlanner.plan(for: patchFailure).kind else {
+            Issue.record("Expected patch failure tool display plan")
+            return
+        }
+        #expect(patchPresentation.title == "Patch failed")
+        #expect(patchPresentation.isExpandedByDefault)
+    }
+
     @Test("Activity disclosure preserves row symbols while hiding details by default")
     func activityDisclosurePreservesProgressiveDetail() throws {
         let message = PersistedChatMessage(
