@@ -99,6 +99,7 @@ final class SplitViewController: NSSplitViewController {
     private var enforcedSidebarWidth: CGFloat?
     private var isRestoringSidebarWidth = false
     private var isTogglingSidebarCollapse = false
+    private var sidebarDividerResizeIntent = SidebarDividerResizeIntent()
     private var keyEventMonitor: Any?
     private var cachedKeyBindings: KeyBindingSettings = KeyBindingSettings()
     private weak var observedWindowForFocusNotifications: NSWindow?
@@ -463,13 +464,19 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func isMouseDrivenResizeEvent() -> Bool {
-        guard let event = NSApp.currentEvent else { return false }
-        switch event.type {
-        case .leftMouseDown, .leftMouseDragged, .leftMouseUp:
-            return true
-        default:
+        guard let event = NSApp.currentEvent,
+              event.window === splitView.window,
+              let sidebarView = sidebarItem?.viewController.view else {
+            sidebarDividerResizeIntent.cancel()
             return false
         }
+        let pointer = splitView.convert(event.locationInWindow, from: nil)
+        return sidebarDividerResizeIntent.recognizes(
+            event.type,
+            pointerX: pointer.x,
+            dividerX: sidebarView.frame.maxX,
+            dividerThickness: splitView.dividerThickness
+        )
     }
 
     private func newTabShortcut() {

@@ -16,6 +16,7 @@
 
 - Keep the main split view structure stable: swap detail content inside a persistent container instead of removing and re-adding split-view items.
 - Preserve the sidebar width during detail-content swaps with `SplitViewController.preserveSidebarWidthDuringContentChange(...)`.
+- Treat a mouse event as a manual sidebar resize only when its pointer is within the divider hit area. A thread-row click can trigger split-view layout while `NSApp.currentEvent` is still `leftMouseDown`; classifying every mouse event as divider input persists the transient width and makes selection resize the sidebar.
 - Load the saved sidebar width into `preferredSidebarWidth` before startup selection/detail work begins, and apply the initial divider position no later than `viewWillAppear`. If launch-time content swaps run first, AppKit will build sidebar rows against the default width and then reflow them again when the saved width is restored.
 - Route thread-row height through `ThreadCell.sidebarRowHeight(descriptionLines:hasSubtitle:hasPRRow:narrowThreads:)` which computes per-thread height from actual content with a minimum enforced by `minimumContentHeight(narrowThreads:)`.
 - Dynamic heights are computed in `heightOfRowByItem` using `ThreadCell.estimatedDescriptionLineCount` for text-width-based line estimation.
