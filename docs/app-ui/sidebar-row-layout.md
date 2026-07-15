@@ -17,6 +17,7 @@ Capsule-style sidebar with state-aware rounded borders, dynamic heights, and bad
 - The `Main worktree` row uses the same capsule geometry as other rows, but with a very subtle primary-tinted fill in its default state so it is visually distinct without a dedicated stripe.
 - The main row always uses a dedicated non-customizable `house.fill` icon. Tint behavior follows thread-row selection semantics: primary color when unselected, white when selected.
 - `Settings > Threads > Sidebar > Show thread icons` controls whether leading thread icons are rendered. When off, `ThreadCell` hides the arranged leading image view so row text shifts onto the icon rail instead of leaving blank space, and the thread context menu omits `Customize > Icon`.
+- Fresh settings show thread icons by default. Existing settings created before `showThreadIcons` was persisted migrate with icons hidden, preserving the earlier icon-free sidebar appearance until the user enables them.
 - A 10pt spacer separates each project header from its main worktree row so sticky header blur does not cut directly into the first capsule.
 - Regular thread rows use a three-line vertical stack:
   - line 1 (primary): task description when set; otherwise the branch name.

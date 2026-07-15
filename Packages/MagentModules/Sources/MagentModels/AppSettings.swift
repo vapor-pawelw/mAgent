@@ -360,7 +360,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoRenameBranches = try container.decodeIfPresent(Bool.self, forKey: .autoRenameBranches) ?? legacyAutoRename ?? true
         autoSetThreadDescription = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadDescription) ?? legacyAutoRename ?? true
         autoSetThreadIconFromWorkType = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadIconFromWorkType) ?? true
-        showThreadIcons = try container.decodeIfPresent(Bool.self, forKey: .showThreadIcons) ?? true
+        // Missing means the settings predate this toggle; keep the previously icon-free sidebar.
+        showThreadIcons = try container.decodeIfPresent(Bool.self, forKey: .showThreadIcons) ?? false
         if let decodedWideThreads = try container.decodeIfPresent(Bool.self, forKey: .wideThreads) {
             wideThreads = decodedWideThreads
         } else if let legacyNarrowThreads = try container.decodeIfPresent(Bool.self, forKey: .narrowThreads) {

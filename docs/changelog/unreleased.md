@@ -66,7 +66,7 @@
 - Hid the thread-list scrollbar so it no longer cuts through sticky header blur.
 - Added breathing room between repository headers and main worktree rows.
 - Made compact thread rows the default and replaced the old `Narrow threads` setting with an opt-in `Wide threads` setting.
-- Added a Threads setting to hide sidebar thread icons and reclaim their row space.
+- Added a Threads setting to show sidebar thread icons; existing installations keep them hidden until enabled.
 - Added an **Archive All Threads...** action to section header context menus when a section contains threads.
 
 #### Bug Fixes

@@ -896,8 +896,8 @@ struct AppSettingsThreadIconVisibilityTests {
         #expect(AppSettings().showThreadIcons)
     }
 
-    @Test("Missing thread icon visibility setting decodes to visible")
-    func decodesMissingThreadIconVisibilityToVisible() throws {
+    @Test("Existing settings without thread icon visibility migrate to hidden")
+    func decodesMissingThreadIconVisibilityToHidden() throws {
         let baselineData = try JSONEncoder().encode(AppSettings())
         var baselineObject = try #require(JSONSerialization.jsonObject(with: baselineData) as? [String: Any])
         baselineObject.removeValue(forKey: "showThreadIcons")
@@ -905,17 +905,17 @@ struct AppSettingsThreadIconVisibilityTests {
 
         let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
 
-        #expect(decoded.showThreadIcons)
+        #expect(!decoded.showThreadIcons)
     }
 
-    @Test("Thread icon visibility setting round-trips")
-    func threadIconVisibilityRoundTrips() throws {
-        let data = try JSONEncoder().encode(AppSettings(showThreadIcons: false))
+    @Test("Explicit thread icon visibility setting round-trips", arguments: [true, false])
+    func threadIconVisibilityRoundTrips(showThreadIcons: Bool) throws {
+        let data = try JSONEncoder().encode(AppSettings(showThreadIcons: showThreadIcons))
         let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
 
-        #expect(object["showThreadIcons"] as? Bool == false)
-        #expect(!decoded.showThreadIcons)
+        #expect(object["showThreadIcons"] as? Bool == showThreadIcons)
+        #expect(decoded.showThreadIcons == showThreadIcons)
     }
 }
 
