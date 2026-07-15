@@ -17,6 +17,12 @@ struct SidebarWidthRange {
 struct SidebarDividerResizeIntent {
     private(set) var isDragging = false
 
+    mutating func reconcilePrimaryButtonState(isPressed: Bool) {
+        if !isPressed {
+            isDragging = false
+        }
+    }
+
     mutating func recognizes(
         _ eventType: NSEvent.EventType,
         pointerX: CGFloat,
@@ -32,20 +38,9 @@ struct SidebarDividerResizeIntent {
             )
             return isDragging
         case .leftMouseDragged:
-            if !isDragging {
-                isDragging = isPointerOverDivider(
-                    pointerX: pointerX,
-                    dividerX: dividerX,
-                    dividerThickness: dividerThickness
-                )
-            }
             return isDragging
         case .leftMouseUp:
-            let recognized = isDragging || isPointerOverDivider(
-                pointerX: pointerX,
-                dividerX: dividerX,
-                dividerThickness: dividerThickness
-            )
+            let recognized = isDragging
             isDragging = false
             return recognized
         default:
@@ -65,5 +60,19 @@ struct SidebarDividerResizeIntent {
         let hitTolerance: CGFloat = 4
         let hitRange = (dividerX - hitTolerance)...(dividerX + max(dividerThickness, 0) + hitTolerance)
         return hitRange.contains(pointerX)
+    }
+}
+
+struct SidebarSplitPositionPolicy {
+    static func position(
+        proposed: CGFloat,
+        preferred: CGFloat,
+        enforced: CGFloat?,
+        allowsMovement: Bool
+    ) -> CGFloat {
+        if let enforced {
+            return enforced
+        }
+        return allowsMovement ? proposed : preferred
     }
 }
