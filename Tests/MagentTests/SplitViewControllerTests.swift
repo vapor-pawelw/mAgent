@@ -3,6 +3,18 @@ import Testing
 
 @Suite("Split view sidebar sizing")
 struct SplitViewControllerTests {
+    @Test("Sidebar width range supports a compact minimum on small screens")
+    func sidebarSupportsCompactWidth() {
+        let sidebarItem = NSSplitViewItem(sidebarWithViewController: NSViewController())
+        SidebarWidthRange.configure(sidebarItem)
+
+        #expect(sidebarItem.minimumThickness == 154)
+        #expect(sidebarItem.maximumThickness == 420)
+        #expect(SidebarWidthRange.clamp(100) == 154)
+        #expect(SidebarWidthRange.clamp(180) == 180)
+        #expect(SidebarWidthRange.clamp(500) == 420)
+    }
+
     @Test("Thread selection clicks are not treated as divider drags")
     func threadSelectionClickDoesNotResizeSidebar() {
         var intent = SidebarDividerResizeIntent()

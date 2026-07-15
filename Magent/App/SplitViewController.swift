@@ -118,8 +118,7 @@ final class SplitViewController: NSSplitViewController {
         threadListVC.delegate = self
 
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: threadListVC)
-        sidebarItem.minimumThickness = 220
-        sidebarItem.maximumThickness = 420
+        SidebarWidthRange.configure(sidebarItem)
         // `sidebarWithViewController:` already configures `canCollapse = true`
         // as part of the sidebar behavior — no explicit assignment needed.
         // Seed the collapsed state from persistence before adding to the split view.
@@ -439,7 +438,7 @@ final class SplitViewController: NSSplitViewController {
         guard let sidebarItem else { return }
         let width = sidebarItem.viewController.view.frame.width
         guard width.isFinite, width > 0 else { return }
-        let clampedWidth = min(max(width, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+        let clampedWidth = SidebarWidthRange.clamp(width)
         let deltaFromPreferred = abs(clampedWidth - preferredSidebarWidth)
 
         if let enforcedSidebarWidth {
@@ -1289,21 +1288,21 @@ final class SplitViewController: NSSplitViewController {
         guard let sidebarItem else { return nil }
         let width = sidebarItem.viewController.view.frame.width
         guard width.isFinite, width > 0 else { return nil }
-        return min(max(width, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+        return SidebarWidthRange.clamp(width)
     }
 
     private func resolvedSavedSidebarWidth() -> CGFloat {
-        guard let sidebarItem else { return Self.defaultSidebarWidth }
+        guard sidebarItem != nil else { return Self.defaultSidebarWidth }
         let savedWidth = UserDefaults.standard.object(forKey: Self.sidebarWidthDefaultsKey) as? Double
         let targetWidth = CGFloat(savedWidth ?? Double(Self.defaultSidebarWidth))
-        return min(max(targetWidth, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+        return SidebarWidthRange.clamp(targetWidth)
     }
 
     private func restoreSidebarWidth(_ width: CGFloat?) {
         guard let width else { return }
-        guard let sidebarItem else { return }
+        guard sidebarItem != nil else { return }
         guard splitViewItems.count >= 2 else { return }
-        let clampedWidth = min(max(width, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+        let clampedWidth = SidebarWidthRange.clamp(width)
         if let currentWidth = currentSidebarWidth(), abs(currentWidth - clampedWidth) <= 0.5 {
             preferredSidebarWidth = clampedWidth
             return

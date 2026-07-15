@@ -49,6 +49,7 @@
 
 #### Improvements
 
+- Reduced the sidebar's minimum width so it takes less space on small screens.
 - Keep last-known PR/MR, Jira, hidden-thread, and stopped-session sidebar state visible immediately after relaunch while fresh checks run.
 - Mark the priority matching a thread's Jira ticket in sidebar priority menus.
 - Restyled section headers with subtle neutral backgrounds, compact colored leading rails, and balanced content padding so section boundaries are clearer without competing with thread cards.

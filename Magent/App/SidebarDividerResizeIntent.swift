@@ -1,5 +1,19 @@
 import AppKit
 
+struct SidebarWidthRange {
+    static let minimum: CGFloat = 154
+    static let maximum: CGFloat = 420
+
+    static func configure(_ item: NSSplitViewItem) {
+        item.minimumThickness = minimum
+        item.maximumThickness = maximum
+    }
+
+    static func clamp(_ width: CGFloat) -> CGFloat {
+        min(max(width, minimum), maximum)
+    }
+}
+
 struct SidebarDividerResizeIntent {
     private(set) var isDragging = false
 
