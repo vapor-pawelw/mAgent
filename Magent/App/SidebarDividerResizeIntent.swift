@@ -1,7 +1,7 @@
 import AppKit
 
 struct SidebarWidthRange {
-    static let minimum: CGFloat = 154
+    static let minimum: CGFloat = 200
     static let maximum: CGFloat = 420
 
     static func configure(_ item: NSSplitViewItem) {

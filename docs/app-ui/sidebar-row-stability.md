@@ -3,7 +3,7 @@
 ## User-Facing Behavior
 
 - Selecting a thread should not change the sidebar width.
-- The main sidebar can be narrowed to 154pt so it leaves more room for thread content on small screens.
+- The main sidebar can be narrowed to 200pt so it leaves more room for thread content on small screens without making sidebar controls too cramped.
 - Selecting a thread should not make a multiline thread row grow or shrink.
 - Task descriptions should keep the same wrapping/height while selection state changes.
 - Thread row heights are dynamic based on content (description lines, subtitle, PR row) with a per-thread minimum enforced by `ThreadCell.sidebarRowHeight`. Height must not change when selection state toggles.

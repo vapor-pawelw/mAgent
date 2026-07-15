@@ -8,10 +8,10 @@ struct SplitViewControllerTests {
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: NSViewController())
         SidebarWidthRange.configure(sidebarItem)
 
-        #expect(sidebarItem.minimumThickness == 154)
+        #expect(sidebarItem.minimumThickness == 200)
         #expect(sidebarItem.maximumThickness == 420)
-        #expect(SidebarWidthRange.clamp(100) == 154)
-        #expect(SidebarWidthRange.clamp(180) == 180)
+        #expect(SidebarWidthRange.clamp(100) == 200)
+        #expect(SidebarWidthRange.clamp(220) == 220)
         #expect(SidebarWidthRange.clamp(500) == 420)
     }
 
