@@ -28,10 +28,10 @@ enum StickyHeaderProjectResolver {
     static func stickyProject<Project>(
         from candidates: [StickyHeaderProjectCandidate<Project>],
         visibleTop: CGFloat,
-        stickinessThreshold: CGFloat = 1
+        activationOffset: CGFloat = 12
     ) -> Project? {
         candidates.last { candidate in
-            candidate.rowMinY < visibleTop + stickinessThreshold
+            candidate.rowMinY + activationOffset < visibleTop
         }?.project
     }
 }

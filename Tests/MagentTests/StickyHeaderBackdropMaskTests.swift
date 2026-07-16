@@ -39,6 +39,15 @@ struct StickyHeaderBackdropMaskTests {
         ]
 
         #expect(StickyHeaderProjectResolver.stickyProject(from: candidates, visibleTop: 390) == "First")
-        #expect(StickyHeaderProjectResolver.stickyProject(from: candidates, visibleTop: 421) == "Second")
+        #expect(StickyHeaderProjectResolver.stickyProject(from: candidates, visibleTop: 433) == "Second")
+    }
+
+    @Test
+    func stickyProjectStaysHiddenAtTopUntilActivationOffsetIsPassed() {
+        let candidates = [StickyHeaderProjectCandidate(project: "First", rowMinY: 0)]
+
+        #expect(StickyHeaderProjectResolver.stickyProject(from: candidates, visibleTop: 0) == nil)
+        #expect(StickyHeaderProjectResolver.stickyProject(from: candidates, visibleTop: 12) == nil)
+        #expect(StickyHeaderProjectResolver.stickyProject(from: candidates, visibleTop: 13) == "First")
     }
 }

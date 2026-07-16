@@ -73,6 +73,7 @@
 #### Bug Fixes
 
 - Kept the sidebar width stable during thread selection without interfering with manual divider dragging.
+- Kept the first repository's normal header and collapse control usable at the top of the sidebar before sticky headers activate.
 - Updated all sidebar tickets immediately when allowed Jira prefixes change, without an unnecessary network refresh.
 - Made secondary sidebar thread metadata 20% dimmer, with an additional proportional dimming for inactive threads and hidden rows.
 - Fixed the sidebar icon visibility setting so changing it updates thread rows immediately.

@@ -625,8 +625,8 @@ final class ThreadListViewController: NSViewController {
 
     /// Determines which project/section header should be pinned at the top of the
     /// sidebar based on the current scroll position. A project header becomes sticky
-    /// when its row crosses the top and stays visible until another project header
-    /// crosses that same point.
+    /// after its row clears the top activation offset and stays visible until
+    /// another project header clears that same offset.
     func updateStickyHeaders() {
         guard let outlineView, let scrollView else { return }
 
@@ -644,8 +644,8 @@ final class ThreadListViewController: NSViewController {
 
         var state = StickyHeaderOverlayView.HeaderState.hidden
 
-        // A project header stays sticky after it first crosses the top and remains
-        // in place through inter-project gaps until the next project header crosses.
+        // A project header stays sticky after it clears the activation offset and
+        // remains in place through inter-project gaps until the next one clears it.
         let projectCandidates = sidebarRootItems.compactMap { item -> StickyHeaderProjectCandidate<SidebarProject>? in
             guard let project = item as? SidebarProject else { return nil }
             let row = outlineView.row(forItem: project)
