@@ -14,52 +14,19 @@ struct SidebarWidthRange {
     }
 }
 
-struct SidebarDividerResizeIntent {
-    private(set) var isDragging = false
+final class SidebarTrackingSplitView: NSSplitView {
+    var onDividerDragStateChanged: ((Bool) -> Void)?
 
-    mutating func reconcilePrimaryButtonState(isPressed: Bool) {
-        if !isPressed {
-            isDragging = false
+    override func mouseDown(with event: NSEvent) {
+        performTrackedDividerDrag {
+            super.mouseDown(with: event)
         }
     }
 
-    mutating func recognizes(
-        _ eventType: NSEvent.EventType,
-        pointerX: CGFloat,
-        dividerX: CGFloat,
-        dividerThickness: CGFloat
-    ) -> Bool {
-        switch eventType {
-        case .leftMouseDown:
-            isDragging = isPointerOverDivider(
-                pointerX: pointerX,
-                dividerX: dividerX,
-                dividerThickness: dividerThickness
-            )
-            return isDragging
-        case .leftMouseDragged:
-            return isDragging
-        case .leftMouseUp:
-            let recognized = isDragging
-            isDragging = false
-            return recognized
-        default:
-            return false
-        }
-    }
-
-    mutating func cancel() {
-        isDragging = false
-    }
-
-    private func isPointerOverDivider(
-        pointerX: CGFloat,
-        dividerX: CGFloat,
-        dividerThickness: CGFloat
-    ) -> Bool {
-        let hitTolerance: CGFloat = 4
-        let hitRange = (dividerX - hitTolerance)...(dividerX + max(dividerThickness, 0) + hitTolerance)
-        return hitRange.contains(pointerX)
+    func performTrackedDividerDrag(_ drag: () -> Void) {
+        onDividerDragStateChanged?(true)
+        defer { onDividerDragStateChanged?(false) }
+        drag()
     }
 }
 

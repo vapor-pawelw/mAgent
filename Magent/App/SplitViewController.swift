@@ -99,8 +99,7 @@ final class SplitViewController: NSSplitViewController {
     private var enforcedSidebarWidth: CGFloat?
     private var isRestoringSidebarWidth = false
     private var isTogglingSidebarCollapse = false
-    private var sidebarDividerResizeIntent = SidebarDividerResizeIntent()
-    private var sidebarDividerEventMonitor: Any?
+    private var isSidebarDividerDragActive = false
     private var keyEventMonitor: Any?
     private var cachedKeyBindings: KeyBindingSettings = KeyBindingSettings()
     private weak var observedWindowForFocusNotifications: NSWindow?
@@ -110,6 +109,15 @@ final class SplitViewController: NSSplitViewController {
     private var didInstallCurrentThreadToolbarSizingConstraints = false
     private weak var pendingPromptRecoveryToolbarButton: NSButton?
     private var pendingPromptRecoveryToolbarHintPopover: NSPopover?
+
+    override func loadView() {
+        let trackingSplitView = SidebarTrackingSplitView()
+        trackingSplitView.onDividerDragStateChanged = { [weak self] isActive in
+            self?.isSidebarDividerDragActive = isActive
+        }
+        splitView = trackingSplitView
+        super.loadView()
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -150,7 +158,6 @@ final class SplitViewController: NSSplitViewController {
         super.viewDidAppear()
 
         applyInitialSidebarWidthIfNeeded()
-        installSidebarDividerEventMonitorIfNeeded()
         setupWindowToolbar()
         installWindowFocusObserversIfNeeded()
 
@@ -242,15 +249,6 @@ final class SplitViewController: NSSplitViewController {
             object: nil
         )
         refreshPendingPromptRecoveryToolbarItem()
-    }
-
-    override func viewWillDisappear() {
-        super.viewWillDisappear()
-        if let sidebarDividerEventMonitor {
-            NSEvent.removeMonitor(sidebarDividerEventMonitor)
-            self.sidebarDividerEventMonitor = nil
-        }
-        sidebarDividerResizeIntent.cancel()
     }
 
     /// Forwarded from the main menu's "New Thread" item (⌘N).
@@ -440,6 +438,7 @@ final class SplitViewController: NSSplitViewController {
     }
 
     override func splitViewDidResizeSubviews(_ notification: Notification) {
+        super.splitViewDidResizeSubviews(notification)
         threadListVC.refreshSidebarLayout(forceColumnRefit: true)
         guard !isRestoringSidebarWidth else { return }
         // During the collapse/expand animation, intermediate frames carry
@@ -451,7 +450,6 @@ final class SplitViewController: NSSplitViewController {
         guard width.isFinite, width > 0 else { return }
         let clampedWidth = SidebarWidthRange.clamp(width)
         let deltaFromPreferred = abs(clampedWidth - preferredSidebarWidth)
-        let isDividerDragActive = isSidebarDividerDragActive()
 
         if let enforcedSidebarWidth {
             if abs(clampedWidth - enforcedSidebarWidth) > 0.5 {
@@ -459,7 +457,7 @@ final class SplitViewController: NSSplitViewController {
             }
             return
         }
-        if isDividerDragActive {
+        if isSidebarDividerDragActive {
             preferredSidebarWidth = clampedWidth
             UserDefaults.standard.set(Double(clampedWidth), forKey: Self.sidebarWidthDefaultsKey)
             return
@@ -471,41 +469,6 @@ final class SplitViewController: NSSplitViewController {
         if deltaFromPreferred > 0.1 {
             restoreSidebarWidth(preferredSidebarWidth)
         }
-    }
-
-    private func installSidebarDividerEventMonitorIfNeeded() {
-        guard sidebarDividerEventMonitor == nil else { return }
-        sidebarDividerEventMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
-        ) { [weak self] event in
-            self?.trackSidebarDividerEvent(event)
-            return event
-        }
-    }
-
-    private func trackSidebarDividerEvent(_ event: NSEvent) {
-        guard event.window === splitView.window,
-              let sidebarView = sidebarItem?.viewController.view else {
-            if event.type == .leftMouseDown || event.type == .leftMouseUp {
-                sidebarDividerResizeIntent.cancel()
-            }
-            return
-        }
-        let pointer = splitView.convert(event.locationInWindow, from: nil)
-        _ = sidebarDividerResizeIntent.recognizes(
-            event.type,
-            pointerX: pointer.x,
-            dividerX: sidebarView.frame.maxX,
-            dividerThickness: splitView.dividerThickness
-        )
-    }
-
-    private func isSidebarDividerDragActive() -> Bool {
-        let primaryButtonMask = 1 << 0
-        sidebarDividerResizeIntent.reconcilePrimaryButtonState(
-            isPressed: NSEvent.pressedMouseButtons & primaryButtonMask != 0
-        )
-        return sidebarDividerResizeIntent.isDragging
     }
 
     private func newTabShortcut() {
@@ -1351,14 +1314,19 @@ final class SplitViewController: NSSplitViewController {
         constrainSplitPosition proposedPosition: CGFloat,
         ofSubviewAt dividerIndex: Int
     ) -> CGFloat {
+        let systemPosition = super.splitView(
+            splitView,
+            constrainSplitPosition: proposedPosition,
+            ofSubviewAt: dividerIndex
+        )
         guard dividerIndex == 0 else {
-            return proposedPosition
+            return systemPosition
         }
-        let allowsMovement = isSidebarDividerDragActive()
+        let allowsMovement = isSidebarDividerDragActive
             || isTogglingSidebarCollapse
             || sidebarItem?.isCollapsed == true
         return SidebarSplitPositionPolicy.position(
-            proposed: proposedPosition,
+            proposed: systemPosition,
             preferred: preferredSidebarWidth,
             enforced: enforcedSidebarWidth,
             allowsMovement: allowsMovement
