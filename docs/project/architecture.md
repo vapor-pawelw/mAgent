@@ -136,6 +136,8 @@ Tab rename still changes tmux session names (tab-level, not thread-level), which
 - **ThreadDetailViewController**: `preparedSessions`, `sessionPreparationTasks`/`sessionPreparationTaskTokens`, `loadingOverlaySessionName`, `startupOverlayRequiredSessions`. Centralised in `rekeySessionState(_:)`.
 - **recreateSessionIfNeeded** guards against stale session names by checking `tmuxSessionNames.contains(sessionName)` both at entry and again immediately before `tmux.createSession`.
 
+Automatic tab naming is a display-name-only path. When a session's submitted-prompt history first transitions from empty to non-empty, `AgentSetupService` asks `RenameService` to generate a specific 1-3 word label from the first prompt. `AppSettings.autoRenameTabs` defaults to enabled and is checked before invoking an agent and before applying the result. Generation uses the same preferred-agent/fallback ordering as thread rename. It never renames the tmux session and it skips any session with an existing custom name or an entry in `manuallyRenamedTabs`; the guard is repeated after the asynchronous model call so manual renames always win races. Successful prompt-based names join that protection set so model/effort detection cannot replace them.
+
 ### 4.2 Prompt-Based Rename Reuse
 
 The "AI Rename…" sheet (⌘⇧R, also in thread context menu and TOC right-click) reuses the same model payload path as first-prompt auto-rename so branch slug generation, task description generation, and icon suggestion stay behaviorally aligned. The sheet provides a multi-line prompt input, a picker with the last 10 recent prompts, and checkboxes to selectively rename icon, description, and/or branch name (state persisted in `AppSettings.aiRenameIcon/aiRenameDescription/aiRenameBranch`).

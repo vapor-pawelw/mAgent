@@ -10,6 +10,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     let persistence = PersistenceService.shared
     var settings: AppSettings!
     private var autoRenameBranchCheckbox: NSButton!
+    private var autoRenameTabsCheckbox: NSButton!
     private var autoSetDescriptionCheckbox: NSButton!
     private var autoSetIconFromWorkTypeCheckbox: NSButton!
     private var showThreadIconsCheckbox: NSButton!
@@ -89,6 +90,21 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         autoRenameDesc.font = .systemFont(ofSize: 11)
         autoRenameDesc.textColor = NSColor(resource: .textSecondary)
         threadNamingSection.addArrangedSubview(autoRenameDesc)
+
+        autoRenameTabsCheckbox = NSButton(
+            checkboxWithTitle: String(localized: .SettingsStrings.settingsThreadsAutoRenameTabs),
+            target: self,
+            action: #selector(autoRenameTabsToggled)
+        )
+        autoRenameTabsCheckbox.state = settings.autoRenameTabs ? .on : .off
+        threadNamingSection.addArrangedSubview(autoRenameTabsCheckbox)
+
+        let autoRenameTabsDesc = NSTextField(
+            wrappingLabelWithString: String(localized: .SettingsStrings.settingsThreadsAutoRenameTabsDescription)
+        )
+        autoRenameTabsDesc.font = .systemFont(ofSize: 11)
+        autoRenameTabsDesc.textColor = NSColor(resource: .textSecondary)
+        threadNamingSection.addArrangedSubview(autoRenameTabsDesc)
 
         autoSetDescriptionCheckbox = NSButton(
             checkboxWithTitle: "Auto-set thread description from agent prompts",
@@ -834,6 +850,12 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     @objc private func autoRenameBranchToggled() {
         persistSettings { settings in
             settings.autoRenameBranches = autoRenameBranchCheckbox.state == .on
+        }
+    }
+
+    @objc private func autoRenameTabsToggled() {
+        persistSettings { settings in
+            settings.autoRenameTabs = autoRenameTabsCheckbox.state == .on
         }
     }
 

@@ -71,6 +71,33 @@ struct ThreadActivityIndicatorPreferenceTests {
     }
 }
 
+@Suite("Automatic tab naming")
+struct AutomaticTabNamingTests {
+
+    @Test("Defaults to enabled for existing settings")
+    func missingPreferenceDefaultsToEnabled() throws {
+        let settings = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"projects":[]}"#.utf8))
+
+        #expect(settings.autoRenameTabs)
+    }
+
+    @Test("Accepts only clean one-to-three word AI names", arguments: [
+        ("Fix tab naming", "Fix tab naming"),
+        ("TAB: Improve Search", "Improve Search"),
+        ("`Review`", "Review"),
+        ("**Fix Search**", "Fix Search"),
+    ])
+    func acceptsValidNames(raw: String, expected: String) {
+        #expect(TabNameAllocator.sanitizedGeneratedName(raw) == expected)
+    }
+
+    @Test("Rejects verbose AI output")
+    func rejectsVerboseNames() {
+        #expect(TabNameAllocator.sanitizedGeneratedName("This name has too many words") == nil)
+        #expect(TabNameAllocator.sanitizedGeneratedName("Here is the name:\nSearch") == nil)
+    }
+}
+
 // MARK: - SemanticVersion
 
 @Suite("SemanticVersion parsing")

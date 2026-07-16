@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "settingsThreadsAutoRenameTabs": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-rename tabs from their first agent prompt"
+          }
+        }
+      }
+    },
+    "settingsThreadsAutoRenameTabsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uses AI to generate a specific 1-3 word tab name. Manual tab names are never overwritten."
+          }
+        }
+      }
+    },
     "settingsAgentsActiveAgents": {
       "extractionState": "manual",
       "localizations": {

@@ -318,6 +318,13 @@ final class ThreadManager {
                 prompt: prompt
             )
         }
+        svc.triggerAutoRenameTabIfNeeded = { [weak self] threadId, sessionName, prompt in
+            await self?.renameService.autoRenameTabIfNeeded(
+                threadId: threadId,
+                sessionName: sessionName,
+                prompt: prompt
+            )
+        }
         return svc
     }()
 

@@ -120,6 +120,10 @@ extension ThreadManager {
 
     // MARK: - Rename Tab
 
+    func autoRenameTabIfNeeded(threadId: UUID, sessionName: String, prompt: String) async {
+        await renameService.autoRenameTabIfNeeded(threadId: threadId, sessionName: sessionName, prompt: prompt)
+    }
+
     func renameTab(threadId: UUID, sessionName: String, newDisplayName: String) async throws {
         try await renameService.renameTab(
             threadId: threadId,

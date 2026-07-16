@@ -105,12 +105,15 @@ Parsing scans the **entire capture window** (300 lines of scrollback + visible p
 
 ### Guard: `manuallyRenamedTabs`
 
-`MagentThread` carries a persisted `manuallyRenamedTabs: Set<String>` field. Auto-sync is skipped for any session in this set. The set is populated in two ways:
+`MagentThread` carries a persisted `manuallyRenamedTabs: Set<String>` field. Despite the legacy name, it is the protection set for tab labels that automatic model-name sync must not overwrite. The set is populated in three ways:
 
 1. **On rename** — `renameTab()` inserts the session (both the display-name-only path and the full tmux rename path).
 2. **Startup migration** — on first launch after this field was introduced, `ThreadManager` iterates all threads and inserts any session whose stored `customTabNames` entry doesn't match `TmuxSessionNaming.looksLikeDefaultTabName(_:for:)`. This protects tabs that were manually named before the feature shipped, with no separate migration flag needed (the set itself is idempotent once persisted).
+3. **Prompt-based automatic naming** — a successfully generated task label inserts the session so later model/effort detection does not replace the more descriptive name.
 
 The set is re-keyed on session rename and cleaned up on tab close, consistent with other per-session sets.
+
+The default-on `autoRenameTabs` setting uses the first submitted prompt for each agent session to generate a 1-3 word display name. It writes only `customTabNames`, leaving the tmux session name unchanged so prompt injection and other session-keyed state are not disrupted. Only the first prompt-history transition from empty to non-empty can launch generation, so failures do not retry on every later prompt. The setting is checked before the background AI command and again before applying its result. Both state checks skip sessions in `manuallyRenamedTabs`, so a manual rename made while generation is in flight still wins.
 
 ## UI: Launch Sheet
 

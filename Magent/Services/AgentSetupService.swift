@@ -24,6 +24,7 @@ final class AgentSetupService {
 
     /// Triggers auto-rename after prompt history grows on a thread (forwarded to ThreadManager+Rename).
     var triggerAutoRenameIfNeeded: ((UUID, String, String) async -> Void)?
+    var triggerAutoRenameTabIfNeeded: ((UUID, String, String) async -> Void)?
 
     // MARK: - Owned State
 
@@ -1500,6 +1501,16 @@ final class AgentSetupService {
             let autoRename = triggerAutoRenameIfNeeded
             Task {
                 await autoRename?(capturedId, capturedSession, allPrompts)
+            }
+        }
+
+        if previousCount == 0, !history.isEmpty {
+            let firstPrompt = history[0]
+            let capturedId = threadId
+            let capturedSession = sessionName
+            let autoRenameTab = triggerAutoRenameTabIfNeeded
+            Task {
+                await autoRenameTab?(capturedId, capturedSession, firstPrompt)
             }
         }
     }

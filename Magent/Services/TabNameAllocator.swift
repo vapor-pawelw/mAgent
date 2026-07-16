@@ -9,6 +9,23 @@ import Foundation
 /// renames reusing stale suffixes and counters resetting to zero.
 enum TabNameAllocator {
 
+    static func sanitizedGeneratedName(_ raw: String) -> String? {
+        let firstLine = raw.components(separatedBy: .newlines).first ?? raw
+        let withoutPrefix = firstLine.replacingOccurrences(
+            of: #"^\s*TAB:\s*"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        let trimmed = withoutPrefix.trimmingCharacters(
+            in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'`*_"))
+        )
+        let words = trimmed.split(whereSeparator: { $0.isWhitespace })
+        guard (1...3).contains(words.count) else { return nil }
+        let name = words.joined(separator: " ")
+        guard name.count <= 40, name.contains(where: { $0.isLetter || $0.isNumber }) else { return nil }
+        return name
+    }
+
     struct Result: Equatable {
         /// The allocated display name to use for the new/renamed tab.
         let displayName: String

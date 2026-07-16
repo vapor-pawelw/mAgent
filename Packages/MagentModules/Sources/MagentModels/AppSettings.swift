@@ -141,6 +141,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var autoReorderThreadsOnAgentCompletion: Bool
     public var showDockBadgeAndBounceForUnreadCompletions: Bool
     public var autoRenameBranches: Bool
+    public var autoRenameTabs: Bool
     public var autoSetThreadDescription: Bool
     public var autoSetThreadIconFromWorkType: Bool
     public var showThreadIcons: Bool
@@ -212,6 +213,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoReorderThreadsOnAgentCompletion: Bool = true,
         showDockBadgeAndBounceForUnreadCompletions: Bool = true,
         autoRenameBranches: Bool = true,
+        autoRenameTabs: Bool = true,
         autoSetThreadDescription: Bool = true,
         autoSetThreadIconFromWorkType: Bool = true,
         showThreadIcons: Bool = true,
@@ -282,6 +284,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.autoReorderThreadsOnAgentCompletion = autoReorderThreadsOnAgentCompletion
         self.showDockBadgeAndBounceForUnreadCompletions = showDockBadgeAndBounceForUnreadCompletions
         self.autoRenameBranches = autoRenameBranches
+        self.autoRenameTabs = autoRenameTabs
         self.autoSetThreadDescription = autoSetThreadDescription
         self.autoSetThreadIconFromWorkType = autoSetThreadIconFromWorkType
         self.showThreadIcons = showThreadIcons
@@ -358,6 +361,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showDockBadgeAndBounceForUnreadCompletions = try container.decodeIfPresent(Bool.self, forKey: .showDockBadgeAndBounceForUnreadCompletions) ?? true
         let legacyAutoRename = try container.decodeIfPresent(Bool.self, forKey: .autoRenameWorktrees)
         autoRenameBranches = try container.decodeIfPresent(Bool.self, forKey: .autoRenameBranches) ?? legacyAutoRename ?? true
+        autoRenameTabs = try container.decodeIfPresent(Bool.self, forKey: .autoRenameTabs) ?? true
         autoSetThreadDescription = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadDescription) ?? legacyAutoRename ?? true
         autoSetThreadIconFromWorkType = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadIconFromWorkType) ?? true
         // Missing means the settings predate this toggle; keep the previously icon-free sidebar.
@@ -449,6 +453,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoReorderThreadsOnAgentCompletion, forKey: .autoReorderThreadsOnAgentCompletion)
         try container.encode(showDockBadgeAndBounceForUnreadCompletions, forKey: .showDockBadgeAndBounceForUnreadCompletions)
         try container.encode(autoRenameBranches, forKey: .autoRenameBranches)
+        try container.encode(autoRenameTabs, forKey: .autoRenameTabs)
         try container.encode(autoSetThreadDescription, forKey: .autoSetThreadDescription)
         try container.encode(autoSetThreadIconFromWorkType, forKey: .autoSetThreadIconFromWorkType)
         try container.encode(showThreadIcons, forKey: .showThreadIcons)
@@ -696,6 +701,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case autoReorderThreadsOnAgentCompletion
         case showDockBadgeAndBounceForUnreadCompletions
         case autoRenameBranches
+        case autoRenameTabs
         case autoSetThreadDescription
         case autoSetThreadIconFromWorkType
         case showThreadIcons

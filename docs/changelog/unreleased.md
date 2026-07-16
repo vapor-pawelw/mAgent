@@ -24,6 +24,7 @@
 #### Improvements
 
 - Reopen cached recent threads immediately more often and let users tune how many terminal views Magent keeps for fast switching.
+- Automatically give agent tabs a concise AI-generated name from their first prompt, while preserving every manually renamed tab.
 - Added a toolbar reminder with a first-time hint to reopen dismissed lost-prompt recovery banners without discarding the saved prompt.
 - Rounded the initial prompt input in the new thread and new tab sheets.
 

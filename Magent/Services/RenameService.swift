@@ -45,6 +45,7 @@ final class RenameService {
     /// Tracks which threads have already shown a banner about a failed auto-rename,
     /// so only one error banner fires per thread regardless of retry count.
     var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
+    private var autoTabRenameInProgress: Set<String> = []
 
     // MARK: - Init
 
@@ -224,7 +225,7 @@ final class RenameService {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let localBin = ShellExecutor.shellQuote("\(homeDir)/.local/bin")
         let miseShims = ShellExecutor.shellQuote("\(homeDir)/.local/share/mise/shims")
-        return "PATH=\(localBin):\(miseShims):$PATH codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none < /dev/null"
+        return "PATH=\(localBin):\(miseShims):$PATH command codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none < /dev/null"
     }
 
     private func backgroundGenerationWorkingDirectory(projectId: UUID?) -> String? {
@@ -1073,6 +1074,61 @@ final class RenameService {
     }
 
     // MARK: - Rename Tab
+
+    func autoRenameTabIfNeeded(threadId: UUID, sessionName: String, prompt: String) async {
+        guard persistence.loadSettings().autoRenameTabs else { return }
+        guard let initialThread = store.threads.first(where: { $0.id == threadId }),
+              initialThread.tmuxSessionNames.contains(sessionName),
+              !initialThread.manuallyRenamedTabs.contains(sessionName),
+              initialThread.customTabNames[sessionName] == nil,
+              !autoTabRenameInProgress.contains(sessionName) else { return }
+
+        autoTabRenameInProgress.insert(sessionName)
+        defer { autoTabRenameInProgress.remove(sessionName) }
+
+        let truncatedPrompt = String(prompt.prefix(500))
+        let aiPrompt = """
+            Name this tab for the user's task in 1-3 clear, specific words. Choose the words that best describe the user's prompt. Output only the tab name, with no prefix, quotes, or explanation. User prompt: \(truncatedPrompt)
+            """
+        let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
+        let projectId = initialThread.projectId
+        let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
+        let preferredAgent = await detectedAgentTypeInSession?(sessionName)
+        let agents = slugGenerationAgentOrder(preferred: preferredAgent, projectId: projectId).available
+
+        for agent in agents {
+            let command: String
+            switch agent {
+            case .codex:
+                command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
+            case .claude:
+                let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+                command = "PATH=\(homeDir)/.local/bin:$PATH command claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\" < /dev/null"
+            default:
+                continue
+            }
+
+            guard case .success(let raw) = await executeWithTimeout(
+                command: command,
+                workingDirectory: workingDirectory,
+                timeoutNanos: 60_000_000_000
+            ), let generatedName = TabNameAllocator.sanitizedGeneratedName(raw) else { continue }
+
+            guard let index = store.threads.firstIndex(where: { $0.id == threadId }),
+                  persistence.loadSettings().autoRenameTabs,
+                  store.threads[index].tmuxSessionNames.contains(sessionName),
+                  !store.threads[index].manuallyRenamedTabs.contains(sessionName),
+                  store.threads[index].customTabNames[sessionName] == nil else { return }
+            let uniqueName = allocateUniqueTabDisplayNameCallback?(generatedName, index, sessionName) ?? generatedName
+            store.threads[index].customTabNames[sessionName] = uniqueName
+            // This shared protection set prevents every automatic naming pass from
+            // overwriting a prompt-derived label; a later manual rename keeps the flag.
+            store.threads[index].manuallyRenamedTabs.insert(sessionName)
+            try? persistence.saveActiveThreads(store.threads)
+            onThreadsChanged?()
+            return
+        }
+    }
 
     func renameTab(
         threadId: UUID,
