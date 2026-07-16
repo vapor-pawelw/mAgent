@@ -695,7 +695,10 @@ final class ThreadListViewController: NSViewController {
                 let lastThreadRow = sectionRow + childCount
                 if lastThreadRow < outlineView.numberOfRows {
                     let lastThreadRect = outlineView.rect(ofRow: lastThreadRow)
-                    let stickyBottom = StickyHeaderOverlayView.projectRowHeight + StickyHeaderOverlayView.sectionRowHeight
+                    let stickyBottom = StickyHeaderOverlayView.height(
+                        showsProject: true,
+                        showsSection: true
+                    )
                     if lastThreadRect.maxY > visibleTop + stickyBottom {
                         state.sectionName = section.name
                         state.sectionColor = section.color
@@ -762,9 +765,12 @@ final class ThreadListViewController: NSViewController {
         guard let section = stickySection else { return }
         let row = outlineView.row(forItem: section)
         guard row >= 0 else { return }
-        // Offset by the project header height so the section row sits just
+        // Offset by the complete project header height so the section row sits just
         // below the sticky project header instead of hidden behind it.
-        scrollOutlineRowToTop(row, topOffset: StickyHeaderOverlayView.projectRowHeight)
+        scrollOutlineRowToTop(
+            row,
+            topOffset: StickyHeaderOverlayView.height(showsProject: true, showsSection: false)
+        )
     }
 
     /// Scrolls the outline view so the given row's top edge aligns with the
@@ -1206,6 +1212,9 @@ final class ThreadListViewController: NSViewController {
         }
 
         sidebarRootItems = []
+        if !sidebarProjects.isEmpty {
+            sidebarRootItems.append(SidebarTopPadding())
+        }
         for (index, project) in sidebarProjects.enumerated() {
             if index > 0 {
                 sidebarRootItems.append(SidebarSpacer())

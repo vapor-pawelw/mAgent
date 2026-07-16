@@ -66,7 +66,7 @@
 - Removed the passive outline from busy thread rows so only their animated border arc is visible.
 - Sticky sidebar headers now use a stronger live blur instead of an opaque fill.
 - Hid the thread-list scrollbar so it no longer cuts through sticky header blur.
-- Added breathing room between repository headers and main worktree rows.
+- Added consistent breathing room above the first repository header and between repository headers and main worktree rows.
 - Made compact thread rows the default and replaced the old `Narrow threads` setting with an opt-in `Wide threads` setting.
 - Added a Threads setting to show sidebar thread icons; existing installations keep them hidden until enabled.
 - Added an **Archive All Threads...** action to section header context menus when a section contains threads.
@@ -75,6 +75,7 @@
 
 - Kept the sidebar width stable during thread selection without interfering with manual divider dragging.
 - Kept the first repository's normal header and collapse control usable at the top of the sidebar before sticky headers activate.
+- Removed the unintended trailing area beneath sticky repository and section headers.
 - Updated all sidebar tickets immediately when allowed Jira prefixes change, without an unnecessary network refresh.
 - Made secondary sidebar thread metadata 20% dimmer, with an additional proportional dimming for inactive threads and hidden rows.
 - Fixed the sidebar icon visibility setting so changing it updates thread rows immediately.

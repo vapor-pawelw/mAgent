@@ -84,6 +84,9 @@ enum SidebarInlineRenameFocusPolicy {
 }
 
 final class SidebarSpacer {}
+final class SidebarTopPadding {
+    let height = StickyHeaderLayout.topInset
+}
 final class SidebarProjectMainSpacer {}
 final class SidebarMissingProjectRow {
     let projectId: UUID

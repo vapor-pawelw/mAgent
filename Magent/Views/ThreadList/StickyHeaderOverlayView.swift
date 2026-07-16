@@ -11,15 +11,20 @@ final class StickyHeaderOverlayView: NSView {
     static let sectionRowHeight: CGFloat = 28
     private static let leadingInset: CGFloat = SectionHeaderStripStyle.contentLeadingInset
     private static let trailingInset: CGFloat = SectionHeaderStripStyle.contentTrailingInset
-    private static let topInset: CGFloat = 6
-    private static let fadeHeight: CGFloat = 28
+    static let topInset: CGFloat = StickyHeaderLayout.topInset
+
+    static func height(showsProject: Bool, showsSection: Bool) -> CGFloat {
+        StickyHeaderLayout.overlayHeight(
+            showsProject: showsProject,
+            showsSection: showsSection,
+            projectRowHeight: projectRowHeight,
+            sectionRowHeight: sectionRowHeight
+        )
+    }
 
     // MARK: - Subviews
 
     private let headerBlurView = NSVisualEffectView()
-    private let fadeBlurView = NSVisualEffectView()
-    private var lastFadeMaskSize: NSSize = .zero
-    private var lastFadeMaskScale: CGFloat = 0
 
     private let projectContainer = NSView()
     private let projectNameLabel = NSTextField(labelWithString: "")
@@ -29,12 +34,8 @@ final class StickyHeaderOverlayView: NSView {
     private let sectionContainer = SectionHeaderStripView()
     private let sectionNameLabel = NSTextField(labelWithString: "")
 
-    private let fadeSpacerView = NSView()
-
     private var sectionTopToProject: NSLayoutConstraint!
     private var sectionTopToSuperview: NSLayoutConstraint!
-    private var fadeTopToProject: NSLayoutConstraint!
-    private var fadeTopToSection: NSLayoutConstraint!
 
     // MARK: - State
 
@@ -71,13 +72,11 @@ final class StickyHeaderOverlayView: NSView {
     private func setup() {
         wantsLayer = true
 
-        for blurView in [headerBlurView, fadeBlurView] {
-            blurView.translatesAutoresizingMaskIntoConstraints = false
-            blurView.blendingMode = .withinWindow
-            blurView.material = .popover
-            blurView.state = .active
-            addSubview(blurView)
-        }
+        headerBlurView.translatesAutoresizingMaskIntoConstraints = false
+        headerBlurView.blendingMode = .withinWindow
+        headerBlurView.material = .popover
+        headerBlurView.state = .active
+        addSubview(headerBlurView)
 
         // Project header row
         projectContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -120,9 +119,6 @@ final class StickyHeaderOverlayView: NSView {
         sectionNameLabel.translatesAutoresizingMaskIntoConstraints = false
         sectionContainer.addSubview(sectionNameLabel)
 
-        fadeSpacerView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(fadeSpacerView)
-
         // Constraints
         sectionTopToProject = sectionContainer.topAnchor.constraint(
             equalTo: projectContainer.bottomAnchor
@@ -132,23 +128,11 @@ final class StickyHeaderOverlayView: NSView {
             constant: Self.topInset
         )
 
-        fadeTopToProject = fadeSpacerView.topAnchor.constraint(
-            equalTo: projectContainer.bottomAnchor
-        )
-        fadeTopToSection = fadeSpacerView.topAnchor.constraint(
-            equalTo: sectionContainer.bottomAnchor
-        )
-
         NSLayoutConstraint.activate([
             headerBlurView.topAnchor.constraint(equalTo: topAnchor),
             headerBlurView.leadingAnchor.constraint(equalTo: leadingAnchor),
             headerBlurView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            headerBlurView.bottomAnchor.constraint(equalTo: fadeSpacerView.topAnchor),
-
-            fadeBlurView.topAnchor.constraint(equalTo: fadeSpacerView.topAnchor),
-            fadeBlurView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            fadeBlurView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            fadeBlurView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            headerBlurView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             projectContainer.topAnchor.constraint(equalTo: topAnchor, constant: Self.topInset),
             projectContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -196,11 +180,6 @@ final class StickyHeaderOverlayView: NSView {
                 lessThanOrEqualTo: sectionContainer.trailingAnchor,
                 constant: -Self.trailingInset
             ),
-
-            fadeSpacerView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            fadeSpacerView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            fadeSpacerView.heightAnchor.constraint(equalToConstant: Self.fadeHeight),
-            fadeSpacerView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
         isHidden = true
@@ -220,6 +199,7 @@ final class StickyHeaderOverlayView: NSView {
             isHidden = true
             projectContainer.isHidden = true
             sectionContainer.isHidden = true
+            invalidateIntrinsicContentSize()
             return true
         }
 
@@ -247,11 +227,6 @@ final class StickyHeaderOverlayView: NSView {
         sectionTopToProject.isActive = showProject && showSection
         sectionTopToSuperview.isActive = !showProject && showSection
 
-        // Fade anchors below the last visible header row
-        fadeTopToSection.isActive = showSection
-        fadeTopToProject.isActive = !showSection && showProject
-
-        updateBackdropMask()
         invalidateIntrinsicContentSize()
         return true
     }
@@ -278,92 +253,13 @@ final class StickyHeaderOverlayView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        var h: CGFloat = 0
-        if !projectContainer.isHidden { h += Self.projectRowHeight }
-        if !sectionContainer.isHidden { h += Self.sectionRowHeight }
-        if h > 0 { h += Self.topInset + Self.fadeHeight }
-        return NSSize(width: NSView.noIntrinsicMetric, height: h)
-    }
-
-    private func updateBackdropMask() {
-        let size = fadeBlurView.bounds.size
-        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
-        guard size.width > 0, size.height > 0 else {
-            fadeBlurView.maskImage = nil
-            return
-        }
-        guard size != lastFadeMaskSize || scale != lastFadeMaskScale else { return }
-
-        fadeBlurView.maskImage = makeFadeMaskImage(size: size, scale: scale)
-        lastFadeMaskSize = size
-        lastFadeMaskScale = scale
-    }
-
-    private func makeFadeMaskImage(size: NSSize, scale: CGFloat) -> NSImage {
-        let pixelWidth = max(1, Int(ceil(size.width * scale)))
-        let pixelHeight = max(1, Int(ceil(size.height * scale)))
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
-        let context = CGContext(
-            data: nil,
-            width: pixelWidth,
-            height: pixelHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo
-        )
-
-        guard let context else {
-            let image = NSImage(size: size)
-            image.lockFocus()
-            NSColor.white.setFill()
-            NSRect(origin: .zero, size: size).fill()
-            image.unlockFocus()
-            return image
-        }
-
-        let stops = StickyHeaderBackdropMask.gradientStops(
-            totalHeight: size.height,
-            rampHeight: size.height
-        )
-        let locations: [CGFloat] = stops.map(\.location)
-        let components: [CGFloat] = stops.flatMap { [$0.opacity, $0.opacity, $0.opacity, $0.opacity] }
-        let gradient = CGGradient(
-            colorSpace: colorSpace,
-            colorComponents: components,
-            locations: locations,
-            count: stops.count
-        )
-
-        if let gradient {
-            context.drawLinearGradient(
-                gradient,
-                start: CGPoint(x: 0, y: 0),
-                end: CGPoint(x: 0, y: CGFloat(pixelHeight)),
-                options: []
+        NSSize(
+            width: NSView.noIntrinsicMetric,
+            height: Self.height(
+                showsProject: !projectContainer.isHidden,
+                showsSection: !sectionContainer.isHidden
             )
-        }
-
-        guard let cgImage = context.makeImage() else { return NSImage(size: size) }
-        let image = NSImage(cgImage: cgImage, size: size)
-        image.cacheMode = .never
-        return image
-    }
-
-    override func layout() {
-        super.layout()
-        updateBackdropMask()
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        if !isHidden { updateBackdropMask() }
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if !isHidden { updateBackdropMask() }
+        )
     }
 
     // MARK: - Click Handling

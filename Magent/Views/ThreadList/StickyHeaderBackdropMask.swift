@@ -1,21 +1,17 @@
 import Foundation
 
-enum StickyHeaderBackdropMask {
-    static func gradientStops(totalHeight: CGFloat, rampHeight: CGFloat) -> [(location: CGFloat, opacity: CGFloat)] {
-        guard totalHeight > 0 else {
-            return [(0, 0), (1, 0)]
-        }
+enum StickyHeaderLayout {
+    static let topInset: CGFloat = 6
 
-        let clampedRampHeight = min(max(rampHeight, 0), totalHeight)
-        guard clampedRampHeight > 0 else {
-            return [(0, 1), (1, 1)]
-        }
-
-        return [
-            (0, 0),
-            (clampedRampHeight / totalHeight, 1),
-            (1, 1),
-        ]
+    static func overlayHeight(
+        showsProject: Bool,
+        showsSection: Bool,
+        projectRowHeight: CGFloat,
+        sectionRowHeight: CGFloat
+    ) -> CGFloat {
+        let rowHeight = (showsProject ? projectRowHeight : 0)
+            + (showsSection ? sectionRowHeight : 0)
+        return rowHeight > 0 ? topInset + rowHeight : 0
     }
 }
 

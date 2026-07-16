@@ -1,34 +1,38 @@
+import Foundation
 import Testing
 
 @Suite
-struct StickyHeaderBackdropMaskTests {
+struct StickyHeaderBehaviorTests {
     @Test
-    func rampsAcrossLowerPartOfBlurRegion() {
-        let stops = StickyHeaderBackdropMask.gradientStops(totalHeight: 80, rampHeight: 48)
+    func overlayHeightMatchesOnlyTheVisibleHeaderRows() {
+        let topPadding = SidebarTopPadding()
 
-        #expect(stops.count == 3)
-        #expect(stops[0].location == 0)
-        #expect(stops[0].opacity == 0)
-        #expect(stops[1].location == 0.6)
-        #expect(stops[1].opacity == 1)
-        #expect(stops[2].location == 1)
-        #expect(stops[2].opacity == 1)
-    }
-
-    @Test
-    func zeroRampKeepsBackdropFullyVisible() {
-        let stops = StickyHeaderBackdropMask.gradientStops(totalHeight: 80, rampHeight: 0)
-
-        #expect(stops.count == 2)
-        #expect(stops[0].opacity == 1)
-        #expect(stops[1].opacity == 1)
-    }
-
-    @Test
-    func rampHeightIsClampedToAvailableHeight() {
-        let stops = StickyHeaderBackdropMask.gradientStops(totalHeight: 8, rampHeight: 12)
-
-        #expect(stops[1].location == 1)
+        #expect(topPadding.height == 6)
+        #expect(topPadding.height == StickyHeaderLayout.topInset)
+        #expect(
+            StickyHeaderLayout.overlayHeight(
+                showsProject: true,
+                showsSection: false,
+                projectRowHeight: 36,
+                sectionRowHeight: 28
+            ) == 42
+        )
+        #expect(
+            StickyHeaderLayout.overlayHeight(
+                showsProject: true,
+                showsSection: true,
+                projectRowHeight: 36,
+                sectionRowHeight: 28
+            ) == 70
+        )
+        #expect(
+            StickyHeaderLayout.overlayHeight(
+                showsProject: false,
+                showsSection: false,
+                projectRowHeight: 36,
+                sectionRowHeight: 28
+            ) == 0
+        )
     }
 
     @Test

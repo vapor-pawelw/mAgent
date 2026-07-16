@@ -451,6 +451,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarSpacer {
             return SidebarSpacerRowView()
         }
+        if item is SidebarTopPadding {
+            return SidebarSpacerRowView()
+        }
         if item is SidebarProjectMainSpacer {
             return SidebarSpacerRowView()
         }
@@ -591,6 +594,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarSpacer {
             return Self.projectHeaderInterProjectGap
         }
+        if let topPadding = item as? SidebarTopPadding {
+            return topPadding.height
+        }
         if item is SidebarProjectMainSpacer {
             return Self.projectHeaderToMainRowGap
         }
@@ -655,6 +661,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return false
         }
         if item is SidebarSpacer {
+            return false
+        }
+        if item is SidebarTopPadding {
             return false
         }
         if item is SidebarProjectMainSpacer {
@@ -851,6 +860,16 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? SidebarSpacerCellView
                 ?? {
                     let c = SidebarSpacerCellView()
+                    c.identifier = identifier
+                    return c
+                }()
+            return cell
+        }
+        if item is SidebarTopPadding {
+            let identifier = NSUserInterfaceItemIdentifier("TopPaddingCell")
+            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
+                ?? {
+                    let c = NSTableCellView()
                     c.identifier = identifier
                     return c
                 }()
