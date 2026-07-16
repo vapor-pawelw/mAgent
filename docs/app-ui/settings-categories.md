@@ -51,6 +51,7 @@
 - The recently archived list reads from persisted threads, sorts by `archivedAt`, and listens for a shared archive-state notification so it refreshes while Settings is open.
 - Project overrides use the parallel section editor in `Magent/Views/Settings/SettingsProjectsViewController.swift` and `Magent/Views/Settings/SettingsProjectsViewController+Sections.swift`.
 - A selected project's settings end with a destructive `Remove Project…` button. It uses the same confirmed removal action as the minus button below the project list and does not delete the repository from disk.
+- Project-list selection callbacks must resolve the detail project from the table's newly selected row. `currentProjectID` tracks the detail already on screen and must not override a new click.
 - Both section editors use `NSColorPanel.shared`, so they must set the active `sectionId` and temporarily detach target/action before assigning `panel.color`, then restore the callback after the programmatic update.
 - App appearance is applied centrally from `AppDelegate`: `NSApp.appearance` controls the AppKit chrome, and Ghostty receives the matching light/dark preference through `GhosttyAppManager`.
 

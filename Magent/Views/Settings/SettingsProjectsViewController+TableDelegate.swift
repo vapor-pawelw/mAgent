@@ -378,7 +378,10 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
         guard let tableView = notification.object as? NSTableView,
               tableView === projectTableView else { return }
         updateRemoveButtonState()
-        guard let project = selectedProject else {
+        guard let project = ProjectSettingsSelectionResolver.project(
+            at: tableView.selectedRow,
+            in: settings.projects
+        ) else {
             showEmptyState()
             return
         }

@@ -6,6 +6,10 @@
 
 - Added a clearly destructive Remove Project action at the bottom of each project's settings.
 
+#### Bug Fixes
+
+- Fixed clicking another project in Settings leaving the previous project's details on screen.
+
 ### Agents
 
 #### Improvements
