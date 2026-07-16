@@ -145,6 +145,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var autoSetThreadDescription: Bool
     public var autoSetThreadIconFromWorkType: Bool
     public var showThreadIcons: Bool
+    public var showWorktreeNames: Bool
     public var wideThreads: Bool
     public var showPRStatusBadges: Bool
     public var showJiraStatusBadges: Bool
@@ -217,6 +218,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoSetThreadDescription: Bool = true,
         autoSetThreadIconFromWorkType: Bool = true,
         showThreadIcons: Bool = true,
+        showWorktreeNames: Bool = false,
         wideThreads: Bool = false,
         showPRStatusBadges: Bool = true,
         showJiraStatusBadges: Bool = true,
@@ -288,6 +290,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.autoSetThreadDescription = autoSetThreadDescription
         self.autoSetThreadIconFromWorkType = autoSetThreadIconFromWorkType
         self.showThreadIcons = showThreadIcons
+        self.showWorktreeNames = showWorktreeNames
         self.wideThreads = wideThreads
         self.showPRStatusBadges = showPRStatusBadges
         self.showJiraStatusBadges = showJiraStatusBadges
@@ -366,6 +369,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoSetThreadIconFromWorkType = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadIconFromWorkType) ?? true
         // Missing means the settings predate this toggle; keep the previously icon-free sidebar.
         showThreadIcons = try container.decodeIfPresent(Bool.self, forKey: .showThreadIcons) ?? false
+        showWorktreeNames = try container.decodeIfPresent(Bool.self, forKey: .showWorktreeNames) ?? false
         if let decodedWideThreads = try container.decodeIfPresent(Bool.self, forKey: .wideThreads) {
             wideThreads = decodedWideThreads
         } else if let legacyNarrowThreads = try container.decodeIfPresent(Bool.self, forKey: .narrowThreads) {
@@ -457,6 +461,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoSetThreadDescription, forKey: .autoSetThreadDescription)
         try container.encode(autoSetThreadIconFromWorkType, forKey: .autoSetThreadIconFromWorkType)
         try container.encode(showThreadIcons, forKey: .showThreadIcons)
+        try container.encode(showWorktreeNames, forKey: .showWorktreeNames)
         try container.encode(wideThreads, forKey: .wideThreads)
         try container.encode(showPRStatusBadges, forKey: .showPRStatusBadges)
         try container.encode(showJiraStatusBadges, forKey: .showJiraStatusBadges)
@@ -705,6 +710,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case autoSetThreadDescription
         case autoSetThreadIconFromWorkType
         case showThreadIcons
+        case showWorktreeNames
         case wideThreads
         case showPRStatusBadges
         case showJiraStatusBadges

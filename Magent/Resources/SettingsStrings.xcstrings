@@ -419,6 +419,28 @@
         }
       }
     },
+    "settingsThreadsShowWorktreeNames": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show worktree names"
+          }
+        }
+      }
+    },
+    "settingsThreadsShowWorktreeNamesDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include the worktree folder name on the second line of thread rows when it differs from the branch."
+          }
+        }
+      }
+    },
     "settingsThreadsStatusBarBusy": {
       "extractionState": "manual",
       "localizations": {

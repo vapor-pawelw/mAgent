@@ -12,6 +12,14 @@ struct SidebarSettingsFingerprintTests {
     }
 
     @Test
+    func showingWorktreeNamesRequiresSidebarRefresh() {
+        let hiddenNames = AppSettings(showWorktreeNames: false)
+        let visibleNames = AppSettings(showWorktreeNames: true)
+
+        #expect(SidebarSettingsFingerprint(settings: hiddenNames) != SidebarSettingsFingerprint(settings: visibleNames))
+    }
+
+    @Test
     func changingActivityIndicatorStyleRequiresSidebarRefresh() {
         let circle = AppSettings(threadActivityIndicatorStyle: .circle)
         let text = AppSettings(threadActivityIndicatorStyle: .text)

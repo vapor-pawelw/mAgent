@@ -110,22 +110,27 @@ final class SplitViewController: NSSplitViewController {
     private weak var pendingPromptRecoveryToolbarButton: NSButton?
     private var pendingPromptRecoveryToolbarHintPopover: NSPopover?
 
-    override func loadView() {
+    override init(nibName nibNameOrNil: NSNib.Name?, bundle nibBundleOrNil: Bundle?) {
+        super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
+
+        configureSplitViewHierarchy()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+
+        configureSplitViewHierarchy()
+    }
+
+    private func configureSplitViewHierarchy() {
+
         let trackingSplitView = SidebarTrackingSplitView()
         trackingSplitView.onDividerDragStateChanged = { [weak self] isActive in
             self?.isSidebarDividerDragActive = isActive
         }
         splitView = trackingSplitView
-        super.loadView()
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-
-        preferredSidebarWidth = resolvedSavedSidebarWidth()
 
         threadListVC.delegate = self
-
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: threadListVC)
         SidebarWidthRange.configure(sidebarItem)
         // `sidebarWithViewController:` already configures `canCollapse = true`
@@ -142,7 +147,12 @@ final class SplitViewController: NSSplitViewController {
         contentContainerVC.setContent(emptyStateVC)
         let contentItem = NSSplitViewItem(contentListWithViewController: contentContainerVC)
         addSplitViewItem(contentItem)
+    }
 
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        preferredSidebarWidth = resolvedSavedSidebarWidth()
         splitView.dividerStyle = .thin
         splitView.delegate = self
     }
@@ -1314,19 +1324,14 @@ final class SplitViewController: NSSplitViewController {
         constrainSplitPosition proposedPosition: CGFloat,
         ofSubviewAt dividerIndex: Int
     ) -> CGFloat {
-        let systemPosition = super.splitView(
-            splitView,
-            constrainSplitPosition: proposedPosition,
-            ofSubviewAt: dividerIndex
-        )
         guard dividerIndex == 0 else {
-            return systemPosition
+            return proposedPosition
         }
         let allowsMovement = isSidebarDividerDragActive
             || isTogglingSidebarCollapse
             || sidebarItem?.isCollapsed == true
         return SidebarSplitPositionPolicy.position(
-            proposed: systemPosition,
+            proposed: proposedPosition,
             preferred: preferredSidebarWidth,
             enforced: enforcedSidebarWidth,
             allowsMovement: allowsMovement

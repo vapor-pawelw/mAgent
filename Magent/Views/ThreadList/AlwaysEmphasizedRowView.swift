@@ -1,69 +1,6 @@
 import Cocoa
 import MagentCore
 
-private final class SignEmojiBadgeView: NSView {
-    var capsuleFill: NSColor = .clear { didSet { needsDisplay = true } }
-    var capsuleBorderColor: NSColor = .clear { didSet { needsDisplay = true } }
-    var capsuleBorderWidth: CGFloat = 0 { didSet { needsDisplay = true } }
-
-    private var emoji: String = ""
-    private var emojiFont: NSFont = .systemFont(ofSize: 11, weight: .bold)
-    private var emojiColor: NSColor = .labelColor
-
-    private static let padding: CGFloat = 4
-
-    func configure(emoji: String, font: NSFont, textColor: NSColor) {
-        self.emoji = emoji
-        self.emojiFont = font
-        self.emojiColor = textColor
-        invalidateIntrinsicContentSize()
-        needsDisplay = true
-    }
-
-    func updateTextColor(_ color: NSColor) {
-        emojiColor = color
-        needsDisplay = true
-    }
-
-    override var intrinsicContentSize: NSSize {
-        let size = (emoji as NSString).size(withAttributes: [.font: emojiFont])
-        let p = Self.padding * 2
-        return NSSize(width: ceil(size.width) + p, height: ceil(size.height) + p)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let radius = bounds.height / 2
-        let roundedPath = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
-
-        NSColor.windowBackgroundColor.setFill()
-        roundedPath.fill()
-        capsuleFill.setFill()
-        roundedPath.fill()
-
-        if capsuleBorderWidth > 0 {
-            let inset = capsuleBorderWidth / 2
-            let borderPath = NSBezierPath(
-                roundedRect: bounds.insetBy(dx: inset, dy: inset),
-                xRadius: max(0, radius - inset),
-                yRadius: max(0, radius - inset)
-            )
-            borderPath.lineWidth = capsuleBorderWidth
-            capsuleBorderColor.setStroke()
-            borderPath.stroke()
-        }
-
-        let attrs: [NSAttributedString.Key: Any] = [.font: emojiFont, .foregroundColor: emojiColor]
-        let textSize = (emoji as NSString).size(withAttributes: attrs)
-        let textRect = CGRect(
-            x: (bounds.width - textSize.width) / 2,
-            y: (bounds.height - textSize.height) / 2,
-            width: textSize.width,
-            height: textSize.height
-        )
-        (emoji as NSString).draw(in: textRect, withAttributes: attrs)
-    }
-}
-
 private final class ArchivingRowOverlayView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
@@ -76,23 +13,18 @@ private final class ArchivingRowOverlayView: NSView {
 
 final class AlwaysEmphasizedRowView: NSTableRowView {
     private static let busyBorderRotationAnimationKey = "busy-border-rotation"
-    static let capsuleLeadingInset: CGFloat = 12
-    static let capsuleTrailingInset: CGFloat = 12
-    static let capsuleVerticalInset: CGFloat = 10
+    static let capsuleLeadingInset = ThreadCapsuleSectionMarkerStyle.capsuleLeadingInset
+    static let capsuleTrailingInset = ThreadCapsuleSectionMarkerStyle.capsuleTrailingInset
+    static let capsuleVerticalInset = ThreadCapsuleSectionMarkerStyle.capsuleVerticalInset
     static let capsuleBorderWidth: CGFloat = 2
     /// Half the border width — the inset from capsule rect to the border's inner edge.
     static let capsuleBorderInset: CGFloat = capsuleBorderWidth / 2
-    private static let capsuleCornerRadius: CGFloat = 8
+    private static let capsuleCornerRadius = ThreadCapsuleSectionMarkerStyle.capsuleCornerRadius
     /// Horizontal content padding from capsule inner edge (inside the border).
     static let capsuleContentHPadding: CGFloat = 12
     /// Vertical content padding from capsule inner edge (inside the border).
     static let capsuleContentVPadding: CGFloat = 12
-    /// X/Y offset from the row's top-leading corner for the sign emoji badge/label center.
-    /// Badge radius is 10pt; centering at 14pt gives a 4pt margin from the leading/top edge.
-    private static let signEmojiBadgeCenter: CGFloat = 14
     private var archivingOverlay: ArchivingRowOverlayView?
-    private var signEmojiTintColor: NSColor?
-    private var signEmojiBadge: SignEmojiBadgeView?
     /// Container layer for the rotating conic gradient border.
     private var busyBorderContainer: CALayer?
 
@@ -110,13 +42,13 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         didSet { needsDisplay = true }
     }
     var showsRateLimitHighlight = false {
-        didSet { needsDisplay = true; updateSignEmojiBadge() }
+        didSet { needsDisplay = true }
     }
     var showsCompletionHighlight = false {
-        didSet { needsDisplay = true; updateSignEmojiBadge() }
+        didSet { needsDisplay = true }
     }
     var showsWaitingHighlight = false {
-        didSet { needsDisplay = true; updateSignEmojiBadge() }
+        didSet { needsDisplay = true }
     }
     var showsSubtleBottomSeparator = false {
         didSet { needsDisplay = true }
@@ -130,12 +62,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     var showsPopoutTint = false {
         didSet { needsDisplay = true }
     }
-    var isMainWorktreeRow = false {
-        didSet {
-            guard isMainWorktreeRow != oldValue else { return }
-            needsDisplay = true
-            updateSignEmojiBadge()
-        }
+    var sectionMarkerColor: NSColor? {
+        didSet { needsDisplay = true }
     }
     var showsArchivingOverlay = false {
         didSet { updateArchivingOverlay() }
@@ -185,7 +113,6 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             for case let cell as NSTableCellView in subviews {
                 cell.backgroundStyle = style
             }
-            updateSignEmojiSelectionColor()
             updateBusyBorderSelectionColors()
         }
     }
@@ -207,7 +134,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     // MARK: - Capsule Style
 
     /// Resolved fill and border colors for the current row state.
-    /// Single source of truth consumed by both capsule drawing and the sign emoji badge.
+    /// Single source of truth for capsule drawing.
     private struct CapsuleStyle {
         let fill: NSColor
         let border: NSColor
@@ -217,8 +144,19 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         (isSelected || showsPopoutTint) ? Self.capsuleBorderWidth : 1
     }
 
+    private var currentCapsuleVisualState: ThreadRowCapsuleVisualState {
+        ThreadRowCapsuleVisualState.resolve(
+            isSelected: isSelected,
+            showsRateLimitHighlight: showsRateLimitHighlight,
+            showsWaitingHighlight: showsWaitingHighlight,
+            showsCompletionHighlight: showsCompletionHighlight,
+            showsPopoutTint: showsPopoutTint
+        )
+    }
+
     private var currentCapsuleStyle: CapsuleStyle {
-        if isSelected {
+        switch currentCapsuleVisualState {
+        case .selected:
             let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let fillColor = isDark
                 ? NSColor.controlAccentColor.withAlphaComponent(0.1)
@@ -227,39 +165,31 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 fill: fillColor,
                 border: .controlAccentColor
             )
-        } else if showsRateLimitHighlight {
+        case .rateLimited:
             return CapsuleStyle(
                 fill: NSColor.systemRed.withAlphaComponent(0.06),
                 border: NSColor.systemRed.withAlphaComponent(0.5)
             )
-        } else if showsWaitingHighlight {
+        case .waiting:
             return CapsuleStyle(
                 fill: NSColor.systemOrange.withAlphaComponent(0.06),
                 border: NSColor.systemOrange.withAlphaComponent(0.5)
             )
-        } else if showsCompletionHighlight {
+        case .completed:
             return CapsuleStyle(
                 fill: NSColor.systemGreen.withAlphaComponent(0.06),
                 border: NSColor.systemGreen.withAlphaComponent(0.5)
             )
-        } else if showsPopoutTint {
+        case .poppedOut:
             return CapsuleStyle(
                 fill: NSColor.systemPurple.withAlphaComponent(0.12),
                 border: NSColor.systemPurple.withAlphaComponent(0.7)
             )
-        } else if isMainWorktreeRow {
-            return CapsuleStyle(
-                fill: NSColor.controlAccentColor.withAlphaComponent(0.045),
-                border: NSColor.controlAccentColor.withAlphaComponent(0.26)
-            )
-        } else {
-            let borderColor = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                ? NSColor.white.withAlphaComponent(0.12)
-                : NSColor.black.withAlphaComponent(0.08)
+        case .idle:
             let fillColor = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
                 ? NSColor.white.withAlphaComponent(0.035)
                 : NSColor.black.withAlphaComponent(0.03)
-            return CapsuleStyle(fill: fillColor, border: borderColor)
+            return CapsuleStyle(fill: fillColor, border: .clear)
         }
     }
 
@@ -272,6 +202,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         )
         style.fill.setFill()
         fillPath.fill()
+        drawSectionMarker(in: fillPath)
 
         let insetRect = capsuleRect.insetBy(dx: borderWidth / 2, dy: borderWidth / 2)
         let borderPath = NSBezierPath(
@@ -284,6 +215,31 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         borderPath.stroke()
     }
 
+    private func drawSectionMarker(in capsulePath: NSBezierPath) {
+        guard let sectionMarkerColor else { return }
+        let vertices = ThreadCapsuleSectionMarkerStyle.vertices(
+            in: capsuleRect,
+            isFlipped: isFlipped
+        )
+        guard let firstVertex = vertices.first else { return }
+
+        let markerPath = NSBezierPath()
+        markerPath.move(to: firstVertex)
+        vertices.dropFirst().forEach { markerPath.line(to: $0) }
+        markerPath.close()
+
+        NSGraphicsContext.saveGraphicsState()
+        capsulePath.addClip()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            ThreadCapsuleSectionMarkerStyle.color(
+                sectionColor: sectionMarkerColor,
+                isSelected: isSelected
+            ).setFill()
+            markerPath.fill()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
     override func drawBackground(in dirtyRect: NSRect) {
         // Selection drawing is done here (not in drawSelection) so we can use
         // selectionHighlightStyle = .none on the outline view to fully suppress
@@ -292,7 +248,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         if isSelected || showsRateLimitHighlight || showsWaitingHighlight || showsCompletionHighlight || showsPopoutTint {
             drawCapsuleBorderAndFill(style)
         } else {
-            // Normal: subtle fill + optional 1pt border.
+            // Normal: subtle fill with context-menu emphasis when needed.
             let fillPath = NSBezierPath(
                 roundedRect: capsuleRect,
                 xRadius: Self.capsuleCornerRadius,
@@ -310,8 +266,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             }
             fillColor.setFill()
             fillPath.fill()
+            drawSectionMarker(in: fillPath)
 
-            // Idle rows rely on their fill alone; reserve borders for interactive and status states.
             if busyBorderContainer == nil, showsContextMenuHighlight {
                 let insetRect = capsuleRect.insetBy(dx: 0.5, dy: 0.5)
                 let borderPath = NSBezierPath(
@@ -320,15 +276,14 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                     yRadius: Self.capsuleCornerRadius
                 )
                 borderPath.lineWidth = 1
-                let highlightBorderColor = isDark
+                let borderColor = isDark
                     ? NSColor.white.withAlphaComponent(0.3)
                     : NSColor.black.withAlphaComponent(0.15)
-                highlightBorderColor.setStroke()
+                borderColor.setStroke()
                 borderPath.stroke()
             }
         }
 
-        updateSignEmojiBadgeAppearance(style: style)
 
         if showsSubtleBottomSeparator {
             let separatorY = isFlipped ? (bounds.maxY - 1) : bounds.minY
@@ -519,72 +474,6 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         CATransaction.commit()
     }
 
-    // MARK: - Sign Emoji
-
-    /// Configure the sign emoji displayed on the capsule's leading edge.
-    func configureSignEmoji(_ emoji: String?, tintColor: NSColor?, isSelected: Bool) {
-        signEmojiTintColor = tintColor
-        guard let emoji, !emoji.isEmpty else {
-            signEmojiBadge?.isHidden = true
-            return
-        }
-        let fontSize: CGFloat = (emoji == "↑" || emoji == "↓") ? 14 : 11
-        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        let textColor: NSColor = (isSelected && isDark) ? .white : (tintColor ?? .labelColor)
-
-        let badge = ensureSignEmojiBadge()
-        badge.configure(
-            emoji: emoji,
-            font: .systemFont(ofSize: fontSize, weight: .bold),
-            textColor: textColor
-        )
-        badge.isHidden = false
-        updateSignEmojiBadge()
-    }
-
-    private func updateSignEmojiSelectionColor() {
-        guard let badge = signEmojiBadge, !badge.isHidden else { return }
-        let isDarkForEmoji = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        badge.updateTextColor((isSelected && isDarkForEmoji) ? .white : (signEmojiTintColor ?? .labelColor))
-        updateSignEmojiBadge()
-    }
-
-    /// Updates badge fill to mirror the capsule's current background color.
-    private func updateSignEmojiBadge() {
-        guard let badge = signEmojiBadge, !badge.isHidden else { return }
-        updateSignEmojiBadgeAppearance(style: currentCapsuleStyle)
-    }
-
-    /// Applies capsule fill and border to the badge. Called from both drawBackground
-    /// (which already has the resolved style) and updateSignEmojiBadge (which resolves it).
-    private func updateSignEmojiBadgeAppearance(style: CapsuleStyle) {
-        guard let badge = signEmojiBadge, !badge.isHidden else { return }
-        badge.capsuleFill = style.fill
-        badge.capsuleBorderColor = style.border
-        // Match capsule border width: 2pt only when selected, 1pt otherwise.
-        badge.capsuleBorderWidth = currentCapsuleBorderWidth
-    }
-
-    private func ensureSignEmojiBadge() -> SignEmojiBadgeView {
-        if let badge = signEmojiBadge { return badge }
-        let badge = SignEmojiBadgeView()
-        badge.translatesAutoresizingMaskIntoConstraints = false
-        badge.isHidden = true
-        // Padding is high-priority (750) so the required 1:1 ratio can override it
-        // to produce a circle when the emoji is narrower than it is tall.
-        badge.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        badge.setContentHuggingPriority(.defaultHigh, for: .vertical)
-        addSubview(badge)
-        NSLayoutConstraint.activate([
-            badge.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
-            badge.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            // Required: always a circle.
-            badge.widthAnchor.constraint(equalTo: badge.heightAnchor),
-        ])
-        signEmojiBadge = badge
-        return badge
-    }
-
     private func updateArchivingOverlay() {
         if showsArchivingOverlay {
             ensureArchivingOverlay()
@@ -644,56 +533,15 @@ final class ProjectHeaderRowView: NSTableRowView {
     }
 }
 
-class SectionHeaderStripView: NSView {
-    var sectionColor: NSColor = .controlAccentColor { didSet { needsDisplay = true } }
-    var isHovered = false { didSet { needsDisplay = true } }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            SectionHeaderStripStyle.draw(in: bounds, color: sectionColor, isHovered: isHovered)
-        }
-    }
-}
+final class SectionHeaderStripView: NSView {}
 
 final class SectionHeaderRowView: NSTableRowView {
-    var sectionColor: NSColor = .controlAccentColor { didSet { needsDisplay = true } }
-    private var trackingAreaReference: NSTrackingArea?
-    private var isHovered = false { didSet { needsDisplay = true } }
-
     override var isEmphasized: Bool {
         get { true }
         set {}
     }
 
-    override func updateTrackingAreas() {
-        if let trackingAreaReference {
-            removeTrackingArea(trackingAreaReference)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow],
-            owner: self
-        )
-        addTrackingArea(area)
-        trackingAreaReference = area
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovered = false
-    }
-
-    override func drawBackground(in dirtyRect: NSRect) {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            SectionHeaderStripStyle.draw(in: bounds, color: sectionColor, isHovered: isHovered)
-        }
-    }
+    override func drawBackground(in dirtyRect: NSRect) {}
 }
 
 final class SidebarSpacerRowView: NSTableRowView {

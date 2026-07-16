@@ -1,6 +1,19 @@
 import Cocoa
 import MagentCore
 
+enum ThreadContextMenuItemPresentation {
+    static func hiddenStateImage(isHidden: Bool) -> NSImage? {
+        NSImage(
+            systemSymbolName: isHidden ? "eye" : "eye.slash",
+            accessibilityDescription: nil
+        )
+    }
+
+    static var archiveImage: NSImage? {
+        NSImage(systemSymbolName: "archivebox", accessibilityDescription: nil)
+    }
+}
+
 private final class ArchiveCommitMessageTextFieldDelegate: NSObject, NSTextFieldDelegate {
     let onChange: () -> Void
 
@@ -152,9 +165,8 @@ extension ThreadListViewController {
             : String(localized: .CommonStrings.commonHide)
         let hideItem = NSMenuItem(title: hideTitle, action: #selector(toggleThreadHidden(_:)), keyEquivalent: "")
         hideItem.target = self
-        hideItem.image = NSImage(
-            systemSymbolName: thread.isSidebarHidden ? "eye" : "eye.slash",
-            accessibilityDescription: nil
+        hideItem.image = ThreadContextMenuItemPresentation.hiddenStateImage(
+            isHidden: thread.isSidebarHidden
         )
         hideItem.representedObject = thread.id
         menu.addItem(hideItem)
@@ -213,7 +225,7 @@ extension ThreadListViewController {
         // Archive
         let archiveItem = NSMenuItem(title: String(localized: .ThreadStrings.threadArchiveMenuTitle), action: #selector(archiveThread(_:)), keyEquivalent: "")
         archiveItem.target = self
-        archiveItem.image = NSImage(systemSymbolName: "archivebox", accessibilityDescription: nil)
+        archiveItem.image = ThreadContextMenuItemPresentation.archiveImage
         archiveItem.representedObject = thread
         menu.addItem(archiveItem)
 
@@ -329,11 +341,6 @@ extension ThreadListViewController {
         SignOption(emoji: "❓", label: "Question"),
         SignOption(emoji: "❗", label: "Exclamation"),
     ]
-
-    /// Returns the tint color for a sign emoji string, if any.
-    static func signEmojiTintColor(for emoji: String) -> NSColor? {
-        signEmojiOptions.first(where: { $0.emoji == emoji })?.tintColor
-    }
 
     private func buildSignEmojiSubmenu(for thread: MagentThread) -> NSMenu {
         let submenu = NSMenu()
@@ -705,6 +712,25 @@ extension ThreadListViewController {
         return item
     }
 
+    func buildJiraBadgeMenu(for thread: MagentThread, settings: AppSettings) -> NSMenu? {
+        buildJiraMenuItem(for: thread, settings: settings)?.submenu
+    }
+
+    func buildPullRequestBadgeMenu(for thread: MagentThread) -> NSMenu? {
+        guard let pr = thread.pullRequestInfo else { return nil }
+        let menu = NSMenu()
+        let item = NSMenuItem(
+            title: String(localized: .ThreadStrings.threadOpenPullRequestLabel(pr.displayLabel)),
+            action: #selector(openThreadPullRequest(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.image = pullRequestMenuIcon(for: thread)
+        item.representedObject = thread
+        menu.addItem(item)
+        return menu
+    }
+
     private func buildChangeStatusSubmenu(for thread: MagentThread, ticketKey: String, settings: AppSettings) -> NSMenuItem? {
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         guard let projectKey = projectKeyFromTicket(ticketKey) ?? project?.jiraProjectKey else { return nil }
@@ -765,7 +791,7 @@ extension ThreadListViewController {
 
     /// Returns a colored dot image based on Jira status category.
     private func jiraStatusDotImage(categoryKey: String?) -> NSImage {
-        let color = StatusBadgeView.jiraCategoryColor(forKey: categoryKey) ?? .tertiaryLabelColor
+        let color = StatusBadgeView.jiraCategoryTintColor(forKey: categoryKey) ?? .tertiaryLabelColor
         return colorDotImage(color: color, size: 8)
     }
 
@@ -1170,6 +1196,10 @@ extension ThreadListViewController {
 
     @objc private func toggleThreadHidden(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
+        toggleThreadHidden(threadId: threadId)
+    }
+
+    func toggleThreadHidden(threadId: UUID) {
         threadManager.toggleThreadHidden(threadId: threadId)
     }
 

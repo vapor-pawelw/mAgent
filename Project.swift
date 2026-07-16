@@ -151,8 +151,13 @@ let project = Project(
                 "Magent/Views/ThreadList/SectionHeaderStripStyle.swift",
                 "Magent/Views/ThreadList/StickyHeaderBackdropMask.swift",
                 "Magent/Views/ThreadList/ThreadRowBadgeLayout.swift",
+                "Magent/Views/ThreadList/ThreadRowCapsuleStyle.swift",
                 "Magent/Views/ThreadList/ThreadRowContentOpacity.swift",
+                "Magent/Views/BadgeForegroundStyle.swift",
+                "Magent/Views/RightClickMenuView.swift",
+                "Magent/Views/StatusBadgeView.swift",
                 "Magent/Views/Settings/ProjectRemovalButtonFactory.swift",
+                "Magent/Views/Settings/ProjectSettingsSelectionResolver.swift",
                 "Tests/MagentTests/**",
             ],
             dependencies: [

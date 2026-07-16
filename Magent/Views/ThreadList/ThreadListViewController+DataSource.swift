@@ -403,6 +403,16 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
     }
 
+    private func sidebarSectionColor(for thread: MagentThread, settings: AppSettings) -> NSColor? {
+        guard settings.shouldUseThreadSections(for: thread.projectId) else { return nil }
+        let projectSections = settings.sections(for: thread.projectId)
+        let resolvedSectionId = thread.resolvedSectionId(
+            knownSectionIds: Set(projectSections.map(\.id)),
+            fallback: settings.defaultSection(for: thread.projectId)?.id
+        )
+        return projectSections.first(where: { $0.id == resolvedSectionId })?.color
+    }
+
     private func calculatedSidebarRowHeight(for thread: MagentThread, settings: AppSettings, outlineWidth: CGFloat) -> CGFloat {
         let maxDescLines = settings.sidebarDescriptionLineLimit
         let trimmedDesc = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -411,15 +421,13 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
         let branchName = (thread.actualBranch ?? thread.branchName).trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedBranch = branchName.isEmpty ? thread.name : branchName
-        let hasBranchWorktreeMismatch = worktreeName != resolvedBranch
-
-        // Subtitle visible when description exists or branch != worktree.
-        let hasSubtitle = hasDescription || hasBranchWorktreeMismatch
-
-        let jiraEnabled = settings.jiraIntegrationEnabled && settings.jiraTicketDetectionEnabled
-        let hasTicket = jiraEnabled && thread.effectiveJiraTicketKey(settings: settings) != nil
-        let hasPR = thread.pullRequestInfo != nil
-        let hasPRRow = hasTicket || hasPR
+        let hasSubtitle = ThreadRowBadgeLayout.subtitleText(
+            hasDescription: hasDescription,
+            branchName: resolvedBranch,
+            worktreeName: worktreeName,
+            showWorktreeName: settings.showWorktreeNames,
+            isMainWorktree: thread.isMain
+        ) != nil
 
         let descLines: Int
         if hasDescription, let desc = trimmedDesc, maxDescLines > 1 {
@@ -430,7 +438,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 - 16 - 6                        // icon + spacing
                 - 30)                           // trailing stack allowance
             descLines = ThreadCell.estimatedDescriptionLineCount(
-                text: desc, maxLines: maxDescLines, availableWidth: textAvailableWidth
+                text: ThreadRowBadgeLayout.primaryText(desc, signEmoji: thread.signEmoji),
+                maxLines: maxDescLines,
+                availableWidth: textAvailableWidth
             )
         } else {
             descLines = 1
@@ -439,7 +449,6 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         return ThreadCell.sidebarRowHeight(
             descriptionLines: descLines,
             hasSubtitle: hasSubtitle,
-            hasPRRow: hasPRRow,
             narrowThreads: !settings.wideThreads
         )
     }
@@ -471,18 +480,15 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return rowView
         }
         if item is SidebarSection {
-            let rowView = SectionHeaderRowView()
-            if let section = item as? SidebarSection {
-                rowView.sectionColor = section.color
-            }
-            return rowView
+            return SectionHeaderRowView()
         }
 
         let rowView = AlwaysEmphasizedRowView()
         if let itemThread = item as? MagentThread {
             let thread = resolvedThreadSnapshot(for: itemThread)
-            let isSelected = outlineView.isRowSelected(outlineView.row(forItem: item))
-            rowView.isMainWorktreeRow = thread.isMain
+            rowView.sectionMarkerColor = thread.isMain
+                ? nil
+                : sidebarSectionColor(for: thread, settings: currentSettings)
             rowView.busyBorderPhaseKey = thread.id
             rowView.showsRateLimitHighlight = thread.hasUnreadRateLimit
             rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion && !thread.hasUnreadRateLimit
@@ -491,13 +497,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             rowView.showsBusyShimmer = thread.isAnyBusy
             rowView.showsArchivingOverlay = thread.isArchiving
             rowView.showsPopoutTint = PopoutWindowManager.shared.isThreadPoppedOut(thread.id)
-            rowView.configureSignEmoji(
-                thread.signEmoji,
-                tintColor: thread.signEmoji.flatMap { Self.signEmojiTintColor(for: $0) },
-                isSelected: isSelected
-            )
         } else {
-            rowView.isMainWorktreeRow = false
+            rowView.sectionMarkerColor = nil
             rowView.showsRateLimitHighlight = false
             rowView.showsCompletionHighlight = false
             rowView.showsWaitingHighlight = false
@@ -597,8 +598,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if let topPadding = item as? SidebarTopPadding {
             return topPadding.height
         }
-        if item is SidebarProjectMainSpacer {
-            return Self.projectHeaderToMainRowGap
+        if let spacer = item as? SidebarProjectMainSpacer {
+            return spacer.height
         }
         if let separator = item as? SidebarGroupSeparator {
             return separator.height
@@ -612,8 +613,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarProject {
             return Self.projectHeaderRowHeight
         }
-        if item is SidebarSection {
-            return 28
+        if let section = item as? SidebarSection {
+            return Self.sectionHeaderRowHeight + section.leadingSpacing
         }
         if let itemThread = item as? MagentThread {
             let thread = resolvedThreadSnapshot(for: itemThread)
@@ -1138,11 +1139,17 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                             constant: SectionHeaderStripStyle.contentLeadingInset
                         ),
                         nameStack.trailingAnchor.constraint(lessThanOrEqualTo: badgeContainer.leadingAnchor, constant: -6),
-                        nameStack.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        nameStack.centerYAnchor.constraint(
+                            equalTo: c.bottomAnchor,
+                            constant: -(Self.sectionHeaderRowHeight / 2)
+                        ),
                         badgeContainer.heightAnchor.constraint(equalToConstant: 16),
                         badgeContainer.widthAnchor.constraint(greaterThanOrEqualToConstant: 16),
                         badgeContainer.trailingAnchor.constraint(equalTo: disclosureButton.leadingAnchor, constant: -4),
-                        badgeContainer.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        badgeContainer.centerYAnchor.constraint(
+                            equalTo: c.bottomAnchor,
+                            constant: -(Self.sectionHeaderRowHeight / 2)
+                        ),
                         badgeLabel.leadingAnchor.constraint(equalTo: badgeContainer.leadingAnchor, constant: 5),
                         badgeLabel.trailingAnchor.constraint(equalTo: badgeContainer.trailingAnchor, constant: -5),
                         badgeLabel.centerYAnchor.constraint(equalTo: badgeContainer.centerYAnchor),
@@ -1150,12 +1157,18 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                             equalTo: c.trailingAnchor,
                             constant: -SectionHeaderStripStyle.contentTrailingInset
                         ),
-                        disclosureButton.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        disclosureButton.centerYAnchor.constraint(
+                            equalTo: c.bottomAnchor,
+                            constant: -(Self.sectionHeaderRowHeight / 2)
+                        ),
                         disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         disclosureButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         editor.leadingAnchor.constraint(equalTo: nameStack.leadingAnchor, constant: -2),
                         editor.trailingAnchor.constraint(equalTo: disclosureButton.leadingAnchor, constant: -6),
-                        editor.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        editor.centerYAnchor.constraint(
+                            equalTo: c.bottomAnchor,
+                            constant: -(Self.sectionHeaderRowHeight / 2)
+                        ),
                     ])
                     return c
                 }()
@@ -1164,18 +1177,24 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.textField?.font = .systemFont(ofSize: 11, weight: .medium)
             cell.textField?.textColor = NSColor(resource: .textSecondary)
             let threadCount = section.threads.count
-            if let badgeContainer = cell.subviews.first(where: { $0.identifier == Self.sectionCountBadgeContainerIdentifier }) {
-                badgeContainer.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.18).cgColor
+            let badgeContainer = cell.subviews.first(where: { $0.identifier == Self.sectionCountBadgeContainerIdentifier })
+            let badgeLabel = badgeContainer?
+                .subviews
+                .first(where: { $0.identifier == Self.sectionCountBadgeLabelIdentifier }) as? NSTextField
+            cell.effectiveAppearance.performAsCurrentDrawingAppearance {
+                let badgeColor = SectionHeaderStripStyle.badgeForegroundColor(
+                    sectionColor: section.color,
+                    appearance: cell.effectiveAppearance
+                )
+                badgeContainer?.layer?.backgroundColor = section.color.withAlphaComponent(0.18).cgColor
+                badgeLabel?.textColor = badgeColor
+            }
+            if let badgeContainer {
                 badgeContainer.isHidden = threadCount == 0 || isRenamingSection(section)
                 badgeContainer.toolTip = threadCount > 0 ? "\(threadCount) threads in \(section.name)" : nil
             }
-            if let badgeLabel = cell
-                .subviews
-                .first(where: { $0.identifier == Self.sectionCountBadgeContainerIdentifier })?
-                .subviews
-                .first(where: { $0.identifier == Self.sectionCountBadgeLabelIdentifier }) as? NSTextField {
+            if let badgeLabel {
                 badgeLabel.stringValue = "\(threadCount)"
-                badgeLabel.textColor = NSColor.controlAccentColor
             }
             if let shieldView = cell.subviews
                 .first(where: { $0.identifier == Self.sectionNameStackIdentifier })?
@@ -1249,7 +1268,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     currentBranch: currentBranch,
                     busyStateSince: thread.busyStateSince,
                     leadingOffset: 0,
-                    showThreadIcon: currentSettings.showThreadIcons
+                    showThreadIcon: currentSettings.showThreadIcons,
+                    signEmoji: thread.signEmoji,
+                    hasAllSessionsDead: thread.hasAllSessionsDead
                 )
                 return cell
             }
@@ -1275,26 +1296,14 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 }()
 
             let settings = currentSettings
-            let shouldUseSections = settings.shouldUseThreadSections(for: thread.projectId)
-            let sectionColor: NSColor?
-            if shouldUseSections {
-                let projectSections = settings.sections(for: thread.projectId)
-                let knownSectionIds = Set(projectSections.map(\.id))
-                let defaultSectionId = settings.defaultSection(for: thread.projectId)?.id
-                let resolvedSectionId = thread.resolvedSectionId(
-                    knownSectionIds: knownSectionIds,
-                    fallback: defaultSectionId
-                )
-                sectionColor = projectSections.first(where: { $0.id == resolvedSectionId })?.color
-            } else {
-                sectionColor = nil
-            }
+            let sectionColor = sidebarSectionColor(for: thread, settings: settings)
             cell.configure(
                 with: thread,
                 sectionColor: sectionColor,
                 leadingOffset: threadLeadingOffset(for: thread, in: outlineView),
                 maxDescriptionLines: settings.sidebarDescriptionLineLimit,
                 showThreadIcon: settings.showThreadIcons,
+                showWorktreeName: settings.showWorktreeNames,
                 isAutoRenaming: threadManager.autoRenameInProgress.contains(thread.id)
             )
             cell.onArchive = { [weak self] in
@@ -1303,9 +1312,19 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.priorityMenuProvider = { [weak self] in
                 self?.buildPrioritySubmenu(for: thread) ?? NSMenu()
             }
+            cell.pullRequestMenuProvider = { [weak self] in
+                self?.buildPullRequestBadgeMenu(for: thread)
+            }
+            cell.jiraMenuProvider = { [weak self] in
+                guard let self else { return nil }
+                return self.buildJiraBadgeMenu(
+                    for: thread,
+                    settings: self.persistence.loadSettings()
+                )
+            }
             cell.onUnpin = { [weak self] in self?.threadManager.toggleThreadPin(threadId: thread.id) }
             cell.onRemoveFavorite = { [weak self] in _ = self?.threadManager.toggleThreadFavorite(threadId: thread.id) }
-            cell.onUnhide = { [weak self] in self?.threadManager.toggleThreadHidden(threadId: thread.id) }
+            cell.onToggleHidden = { [weak self] in self?.toggleThreadHidden(threadId: thread.id) }
             return cell
         }
 
@@ -1612,10 +1631,11 @@ extension ThreadListViewController: ThreadManagerDelegate {
                 rowsWithHeightChanges.insert(row)
             }
 
-            // Reconfigure the row view (busy border, highlight borders, sign emoji).
+            // Reconfigure the row view (busy border and highlight borders).
             if let rowView = outlineView.rowView(atRow: row, makeIfNecessary: false) as? AlwaysEmphasizedRowView {
-                let isSelected = outlineView.isRowSelected(row)
-                rowView.isMainWorktreeRow = updated.isMain
+                rowView.sectionMarkerColor = updated.isMain
+                    ? nil
+                    : sidebarSectionColor(for: updated, settings: settings)
                 rowView.busyBorderPhaseKey = updated.id
                 rowView.showsRateLimitHighlight = updated.hasUnreadRateLimit
                 rowView.showsCompletionHighlight = updated.hasUnreadAgentCompletion && !updated.hasUnreadRateLimit
@@ -1623,11 +1643,6 @@ extension ThreadListViewController: ThreadManagerDelegate {
                 rowView.showsPopoutTint = PopoutWindowManager.shared.isThreadPoppedOut(updated.id)
                 rowView.showsBusyShimmer = updated.isAnyBusy
                 rowView.showsArchivingOverlay = updated.isArchiving
-                rowView.configureSignEmoji(
-                    updated.signEmoji,
-                    tintColor: updated.signEmoji.flatMap { Self.signEmojiTintColor(for: $0) },
-                    isSelected: isSelected
-                )
             }
 
             // Reconfigure the cell view (text, icon, metadata).
@@ -1654,29 +1669,19 @@ extension ThreadListViewController: ThreadManagerDelegate {
                         currentBranch: currentBranch,
                         busyStateSince: updated.busyStateSince,
                         leadingOffset: 0,
-                        showThreadIcon: settings.showThreadIcons
+                        showThreadIcon: settings.showThreadIcons,
+                        signEmoji: updated.signEmoji,
+                        hasAllSessionsDead: updated.hasAllSessionsDead
                     )
                 } else {
-                    let shouldUseSections = settings.shouldUseThreadSections(for: updated.projectId)
-                    let sectionColor: NSColor?
-                    if shouldUseSections {
-                        let projectSections = settings.sections(for: updated.projectId)
-                        let knownSectionIds = Set(projectSections.map(\.id))
-                        let defaultSectionId = settings.defaultSection(for: updated.projectId)?.id
-                        let resolvedSectionId = updated.resolvedSectionId(
-                            knownSectionIds: knownSectionIds,
-                            fallback: defaultSectionId
-                        )
-                        sectionColor = projectSections.first(where: { $0.id == resolvedSectionId })?.color
-                    } else {
-                        sectionColor = nil
-                    }
+                    let sectionColor = sidebarSectionColor(for: updated, settings: settings)
                     cell.configure(
                         with: updated,
                         sectionColor: sectionColor,
                         leadingOffset: threadLeadingOffset(for: updated, in: outlineView),
                         maxDescriptionLines: settings.sidebarDescriptionLineLimit,
                         showThreadIcon: settings.showThreadIcons,
+                        showWorktreeName: settings.showWorktreeNames,
                         isAutoRenaming: threadManager.autoRenameInProgress.contains(updated.id)
                     )
                 }

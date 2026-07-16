@@ -1,22 +1,60 @@
+import AppKit
 import Testing
 
 @Suite
 struct ThreadRowBadgeLayoutTests {
 
-    @Test("Activity age fills one cumulative circle slice per color band")
-    func activityAgeMapsToCumulativeCircleSlices() {
-        #expect(ThreadRowBadgeLayout.activityColorLevelCount == 6)
-        #expect(ThreadRowBadgeLayout.activityColorLevel(forElapsed: 0) == 1)
-        #expect(ThreadRowBadgeLayout.activityColorLevel(forElapsed: 900) == 2)
-        #expect(ThreadRowBadgeLayout.activityColorLevel(forElapsed: 7_200) == 3)
-        #expect(ThreadRowBadgeLayout.activityColorLevel(forElapsed: 28_800) == 4)
-        #expect(ThreadRowBadgeLayout.activityColorLevel(forElapsed: 86_400) == 5)
-        #expect(ThreadRowBadgeLayout.activityColorLevel(forElapsed: 259_200) == 6)
+    @Test("Activity badges only appear after the busy and idle thresholds")
+    func activityBadgeThresholds() {
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 3_599, isBusy: true) == nil)
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 3_600, isBusy: true) == .init(label: .busy, tone: .yellow))
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 17_999, isBusy: true)?.tone == .yellow)
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 18_000, isBusy: true)?.tone == .orange)
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 86_400, isBusy: true)?.tone == .red)
+
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 604_799, isBusy: false) == nil)
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 604_800, isBusy: false) == .init(label: .idle, tone: .yellow))
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 1_209_599, isBusy: false)?.tone == .yellow)
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 1_209_600, isBusy: false)?.tone == .orange)
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 2_591_999, isBusy: false)?.tone == .orange)
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 2_592_000, isBusy: false)?.tone == .red)
     }
 
-    @Test("Priority remains the leading status item")
-    func priorityRemainsLeading() {
-        #expect(ThreadRowBadgeLayout.LeadingStatusItem.allCases == [.priority])
+    @Test("Main worktree never shows a stale activity badge")
+    func mainWorktreeIdleBadgeIsSuppressed() {
+        #expect(ThreadRowBadgeLayout.activityBadge(
+            forElapsed: 2_592_000,
+            isBusy: false,
+            isMainWorktree: true
+        ) == nil)
+        #expect(ThreadRowBadgeLayout.activityBadge(
+            forElapsed: 3_600,
+            isBusy: true,
+            isMainWorktree: true
+        )?.label == .busy)
+    }
+
+    @Test("Only stale badges on regular threads offer Hide and Archive")
+    func staleBadgeMenuActions() {
+        #expect(ThreadRowBadgeLayout.activityBadgeMenuActions(
+            isBusy: false,
+            isMainWorktree: false
+        ) == [.toggleHidden, .archive])
+        #expect(ThreadRowBadgeLayout.activityBadgeMenuActions(
+            isBusy: true,
+            isMainWorktree: false
+        ).isEmpty)
+        #expect(ThreadRowBadgeLayout.activityBadgeMenuActions(
+            isBusy: false,
+            isMainWorktree: true
+        ).isEmpty)
+    }
+
+    @Test("Stopped sessions follow pinned and hidden indicators on the left edge")
+    func leadingStatusOrder() {
+        #expect(ThreadRowBadgeLayout.LeadingStatusItem.allCases == [
+            .pinned, .hidden, .stoppedSessions, .favorite, .priority,
+        ])
     }
 
     @Test("Priority menus identify the level matching Jira")
@@ -28,6 +66,58 @@ struct ThreadRowBadgeLayoutTests {
 
     @Test("Trailing status indicators preserve their established order")
     func trailingStatusOrderPreservesStateIndicatorOrder() {
-        #expect(ThreadRowBadgeLayout.TrailingStatusItem.allCases == [.favorite, .pinned, .hidden, .jiraSync, .activityDuration])
+        #expect(ThreadRowBadgeLayout.TrailingStatusItem.allCases == [
+            .pullRequestStatus, .jiraStatus, .activityDuration, .jiraSync,
+        ])
+    }
+
+    @Test("Pull request badge combines the short number and status")
+    func pullRequestBadgeText() {
+        #expect(ThreadRowBadgeLayout.pullRequestBadgeText(number: "#392", status: "Open") == "#392 Open")
+        #expect(ThreadRowBadgeLayout.pullRequestBadgeText(number: "!18", status: "Draft") == "!18 Draft")
+    }
+
+    @Test("Branch ticket highlighting finds the detected key without changing its case")
+    func branchTicketHighlightRange() throws {
+        let branch = "feature/ip-392-sidebar"
+        let range = try #require(ThreadRowBadgeLayout.highlightedTicketRange(in: branch, ticketKey: "IP-392"))
+        #expect(branch[range] == "ip-392")
+        #expect(ThreadRowBadgeLayout.highlightedTicketRange(in: branch, ticketKey: "IP-999") == nil)
+    }
+
+    @Test("Branch ticket highlighting preserves typography and only colors the detected key")
+    func branchTicketHighlightAttributes() throws {
+        let text = "feature/ip-392-sidebar"
+        let font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineBreakMode = .byTruncatingTail
+        let attributedText = try #require(ThreadRowBadgeLayout.highlightedTicketText(
+            text,
+            ticketKey: "IP-392",
+            font: font,
+            baseColor: .secondaryLabelColor,
+            highlightColor: .controlAccentColor,
+            paragraphStyle: paragraphStyle
+        ))
+
+        #expect(attributedText.attribute(.font, at: 0, effectiveRange: nil) as? NSFont == font)
+        #expect(
+            (attributedText.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?
+                .lineBreakMode == .byTruncatingTail
+        )
+        let ticketRange = try #require(text.range(of: "ip-392"))
+        let ticketIndex = NSRange(ticketRange, in: text).location
+        #expect(
+            attributedText.attribute(.foregroundColor, at: ticketIndex, effectiveRange: nil) as? NSColor
+                == NSColor.controlAccentColor
+        )
+        #expect(ThreadRowBadgeLayout.highlightedTicketText(
+            text,
+            ticketKey: "IP-999",
+            font: font,
+            baseColor: .secondaryLabelColor,
+            highlightColor: .controlAccentColor,
+            paragraphStyle: paragraphStyle
+        ) == nil)
     }
 }

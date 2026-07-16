@@ -221,6 +221,39 @@
         }
       }
     },
+    "threadSessionsStoppedTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All tmux sessions stopped — select a tab to recreate"
+          }
+        }
+      }
+    },
+    "threadActivityBadgeIdle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stale"
+          }
+        }
+      }
+    },
+    "threadActivityBadgeBusy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Busy"
+          }
+        }
+      }
+    },
     "threadArchiveCompletedWithoutLocalSync": {
       "extractionState": "manual",
       "localizations": {
@@ -899,6 +932,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last confirmed; sync currently unavailable"
+          }
+        }
+      }
+    },
+    "threadPullRequestBadgeTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$@"
+          }
+        }
+      }
+    },
+    "threadJiraStatusBadgeTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$@"
           }
         }
       }

@@ -2,7 +2,7 @@ import Cocoa
 import MagentCore
 
 /// A compact, borderless priority indicator.
-private final class PriorityIndicatorView: NSView {
+private final class PriorityIndicatorView: RightClickMenuView {
     let label: NSTextField = {
         let tf = NSTextField(labelWithString: "")
         tf.translatesAutoresizingMaskIntoConstraints = false
@@ -16,8 +16,6 @@ private final class PriorityIndicatorView: NSView {
         tf.setContentCompressionResistancePriority(.required, for: .horizontal)
         return tf
     }()
-    var contextualMenuProvider: (() -> NSMenu)?
-
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
@@ -35,25 +33,11 @@ private final class PriorityIndicatorView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    override func mouseDown(with event: NSEvent) {
-        guard let menu = contextualMenuProvider?() else {
-            super.mouseDown(with: event)
-            return
-        }
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
-    }
-
-    override func menu(for event: NSEvent) -> NSMenu? {
-        contextualMenuProvider?()
-    }
-
 }
 
 /// A flat status item used in the capsule's status row.
 /// Hosts either a text label or an icon image view (or both).
-private final class TopBorderBadge: NSView {
-    var contextualMenuProvider: (() -> NSMenu)?
-
+private final class TopBorderBadge: RightClickMenuView {
     let label: NSTextField = {
         let tf = NSTextField(labelWithString: "")
         tf.translatesAutoresizingMaskIntoConstraints = false
@@ -86,6 +70,8 @@ private final class TopBorderBadge: NSView {
     }()
 
     private let contentStack: NSStackView
+    private var contentEdgeConstraints: [NSLayoutConstraint] = []
+    private var iconSizeConstraints: [NSLayoutConstraint] = []
 
     override init(frame frameRect: NSRect) {
         contentStack = NSStackView(views: [])
@@ -102,13 +88,17 @@ private final class TopBorderBadge: NSView {
         addSubview(contentStack)
         addSubview(cornerDot)
 
-        NSLayoutConstraint.activate([
-            iconView.widthAnchor.constraint(equalToConstant: 13),
-            iconView.heightAnchor.constraint(equalToConstant: 13),
+        contentEdgeConstraints = [
             contentStack.leadingAnchor.constraint(equalTo: leadingAnchor),
             contentStack.trailingAnchor.constraint(equalTo: trailingAnchor),
             contentStack.topAnchor.constraint(equalTo: topAnchor),
             contentStack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ]
+        iconSizeConstraints = [
+            iconView.widthAnchor.constraint(equalToConstant: ThreadRowBadgeLayout.standardStatusIconSize),
+            iconView.heightAnchor.constraint(equalToConstant: ThreadRowBadgeLayout.standardStatusIconSize),
+        ]
+        NSLayoutConstraint.activate(contentEdgeConstraints + iconSizeConstraints + [
             cornerDot.widthAnchor.constraint(equalToConstant: 2),
             cornerDot.heightAnchor.constraint(equalToConstant: 2),
             cornerDot.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -117,18 +107,6 @@ private final class TopBorderBadge: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
-
-    override func mouseDown(with event: NSEvent) {
-        guard let menu = contextualMenuProvider?() else {
-            super.mouseDown(with: event)
-            return
-        }
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
-    }
-
-    override func menu(for event: NSEvent) -> NSMenu? {
-        contextualMenuProvider?()
-    }
 
     func updateColors(appearance: NSAppearance) {
         appearance.performAsCurrentDrawingAppearance {
@@ -144,79 +122,21 @@ private final class TopBorderBadge: NSView {
     func setCornerDotVisible(_ isVisible: Bool) {
         cornerDot.isHidden = !isVisible
     }
+
+    func setContentInsets(horizontal: CGFloat, vertical: CGFloat) {
+        contentEdgeConstraints[0].constant = horizontal
+        contentEdgeConstraints[1].constant = -horizontal
+        contentEdgeConstraints[2].constant = vertical
+        contentEdgeConstraints[3].constant = -vertical
+    }
+
+    func setIconSize(_ size: CGFloat) {
+        iconSizeConstraints.forEach { $0.constant = size }
+    }
 }
 
-/// A compact, clickable pie indicator. Its colored portion advances one sixth
-/// at a time to match the existing activity-age color bands.
-private final class ActivityCircleIndicatorView: NSView {
-    var fillLevel = 1 { didSet { needsDisplay = true } }
-    var fillColor: NSColor = .systemBlue { didSet { needsDisplay = true } }
-    var borderColor: NSColor = .clear { didSet { needsDisplay = true } }
-    var style: ThreadActivityIndicatorStyle = .circle
-    var onStyleSelection: ((ThreadActivityIndicatorStyle) -> Void)?
-
-    override var intrinsicContentSize: NSSize { NSSize(width: 9, height: 9) }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        translatesAutoresizingMaskIntoConstraints = false
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let circleRect = bounds.insetBy(dx: 0.5, dy: 0.5)
-        let center = NSPoint(x: circleRect.midX, y: circleRect.midY)
-        let radius = min(circleRect.width, circleRect.height) / 2
-
-        NSColor.controlBackgroundColor.setFill()
-        NSBezierPath(ovalIn: circleRect).fill()
-
-        let level = min(max(fillLevel, 1), ThreadRowBadgeLayout.activityColorLevelCount)
-        let endAngle = 90 - (360 * CGFloat(level) / CGFloat(ThreadRowBadgeLayout.activityColorLevelCount))
-        let fillPath = NSBezierPath()
-        fillPath.move(to: center)
-        fillPath.appendArc(withCenter: center, radius: radius, startAngle: 90, endAngle: endAngle, clockwise: true)
-        fillPath.close()
-        fillColor.setFill()
-        fillPath.fill()
-
-        borderColor.setStroke()
-        let outline = NSBezierPath(ovalIn: circleRect)
-        outline.lineWidth = 1
-        outline.stroke()
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        NSMenu.popUpContextMenu(activityStyleMenu(), with: event, for: self)
-    }
-
-    override func menu(for event: NSEvent) -> NSMenu? {
-        activityStyleMenu()
-    }
-
-    @objc private func selectStyle(_ sender: NSMenuItem) {
-        guard let rawValue = sender.representedObject as? String,
-              let style = ThreadActivityIndicatorStyle(rawValue: rawValue) else { return }
-        onStyleSelection?(style)
-    }
-
-    func activityStyleMenu() -> NSMenu {
-        let menu = NSMenu()
-        for candidate in ThreadActivityIndicatorStyle.allCases {
-            let title: String = switch candidate {
-            case .circle: String(localized: .ThreadStrings.threadActivityIndicatorCircle)
-            case .text: String(localized: .ThreadStrings.threadActivityIndicatorText)
-            }
-            let item = NSMenuItem(title: title, action: #selector(selectStyle(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = candidate.rawValue
-            item.state = candidate == style ? .on : .off
-            menu.addItem(item)
-        }
-        return menu
-    }
+private final class TextBaselineImageView: NSImageView {
+    override var baselineOffsetFromBottom: CGFloat { 0 }
 }
 
 final class ThreadCell: NSTableCellView {
@@ -276,31 +196,31 @@ final class ThreadCell: NSTableCellView {
     private static let pinMarkerWidth: CGFloat = 12
     private static let archiveMarkerWidth: CGFloat = 12
     private static let trailingMarkerSpacing: CGFloat = 4
-    private static let primarySecondaryRowSpacing: CGFloat = 1
-    /// Total vertical padding from row/cell edge to content (capsule inset + border + content padding).
-    private static let contentVerticalInset: CGFloat =
+    private static let contentTopInset: CGFloat =
         AlwaysEmphasizedRowView.capsuleVerticalInset
         + AlwaysEmphasizedRowView.capsuleBorderInset
-        + AlwaysEmphasizedRowView.capsuleContentVPadding
+        + ThreadRowBadgeLayout.topContentPadding
+    private static let contentBottomInset: CGFloat =
+        AlwaysEmphasizedRowView.capsuleVerticalInset
+        + AlwaysEmphasizedRowView.capsuleBorderInset
+        + ThreadRowBadgeLayout.bottomContentPadding
 
     private var subtitleLabel: NSTextField?
-    private var jiraTicketLabel: NSTextField?
     private var jiraStatusBadge: StatusBadgeView?
-    private var prDotSeparator: NSTextField?
-    private var prNumberLabel: NSTextField?
     private var prStatusBadge: StatusBadgeView?
     private var primaryDirtyDot: NSImageView?
     private var secondaryDirtyDot: NSImageView?
+    private var inlineMainIconView: NSImageView?
     private var popoutImageView: NSImageView?
     private var pinImageView: NSImageView?
     private(set) var archiveButton: NSButton?
     private var trailingStackView: NSStackView?
+    private var trailingStackCenterYConstraint: NSLayoutConstraint?
     private weak var secondaryRowStack: NSStackView?
     private weak var statusRowStack: NSStackView?
-    private weak var prRowStack: NSStackView?
+    private weak var contentStack: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
     private var durationLabel: NSTextField?
-    private var durationCircle: ActivityCircleIndicatorView?
     private var durationTimer: Timer?
     private var currentDurationSince: Date?
     private var isCurrentDurationBusy = false
@@ -313,22 +233,29 @@ final class ThreadCell: NSTableCellView {
     private var favoriteBadge: TopBorderBadge?
     private var pinnedBadge: TopBorderBadge?
     private var hiddenBadge: TopBorderBadge?
+    private var stoppedSessionsBadge: TopBorderBadge?
     private var jiraSyncBadge: TopBorderBadge?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
+    private var isConfiguredThreadHidden = false
     private var showsRenamePulse = false
     private var hasUnreadCompletion = false
     private var hasWaitingForInput = false
     private var hasAllDead = false
     private var configuredSectionColor: NSColor?
+    private var highlightedTicketField: NSTextField?
+    private var highlightedTicketKey: String?
+    private var highlightedTicketBaseColor: NSColor?
 
     private static let renamePulseAnimationKey = "rename-label-pulse"
 
     var onArchive: (() -> Void)?
     var priorityMenuProvider: (() -> NSMenu)?
+    var pullRequestMenuProvider: (() -> NSMenu?)?
+    var jiraMenuProvider: (() -> NSMenu?)?
     var onUnpin: (() -> Void)?
     var onRemoveFavorite: (() -> Void)?
-    var onUnhide: (() -> Void)?
+    var onToggleHidden: (() -> Void)?
 
     private static func descriptionFont() -> NSFont {
         .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
@@ -343,7 +270,7 @@ final class ThreadCell: NSTableCellView {
     }
 
     static func uniformSidebarRowHeight(maxDescriptionLines: Int, narrowThreads: Bool = false) -> CGFloat {
-        sidebarRowHeight(descriptionLines: max(1, maxDescriptionLines), hasSubtitle: true, hasPRRow: true, narrowThreads: narrowThreads)
+        sidebarRowHeight(descriptionLines: max(1, maxDescriptionLines), hasSubtitle: true, narrowThreads: narrowThreads)
     }
 
     /// Estimate how many lines the description text will occupy given available width.
@@ -354,12 +281,12 @@ final class ThreadCell: NSTableCellView {
         return min(lines, max(1, maxLines))
     }
 
-    /// Minimum content height: description lines, status row, and 2 metadata labels.
+    /// Minimum content height: configured description lines plus the status row.
     static func minimumContentHeight(narrowThreads: Bool) -> CGFloat {
         let descLines = narrowThreads ? 1 : 2
         let minBlock = lineHeight(for: descriptionFont()) * CGFloat(descLines)
-            + (lineHeight(for: metadataFont()) * 3)
-            + primarySecondaryRowSpacing
+            + ThreadRowBadgeLayout.statusRowHeight
+            + ThreadRowBadgeLayout.textToStatusRowSpacing
         return max(leadingIconSize, minBlock)
     }
 
@@ -367,20 +294,17 @@ final class ThreadCell: NSTableCellView {
     static func sidebarRowHeight(
         descriptionLines: Int,
         hasSubtitle: Bool,
-        hasPRRow: Bool,
         narrowThreads: Bool = false
     ) -> CGFloat {
         let descHeight = lineHeight(for: descriptionFont()) * CGFloat(max(1, descriptionLines))
         var titleBlockHeight = descHeight
         if hasSubtitle {
-            titleBlockHeight += lineHeight(for: metadataFont()) + primarySecondaryRowSpacing
+            titleBlockHeight += lineHeight(for: metadataFont()) + ThreadRowBadgeLayout.titleToSubtitleSpacing
         }
-        titleBlockHeight += lineHeight(for: metadataFont()) + primarySecondaryRowSpacing
-        if hasPRRow {
-            titleBlockHeight += lineHeight(for: metadataFont()) + primarySecondaryRowSpacing
-        }
+        titleBlockHeight += ThreadRowBadgeLayout.statusRowHeight
+            + ThreadRowBadgeLayout.textToStatusRowSpacing
         let contentHeight = max(leadingIconSize, titleBlockHeight, minimumContentHeight(narrowThreads: narrowThreads))
-        return ceil(contentHeight + (contentVerticalInset * 2))
+        return ceil(contentHeight + contentTopInset + contentBottomInset)
     }
 
     override init(frame frameRect: NSRect) {
@@ -402,6 +326,8 @@ final class ThreadCell: NSTableCellView {
             updateMainIconTintForSelection()
             updateTopBorderBadgeColors()
             updateLeadingIconTint()
+            updateDirtyDotColors()
+            updateBranchTicketHighlightAppearance()
         }
     }
 
@@ -423,6 +349,27 @@ final class ThreadCell: NSTableCellView {
         primaryDirtyDot = primaryDot
         secondaryDirtyDot = secondaryDot
 
+        let inlineMainIcon = TextBaselineImageView()
+        inlineMainIcon.translatesAutoresizingMaskIntoConstraints = false
+        inlineMainIcon.image = Self.cachedSymbolImage("house.fill")
+        inlineMainIcon.imageScaling = .scaleProportionallyDown
+        inlineMainIcon.symbolConfiguration = NSImage.SymbolConfiguration(
+            pointSize: ThreadRowBadgeLayout.inlineMainWorktreeIconSize,
+            weight: .semibold
+        )
+        inlineMainIcon.setContentHuggingPriority(.required, for: .horizontal)
+        inlineMainIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
+        inlineMainIcon.isHidden = true
+        inlineMainIconView = inlineMainIcon
+        NSLayoutConstraint.activate([
+            inlineMainIcon.widthAnchor.constraint(
+                equalToConstant: ThreadRowBadgeLayout.inlineMainWorktreeIconSize
+            ),
+            inlineMainIcon.heightAnchor.constraint(
+                equalToConstant: ThreadRowBadgeLayout.inlineMainWorktreeIconSize
+            ),
+        ])
+
         let subtitle = NSTextField(labelWithString: "")
         subtitle.translatesAutoresizingMaskIntoConstraints = false
         subtitle.font = Self.metadataFont()
@@ -434,40 +381,9 @@ final class ThreadCell: NSTableCellView {
         subtitle.isHidden = true
         subtitleLabel = subtitle
 
-        let jiraTicketTF = NSTextField(labelWithString: "")
-        jiraTicketTF.translatesAutoresizingMaskIntoConstraints = false
-        jiraTicketTF.font = Self.metadataFont()
-        jiraTicketTF.textColor = .controlAccentColor
-        jiraTicketTF.lineBreakMode = .byClipping
-        jiraTicketTF.maximumNumberOfLines = 1
-        jiraTicketTF.setContentHuggingPriority(.required, for: .horizontal)
-        jiraTicketTF.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
-        jiraTicketTF.isHidden = true
-        jiraTicketLabel = jiraTicketTF
-
         let jiraBadge = StatusBadgeView()
         jiraBadge.isHidden = true
         jiraStatusBadge = jiraBadge
-
-        let dotSep = NSTextField(labelWithString: " · ")
-        dotSep.translatesAutoresizingMaskIntoConstraints = false
-        dotSep.font = Self.metadataFont()
-        dotSep.textColor = .controlAccentColor
-        dotSep.setContentHuggingPriority(.required, for: .horizontal)
-        dotSep.setContentCompressionResistancePriority(.required, for: .horizontal)
-        dotSep.isHidden = true
-        prDotSeparator = dotSep
-
-        let prNumTF = NSTextField(labelWithString: "")
-        prNumTF.translatesAutoresizingMaskIntoConstraints = false
-        prNumTF.font = Self.metadataFont()
-        prNumTF.textColor = .controlAccentColor
-        prNumTF.lineBreakMode = .byClipping
-        prNumTF.maximumNumberOfLines = 1
-        prNumTF.setContentHuggingPriority(.required, for: .horizontal)
-        prNumTF.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
-        prNumTF.isHidden = true
-        prNumberLabel = prNumTF
 
         let prBadge = StatusBadgeView()
         prBadge.isHidden = true
@@ -485,10 +401,18 @@ final class ThreadCell: NSTableCellView {
         tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         configurePrimaryTextFieldLayout(maxLines: 1, wraps: false)
 
-        let primaryRow = NSStackView(views: [primaryDot, tf])
+        let titleRow = NSStackView(views: [tf, inlineMainIcon])
+        titleRow.orientation = .horizontal
+        titleRow.alignment = .firstBaseline
+        titleRow.spacing = 4
+        titleRow.detachesHiddenViews = true
+        titleRow.translatesAutoresizingMaskIntoConstraints = false
+
+        let primaryRow = NSStackView(views: [primaryDot, titleRow])
         primaryRow.orientation = .horizontal
         primaryRow.alignment = .centerY
         primaryRow.spacing = 4
+        primaryRow.detachesHiddenViews = true
         primaryRow.translatesAutoresizingMaskIntoConstraints = false
 
         let secondaryRow = NSStackView(views: [secondaryDot, subtitle])
@@ -498,32 +422,34 @@ final class ThreadCell: NSTableCellView {
         subtitle.alphaValue = ThreadRowContentOpacity.secondaryLine
         secondaryRow.translatesAutoresizingMaskIntoConstraints = false
 
-        // PR row: badge-aware composition. Individual labels + badges for Jira and PR.
-        let prRow = NSStackView(views: [jiraTicketTF, jiraBadge, dotSep, prNumTF, prBadge])
-        prRow.orientation = .horizontal
-        prRow.alignment = .centerY
-        prRow.spacing = 3
-        prRow.detachesHiddenViews = true
-        prRow.translatesAutoresizingMaskIntoConstraints = false
+        let textRowsStack = NSStackView(views: [primaryRow, secondaryRow])
+        textRowsStack.orientation = .vertical
+        textRowsStack.alignment = .leading
+        textRowsStack.spacing = ThreadRowBadgeLayout.titleToSubtitleSpacing
+        textRowsStack.detachesHiddenViews = true
+        textRowsStack.translatesAutoresizingMaskIntoConstraints = false
+        textRowsStack.identifier = NSUserInterfaceItemIdentifier("threadTextRows")
 
         let statusRow = NSStackView()
         statusRow.orientation = .horizontal
         statusRow.alignment = .centerY
         statusRow.spacing = 4
         statusRow.translatesAutoresizingMaskIntoConstraints = false
+        statusRow.identifier = NSUserInterfaceItemIdentifier("threadStatusRow")
+        statusRow.heightAnchor.constraint(equalToConstant: ThreadRowBadgeLayout.statusRowHeight).isActive = true
 
-        let verticalStack = NSStackView(views: [primaryRow, secondaryRow, statusRow, prRow])
+        let verticalStack = NSStackView(views: [textRowsStack, statusRow])
         verticalStack.orientation = .vertical
         verticalStack.alignment = .leading
-        verticalStack.spacing = Self.primarySecondaryRowSpacing
+        verticalStack.spacing = ThreadRowBadgeLayout.titleToSubtitleSpacing
+        verticalStack.setCustomSpacing(ThreadRowBadgeLayout.textToStatusRowSpacing, after: textRowsStack)
         verticalStack.detachesHiddenViews = true
         verticalStack.translatesAutoresizingMaskIntoConstraints = false
         verticalStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         verticalStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
         secondaryRowStack = secondaryRow
         statusRowStack = statusRow
-        prRowStack = prRow
-        statusRow.widthAnchor.constraint(equalTo: verticalStack.widthAnchor).isActive = true
+        contentStack = verticalStack
         let stack = NSStackView(views: [iv, verticalStack])
         stack.orientation = .horizontal
         stack.spacing = 6
@@ -531,6 +457,20 @@ final class ThreadCell: NSTableCellView {
         stack.detachesHiddenViews = true
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
+
+        if let trailingStackView {
+            trailingStackCenterYConstraint?.isActive = false
+            let centerConstraint = switch ThreadRowBadgeLayout.trailingMarkerVerticalAnchor {
+            case .textRows:
+                trailingStackView.centerYAnchor.constraint(equalTo: textRowsStack.centerYAnchor)
+            }
+            centerConstraint.isActive = true
+            trailingStackCenterYConstraint = centerConstraint
+        }
+
+        let statusRowTrailingConstraint = statusRow.trailingAnchor.constraint(
+            equalTo: verticalStack.trailingAnchor
+        )
 
         let leadingConstraint = stack.leadingAnchor.constraint(
             equalTo: leadingAnchor,
@@ -541,9 +481,23 @@ final class ThreadCell: NSTableCellView {
         var constraints = [
             leadingConstraint,
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            verticalStack.topAnchor.constraint(equalTo: topAnchor, constant: Self.contentTopInset),
+            verticalStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.contentBottomInset),
+            statusRowTrailingConstraint,
         ]
         if let trailingStack = trailingStackView {
-            constraints.append(verticalStack.trailingAnchor.constraint(equalTo: trailingStack.leadingAnchor, constant: -6))
+            constraints.append(
+                textRowsStack.trailingAnchor.constraint(
+                    lessThanOrEqualTo: trailingStack.leadingAnchor,
+                    constant: -6
+                )
+            )
+            constraints.append(
+                verticalStack.trailingAnchor.constraint(
+                    equalTo: trailingAnchor,
+                    constant: -ThreadListViewController.sidebarTrailingInset
+                )
+            )
         } else {
             constraints.append(verticalStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -ThreadListViewController.sidebarTrailingInset))
         }
@@ -576,6 +530,7 @@ final class ThreadCell: NSTableCellView {
         }
         bottomRightBadgeStack?.alphaValue = 1.0
         bottomLeftBadgeStack?.alphaValue = 1.0
+        statusRowStack?.alphaValue = 1.0
         subtitleLabel?.alphaValue = ThreadRowContentOpacity.secondaryLine
     }
 
@@ -628,6 +583,7 @@ final class ThreadCell: NSTableCellView {
         archiveBtn.target = self
         archiveBtn.action = #selector(archiveButtonClicked)
         archiveBtn.isHidden = true
+        archiveBtn.identifier = NSUserInterfaceItemIdentifier("threadArchiveButton")
 
         let stack = NSStackView(views: [archiveBtn, popoutIV, pinIV])
         stack.orientation = .horizontal
@@ -642,8 +598,9 @@ final class ThreadCell: NSTableCellView {
 
         let trailingAlignmentInset = AlwaysEmphasizedRowView.capsuleTrailingInset + AlwaysEmphasizedRowView.capsuleContentHPadding
 
+        let centerConstraint = stack.centerYAnchor.constraint(equalTo: centerYAnchor)
         NSLayoutConstraint.activate([
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            centerConstraint,
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -trailingAlignmentInset),
             popoutIV.widthAnchor.constraint(equalToConstant: 15),
             popoutIV.heightAnchor.constraint(equalToConstant: 15),
@@ -653,6 +610,7 @@ final class ThreadCell: NSTableCellView {
             archiveBtn.heightAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
         ])
         trailingStackView = stack
+        trailingStackCenterYConstraint = centerConstraint
         popoutImageView = popoutIV
         pinImageView = pinIV
         archiveButton = archiveBtn
@@ -668,30 +626,37 @@ final class ThreadCell: NSTableCellView {
         leadingOffset: CGFloat = 0,
         maxDescriptionLines: Int = 2,
         showThreadIcon: Bool = true,
+        showWorktreeName: Bool = false,
         isAutoRenaming: Bool = false
     ) {
         isConfiguredAsMain = false
+        isConfiguredThreadHidden = thread.isSidebarHidden
         ensureTrailingStack()
         ensureLeadingStack()
+        inlineMainIconView?.isHidden = true
         setLeadingOffset(leadingOffset)
         setDimmedAppearance(isHidden: thread.isSidebarHidden, isArchiving: thread.isArchiving)
 
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
         let branchName = (thread.actualBranch ?? thread.branchName).trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
-        let hasBranchWorktreeMismatch = worktreeName != resolvedBranchName
-
-        // Secondary line 1: branch + worktree (no PR).
-        var branchWorktreeParts = [resolvedBranchName]
-        if hasBranchWorktreeMismatch {
-            branchWorktreeParts.append(worktreeName)
-        }
-        let branchWorktreeLine = branchWorktreeParts.joined(separator: "  ·  ")
 
         let trimmedDescription = thread.taskDescription?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let hasDescription = !(trimmedDescription?.isEmpty ?? true)
+        let primaryBaseText = hasDescription ? (trimmedDescription ?? resolvedBranchName) : resolvedBranchName
+        let primaryText = ThreadRowBadgeLayout.primaryText(
+            primaryBaseText,
+            signEmoji: thread.signEmoji
+        )
         let clampedDescriptionLines = max(1, maxDescriptionLines)
+        let subtitleText = ThreadRowBadgeLayout.subtitleText(
+            hasDescription: hasDescription,
+            branchName: resolvedBranchName,
+            worktreeName: worktreeName,
+            showWorktreeName: showWorktreeName
+        )
+        let branchWorktreeLine = subtitleText ?? resolvedBranchName
 
         if hasDescription {
             // Keep description wrapping stable across selection/unread state changes.
@@ -706,26 +671,27 @@ final class ThreadCell: NSTableCellView {
         if showsJiraState && thread.jiraUnassigned {
             textField?.textColor = .tertiaryLabelColor
         } else {
-            textField?.textColor = deadSessions ? .secondaryLabelColor : .labelColor
+            textField?.textColor = .labelColor
         }
-        if hasDescription, let description = trimmedDescription {
+        contentStack?.alphaValue = ThreadRowContentOpacity.contentGroupOpacity(isInactive: deadSessions)
+        if hasDescription {
             // With description: primary = description, secondary = branch · worktree.
-            textField?.stringValue = description
+            textField?.stringValue = primaryText
             configurePrimaryTextFieldLayout(
                 maxLines: clampedDescriptionLines,
                 wraps: clampedDescriptionLines > 1
             )
-            subtitleLabel?.stringValue = branchWorktreeLine
+            subtitleLabel?.stringValue = subtitleText ?? resolvedBranchName
             subtitleLabel?.textColor = showsJiraState && thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
             subtitleLabel?.isHidden = false
             setDirtyDot(primaryDirtyDot, visible: false)
             setDirtyDot(secondaryDirtyDot, visible: thread.isDirty)
         } else {
-            // Without description: primary = branch, secondary = worktree only (if different).
-            textField?.stringValue = resolvedBranchName
+            // Without description, the optional second line is reserved for the worktree name.
+            textField?.stringValue = primaryText
             configurePrimaryTextFieldLayout(maxLines: 1, wraps: false)
-            if hasBranchWorktreeMismatch {
-                subtitleLabel?.stringValue = worktreeName
+            if let subtitleText {
+                subtitleLabel?.stringValue = subtitleText
                 subtitleLabel?.textColor = .secondaryLabelColor
                 subtitleLabel?.isHidden = false
             } else {
@@ -736,21 +702,24 @@ final class ThreadCell: NSTableCellView {
             setDirtyDot(secondaryDirtyDot, visible: false)
         }
 
-        // Secondary line 2 (PR/ticket row): ticket key with status badge, PR number with status badge.
+        // Highlight the detected Jira key in the branch and place PR/Jira state in the status row.
         let cellSettings = PersistenceService.shared.loadSettings()
         let jiraEnabled = cellSettings.jiraIntegrationEnabled && cellSettings.jiraTicketDetectionEnabled
         let ticketKey = jiraEnabled ? thread.effectiveJiraTicketKey(settings: cellSettings) : nil
-        let badgeFontSize: CGFloat = 8
+        let branchTicketKey = jiraEnabled
+            ? thread.detectedBranchTicketKey(allowedPrefixes: cellSettings.jiraTicketDetectionPrefixFilterSet)
+            : nil
+        applyBranchTicketHighlight(
+            ticketKey: branchTicketKey,
+            branchWorktreeLine: branchWorktreeLine,
+            primaryText: primaryText,
+            hasDescription: hasDescription
+        )
+        let badgeFontSize = ThreadRowBadgeLayout.compactTextFontSize
         let showJiraBadges = cellSettings.showJiraStatusBadges
         let showPRBadges = cellSettings.showPRStatusBadges
 
-        let hasTicket = ticketKey != nil
-        let hasPR = thread.pullRequestInfo != nil
-
         if let ticketKey {
-            jiraTicketLabel?.stringValue = ticketKey
-            jiraTicketLabel?.isHidden = false
-            jiraTicketLabel?.toolTip = "Jira ticket: \(ticketKey)"
             if showJiraBadges, let verified = thread.verifiedJiraTicket, !verified.status.isEmpty {
                 jiraStatusBadge?.configure(
                     text: verified.status,
@@ -758,49 +727,43 @@ final class ThreadCell: NSTableCellView {
                     fontSize: badgeFontSize
                 )
                 jiraStatusBadge?.isHidden = false
-                jiraStatusBadge?.toolTip = "Jira status: \(verified.status)"
+                jiraStatusBadge?.toolTip = String(
+                    localized: .ThreadStrings.threadJiraStatusBadgeTooltip(ticketKey, verified.status)
+                )
             } else {
                 jiraStatusBadge?.isHidden = true
                 jiraStatusBadge?.toolTip = nil
             }
         } else {
-            jiraTicketLabel?.stringValue = ""
-            jiraTicketLabel?.isHidden = true
-            jiraTicketLabel?.toolTip = nil
             jiraStatusBadge?.isHidden = true
             jiraStatusBadge?.toolTip = nil
         }
 
-        prDotSeparator?.isHidden = !(hasTicket && hasPR)
-
         if let pr = thread.pullRequestInfo {
             let prAlpha: CGFloat = thread.hasStalePullRequestInfo ? 0.5 : 1.0
-            prNumberLabel?.stringValue = pr.displayLabel
-            prNumberLabel?.isHidden = false
-            prNumberLabel?.alphaValue = prAlpha
             let stalePrefix = thread.hasStalePullRequestInfo
                 ? String(localized: .ThreadStrings.threadPullRequestStaleTooltipPrefix) + "\n"
                 : ""
-            prNumberLabel?.toolTip = "\(stalePrefix)Pull request: \(pr.displayLabel)"
             if showPRBadges {
                 prStatusBadge?.configure(
-                    text: pr.statusText,
+                    text: ThreadRowBadgeLayout.pullRequestBadgeText(
+                        number: pr.shortLabel,
+                        status: pr.statusText
+                    ),
                     style: StatusBadgeView.prStyle(for: pr),
                     fontSize: badgeFontSize
                 )
                 prStatusBadge?.isHidden = false
                 prStatusBadge?.alphaValue = prAlpha
-                prStatusBadge?.toolTip = "\(stalePrefix)PR status: \(pr.statusText)"
+                prStatusBadge?.toolTip = stalePrefix + String(
+                    localized: .ThreadStrings.threadPullRequestBadgeTooltip(pr.displayLabel, pr.statusText)
+                )
             } else {
                 prStatusBadge?.isHidden = true
                 prStatusBadge?.alphaValue = 1.0
                 prStatusBadge?.toolTip = nil
             }
         } else {
-            prNumberLabel?.stringValue = ""
-            prNumberLabel?.isHidden = true
-            prNumberLabel?.alphaValue = 1.0
-            prNumberLabel?.toolTip = nil
             prStatusBadge?.isHidden = true
             prStatusBadge?.alphaValue = 1.0
             prStatusBadge?.toolTip = nil
@@ -826,7 +789,8 @@ final class ThreadCell: NSTableCellView {
         hasUnreadCompletion = thread.hasUnreadAgentCompletion
         hasWaitingForInput = thread.hasWaitingForInput
         hasAllDead = thread.hasAllSessionsDead
-        subtitleLabel?.alphaValue = ThreadRowContentOpacity.secondaryLineOpacity(isInactive: hasAllDead)
+        subtitleLabel?.alphaValue = ThreadRowContentOpacity.secondaryLine
+        updateStatusItemOpacities()
         configuredSectionColor = sectionColor
         updateLeadingIconTint()
 
@@ -859,6 +823,8 @@ final class ThreadCell: NSTableCellView {
             hiddenBadge?.isHidden = true
             hiddenBadge?.toolTip = nil
         }
+
+        configureStoppedSessionsBadge(isStopped: deadSessions)
 
         if thread.syncWithJira {
             ensureJiraSyncBadge()
@@ -903,7 +869,8 @@ final class ThreadCell: NSTableCellView {
         )
         configurePriority(thread.priority)
         updateTrailingStatusOrder()
-        configureInteractiveBadgeMenus(for: thread)
+        updateTopBorderBadgeColors()
+        configureInteractiveBadgeMenus()
 
         syncRowVisibility()
         showsRenamePulse = isAutoRenaming
@@ -924,15 +891,22 @@ final class ThreadCell: NSTableCellView {
         currentBranch: String? = nil,
         busyStateSince: Date? = nil,
         leadingOffset: CGFloat = 0,
-        showThreadIcon: Bool = true
+        showThreadIcon: Bool = true,
+        signEmoji: String? = nil,
+        hasAllSessionsDead: Bool = false
     ) {
         isConfiguredAsMain = true
+        isConfiguredThreadHidden = false
+        highlightedTicketField = nil
+        highlightedTicketKey = nil
+        highlightedTicketBaseColor = nil
         ensureTrailingStack()
         ensureLeadingStack()
         setLeadingOffset(leadingOffset)
         setDimmedAppearance(isHidden: false, isArchiving: false)
 
-        textField?.stringValue = "Main worktree"
+        textField?.stringValue = ThreadRowBadgeLayout.primaryText("Main worktree", signEmoji: signEmoji)
+        contentStack?.alphaValue = ThreadRowContentOpacity.contentGroupOpacity(isInactive: hasAllSessionsDead)
         textField?.font = .systemFont(
             ofSize: NSFont.systemFontSize,
             weight: isUnreadCompletion ? .bold : .semibold
@@ -956,11 +930,22 @@ final class ThreadCell: NSTableCellView {
 
         imageView?.image = nil
         imageView?.image = Self.cachedSymbolImage("house.fill")
-        imageView?.isHidden = !showThreadIcon
+        switch ThreadRowBadgeLayout.mainWorktreeIconPlacement(showThreadIcons: showThreadIcon) {
+        case .leading:
+            imageView?.isHidden = false
+            inlineMainIconView?.isHidden = true
+        case .inlineAfterTitle:
+            imageView?.isHidden = true
+            inlineMainIconView?.isHidden = false
+        }
         updateMainIconTintForSelection()
 
         setDirtyDot(primaryDirtyDot, visible: false)
         setDirtyDot(secondaryDirtyDot, visible: isDirty)
+        hasAllDead = hasAllSessionsDead
+        configureStoppedSessionsBadge(isStopped: hasAllSessionsDead)
+        prStatusBadge?.isHidden = true
+        jiraStatusBadge?.isHidden = true
 
         let detailedTooltip = buildDetailedTooltip(
             description: "Main worktree",
@@ -979,6 +964,7 @@ final class ThreadCell: NSTableCellView {
         )
         toolTip = detailedTooltip
         imageView?.toolTip = detailedTooltip
+        inlineMainIconView?.toolTip = detailedTooltip
         textField?.toolTip = detailedTooltip
         subtitleLabel?.toolTip = detailedTooltip
         primaryDirtyDot?.toolTip = detailedTooltip
@@ -999,6 +985,7 @@ final class ThreadCell: NSTableCellView {
         // The main worktree row doesn't carry a priority.
         configurePriority(nil)
         updateTrailingStatusOrder()
+        updateTopBorderBadgeColors()
 
         syncRowVisibility()
     }
@@ -1008,9 +995,43 @@ final class ThreadCell: NSTableCellView {
         let secondaryDotVisible = !(secondaryDirtyDot?.isHidden ?? true)
         secondaryRowStack?.isHidden = !subtitleVisible && !secondaryDotVisible
 
-        let hasJira = !(jiraTicketLabel?.isHidden ?? true)
-        let hasPR = !(prNumberLabel?.isHidden ?? true)
-        prRowStack?.isHidden = !hasJira && !hasPR
+    }
+
+    private func applyBranchTicketHighlight(
+        ticketKey: String?,
+        branchWorktreeLine: String,
+        primaryText: String,
+        hasDescription: Bool
+    ) {
+        let target = hasDescription ? branchWorktreeLine : primaryText
+        let field = hasDescription ? subtitleLabel : textField
+        highlightedTicketField = field
+        highlightedTicketKey = ticketKey
+        highlightedTicketBaseColor = field?.textColor
+        field?.stringValue = target
+        updateBranchTicketHighlightAppearance()
+    }
+
+    private func updateBranchTicketHighlightAppearance() {
+        guard let field = highlightedTicketField,
+              let ticketKey = highlightedTicketKey,
+              let font = field.font,
+              let baseColor = highlightedTicketBaseColor else { return }
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = field.alignment
+        paragraphStyle.lineBreakMode = field.lineBreakMode
+        let isDarkSelection = backgroundStyle == .emphasized
+            && effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let renderedBaseColor = isDarkSelection ? NSColor.white : baseColor
+        guard let attributedText = ThreadRowBadgeLayout.highlightedTicketText(
+            field.stringValue,
+            ticketKey: ticketKey,
+            font: font,
+            baseColor: renderedBaseColor,
+            highlightColor: NSColor(resource: .primaryBrand),
+            paragraphStyle: paragraphStyle
+        ) else { return }
+        field.attributedStringValue = attributedText
     }
 
     private func configurePrimaryTextFieldLayout(maxLines: Int, wraps: Bool) {
@@ -1141,19 +1162,11 @@ final class ThreadCell: NSTableCellView {
         let badge = TopBorderBadge()
         badge.iconView.isHidden = true
         badge.isHidden = true
-
-        let circle = ActivityCircleIndicatorView()
-        circle.isHidden = true
-        circle.onStyleSelection = { [weak self] style in
-            var settings = PersistenceService.shared.loadSettings()
-            settings.threadActivityIndicatorStyle = style
-            try? PersistenceService.shared.saveSettings(settings)
-            NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
-            self?.updateDurationPresentation()
-        }
-        badge.contextualMenuProvider = { [weak circle] in
-            circle?.activityStyleMenu() ?? NSMenu()
-        }
+        badge.label.font = .systemFont(
+            ofSize: ThreadRowBadgeLayout.compactTextFontSize,
+            weight: .medium
+        )
+        badge.setContentInsets(horizontal: 3, vertical: 1)
 
         let capsule = PriorityIndicatorView()
         capsule.label.font = Self.priorityDotsFont()
@@ -1178,12 +1191,10 @@ final class ThreadCell: NSTableCellView {
         bottomLeftBadgeStack = stack
         durationBadge = badge
         durationLabel = badge.label
-        durationCircle = circle
         priorityCapsule = capsule
 
         ensureBottomRightBadgeStack()
         bottomRightBadgeStack?.addArrangedSubview(badge)
-        bottomRightBadgeStack?.addArrangedSubview(circle)
 
         updateTopBorderBadgeColors()
     }
@@ -1251,7 +1262,7 @@ final class ThreadCell: NSTableCellView {
         capsule.needsDisplay = true
     }
 
-    private func configureInteractiveBadgeMenus(for thread: MagentThread) {
+    private func configureInteractiveBadgeMenus() {
         priorityCapsule?.contextualMenuProvider = { [weak self] in
             self?.priorityMenuProvider?() ?? NSMenu()
         }
@@ -1265,7 +1276,60 @@ final class ThreadCell: NSTableCellView {
             self?.singleActionMenu(title: String(localized: .CommonStrings.commonUnpin), action: #selector(ThreadCell.unpinFromBadge)) ?? NSMenu()
         }
         hiddenBadge?.contextualMenuProvider = { [weak self] in
-            self?.singleActionMenu(title: String(localized: .CommonStrings.commonUnhide), action: #selector(ThreadCell.unhideFromBadge)) ?? NSMenu()
+            self?.singleActionMenu(title: String(localized: .CommonStrings.commonUnhide), action: #selector(ThreadCell.toggleHiddenFromBadge)) ?? NSMenu()
+        }
+        prStatusBadge?.contextualMenuProvider = { [weak self] in
+            self?.pullRequestMenuProvider?()
+        }
+        jiraStatusBadge?.contextualMenuProvider = { [weak self] in
+            self?.jiraMenuProvider?()
+        }
+        durationBadge?.contextualMenuProvider = { [weak self] in
+            guard let self,
+                  self.durationBadge?.isHidden == false,
+                  let text = self.durationBadge?.toolTip,
+                  !text.isEmpty else { return nil }
+            let menu = NSMenu()
+            menu.addItem(.sectionHeader(title: text))
+            let actions = ThreadRowBadgeLayout.activityBadgeMenuActions(
+                isBusy: self.isCurrentDurationBusy,
+                isMainWorktree: self.isConfiguredAsMain
+            )
+            var actionItems: [NSMenuItem] = []
+            for action in actions {
+                switch action {
+                case .toggleHidden where self.onToggleHidden != nil:
+                    let title = self.isConfiguredThreadHidden
+                        ? String(localized: .CommonStrings.commonUnhide)
+                        : String(localized: .CommonStrings.commonHide)
+                    let hideItem = NSMenuItem(
+                        title: title,
+                        action: #selector(toggleHiddenFromBadge),
+                        keyEquivalent: ""
+                    )
+                    hideItem.target = self
+                    hideItem.image = ThreadContextMenuItemPresentation.hiddenStateImage(
+                        isHidden: self.isConfiguredThreadHidden
+                    )
+                    actionItems.append(hideItem)
+                case .archive where self.onArchive != nil:
+                    let archiveItem = NSMenuItem(
+                        title: String(localized: .ThreadStrings.threadArchiveMenuTitle),
+                        action: #selector(archiveButtonClicked),
+                        keyEquivalent: ""
+                    )
+                    archiveItem.target = self
+                    archiveItem.image = ThreadContextMenuItemPresentation.archiveImage
+                    actionItems.append(archiveItem)
+                case .toggleHidden, .archive:
+                    break
+                }
+            }
+            if !actionItems.isEmpty {
+                menu.addItem(.separator())
+                actionItems.forEach { menu.addItem($0) }
+            }
+            return menu
         }
     }
 
@@ -1285,8 +1349,8 @@ final class ThreadCell: NSTableCellView {
         onUnpin?()
     }
 
-    @objc private func unhideFromBadge() {
-        onUnhide?()
+    @objc private func toggleHiddenFromBadge() {
+        onToggleHidden?()
     }
 
     private func ensureKeepAliveBadge() {
@@ -1303,50 +1367,70 @@ final class ThreadCell: NSTableCellView {
     }
 
     private func ensureFavoriteBadge() {
-        ensureBottomRightBadgeStack()
         if favoriteBadge == nil {
             let badge = TopBorderBadge()
             badge.label.isHidden = true
             badge.iconView.image = Self.cachedSymbolImage("heart.fill")
+            badge.iconView.imageAlignment = .alignCenter
+            badge.iconView.imageScaling = .scaleProportionallyDown
+            badge.setIconSize(ThreadRowBadgeLayout.compactLeadingStatusIconSize)
             badge.iconView.contentTintColor = NSColor(resource: .primaryBrand)
             badge.iconView.isHidden = false
             badge.isHidden = true
             favoriteBadge = badge
         }
-        if let badge = favoriteBadge, badge.superview !== bottomRightBadgeStack {
-            bottomRightBadgeStack?.addArrangedSubview(badge)
-        }
     }
 
     private func ensurePinnedBadge() {
-        ensureBottomRightBadgeStack()
         if pinnedBadge == nil {
             let badge = TopBorderBadge()
             badge.label.isHidden = true
             badge.iconView.image = Self.cachedSymbolImage("pin.fill")
+            badge.iconView.imageAlignment = .alignCenter
+            badge.iconView.imageScaling = .scaleProportionallyDown
+            badge.setIconSize(ThreadRowBadgeLayout.compactLeadingStatusIconSize)
             badge.iconView.contentTintColor = NSColor(resource: .primaryBrand)
             badge.iconView.isHidden = false
             badge.isHidden = true
             pinnedBadge = badge
         }
-        if let badge = pinnedBadge, badge.superview !== bottomRightBadgeStack {
-            bottomRightBadgeStack?.addArrangedSubview(badge)
-        }
     }
 
     private func ensureHiddenBadge() {
-        ensureBottomRightBadgeStack()
         if hiddenBadge == nil {
             let badge = TopBorderBadge()
             badge.label.isHidden = true
             badge.iconView.image = Self.cachedSymbolImage("eye.slash.fill")
+            badge.iconView.imageAlignment = .alignCenter
+            badge.iconView.imageScaling = .scaleProportionallyDown
             badge.iconView.contentTintColor = .secondaryLabelColor
             badge.iconView.isHidden = false
             badge.isHidden = true
             hiddenBadge = badge
         }
-        if let badge = hiddenBadge, badge.superview !== bottomRightBadgeStack {
-            bottomRightBadgeStack?.addArrangedSubview(badge)
+    }
+
+    private func ensureStoppedSessionsBadge() {
+        if stoppedSessionsBadge == nil {
+            let badge = TopBorderBadge()
+            badge.label.isHidden = true
+            badge.iconView.image = Self.cachedSymbolImage("xmark.circle.fill")
+            badge.iconView.imageAlignment = .alignCenter
+            badge.iconView.imageScaling = .scaleProportionallyDown
+            badge.iconView.isHidden = false
+            badge.isHidden = true
+            stoppedSessionsBadge = badge
+        }
+    }
+
+    private func configureStoppedSessionsBadge(isStopped: Bool) {
+        if isStopped {
+            ensureStoppedSessionsBadge()
+            stoppedSessionsBadge?.isHidden = false
+            stoppedSessionsBadge?.toolTip = String(localized: .ThreadStrings.threadSessionsStoppedTooltip)
+        } else {
+            stoppedSessionsBadge?.isHidden = true
+            stoppedSessionsBadge?.toolTip = nil
         }
     }
 
@@ -1369,64 +1453,75 @@ final class ThreadCell: NSTableCellView {
     }
 
     private func updateTrailingStatusOrder() {
-        guard let stack = bottomRightBadgeStack else { return }
+        guard let leadingStack = bottomLeftBadgeStack,
+              let trailingStack = bottomRightBadgeStack else { return }
 
-        let leadingTrailingItems: [NSView?] = [
+        let leadingItems = ThreadRowBadgeLayout.LeadingStatusItem.allCases.compactMap { item -> NSView? in
+            switch item {
+            case .pinned: pinnedBadge
+            case .hidden: hiddenBadge
+            case .stoppedSessions: stoppedSessionsBadge
+            case .favorite: favoriteBadge
+            case .priority: priorityCapsule
+            }
+        }
+        let fixedTrailingItems: [NSView?] = [
             claudeRateLimitBadge,
             codexRateLimitBadge,
             keepAliveBadge,
         ]
-        let orderedStatusItems = ThreadRowBadgeLayout.TrailingStatusItem.allCases.flatMap { item -> [NSView?] in
+        let trailingItems = ThreadRowBadgeLayout.TrailingStatusItem.allCases.compactMap { item -> NSView? in
             switch item {
-            case .favorite: [favoriteBadge]
-            case .pinned: [pinnedBadge]
-            case .hidden: [hiddenBadge]
-            case .jiraSync: [jiraSyncBadge]
-            case .activityDuration: [durationBadge, durationCircle]
+            case .pullRequestStatus: prStatusBadge
+            case .jiraStatus: jiraStatusBadge
+            case .activityDuration: durationBadge
+            case .jiraSync: jiraSyncBadge
             }
         }
-        let attachedItems = (leadingTrailingItems + orderedStatusItems)
-            .compactMap { $0 }
-            .filter { $0.superview === stack }
+        let statusItems = leadingItems + fixedTrailingItems.compactMap { $0 } + trailingItems
 
-        for item in attachedItems {
-            stack.removeArrangedSubview(item)
+        for item in statusItems {
+            (item.superview as? NSStackView)?.removeArrangedSubview(item)
             item.removeFromSuperview()
         }
-        for item in attachedItems {
-            stack.addArrangedSubview(item)
+        for item in leadingItems {
+            leadingStack.addArrangedSubview(item)
+        }
+        for item in fixedTrailingItems.compactMap({ $0 }) + trailingItems {
+            trailingStack.addArrangedSubview(item)
         }
     }
 
     private func updateTopBorderBadgeColors() {
-        let rowSelected = (superview as? NSTableRowView)?.isSelected ?? false
         durationBadge?.updateColors(appearance: effectiveAppearance)
-        updateDurationCircleColors()
-        // Re-apply elapsed-time tint after updateColors resets label to secondaryLabelColor.
-        if let since = currentDurationSince {
-            let elapsed = max(0, Int(Date().timeIntervalSince(since)))
-            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed, isDark: isDark)
-        }
+        updateDurationBadgeColors()
         claudeRateLimitBadge?.updateColors(appearance: effectiveAppearance)
         codexRateLimitBadge?.updateColors(appearance: effectiveAppearance)
         keepAliveBadge?.updateColors(appearance: effectiveAppearance)
         favoriteBadge?.updateColors(appearance: effectiveAppearance)
         pinnedBadge?.updateColors(appearance: effectiveAppearance)
         hiddenBadge?.updateColors(appearance: effectiveAppearance)
+        stoppedSessionsBadge?.updateColors(appearance: effectiveAppearance)
         jiraSyncBadge?.updateColors(appearance: effectiveAppearance)
-        // Pin/favorite icons: primary brand by default, white when selected in dark mode.
-        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        if let favorite = favoriteBadge {
-            favorite.iconView.contentTintColor = (rowSelected && isDark) ? .white : NSColor(resource: .primaryBrand)
-        }
-        if let pin = pinnedBadge {
-            pin.iconView.contentTintColor = (rowSelected && isDark) ? .white : NSColor(resource: .primaryBrand)
-        }
-        hiddenBadge?.iconView.contentTintColor = .secondaryLabelColor
+        let descriptionColor = textField?.textColor ?? .labelColor
+        favoriteBadge?.iconView.contentTintColor = descriptionColor
+        pinnedBadge?.iconView.contentTintColor = descriptionColor
+        hiddenBadge?.iconView.contentTintColor = descriptionColor
+        stoppedSessionsBadge?.iconView.contentTintColor = descriptionColor
+        updateStatusItemOpacities()
         if let popout = popoutImageView {
             popout.contentTintColor = .systemPurple
         }
+    }
+
+    private func updateStatusItemOpacities() {
+        statusRowStack?.alphaValue = 1
+        bottomRightBadgeStack?.alphaValue = 1
+        priorityCapsule?.alphaValue = 1
+        favoriteBadge?.alphaValue = 1
+        pinnedBadge?.alphaValue = 1
+        hiddenBadge?.alphaValue = 1
+        stoppedSessionsBadge?.alphaValue = 1
     }
 
 
@@ -1442,7 +1537,6 @@ final class ThreadCell: NSTableCellView {
             durationLabel?.stringValue = ""
             durationLabel?.isHidden = true
             durationBadge?.isHidden = true
-            durationCircle?.isHidden = true
             durationBadge?.toolTip = nil
             stopDurationTimer()
         }
@@ -1450,64 +1544,68 @@ final class ThreadCell: NSTableCellView {
 
     private func refreshDurationText(since: Date) {
         let elapsed = max(0, Int(Date().timeIntervalSince(since)))
-        let text: String
-        if elapsed < 60 {
-            text = "<1m"
-        } else if elapsed < 3600 {
-            text = "\(elapsed / 60)m"
-        } else if elapsed < 86400 {
-            text = "\(elapsed / 3600)h"
-        } else {
-            text = "\(elapsed / 86400)d"
+        let badge = ThreadRowBadgeLayout.activityBadge(
+            forElapsed: elapsed,
+            isBusy: isCurrentDurationBusy,
+            isMainWorktree: isConfiguredAsMain
+        )
+        durationLabel?.stringValue = switch badge?.label {
+        case .idle: String(localized: .ThreadStrings.threadActivityBadgeIdle)
+        case .busy: String(localized: .ThreadStrings.threadActivityBadgeBusy)
+        case nil: ""
         }
-        durationLabel?.stringValue = text
-        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed, isDark: isDark)
+        updateDurationBadgeColors()
+        let text = elapsedDurationText(elapsed)
         if isCurrentDurationBusy {
             durationBadge?.toolTip = String(localized: .ThreadStrings.threadBusyDurationTooltip(text))
         } else {
             let relative = RelativeDateTimeFormatter().localizedString(for: since, relativeTo: Date())
             durationBadge?.toolTip = String(localized: .ThreadStrings.threadLastActivityTooltip(relative))
         }
-        durationCircle?.toolTip = durationBadge?.toolTip
-        durationCircle?.fillLevel = ThreadRowBadgeLayout.activityColorLevel(forElapsed: elapsed)
-        durationCircle?.fillColor = Self.durationLabelColor(elapsed: elapsed, isDark: isDark)
-        updateDurationCircleColors()
+        updateDurationPresentation()
     }
 
     private func updateDurationPresentation() {
-        let style = PersistenceService.shared.loadSettings().threadActivityIndicatorStyle
-        let hasDuration = currentDurationSince != nil
-        durationBadge?.isHidden = !hasDuration || style != .text
-        durationLabel?.isHidden = !hasDuration || style != .text
-        durationCircle?.style = style
-        durationCircle?.isHidden = !hasDuration || style != .circle
+        let elapsed = currentDurationSince.map { max(0, Int(Date().timeIntervalSince($0))) }
+        let hasBadge = elapsed.flatMap {
+            ThreadRowBadgeLayout.activityBadge(
+                forElapsed: $0,
+                isBusy: isCurrentDurationBusy,
+                isMainWorktree: isConfiguredAsMain
+            )
+        } != nil
+        durationBadge?.isHidden = !hasBadge
+        durationLabel?.isHidden = !hasBadge
     }
 
-    private func updateDurationCircleColors() {
-        guard let circle = durationCircle else { return }
-        circle.borderColor = .clear
+    private func elapsedDurationText(_ elapsed: Int) -> String {
+        if elapsed < 60 { return "<1m" }
+        if elapsed < 3_600 { return "\(elapsed / 60)m" }
+        if elapsed < 86_400 { return "\(elapsed / 3_600)h" }
+        return "\(elapsed / 86_400)d"
     }
 
-    /// Returns a subtle tint for the duration label based on elapsed seconds.
-    /// Light blue → light green → green → yellow → orange → red as activity ages.
-    /// Uses lower opacity in dark mode (colors are already vivid against dark bg);
-    /// uses full opacity in light mode so the same colors stay readable on white.
-    private static func durationLabelColor(elapsed: Int, isDark: Bool = true) -> NSColor {
-        if elapsed < 900 {
-            // systemCyan is too light on white; use systemBlue in light mode
-            return isDark ? NSColor.systemCyan.withAlphaComponent(0.7) : NSColor.systemBlue
-        } else if elapsed < 7200 {
-            return isDark ? NSColor.systemTeal.withAlphaComponent(0.75) : NSColor.systemTeal
-        } else if elapsed < 28800 {
-            return NSColor.systemGreen.withAlphaComponent(isDark ? 0.7 : 1.0)
-        } else if elapsed < 86400 {
-            // systemYellow is invisible on white; use systemOrange in light mode
-            return isDark ? NSColor.systemYellow.withAlphaComponent(0.65) : NSColor.systemOrange
-        } else if elapsed < 259200 {
-            return NSColor.systemOrange.withAlphaComponent(isDark ? 0.65 : 1.0)
-        } else {
-            return NSColor.systemRed.withAlphaComponent(isDark ? 0.6 : 1.0)
+    private func updateDurationBadgeColors() {
+        guard let since = currentDurationSince,
+              let badge = ThreadRowBadgeLayout.activityBadge(
+                forElapsed: max(0, Int(Date().timeIntervalSince(since))),
+                isBusy: isCurrentDurationBusy,
+                isMainWorktree: isConfiguredAsMain
+              ) else { return }
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let color: NSColor = switch badge.tone {
+            case .yellow: .systemYellow
+            case .orange: .systemOrange
+            case .red: .systemRed
+            }
+            durationBadge?.layer?.borderColor = NSColor.clear.cgColor
+            durationBadge?.layer?.borderWidth = 0
+            durationBadge?.layer?.cornerRadius = 3
+            durationBadge?.layer?.backgroundColor = color.withAlphaComponent(0.1).cgColor
+            durationLabel?.textColor = BadgeForegroundStyle.color(
+                tintColor: color,
+                appearance: effectiveAppearance
+            )
         }
     }
 
@@ -1533,9 +1631,8 @@ final class ThreadCell: NSTableCellView {
         guard let dot else { return }
         if visible {
             dot.image = Self.cachedSymbolImage("circle.fill")
-            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            dot.contentTintColor = NSColor.systemOrange.withAlphaComponent(isDark ? 0.7 : 1.0)
             dot.isHidden = false
+            updateDirtyDotColors()
         } else {
             dot.image = nil
             dot.isHidden = true
@@ -1569,8 +1666,9 @@ final class ThreadCell: NSTableCellView {
 
     private func updateMainIconTintForSelection() {
         guard isConfiguredAsMain else { return }
-        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        imageView?.contentTintColor = (isRowVisuallySelected && isDark) ? .white : NSColor(resource: .primaryBrand)
+        let tintColor = textField?.textColor ?? .labelColor
+        imageView?.contentTintColor = tintColor
+        inlineMainIconView?.contentTintColor = tintColor
     }
 
     private var isRowVisuallySelected: Bool {
@@ -1598,7 +1696,11 @@ final class ThreadCell: NSTableCellView {
         let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         // Keep-alive badge: systemCyan is illegible on white
         keepAliveBadge?.iconView.contentTintColor = isDark ? .systemCyan : .systemTeal
-        // Dirty dots: orange at 0.7 alpha is too faint on white
+        updateDirtyDotColors()
+    }
+
+    private func updateDirtyDotColors() {
+        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let dirtyColor = NSColor.systemOrange.withAlphaComponent(isDark ? 0.7 : 1.0)
         primaryDirtyDot?.contentTintColor = dirtyColor
         secondaryDirtyDot?.contentTintColor = dirtyColor

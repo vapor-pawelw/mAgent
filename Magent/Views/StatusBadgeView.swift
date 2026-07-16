@@ -3,31 +3,30 @@ import MagentModels
 
 /// A tiny rounded-rect pill displaying a status label with a colored background.
 /// Used inline in sidebar rows and top-bar buttons to show PR/Jira status.
-final class StatusBadgeView: NSView {
+final class StatusBadgeView: RightClickMenuView {
 
     struct Style {
-        let backgroundColor: NSColor
-        let textColor: NSColor
+        static let backgroundOpacity: CGFloat = 0.10
+        let tintColor: NSColor
 
-        // PR statuses — darkened for white-text legibility
-        static let open = Style(backgroundColor: NSColor(red: 0.15, green: 0.55, blue: 0.20, alpha: 1), textColor: .white)
-        static let draft = Style(backgroundColor: NSColor(red: 0.40, green: 0.40, blue: 0.42, alpha: 1), textColor: .white)
-        static let merged = Style(backgroundColor: NSColor(red: 0.50, green: 0.22, blue: 0.70, alpha: 1), textColor: .white)
-        static let approved = Style(backgroundColor: NSColor(red: 0.12, green: 0.50, blue: 0.15, alpha: 1), textColor: .white)
-        static let changesRequested = Style(backgroundColor: NSColor(red: 0.80, green: 0.50, blue: 0.10, alpha: 1), textColor: .white)
-        static let closed = Style(backgroundColor: NSColor(red: 0.70, green: 0.20, blue: 0.20, alpha: 1), textColor: .white)
+        static let open = Style(tintColor: .systemGreen)
+        static let draft = Style(tintColor: .secondaryLabelColor)
+        static let merged = Style(tintColor: .systemPurple)
+        static let approved = Style(tintColor: .systemGreen)
+        static let changesRequested = Style(tintColor: .systemOrange)
+        static let closed = Style(tintColor: .systemRed)
 
-        // Jira status category colors (from Jira's own category system)
-        static let jiraTodo = Style(backgroundColor: NSColor(red: 0.35, green: 0.38, blue: 0.42, alpha: 1), textColor: .white)
-        static let jiraInProgress = Style(backgroundColor: NSColor(red: 0.15, green: 0.45, blue: 0.75, alpha: 1), textColor: .white)
-        static let jiraDone = Style(backgroundColor: NSColor(red: 0.15, green: 0.55, blue: 0.20, alpha: 1), textColor: .white)
+        static let jiraTodo = Style(tintColor: .secondaryLabelColor)
+        static let jiraInProgress = Style(tintColor: .systemBlue)
+        static let jiraDone = Style(tintColor: .systemGreen)
+
     }
 
     private let label = NSTextField(labelWithString: "")
 
     override var wantsUpdateLayer: Bool { true }
 
-    private var badgeBackgroundColor: NSColor = .clear
+    private var badgeStyle = Style(tintColor: .clear)
     private var cornerRadius: CGFloat = 3
 
     override init(frame frameRect: NSRect) {
@@ -68,16 +67,21 @@ final class StatusBadgeView: NSView {
 
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            self.layer?.backgroundColor = self.badgeBackgroundColor.cgColor
+            self.layer?.backgroundColor = self.badgeStyle.tintColor
+                .withAlphaComponent(Style.backgroundOpacity)
+                .cgColor
             self.layer?.cornerRadius = self.cornerRadius
+            self.label.textColor = BadgeForegroundStyle.color(
+                tintColor: self.badgeStyle.tintColor,
+                appearance: self.effectiveAppearance
+            )
         }
     }
 
     func configure(text: String, style: Style, fontSize: CGFloat) {
         label.stringValue = text
         label.font = .systemFont(ofSize: fontSize, weight: .medium)
-        label.textColor = style.textColor
-        badgeBackgroundColor = style.backgroundColor
+        badgeStyle = style
         needsDisplay = true
     }
 
@@ -96,12 +100,12 @@ final class StatusBadgeView: NSView {
 
     // MARK: - Jira Status
 
-    /// Returns the Jira category background color, or nil for unknown categories.
-    static func jiraCategoryColor(forKey categoryKey: String?) -> NSColor? {
+    /// Returns the semantic Jira category tint, or nil for unknown categories.
+    static func jiraCategoryTintColor(forKey categoryKey: String?) -> NSColor? {
         switch categoryKey {
-        case "new": return Style.jiraTodo.backgroundColor
-        case "indeterminate": return Style.jiraInProgress.backgroundColor
-        case "done": return Style.jiraDone.backgroundColor
+        case "new": return Style.jiraTodo.tintColor
+        case "indeterminate": return Style.jiraInProgress.tintColor
+        case "done": return Style.jiraDone.tintColor
         default: return nil
         }
     }

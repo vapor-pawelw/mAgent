@@ -307,8 +307,9 @@ final class ThreadListViewController: NSViewController {
         capsuleAlignedTrailing - ((projectHeaderActionButtonSize - disclosureButtonSize) / 2)
     static let projectHeaderVerticalPadding: CGFloat = 6
     static let projectHeaderRowHeight: CGFloat = 36
-    static let projectHeaderToMainRowGap: CGFloat = 10
+    static let projectHeaderToMainRowGap: CGFloat = SidebarVerticalSpacing.projectHeaderToMainRowSpacing
     static let projectHeaderInterProjectGap: CGFloat = 24
+    static let sectionHeaderRowHeight: CGFloat = SidebarVerticalSpacing.sectionHeaderHeight
 
     weak var delegate: ThreadListDelegate?
 
@@ -540,6 +541,8 @@ final class ThreadListViewController: NSViewController {
         // On first appearance the scroll view has its final bounds —
         // force the column width to match so rows don't extend past the trailing edge.
         refitOutlineColumnIfNeeded(force: true)
+        settleSidebarOutlineGeometryAfterStructuralReload()
+        updateStickyHeaders()
         scheduleInitialSelectedThreadCenteringIfNeeded()
     }
 
@@ -1116,6 +1119,9 @@ final class ThreadListViewController: NSViewController {
         let allThreads = threadManager.threads
         let mainThreads = allThreads.filter { $0.isMain }
         let regularThreads = allThreads.filter { !$0.isMain }
+        let collapsedSectionKeys = Set(
+            UserDefaults.standard.stringArray(forKey: Self.collapsedSectionIdsKey) ?? []
+        )
 
         let visibleProjects = settings.projects.filter { !$0.isHidden }
         let sortedProjects = visibleProjects.filter(\.isPinned) + visibleProjects.filter { !$0.isPinned }
@@ -1149,6 +1155,7 @@ final class ThreadListViewController: NSViewController {
                 // Keep stored thread state untouched while the repo path is unresolved.
             } else if shouldUseSections {
                 // Section groups with regular threads (per-project or global fallback)
+                var previousSectionShowsTrailingThread = !projectMainThreads.isEmpty
                 for section in projectSections {
                     let matchingThreads = regularThreads.filter { thread in
                         guard thread.projectId == project.id else { return false }
@@ -1158,6 +1165,7 @@ final class ThreadListViewController: NSViewController {
                         matchingThreads,
                         preferRecentCompletions: settings.autoReorderThreadsOnAgentCompletion
                     )
+                    let sectionHasThreads = !sortedThreads.isEmpty
                     children.append(SidebarSection(
                         projectId: project.id,
                         sectionId: section.id,
@@ -1165,8 +1173,16 @@ final class ThreadListViewController: NSViewController {
                         color: section.color,
                         isKeepAlive: section.isKeepAlive,
                         threads: sortedThreads,
-                        areHiddenThreadsExpanded: isHiddenThreadGroupExpanded(projectId: project.id, sectionId: section.id)
+                        areHiddenThreadsExpanded: isHiddenThreadGroupExpanded(projectId: project.id, sectionId: section.id),
+                        leadingSpacing: SidebarVerticalSpacing.sectionLeadingSpacing(
+                            previousSectionShowsTrailingThread: previousSectionShowsTrailingThread
+                        )
                     ))
+                    let sectionKey = "\(project.id.uuidString):\(section.id.uuidString)"
+                    previousSectionShowsTrailingThread = SidebarVerticalSpacing.sectionShowsTrailingThread(
+                        hasThreads: sectionHasThreads,
+                        isCollapsed: collapsedSectionKeys.contains(sectionKey)
+                    )
                 }
             } else {
                 // Flat list: treat the project like one combined section while
@@ -1329,6 +1345,7 @@ final class ThreadListViewController: NSViewController {
     }
 
     private func settleSidebarOutlineGeometryAfterStructuralReload() {
+        guard view.window != nil, scrollView.bounds.height > 0 else { return }
         // Expansion rebuilds the visible row tree after reloadData's initial layout pass.
         // Flush that second structure before scroll restore/sticky headers read row rects.
         outlineView.noteNumberOfRowsChanged()

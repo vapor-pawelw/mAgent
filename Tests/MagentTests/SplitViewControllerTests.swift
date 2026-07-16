@@ -3,6 +3,11 @@ import Testing
 
 @Suite("Split view sidebar sizing")
 struct SplitViewControllerTests {
+    @Test("Sidebar split view lays out sidebar beside content")
+    func sidebarUsesVerticalDivider() {
+        #expect(SidebarTrackingSplitView().isVertical)
+    }
+
     @Test("Sidebar width range supports a compact minimum on small screens")
     func sidebarSupportsCompactWidth() {
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: NSViewController())

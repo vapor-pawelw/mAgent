@@ -10,6 +10,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var coordinator: AppCoordinator?
     private var ipcServer: IPCSocketServer?
     private var systemAppearanceObserver: NSObjectProtocol?
+    private var launchSmokeTestWindow: NSWindow?
 
     private var knownWorktreePaths: [String] {
         ThreadManager.shared.threads.map(\.worktreePath)
@@ -113,13 +114,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         } else {
             runningInstances = []
         }
-        if let existing = runningInstances.first(where: {
+        #if DEBUG
+        let isLaunchSmokeTest = ProcessInfo.processInfo.environment[
+            "MAGENT_APP_LAUNCH_SMOKE_TEST"
+        ] == "1"
+        #else
+        let isLaunchSmokeTest = false
+        #endif
+        let allowsParallelTestInstance = isLaunchSmokeTest
+        if !allowsParallelTestInstance, let existing = runningInstances.first(where: {
             $0.processIdentifier != currentPID
                 && !$0.isTerminated
                 && isLiveNonZombieProcess($0.processIdentifier)
         }) {
             _ = existing.activate(options: [.activateAllWindows])
             NSApp.terminate(nil)
+            return
+        }
+
+        if isLaunchSmokeTest {
+            let window = NSWindow(contentViewController: SplitViewController())
+            window.setContentSize(NSSize(width: 1_000, height: 700))
+            window.makeKeyAndOrderFront(nil)
+            launchSmokeTestWindow = window
             return
         }
 

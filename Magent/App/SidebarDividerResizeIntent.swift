@@ -17,6 +17,16 @@ struct SidebarWidthRange {
 final class SidebarTrackingSplitView: NSSplitView {
     var onDividerDragStateChanged: ((Bool) -> Void)?
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        isVertical = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        isVertical = true
+    }
+
     override func mouseDown(with event: NSEvent) {
         performTrackedDividerDrag {
             super.mouseDown(with: event)

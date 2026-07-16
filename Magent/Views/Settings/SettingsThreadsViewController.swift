@@ -14,6 +14,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var autoSetDescriptionCheckbox: NSButton!
     private var autoSetIconFromWorkTypeCheckbox: NSButton!
     private var showThreadIconsCheckbox: NSButton!
+    private var showWorktreeNamesCheckbox: NSButton!
     private var wideThreadsCheckbox: NSButton!
     private var showPRStatusBadgesCheckbox: NSButton!
     private var showJiraStatusBadgesCheckbox: NSButton!
@@ -255,6 +256,21 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         showThreadIconsDesc.font = .systemFont(ofSize: 11)
         showThreadIconsDesc.textColor = NSColor(resource: .textSecondary)
         sidebarSection.addArrangedSubview(showThreadIconsDesc)
+
+        showWorktreeNamesCheckbox = NSButton(
+            checkboxWithTitle: String(localized: .SettingsStrings.settingsThreadsShowWorktreeNames),
+            target: self,
+            action: #selector(showWorktreeNamesToggled)
+        )
+        showWorktreeNamesCheckbox.state = settings.showWorktreeNames ? .on : .off
+        sidebarSection.addArrangedSubview(showWorktreeNamesCheckbox)
+
+        let showWorktreeNamesDesc = NSTextField(
+            wrappingLabelWithString: String(localized: .SettingsStrings.settingsThreadsShowWorktreeNamesDescription)
+        )
+        showWorktreeNamesDesc.font = .systemFont(ofSize: 11)
+        showWorktreeNamesDesc.textColor = NSColor(resource: .textSecondary)
+        sidebarSection.addArrangedSubview(showWorktreeNamesDesc)
 
         autoReorderOnCompletionCheckbox = NSButton(
             checkboxWithTitle: "Move completed threads to top",
@@ -880,6 +896,12 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     @objc private func showThreadIconsToggled() {
         persistSettings(notify: true) { settings in
             settings.showThreadIcons = showThreadIconsCheckbox.state == .on
+        }
+    }
+
+    @objc private func showWorktreeNamesToggled() {
+        persistSettings(notify: true) { settings in
+            settings.showWorktreeNames = showWorktreeNamesCheckbox.state == .on
         }
     }
 

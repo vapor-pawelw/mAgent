@@ -203,8 +203,8 @@ For the main thread, the sidebar uses these rules:
 
 - Line 1: `Main worktree`
 - Line 2: current branch name when available
-- The row uses a subtle primary-tinted capsule with a 1pt border (no dedicated accent stripe).
-- The row icon is fixed to `house.fill` (non-customizable for main threads). It is primary-tinted by default and switches to white when selected.
+- The row uses the same neutral capsule background as other threads and does not participate in section-color gradients.
+- The row icon is fixed to `house.fill` (non-customizable for main threads). With sidebar thread icons enabled it uses the leading icon rail; with icons disabled it remains visible inline before `Main worktree`. Its tint matches the adaptive first-line label color.
 
 ### Non-Main Thread Rename Actions
 
@@ -240,9 +240,11 @@ For the main thread, the sidebar uses these rules:
   - Show status section only when at least one status is active
 - Thread-row badges should expose hover hints for the specific badge meaning:
   - Priority badge: show numeric level and label (`Lowest` ... `Highest`)
-  - Busy duration badge: show elapsed busy duration
+  - Activity badge: show `Busy` for busy activity older than 1 hour and `Stale` for last activity older than 7 days, using yellow for 7–14 days, orange for 14–30 days, and red after 30 days; never show the stale state on a main worktree
   - Favorite, pinned, and keep-alive badges: identify the protection/pinning/favorite state
-  - Jira and PR badges: show ticket/PR status context
+  - Jira badge: show the ticket key and status
+  - PR/MR badge: show the provider-specific PR/MR number and status
+- Left-clicks on status-row badges select the thread. Badge-specific actions are right-click only: PR/MR opens the numbered review, Jira reuses the thread context menu's Jira submenu, Busy shows precise informational context, and Stale adds the same Hide/Unhide and Archive actions used by the full thread context menu because it represents last activity.
 
 ## Settings
 

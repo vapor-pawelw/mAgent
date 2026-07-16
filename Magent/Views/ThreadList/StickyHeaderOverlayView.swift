@@ -11,7 +11,7 @@ final class StickyHeaderOverlayView: NSView {
     static let sectionRowHeight: CGFloat = 28
     private static let leadingInset: CGFloat = SectionHeaderStripStyle.contentLeadingInset
     private static let trailingInset: CGFloat = SectionHeaderStripStyle.contentTrailingInset
-    static let topInset: CGFloat = StickyHeaderLayout.topInset
+    static let topInset: CGFloat = SidebarVerticalSpacing.sidebarTopInset
 
     static func height(showsProject: Bool, showsSection: Bool) -> CGFloat {
         StickyHeaderLayout.overlayHeight(
@@ -218,9 +218,6 @@ final class StickyHeaderOverlayView: NSView {
         sectionContainer.isHidden = !showSection
         if showSection {
             sectionNameLabel.stringValue = state.sectionName ?? ""
-            if let color = state.sectionColor {
-                sectionContainer.sectionColor = color
-            }
         }
 
         // Adjust section top constraint

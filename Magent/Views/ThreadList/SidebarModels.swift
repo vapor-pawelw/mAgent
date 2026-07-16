@@ -1,6 +1,26 @@
 import Cocoa
 import MagentCore
 
+enum SidebarVerticalSpacing {
+    static let sidebarTopInset: CGFloat = StickyHeaderLayout.topInset
+    static let threadCapsuleInset: CGFloat = 4
+    static let threadCapsuleGap: CGFloat = threadCapsuleInset * 2
+    static let groupBoundaryGap: CGFloat = 16
+    static let groupSeparatorHeight: CGFloat = groupBoundaryGap - threadCapsuleGap
+    static let projectHeaderToMainRowSpacing: CGFloat = groupBoundaryGap - threadCapsuleInset
+    static let sectionHeaderHeight: CGFloat = 28
+    private static let populatedSectionLeadingSpacing: CGFloat =
+        groupBoundaryGap - threadCapsuleInset - SectionHeaderStripStyle.verticalInset
+
+    static func sectionLeadingSpacing(previousSectionShowsTrailingThread: Bool) -> CGFloat {
+        previousSectionShowsTrailingThread ? populatedSectionLeadingSpacing : 0
+    }
+
+    static func sectionShowsTrailingThread(hasThreads: Bool, isCollapsed: Bool) -> Bool {
+        hasThreads && !isCollapsed
+    }
+}
+
 class SidebarProject {
     let projectId: UUID
     let name: String
@@ -25,8 +45,9 @@ class SidebarSection {
     var isKeepAlive: Bool
     var threads: [MagentThread]
     var areHiddenThreadsExpanded: Bool
+    let leadingSpacing: CGFloat
 
-    init(projectId: UUID, sectionId: UUID, name: String, color: NSColor, isKeepAlive: Bool = false, threads: [MagentThread], areHiddenThreadsExpanded: Bool = false) {
+    init(projectId: UUID, sectionId: UUID, name: String, color: NSColor, isKeepAlive: Bool = false, threads: [MagentThread], areHiddenThreadsExpanded: Bool = false, leadingSpacing: CGFloat = 0) {
         self.projectId = projectId
         self.sectionId = sectionId
         self.name = name
@@ -34,6 +55,7 @@ class SidebarSection {
         self.isKeepAlive = isKeepAlive
         self.threads = threads
         self.areHiddenThreadsExpanded = areHiddenThreadsExpanded
+        self.leadingSpacing = leadingSpacing
     }
 
     /// Thread items interleaved with `SidebarGroupSeparator` spacers at pinned→normal
@@ -85,9 +107,11 @@ enum SidebarInlineRenameFocusPolicy {
 
 final class SidebarSpacer {}
 final class SidebarTopPadding {
-    let height = StickyHeaderLayout.topInset
+    let height = SidebarVerticalSpacing.sidebarTopInset
 }
-final class SidebarProjectMainSpacer {}
+final class SidebarProjectMainSpacer {
+    let height = SidebarVerticalSpacing.projectHeaderToMainRowSpacing
+}
 final class SidebarMissingProjectRow {
     let projectId: UUID
     let projectName: String
@@ -101,7 +125,7 @@ final class SidebarMissingProjectRow {
 }
 /// Blank spacing between thread groups or after a final collapsed disclosure row.
 final class SidebarGroupSeparator {
-    static let standardHeight: CGFloat = 12
+    static let standardHeight: CGFloat = SidebarVerticalSpacing.groupSeparatorHeight
 
     let height: CGFloat
 

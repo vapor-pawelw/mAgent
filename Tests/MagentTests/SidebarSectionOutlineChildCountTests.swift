@@ -5,6 +5,66 @@ import MagentCore
 @Suite
 struct SidebarSectionOutlineChildCountTests {
     @Test
+    func sidebarSpacingKeepsGroupBoundariesWhileTighteningThreadRows() {
+        #expect(SidebarVerticalSpacing.threadCapsuleGap == 8)
+        #expect(SidebarVerticalSpacing.groupBoundaryGap == 16)
+        #expect(
+            SidebarVerticalSpacing.projectHeaderToMainRowSpacing
+                + SidebarVerticalSpacing.threadCapsuleInset
+                == SidebarVerticalSpacing.groupBoundaryGap
+        )
+        #expect(SidebarVerticalSpacing.sectionLeadingSpacing(
+            previousSectionShowsTrailingThread: true
+        ) == 10)
+        #expect(
+            SidebarVerticalSpacing.threadCapsuleGap
+                + SidebarGroupSeparator.standardHeight
+                == SidebarVerticalSpacing.groupBoundaryGap
+        )
+        #expect(
+            SidebarVerticalSpacing.threadCapsuleInset
+                + SidebarVerticalSpacing.sectionLeadingSpacing(
+                    previousSectionShowsTrailingThread: true
+                )
+                + SectionHeaderStripStyle.verticalInset
+                == SidebarVerticalSpacing.groupBoundaryGap
+        )
+    }
+
+    @Test
+    func firstProjectUsesTopPaddingInsteadOfExtraMainWorktreeSpacing() {
+        let topPadding = SidebarTopPadding()
+        let mainWorktreeSpacer = SidebarProjectMainSpacer()
+
+        #expect(topPadding.height == 6)
+        #expect(topPadding.height == StickyHeaderLayout.topInset)
+        #expect(mainWorktreeSpacer.height == 12)
+        #expect(mainWorktreeSpacer.height == SidebarVerticalSpacing.projectHeaderToMainRowSpacing)
+    }
+
+    @Test
+    func emptyPreviousSectionsDoNotAddBoundarySpacing() {
+        #expect(SidebarVerticalSpacing.sectionLeadingSpacing(
+            previousSectionShowsTrailingThread: false
+        ) == 0)
+        #expect(SidebarVerticalSpacing.sectionLeadingSpacing(
+            previousSectionShowsTrailingThread: true
+        ) == 10)
+    }
+
+    @Test
+    func collapsedSectionsContributeNoFollowingBoundarySpacing() {
+        #expect(!SidebarVerticalSpacing.sectionShowsTrailingThread(
+            hasThreads: true,
+            isCollapsed: true
+        ))
+        #expect(SidebarVerticalSpacing.sectionShowsTrailingThread(
+            hasThreads: true,
+            isCollapsed: false
+        ))
+    }
+
+    @Test
     func hiddenThreadsAreCollapsedBehindAGroupToggleByDefault() {
         let projectId = UUID()
         let pinned = makeThread(projectId: projectId, name: "pinned", isPinned: true)

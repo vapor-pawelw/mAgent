@@ -518,7 +518,9 @@ final class DiffPanelView: NSView {
         heightConstraint = heightAnchor.constraint(equalToConstant: clampedHeight)
 
         tabBarTopToHandleConstraint = tabBarStack.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4)
+        tabBarTopToHandleConstraint.priority = .defaultHigh
         tabBarTopToContextBadgeConstraint = tabBarStack.topAnchor.constraint(equalTo: contextThreadBadgeView.bottomAnchor, constant: 4)
+        tabBarTopToContextBadgeConstraint.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
             handleView.topAnchor.constraint(equalTo: topAnchor),

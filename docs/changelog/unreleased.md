@@ -47,18 +47,25 @@
 
 #### Features
 
+- Added a disabled-by-default Threads setting for showing worktree folder names on the second line of sidebar rows.
 - Added collapsed-by-default hidden-thread groups that can be expanded independently in each sidebar section or project.
 - Added toolbar and empty-state repository actions for creating, importing, or cloning repositories.
-- Replaced the thread activity pill with a cumulative, color-coded circle and made its Circle/Text style switch available directly from the indicator.
-- Made priority, favorite, pinned, and hidden sidebar badges directly actionable with their matching quick menus.
+- Replaced thread activity durations with tiny `Busy` and `Stale` badges; stale threads appear after 7 days and escalate from yellow to orange at 14 days and red at 30 days.
+- Made sidebar status badges right-clickable while preserving left-click thread selection, including direct numbered PR/MR opening, the full Jira menu, quick Hide and Archive actions from stale-thread badges, precise Stale/Busy context, and quick menus for priority, favorite, pinned, and hidden states.
 
 #### Improvements
 
 - Reduced the sidebar's minimum width so it takes less space on small screens.
+- Moved thread signs inline before descriptions for a cleaner, more compact sidebar presentation, with signs dimming together with inactive thread text and a matching status icon identifying threads whose tmux sessions are stopped.
+- Tightened spacing between sidebar threads while preserving stronger pinned, hidden, and section boundaries.
 - Keep last-known PR/MR, Jira, hidden-thread, and stopped-session sidebar state visible immediately after relaunch while fresh checks run.
 - Mark the priority matching a thread's Jira ticket in sidebar priority menus.
-- Restyled section headers with subtle neutral backgrounds, compact colored leading rails, and balanced content padding so section boundaries are clearer without competing with thread cards.
-- Moved thread priority and flat, borderless status indicators into a full-width in-capsule row below each thread's text, with activity shown as the final trailing indicator.
+- Simplified section headers to plain rows and moved their color cue to diagonal top-right bands on thread capsules.
+- Matched main-worktree capsules to the neutral thread background and kept a compact, optically aligned home icon inline when other thread icons are hidden.
+- Consolidated thread metadata into a full-width status row, with favorite beside pinned/hidden markers and combined PR/MR number-and-status badges before Jira and activity; Jira keys are now highlighted directly in branch names instead of repeated on a separate line.
+- Anchored sidebar status rows closer to the bottom edge of thread capsules for clearer separation from branch and description text.
+- Improved compact Stale/Busy, PR/MR, Jira, and section-count badge readability with larger, higher-contrast appearance-aware text on subtle tinted backgrounds.
+- Aligned pinned, favorite, and hidden sidebar markers, matched them to thread-description color and dimming, and reduced the visual weight of pinned/favorite icons.
 - Replaced sidebar dividers between pinned, normal, and hidden threads with cleaner spacing.
 - Tightened Hidden disclosure spacing while preserving separation from the next section when collapsed.
 - Added a default `Cmd+J` shortcut and View menu action to recenter the sidebar on the current thread.
@@ -66,7 +73,6 @@
 - Refresh missing-repository status when Magent returns to the foreground.
 - Center the missing-repository recovery row content within its sidebar box.
 - Made default thread pills subtler in dark mode while keeping them lighter than the sidebar.
-- Removed idle thread-capsule outlines for a cleaner sidebar.
 - Removed the passive outline from busy thread rows so only their animated border arc is visible.
 - Sticky sidebar headers now use a stronger live blur instead of an opaque fill.
 - Hid the thread-list scrollbar so it no longer cuts through sticky header blur.
@@ -77,9 +83,15 @@
 
 #### Bug Fixes
 
+- Fixed Magent crashing during startup while constructing the main sidebar and content split view.
+- Kept dirty-branch dots orange when their sidebar thread is selected.
+- Fixed main worktree branch text clipping and kept status-free sidebar thread rows from stretching their text layout.
+- Kept stale-activity badges off main worktrees.
+- Kept consistent spacing between thread descriptions and their branch line when PR or Jira status badges are present.
 - Kept the sidebar width stable during thread selection without interfering with manual divider dragging.
 - Kept the first repository's normal header and collapse control usable at the top of the sidebar before sticky headers activate.
 - Removed the unintended trailing area beneath sticky repository and section headers.
+- Fixed trailing thread status icons following the text width instead of aligning to the sidebar row's trailing content edge, and kept archive suggestions centered on the text without overlapping the spaced status row.
 - Updated all sidebar tickets immediately when allowed Jira prefixes change, without an unnecessary network refresh.
 - Made secondary sidebar thread metadata 20% dimmer, with an additional proportional dimming for inactive threads and hidden rows.
 - Fixed the sidebar icon visibility setting so changing it updates thread rows immediately.

@@ -946,6 +946,39 @@ struct AppSettingsThreadIconVisibilityTests {
     }
 }
 
+// MARK: - AppSettings worktree names
+
+@Suite("AppSettings worktree name visibility")
+struct AppSettingsWorktreeNameVisibilityTests {
+
+    @Test("New settings hide worktree names by default")
+    func defaultsToHidingWorktreeNames() {
+        #expect(!AppSettings().showWorktreeNames)
+    }
+
+    @Test("Existing settings migrate to hidden worktree names")
+    func missingWorktreeNameVisibilityDecodesToHidden() throws {
+        let baselineData = try JSONEncoder().encode(AppSettings(showWorktreeNames: true))
+        var baselineObject = try #require(JSONSerialization.jsonObject(with: baselineData) as? [String: Any])
+        baselineObject.removeValue(forKey: "showWorktreeNames")
+        let data = try JSONSerialization.data(withJSONObject: baselineObject)
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(!decoded.showWorktreeNames)
+    }
+
+    @Test("Worktree name visibility round-trips")
+    func worktreeNameVisibilityRoundTrips() throws {
+        let data = try JSONEncoder().encode(AppSettings(showWorktreeNames: true))
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(object["showWorktreeNames"] as? Bool == true)
+        #expect(decoded.showWorktreeNames)
+    }
+}
+
 // MARK: - AppSettings terminal surface cache
 
 @Suite("AppSettings terminal surface cache")

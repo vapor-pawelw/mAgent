@@ -9,6 +9,7 @@ struct SidebarSettingsFingerprint: Equatable {
     let defaultSectionId: UUID?
     let autoReorderThreadsOnAgentCompletion: Bool
     let showThreadIcons: Bool
+    let showWorktreeNames: Bool
     let showPRStatusBadges: Bool
     let showJiraStatusBadges: Bool
     let jiraTicketDetectionPrefixes: Set<String>
@@ -23,6 +24,7 @@ struct SidebarSettingsFingerprint: Equatable {
         defaultSectionId = settings.defaultSectionId
         autoReorderThreadsOnAgentCompletion = settings.autoReorderThreadsOnAgentCompletion
         showThreadIcons = settings.showThreadIcons
+        showWorktreeNames = settings.showWorktreeNames
         showPRStatusBadges = settings.showPRStatusBadges
         showJiraStatusBadges = settings.showJiraStatusBadges
         jiraTicketDetectionPrefixes = settings.jiraTicketDetectionPrefixFilterSet
