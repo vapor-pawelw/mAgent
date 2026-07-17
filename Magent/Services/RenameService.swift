@@ -1174,33 +1174,13 @@ final class RenameService {
             }
         }
 
-        let truncatedPrompt = String(prompt.prefix(500))
-        let aiPrompt = """
-            Name this tab for the user's task in 1-3 clear, specific words. Choose the words that best describe the user's prompt. Output only the tab name, with no prefix, quotes, or explanation. User prompt: \(truncatedPrompt)
-            """
-        let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
         let projectId = initialThread.projectId
-        let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
         let preferredAgent = await detectedAgentTypeInSession?(sessionName)
-        let agents = slugGenerationAgentOrder(preferred: preferredAgent, projectId: projectId).available
-
-        for agent in agents {
-            let command: String
-            switch agent {
-            case .codex:
-                command = BackgroundAICommandBuilder.codex(escapedPrompt: escapedPrompt)
-            case .claude:
-                command = BackgroundAICommandBuilder.claude(escapedPrompt: escapedPrompt)
-            default:
-                continue
-            }
-
-            guard case .success(let raw) = await executeWithTimeout(
-                command: command,
-                workingDirectory: workingDirectory,
-                timeoutNanos: 60_000_000_000
-            ), let generatedName = TabNameAllocator.sanitizedGeneratedName(raw) else { continue }
-
+        if let generatedName = await generateAutomaticTabName(
+            prompt: prompt,
+            preferredAgent: preferredAgent,
+            projectId: projectId
+        ) {
             guard let currentSessionName = autoTabRenameOperations.sessionName(operationId: operationId),
                   let index = store.threads.firstIndex(where: { $0.id == threadId }),
                   persistence.loadSettings().autoRenameTabs,
@@ -1219,8 +1199,43 @@ final class RenameService {
             store.threads[index].manuallyRenamedTabs.insert(currentSessionName)
             try? persistence.saveActiveThreads(store.threads)
             onThreadsChanged?()
-            return
         }
+    }
+
+    func generateAutomaticTabName(
+        prompt: String,
+        preferredAgent: AgentType?,
+        projectId: UUID?
+    ) async -> String? {
+        guard persistence.loadSettings().autoRenameTabs else { return nil }
+
+        let truncatedPrompt = String(prompt.prefix(500))
+        let aiPrompt = """
+            Name this tab for the user's task in 1-3 clear, specific words. Choose the words that best describe the user's prompt. Output only the tab name, with no prefix, quotes, or explanation. User prompt: \(truncatedPrompt)
+            """
+        let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
+        let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
+        let agents = slugGenerationAgentOrder(preferred: preferredAgent, projectId: projectId).available
+
+        for agent in agents {
+            let command: String
+            switch agent {
+            case .codex:
+                command = BackgroundAICommandBuilder.codex(escapedPrompt: escapedPrompt)
+            case .claude:
+                command = BackgroundAICommandBuilder.claude(escapedPrompt: escapedPrompt)
+            default:
+                continue
+            }
+
+            guard case .success(let raw) = await executeWithTimeout(
+                command: command,
+                workingDirectory: workingDirectory,
+                timeoutNanos: 60_000_000_000
+            ), let generatedName = TabNameAllocator.sanitizedGeneratedName(raw) else { continue }
+            return persistence.loadSettings().autoRenameTabs ? generatedName : nil
+        }
+        return nil
     }
 
     func remapAutoTabRenameState(sessionRenameMap: [String: String]) {

@@ -78,8 +78,10 @@ public nonisolated enum AgentType: String, Codable, CaseIterable, Sendable {
     public var capabilities: AgentCapabilityMatrix {
         switch self {
         case .claude:
+            // Claude chat runtime code is intentionally retained for possible future work,
+            // but the surface is not ready to expose through any creation flow yet.
             return AgentCapabilityMatrix(
-                supportedSurfaces: [.terminal, .chat],
+                supportedSurfaces: [.terminal],
                 defaultSurface: .terminal,
                 supportsResume: true,
                 supportsModelSelection: true,

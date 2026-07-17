@@ -243,6 +243,7 @@ final class ThreadDetailViewController: NSViewController {
     var chatStreamingLastUIRefreshAtByIdentifier: [String: Date] = [:]
     var chatSteerInputContinuationsByIdentifier: [String: AsyncStream<String>.Continuation] = [:]
     var chatQueuedPromptsByIdentifier: [String: [(messageID: UUID, text: String, attachments: [PersistedChatAttachment])]] = [:]
+    var chatAutoRenameTasksByIdentifier: [String: Task<Void, Never>] = [:]
     var activeDraftTabId: String?
     var activeWebTabId: String?
     var activeChatTabId: String?

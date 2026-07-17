@@ -68,8 +68,23 @@ public enum TmuxSessionNaming {
     }
 
     public static func looksLikeDefaultChatTabName(_ name: String, for agentType: AgentType) -> Bool {
+        if name == "\(agentType.displayName) Chat" || name == "\(agentType.displayName) (Chat)" || name == "Chat" {
+            return true
+        }
         guard name.hasSuffix(" (Chat)") else { return false }
         return looksLikeDefaultTabName(String(name.dropLast(" (Chat)".count)), for: agentType)
+    }
+
+    public static func shouldAutoRenameChatTab(
+        title: String,
+        agentType: AgentType,
+        messageCount: Int,
+        renameAlreadyStarted: Bool
+    ) -> Bool {
+        agentType == .codex
+            && messageCount == 0
+             && !renameAlreadyStarted
+             && looksLikeDefaultChatTabName(title, for: agentType)
     }
 
     private static func displayModelLabel(_ modelLabel: String?, for agentType: AgentType?) -> String? {

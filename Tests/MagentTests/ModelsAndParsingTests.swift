@@ -1370,7 +1370,7 @@ struct AgentTypeCapabilitiesTests {
     func claudeAndCodexPrimaryTier() {
         for agent in [AgentType.claude, .codex] {
             let capabilities = agent.capabilities
-            #expect(capabilities.supportedSurfaces == [.terminal, .chat])
+            #expect(capabilities.supportedSurfaces == (agent == .codex ? [.terminal, .chat] : [.terminal]))
             #expect(capabilities.defaultSurface == .terminal)
             #expect(capabilities.supportsResume)
             #expect(capabilities.supportsModelSelection)
@@ -1381,7 +1381,7 @@ struct AgentTypeCapabilitiesTests {
             #expect(capabilities.supportsOutputRateLimitDetection)
             #expect(!capabilities.supportsStructuredRateLimitSignals)
 
-            #expect(agent.supportedSurfaces == [.terminal, .chat])
+            #expect(agent.supportedSurfaces == (agent == .codex ? [.terminal, .chat] : [.terminal]))
             #expect(agent.defaultSurface == .terminal)
             #expect(agent.supportsResume)
         }
@@ -1408,8 +1408,7 @@ struct AgentTypeCapabilitiesTests {
 
     @Test("Surface display names add suffix only for multi-surface agents")
     func surfaceDisplayNames() {
-        #expect(AgentType.claude.displayName(for: .terminal) == "Claude Code (Terminal)")
-        #expect(AgentType.claude.displayName(for: .chat) == "Claude Code (Chat)")
+        #expect(AgentType.claude.displayName(for: .terminal) == "Claude Code")
         #expect(AgentType.codex.displayName(for: .terminal) == "Codex (Terminal)")
         #expect(AgentType.custom.displayName(for: .terminal) == "Custom")
     }
@@ -1424,7 +1423,6 @@ struct AgentTypeCapabilitiesTests {
         #expect(AgentType.codex.displayName(for: .terminal, chatsEnabled: true) == "Codex (Terminal)")
         #expect(AgentType.codex.displayName(for: .chat, chatsEnabled: true) == "Codex (Chat)")
     }
-
     @Test("Chat tab names reuse compact terminal model formatting")
     func chatTabModelDisplayName() {
         #expect(
@@ -1436,6 +1434,25 @@ struct AgentTypeCapabilitiesTests {
         )
         #expect(TmuxSessionNaming.looksLikeDefaultChatTabName("Codex (5.3-codex, H) (Chat)", for: .codex))
         #expect(!TmuxSessionNaming.looksLikeDefaultChatTabName("Fix login (Chat)", for: .codex))
+        #expect(TmuxSessionNaming.looksLikeDefaultChatTabName("Codex Chat", for: .codex))
+        #expect(TmuxSessionNaming.shouldAutoRenameChatTab(
+            title: "Codex (5.3-codex, H) (Chat)",
+            agentType: .codex,
+            messageCount: 0,
+            renameAlreadyStarted: false
+        ))
+        #expect(!TmuxSessionNaming.shouldAutoRenameChatTab(
+            title: "Fix login (Chat)",
+            agentType: .codex,
+            messageCount: 0,
+            renameAlreadyStarted: false
+        ))
+        #expect(!TmuxSessionNaming.shouldAutoRenameChatTab(
+            title: "Codex (5.3-codex, H) (Chat)",
+            agentType: .codex,
+            messageCount: 1,
+            renameAlreadyStarted: false
+        ))
     }
 }
 

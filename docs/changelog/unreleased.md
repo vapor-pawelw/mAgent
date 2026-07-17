@@ -23,6 +23,7 @@
 
 #### Improvements
 
+- Codex chat tabs now show the selected model and reasoning effort in their names, use a clear Chat suffix, and support automatic naming from the first prompt; unfinished Claude chat entry points are hidden for now.
 - Matched the chat composer’s prompt surface to the rounded input used when creating threads and tabs.
 - Made assistant replies easier to read with a wider unboxed layout while keeping user prompts and important statuses visually distinct.
 - Replaced the animated working bubble with a quieter inline progress row.

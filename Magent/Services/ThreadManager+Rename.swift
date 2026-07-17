@@ -124,6 +124,14 @@ extension ThreadManager {
         await renameService.autoRenameTabIfNeeded(threadId: threadId, sessionName: sessionName, prompt: prompt)
     }
 
+    func generateAutomaticTabName(prompt: String, preferredAgent: AgentType, projectId: UUID) async -> String? {
+        await renameService.generateAutomaticTabName(
+            prompt: prompt,
+            preferredAgent: preferredAgent,
+            projectId: projectId
+        )
+    }
+
     func renameTab(threadId: UUID, sessionName: String, newDisplayName: String) async throws {
         try await renameService.renameTab(
             threadId: threadId,

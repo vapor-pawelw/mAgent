@@ -8,6 +8,7 @@
 - Message timestamps and sent model/reasoning metadata stay out of the transcript and remain available from the message hover tooltip.
 - The composer uses the same rounded prompt surface styling as new thread and new tab sheets: a multiline text area above an integrated footer containing attachment, model, reasoning, and send controls.
 - Codex chat tabs expose the `None` reasoning effort from the bottom-left picker and store/pass it as Codex `reasoningLevel: "none"`.
+- Codex chat tab titles mirror terminal tab naming from the selected model and reasoning effort, with ` (Chat)` appended. On the first submitted prompt, the regular automatic tab-naming setting can replace that default with a concise task name. Automatic updates preserve manually renamed chat tabs.
 - Tool activity should read like concise actions first: `Run command`, `Read file`, `Search`, or `Tool output`.
 - Patch edits should read as `Apply patch` / `Patch applied` and summarize changed files instead of rendering the raw patch inline. Expanded filenames are links that open the thread's existing Diff tab focused on that file.
 - Consecutive routine tool rows are compacted in the visible chat transcript into one collapsed assistant-side activity disclosure. Its header and expanded rows use tinted SF Symbols, while the saved transcript remains unmodified for export, restore, and agent handoff.
@@ -31,6 +32,8 @@
 - Codex `/effort none` selects the `none` reasoning effort.
 
 ## Gotchas
+
+- Claude Code chat implementation remains in the codebase for possible future development, but the surface is intentionally excluded from `AgentType.capabilities` and must not be offered even by the debug chat feature flag until it is ready.
 
 - Keep provider-specific transcript parsing out of the view layer. Normalize provider logs in the reconciler/runtime layer, then render via shared chat message presentation.
 - Keep raw persisted transcript text as the compatibility boundary even when `toolEvent` is present. Existing IPC/read-tab flows and older app versions still rely on readable text.

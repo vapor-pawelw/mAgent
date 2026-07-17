@@ -126,10 +126,23 @@ extension ThreadDetailViewController {
 
         hideEmptyState()
 
+        let effectiveTitle: String
+        if TmuxSessionNaming.looksLikeDefaultChatTabName(title, for: agentType) {
+            let modelLabel = AgentModelsService.shared.config(for: agentType)?
+                .models.first(where: { $0.id == modelId })?.label
+            effectiveTitle = automaticChatTabTitle(
+                agentType: agentType,
+                modelId: modelId,
+                reasoningLevel: reasoningLevel
+            )
+        } else {
+            effectiveTitle = title
+        }
+
         let entry = ChatTabEntry(
             identifier: identifier,
             agentType: agentType,
-            title: title,
+            title: effectiveTitle,
             messages: messages,
             draftInput: draftInput,
             draftAttachments: draftAttachments,
@@ -143,7 +156,7 @@ extension ThreadDetailViewController {
         chatTabs.append(entry)
         persistChatTabs()
 
-        let item = TabItemView(title: title)
+        let item = TabItemView(title: effectiveTitle)
         item.showCloseButton = true
         attachDragGesture(to: item)
         applyChatTabIcon(to: item)
@@ -336,6 +349,8 @@ extension ThreadDetailViewController {
         chatQueuedPromptsByIdentifier.removeValue(forKey: identifier)
         chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
         chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
+        chatAutoRenameTasksByIdentifier[identifier]?.cancel()
+        chatAutoRenameTasksByIdentifier.removeValue(forKey: identifier)
         threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: identifier)
 
         let persistedSnapshot = thread.persistedChatTabs.first(where: { $0.identifier == identifier })
@@ -637,6 +652,11 @@ extension ThreadDetailViewController {
            handleChatSlashCommandIfNeeded(identifier: identifier, chatIndex: entryIndex, text: trimmedText) {
             return
         }
+        triggerAutomaticChatTabRenameIfNeeded(
+            identifier: identifier,
+            chatIndex: entryIndex,
+            prompt: trimmedText
+        )
         guard chatRequestTasksByIdentifier[identifier] == nil else {
             if chatTabs[entryIndex].agentType == .codex,
                normalizedAttachments.isEmpty,
@@ -694,6 +714,60 @@ extension ThreadDetailViewController {
             attachments: normalizedAttachments,
             chatIndex: entryIndex
         )
+    }
+
+    private func triggerAutomaticChatTabRenameIfNeeded(identifier: String, chatIndex: Int, prompt: String) {
+        guard !prompt.isEmpty, chatTabs.indices.contains(chatIndex) else { return }
+        let entry = chatTabs[chatIndex]
+        guard TmuxSessionNaming.shouldAutoRenameChatTab(
+            title: entry.title,
+            agentType: entry.agentType,
+            messageCount: entry.messages.count,
+            renameAlreadyStarted: chatAutoRenameTasksByIdentifier[identifier] != nil
+        ) else { return }
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let generatedName = await self.threadManager.generateAutomaticTabName(
+                prompt: prompt,
+                preferredAgent: entry.agentType,
+                projectId: self.thread.projectId
+            )
+            guard !Task.isCancelled,
+                  let generatedName,
+                  let currentIndex = self.chatTabs.firstIndex(where: { $0.identifier == identifier }),
+                  TmuxSessionNaming.looksLikeDefaultChatTabName(
+                    self.chatTabs[currentIndex].title,
+                    for: self.chatTabs[currentIndex].agentType
+                  ) else { return }
+
+            let usedNames = self.tabSlots.enumerated().compactMap { slotIndex, slot -> String? in
+                guard slot != .chat(identifier: identifier), self.tabItems.indices.contains(slotIndex) else { return nil }
+                return self.tabItems[slotIndex].titleLabel.stringValue
+            }
+            let allocation = TabNameAllocator.allocate(
+                requestedName: generatedName,
+                usedNames: usedNames,
+                counters: self.thread.tabNameSuffixCounters
+            )
+            if let counterUpdate = allocation.counterUpdate {
+                self.thread.tabNameSuffixCounters[counterUpdate.normalizedBase] = counterUpdate.suffix
+            }
+            var resolvedName = allocation.displayName
+            if TmuxSessionNaming.looksLikeDefaultChatTabName(resolvedName, for: .codex) {
+                resolvedName += "-1"
+            }
+
+            self.chatTabs[currentIndex].title = resolvedName
+            self.chatTabs[currentIndex].isTitleManuallySet = true
+            if let slotIndex = self.tabSlots.firstIndex(of: .chat(identifier: identifier)) {
+                self.tabItems[slotIndex].titleLabel.stringValue = resolvedName
+                self.rebuildTabBar()
+            }
+            self.persistChatTabs()
+            self.refreshTabTooltips()
+        }
+        chatAutoRenameTasksByIdentifier[identifier] = task
     }
 
     private func startChatPromptRequest(
@@ -1117,6 +1191,7 @@ extension ThreadDetailViewController {
         )
         chatTabs[chatIndex].modelId = validatedModelId
         chatTabs[chatIndex].reasoningLevel = validatedEffort
+        refreshAutomaticChatTabTitle(at: chatIndex)
         AgentLastSelectionStore.saveModel(validatedModelId, for: agentType)
         if let validatedEffort {
             AgentLastSelectionStore.saveReasoning(validatedEffort, for: agentType, modelId: validatedModelId)
@@ -1150,6 +1225,7 @@ extension ThreadDetailViewController {
         }
 
         chatTabs[chatIndex].reasoningLevel = validatedEffort
+        refreshAutomaticChatTabTitle(at: chatIndex)
         AgentLastSelectionStore.saveReasoning(
             validatedEffort,
             for: agentType,
