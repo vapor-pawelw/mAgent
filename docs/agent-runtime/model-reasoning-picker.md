@@ -113,7 +113,14 @@ Parsing scans the **entire capture window** (300 lines of scrollback + visible p
 
 The set is re-keyed on session rename and cleaned up on tab close, consistent with other per-session sets.
 
-The default-on `autoRenameTabs` setting uses the first submitted prompt for each agent session to generate a 1-3 word display name. It writes only `customTabNames`, leaving the tmux session name unchanged so prompt injection and other session-keyed state are not disrupted. Only the first prompt-history transition from empty to non-empty can launch generation, so failures do not retry on every later prompt. The setting is checked before the background AI command and again before applying its result. Both state checks skip sessions in `manuallyRenamedTabs`, so a manual rename made while generation is in flight still wins.
+Codex chat tabs use the same compact model/effort title as terminal tabs with a trailing
+`(Chat)` marker, and refresh that automatic title when `/model` or `/effort` changes the
+chat runtime selection. The persisted manual-title flag defaults to `true` when decoding
+legacy chat tabs because those records cannot distinguish a generated default from the same
+title explicitly chosen by the user. Claude chat implementation remains in the codebase for
+possible future development, but is intentionally hidden even when experimental chats are enabled.
+
+The default-on `autoRenameTabs` setting uses a submitted prompt for each agent session to generate a 1-3 word display name. The initial prompt injected while creating a thread or tab triggers naming directly. Later prompt-history updates retry naming while the tab still has only its default label, so a transient generation failure does not permanently disable the feature. It writes only `customTabNames`, leaving the tmux session name unchanged so prompt injection and other session-keyed state are not disrupted. The setting is checked before the background AI command and again before applying its result. Both state checks skip sessions in `manuallyRenamedTabs`, so a successful automatic name or a manual rename made while generation is in flight wins permanently.
 
 ## UI: Launch Sheet
 
@@ -138,8 +145,8 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 
 ### Chat Surface Runtime Gate
 
-- Chat surfaces are selectable directly for supported agents (currently Claude and Codex).
-- New-thread creation can start directly on a chat tab from the launch sheet or IPC/CLI by selecting the chat surface (`claude:chat` / `codex:chat` in CLI payloads). Chat-first thread creation must persist the typed prompt as the chat draft and skip fallback tmux session creation when the thread contains only non-terminal tabs.
+- Chat surfaces are selectable directly for Codex while the experimental chat feature is enabled.
+- New-thread creation can start directly on a Codex chat tab from the launch sheet or IPC/CLI by selecting the chat surface (`codex:chat` in CLI payloads). Chat-first thread creation must persist the typed prompt as the chat draft and skip fallback tmux session creation when the thread contains only non-terminal tabs. Claude chat code is retained only as a possible future implementation and is not exposed through UI or CLI.
 - No separate Pi runtime install gate is used in the launch sheet.
 - Chat message execution uses each agent's native non-interactive JSON stream path:
   - Claude: `claude -p --output-format stream-json` (resume via `--resume <session_id>`)

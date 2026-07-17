@@ -833,7 +833,7 @@ actor IPCSocketServer {
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal|claude:chat|codex:chat] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--priority 1-5] [--select] [--no-submit]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal|codex:chat] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--priority 1-5] [--select] [--no-submit]"
             [ -z "$base_thread" ] || [ -z "$base_branch" ] || die "Use either --base-thread or --base-branch, not both"
             if [ -n "$priority" ]; then
                 case "$priority" in
@@ -1613,8 +1613,8 @@ actor IPCSocketServer {
             echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
             echo "Thread commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal|claude:chat|codex:chat] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--priority 1-5] [--select] [--no-submit]"
-            echo "  batch-create         --project <name> --file <specs.json> [--no-submit]  (parallel thread creation; per-spec keys: agentType (claude/codex/custom/terminal or claude:chat/codex:chat), modelId, reasoningLevel, prompt, ...)"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal|codex:chat] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--priority 1-5] [--select] [--no-submit]"
+            echo "  batch-create         --project <name> --file <specs.json> [--no-submit]  (parallel thread creation; per-spec keys: agentType (claude/codex/custom/terminal or codex:chat), modelId, reasoningLevel, prompt, ...)"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
             echo "  list-archived        [--project <name>] [--limit <n>]  (most recently archived first)"

@@ -59,6 +59,19 @@ public enum TmuxSessionNaming {
         return "\(defaultTabDisplayName(for: agentType)) (\(details.joined(separator: ", ")))"
     }
 
+    public static func chatTabDisplayName(
+        for agentType: AgentType,
+        modelLabel: String? = nil,
+        reasoningLevel: String? = nil
+    ) -> String {
+        "\(defaultTabDisplayName(for: agentType, modelLabel: modelLabel, reasoningLevel: reasoningLevel)) (Chat)"
+    }
+
+    public static func looksLikeDefaultChatTabName(_ name: String, for agentType: AgentType) -> Bool {
+        guard name.hasSuffix(" (Chat)") else { return false }
+        return looksLikeDefaultTabName(String(name.dropLast(" (Chat)".count)), for: agentType)
+    }
+
     private static func displayModelLabel(_ modelLabel: String?, for agentType: AgentType?) -> String? {
         let trimmed = modelLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let trimmed, !trimmed.isEmpty else { return nil }

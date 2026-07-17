@@ -37,6 +37,7 @@ final class ThreadLifecycleService {
 
     // Rename / auto-rename
     var autoRenameThreadAfterFirstPromptIfNeeded: ((UUID, String, String) async -> Bool)?
+    var autoRenameTabIfNeeded: ((UUID, String, String) async -> Void)?
     var cleanupRenameStateForThread: ((UUID) -> Void)?
 
     // Agent setup cleanup
@@ -518,6 +519,9 @@ final class ThreadLifecycleService {
                 let sessionName = tmuxSessionName
                 Task { [weak self] in
                     _ = await self?.autoRenameThreadAfterFirstPromptIfNeeded?(threadId, sessionName, prompt)
+                }
+                Task { [weak self] in
+                    await self?.autoRenameTabIfNeeded?(threadId, sessionName, prompt)
                 }
             }
 

@@ -14,6 +14,7 @@ struct ChatTabEntry {
     var modelId: String?
     var reasoningLevel: String?
     var isPinned: Bool
+    var isTitleManuallySet: Bool
     var viewController: ChatTabViewController?
 }
 

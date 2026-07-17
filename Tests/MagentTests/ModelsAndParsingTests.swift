@@ -74,6 +74,59 @@ struct ThreadActivityIndicatorPreferenceTests {
 @Suite("Automatic tab naming")
 struct AutomaticTabNamingTests {
 
+    @Test("Default agent labels remain eligible for automatic naming")
+    func defaultLabelIsEligible() {
+        let sessionName = "ma-project-codex"
+        let thread = MagentThread(
+            projectId: UUID(),
+            name: "main",
+            worktreePath: "/tmp/project",
+            branchName: "main",
+            tmuxSessionNames: [sessionName],
+            agentTmuxSessions: [sessionName],
+            sessionAgentTypes: [sessionName: .codex],
+            customTabNames: [sessionName: "Codex"]
+        )
+
+        #expect(TabNameAllocator.shouldAttemptAutoRename(thread: thread, sessionName: sessionName))
+    }
+
+    @Test("Generated or manually assigned labels are protected")
+    func protectedLabelIsIneligible() {
+        let sessionName = "ma-project-codex"
+        let thread = MagentThread(
+            projectId: UUID(),
+            name: "main",
+            worktreePath: "/tmp/project",
+            branchName: "main",
+            tmuxSessionNames: [sessionName],
+            agentTmuxSessions: [sessionName],
+            customTabNames: [sessionName: "Fix tab naming"],
+            manuallyRenamedTabs: [sessionName]
+        )
+
+        #expect(!TabNameAllocator.shouldAttemptAutoRename(thread: thread, sessionName: sessionName))
+    }
+
+    @Test("Default-shaped model labels retry but other generated labels stay protected")
+    func retryEligibilityUsesDefaultShape() {
+        let sessionName = "ma-project-codex"
+        var thread = MagentThread(
+            projectId: UUID(),
+            name: "main",
+            worktreePath: "/tmp/project",
+            branchName: "main",
+            tmuxSessionNames: [sessionName],
+            agentTmuxSessions: [sessionName],
+            sessionAgentTypes: [sessionName: .codex],
+            customTabNames: [sessionName: "Codex (5.3-codex, H)"]
+        )
+
+        #expect(TabNameAllocator.shouldAttemptAutoRename(thread: thread, sessionName: sessionName))
+        thread.customTabNames[sessionName] = "Fix tab naming"
+        #expect(!TabNameAllocator.shouldAttemptAutoRename(thread: thread, sessionName: sessionName))
+    }
+
     @Test("Defaults to enabled for existing settings")
     func missingPreferenceDefaultsToEnabled() throws {
         let settings = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"projects":[]}"#.utf8))
@@ -1169,12 +1222,26 @@ struct AgentTypeCapabilitiesTests {
 
     @Test("Chat feature gate collapses visible surfaces and labels")
     func chatFeatureGateSurfacesAndLabels() {
+        #expect(AgentType.claude.supportedSurfaces(chatsEnabled: true) == [.terminal])
         #expect(AgentType.codex.supportedSurfaces(chatsEnabled: false) == [.terminal])
         #expect(AgentType.codex.displayName(for: .terminal, chatsEnabled: false) == "Codex")
 
         #expect(AgentType.codex.supportedSurfaces(chatsEnabled: true) == [.terminal, .chat])
         #expect(AgentType.codex.displayName(for: .terminal, chatsEnabled: true) == "Codex (Terminal)")
         #expect(AgentType.codex.displayName(for: .chat, chatsEnabled: true) == "Codex (Chat)")
+    }
+
+    @Test("Chat tab names reuse compact terminal model formatting")
+    func chatTabModelDisplayName() {
+        #expect(
+            TmuxSessionNaming.chatTabDisplayName(
+                for: .codex,
+                modelLabel: "GPT 5.3 Codex",
+                reasoningLevel: "high"
+            ) == "Codex (5.3-codex, H) (Chat)"
+        )
+        #expect(TmuxSessionNaming.looksLikeDefaultChatTabName("Codex (5.3-codex, H) (Chat)", for: .codex))
+        #expect(!TmuxSessionNaming.looksLikeDefaultChatTabName("Fix login (Chat)", for: .codex))
     }
 }
 
@@ -1341,7 +1408,8 @@ struct PersistedChatTabTests {
             conversationSessionID: "session-123",
             modelId: "gpt-5.5",
             reasoningLevel: "high",
-            isPinned: true
+            isPinned: true,
+            isTitleManuallySet: true
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(PersistedChatTab.self, from: data)
@@ -1350,6 +1418,24 @@ struct PersistedChatTabTests {
         #expect(decoded.modelId == "gpt-5.5")
         #expect(decoded.reasoningLevel == "high")
         #expect(decoded.isPinned == true)
+        #expect(decoded.isTitleManuallySet == true)
+    }
+
+    @Test("Legacy titles remain protected from automatic updates")
+    func legacyTitlesAreInferredAsManual() throws {
+        let customJSON = """
+        {"identifier":"chat:1","agentType":"codex","title":"Investigate login","messages":[]}
+        """.data(using: .utf8)!
+        let defaultJSON = """
+        {"identifier":"chat:2","agentType":"codex","title":"Codex Chat","messages":[]}
+        """.data(using: .utf8)!
+        let explicitManualDefaultJSON = """
+        {"identifier":"chat:3","agentType":"codex","title":"Codex Chat","messages":[],"isTitleManuallySet":true}
+        """.data(using: .utf8)!
+
+        #expect(try JSONDecoder().decode(PersistedChatTab.self, from: customJSON).isTitleManuallySet)
+        #expect(try JSONDecoder().decode(PersistedChatTab.self, from: defaultJSON).isTitleManuallySet)
+        #expect(try JSONDecoder().decode(PersistedChatTab.self, from: explicitManualDefaultJSON).isTitleManuallySet)
     }
 
     @Test("Round-trip preserves draft attachments")

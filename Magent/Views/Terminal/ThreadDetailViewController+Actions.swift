@@ -838,7 +838,14 @@ extension ThreadDetailViewController {
                 self.openChatTab(
                     identifier: "chat:\(UUID().uuidString)",
                     agentType: agentType,
-                    title: title?.isEmpty == false ? title! : "\(agentType.displayName) Chat",
+                    title: title?.isEmpty == false ? title! : TmuxSessionNaming.chatTabDisplayName(
+                        for: agentType,
+                        modelLabel: self.threadManager.resolvedModelLabel(for: agentType, modelId: result.modelId),
+                        reasoningLevel: result.reasoningLevel
+                    ),
+                    modelId: result.modelId,
+                    reasoningLevel: result.reasoningLevel,
+                    isTitleManuallySet: title?.isEmpty == false,
                     initialPrompt: result.prompt
                 )
             } else if let webURL = result.initialWebURL {
@@ -1131,7 +1138,11 @@ extension ThreadDetailViewController {
                 title: chat.title,
                 messages: chat.messages,
                 draftInput: chat.draftInput,
-                conversationSessionID: chat.conversationSessionID
+                draftAttachments: chat.draftAttachments,
+                conversationSessionID: chat.conversationSessionID,
+                modelId: chat.modelId,
+                reasoningLevel: chat.reasoningLevel,
+                isTitleManuallySet: chat.isTitleManuallySet
             )
         }
     }
@@ -1746,7 +1757,11 @@ extension ThreadDetailViewController: NSMenuDelegate {
             openChatTab(
                 identifier: "chat:\(UUID().uuidString)",
                 agentType: agentType,
-                title: "\(agentType.displayName) Chat",
+                title: TmuxSessionNaming.chatTabDisplayName(
+                    for: agentType,
+                    modelLabel: threadManager.resolvedModelLabel(for: agentType, modelId: modelId),
+                    reasoningLevel: reasoning
+                ),
                 modelId: modelId,
                 reasoningLevel: reasoning
             )

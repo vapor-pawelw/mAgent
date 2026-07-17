@@ -11,7 +11,10 @@ private struct IPCAgentSelectionError: Error, CustomStringConvertible {
     let description: String
 }
 
-private func parseIPCAgentSelection(_ rawValue: String?) -> Result<IPCAgentSelection, IPCAgentSelectionError> {
+private func parseIPCAgentSelection(
+    _ rawValue: String?,
+    chatsEnabled: Bool
+) -> Result<IPCAgentSelection, IPCAgentSelectionError> {
     guard let rawValue, !rawValue.isEmpty else {
         return .success(IPCAgentSelection(agentType: nil, surface: nil, useAgentCommand: true))
     }
@@ -35,7 +38,7 @@ private func parseIPCAgentSelection(_ rawValue: String?) -> Result<IPCAgentSelec
     }
 
     let selectedSurface = surface ?? agentType.defaultSurface
-    guard agentType.supports(selectedSurface) else {
+    guard agentType.supportedSurfaces(chatsEnabled: chatsEnabled).contains(selectedSurface) else {
         return .failure(IPCAgentSelectionError(description: "Agent type \(agentType.rawValue) does not support the \(selectedSurface.rawValue) surface"))
     }
 
@@ -352,7 +355,7 @@ final class IPCCommandHandler {
         }
 
         let selection: IPCAgentSelection
-        switch parseIPCAgentSelection(request.agentType) {
+        switch parseIPCAgentSelection(request.agentType, chatsEnabled: settings.isChatsFeatureEnabled) {
         case .success(let parsed):
             selection = parsed
         case .failure(let message):
@@ -482,7 +485,11 @@ final class IPCCommandHandler {
                     return PersistedChatTab(
                         identifier: "chat:\(UUID().uuidString)",
                         agentType: requestedAgent,
-                        title: "\(requestedAgent.displayName) Chat",
+                        title: TmuxSessionNaming.chatTabDisplayName(
+                            for: requestedAgent,
+                            modelLabel: threadManager.resolvedModelLabel(for: requestedAgent, modelId: request.modelId),
+                            reasoningLevel: request.reasoningLevel
+                        ),
                         draftInput: request.prompt ?? "",
                         modelId: request.modelId,
                         reasoningLevel: request.reasoningLevel
@@ -560,6 +567,7 @@ final class IPCCommandHandler {
             let agentType: AgentType?
             let useAgentCommand: Bool
             let modelId: String?
+            let modelLabel: String?
             let reasoningLevel: String?
             let prompt: String?
             let noSubmit: Bool
@@ -575,7 +583,7 @@ final class IPCCommandHandler {
         var resolved: [ResolvedSpec] = []
         for (i, spec) in specs.enumerated() {
             let selection: IPCAgentSelection
-            switch parseIPCAgentSelection(spec.agentType) {
+            switch parseIPCAgentSelection(spec.agentType, chatsEnabled: settings.isChatsFeatureEnabled) {
             case .success(let parsed):
                 selection = parsed
             case .failure(let message):
@@ -682,6 +690,9 @@ final class IPCCommandHandler {
                 agentType: agentType,
                 useAgentCommand: useAgentCommand,
                 modelId: spec.modelId,
+                modelLabel: agentType.flatMap {
+                    threadManager.resolvedModelLabel(for: $0, modelId: spec.modelId)
+                },
                 reasoningLevel: spec.reasoningLevel,
                 prompt: resolvedPrompt,
                 noSubmit: spec.noSubmit == true || request.noSubmit == true,
@@ -716,7 +727,11 @@ final class IPCCommandHandler {
                                 return PersistedChatTab(
                                     identifier: "chat:\(UUID().uuidString)",
                                     agentType: agentType,
-                                    title: "\(agentType.displayName) Chat",
+                                    title: TmuxSessionNaming.chatTabDisplayName(
+                                        for: agentType,
+                                        modelLabel: spec.modelLabel,
+                                        reasoningLevel: spec.reasoningLevel
+                                    ),
                                     draftInput: spec.prompt ?? "",
                                     modelId: spec.modelId,
                                     reasoningLevel: spec.reasoningLevel
@@ -2229,6 +2244,7 @@ final class IPCCommandHandler {
 
             var chatTabs = threadManager.threads[threadIndex].persistedChatTabs
             chatTabs[chatIndex].title = trimmedName
+            chatTabs[chatIndex].isTitleManuallySet = true
             threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: chatTabs)
             await MainActor.run {
                 threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)

@@ -1,4 +1,5 @@
 import Foundation
+import MagentCore
 
 // MARK: - TabNameAllocator
 
@@ -8,6 +9,16 @@ import Foundation
 /// can be tested in isolation — historically a source of subtle bugs around tab
 /// renames reusing stale suffixes and counters resetting to zero.
 enum TabNameAllocator {
+
+    static func shouldAttemptAutoRename(thread: MagentThread, sessionName: String) -> Bool {
+        guard thread.tmuxSessionNames.contains(sessionName),
+              !thread.manuallyRenamedTabs.contains(sessionName) else { return false }
+        guard let currentName = thread.customTabNames[sessionName] else { return true }
+        return TmuxSessionNaming.looksLikeDefaultTabName(
+            currentName,
+            for: thread.sessionAgentTypes[sessionName]
+        )
+    }
 
     static func sanitizedGeneratedName(_ raw: String) -> String? {
         let firstLine = raw.components(separatedBy: .newlines).first ?? raw

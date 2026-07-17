@@ -1078,9 +1078,7 @@ final class RenameService {
     func autoRenameTabIfNeeded(threadId: UUID, sessionName: String, prompt: String) async {
         guard persistence.loadSettings().autoRenameTabs else { return }
         guard let initialThread = store.threads.first(where: { $0.id == threadId }),
-              initialThread.tmuxSessionNames.contains(sessionName),
-              !initialThread.manuallyRenamedTabs.contains(sessionName),
-              initialThread.customTabNames[sessionName] == nil,
+              TabNameAllocator.shouldAttemptAutoRename(thread: initialThread, sessionName: sessionName),
               !autoTabRenameInProgress.contains(sessionName) else { return }
 
         autoTabRenameInProgress.insert(sessionName)
@@ -1116,9 +1114,10 @@ final class RenameService {
 
             guard let index = store.threads.firstIndex(where: { $0.id == threadId }),
                   persistence.loadSettings().autoRenameTabs,
-                  store.threads[index].tmuxSessionNames.contains(sessionName),
-                  !store.threads[index].manuallyRenamedTabs.contains(sessionName),
-                  store.threads[index].customTabNames[sessionName] == nil else { return }
+                  TabNameAllocator.shouldAttemptAutoRename(
+                      thread: store.threads[index],
+                      sessionName: sessionName
+                  ) else { return }
             let uniqueName = allocateUniqueTabDisplayNameCallback?(generatedName, index, sessionName) ?? generatedName
             store.threads[index].customTabNames[sessionName] = uniqueName
             // This shared protection set prevents every automatic naming pass from

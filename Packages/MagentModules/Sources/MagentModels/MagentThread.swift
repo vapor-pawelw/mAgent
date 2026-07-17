@@ -233,6 +233,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
     public var modelId: String?
     public var reasoningLevel: String?
     public var isPinned: Bool
+    public var isTitleManuallySet: Bool
 
     private enum CodingKeys: String, CodingKey {
         case identifier
@@ -245,6 +246,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         case modelId
         case reasoningLevel
         case isPinned
+        case isTitleManuallySet
     }
 
     public init(
@@ -257,7 +259,8 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         conversationSessionID: String? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
-        isPinned: Bool = false
+        isPinned: Bool = false,
+        isTitleManuallySet: Bool = false
     ) {
         self.identifier = identifier
         self.agentType = agentType
@@ -269,6 +272,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         self.modelId = modelId
         self.reasoningLevel = reasoningLevel
         self.isPinned = isPinned
+        self.isTitleManuallySet = isTitleManuallySet
     }
 
     public init(from decoder: Decoder) throws {
@@ -283,6 +287,9 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
         reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        // Legacy records cannot distinguish a generated default from the same title
+        // explicitly chosen by the user, so preserve them rather than overwrite them.
+        isTitleManuallySet = try container.decodeIfPresent(Bool.self, forKey: .isTitleManuallySet) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -309,6 +316,7 @@ public nonisolated struct PersistedChatTab: Codable, Sendable, Equatable {
         if isPinned {
             try container.encode(isPinned, forKey: .isPinned)
         }
+        try container.encode(isTitleManuallySet, forKey: .isTitleManuallySet)
     }
 }
 

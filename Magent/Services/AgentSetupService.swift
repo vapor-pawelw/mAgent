@@ -1504,13 +1504,12 @@ final class AgentSetupService {
             }
         }
 
-        if previousCount == 0, !history.isEmpty {
-            let firstPrompt = history[0]
+        if let latestPrompt = history.last {
             let capturedId = threadId
             let capturedSession = sessionName
             let autoRenameTab = triggerAutoRenameTabIfNeeded
             Task {
-                await autoRenameTab?(capturedId, capturedSession, firstPrompt)
+                await autoRenameTab?(capturedId, capturedSession, latestPrompt)
             }
         }
     }

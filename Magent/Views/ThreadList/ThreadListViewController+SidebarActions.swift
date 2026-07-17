@@ -537,7 +537,11 @@ extension ThreadListViewController {
                     return PersistedChatTab(
                         identifier: "chat:\(UUID().uuidString)",
                         agentType: agentType,
-                        title: "\(agentType.displayName) Chat",
+                        title: TmuxSessionNaming.chatTabDisplayName(
+                            for: agentType,
+                            modelLabel: self.threadManager.resolvedModelLabel(for: agentType, modelId: result.modelId),
+                            reasoningLevel: result.reasoningLevel
+                        ),
                         messages: [],
                         draftInput: result.prompt ?? "",
                         modelId: result.modelId,
@@ -603,7 +607,11 @@ extension ThreadListViewController {
                 initialChatTab: PersistedChatTab(
                     identifier: "chat:\(UUID().uuidString)",
                     agentType: agentType,
-                    title: "\(agentType.displayName) Chat",
+                    title: TmuxSessionNaming.chatTabDisplayName(
+                        for: agentType,
+                        modelLabel: threadManager.resolvedModelLabel(for: agentType, modelId: modelId),
+                        reasoningLevel: reasoning
+                    ),
                     messages: [],
                     modelId: modelId,
                     reasoningLevel: reasoning

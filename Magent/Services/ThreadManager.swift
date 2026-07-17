@@ -460,6 +460,13 @@ final class ThreadManager {
                 prompt: prompt
             ) ?? false
         }
+        svc.autoRenameTabIfNeeded = { [weak self] threadId, sessionName, prompt in
+            await self?.renameService.autoRenameTabIfNeeded(
+                threadId: threadId,
+                sessionName: sessionName,
+                prompt: prompt
+            )
+        }
         svc.cleanupRenameStateForThread = { [weak self] threadId in
             self?.renameService.cleanupForThread(id: threadId)
         }

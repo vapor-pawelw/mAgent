@@ -4,6 +4,18 @@ import MagentCore
 extension ThreadDetailViewController {
     private static let chatLoadingPlaceholder = "Thinking..."
 
+    private func automaticChatTabTitle(
+        agentType: AgentType,
+        modelId: String?,
+        reasoningLevel: String?
+    ) -> String {
+        TmuxSessionNaming.chatTabDisplayName(
+            for: agentType,
+            modelLabel: threadManager.resolvedModelLabel(for: agentType, modelId: modelId),
+            reasoningLevel: reasoningLevel
+        )
+    }
+
     // MARK: - Restore (In-memory)
 
     func restoreChatTabItems() {
@@ -35,10 +47,21 @@ extension ThreadDetailViewController {
             if reconciledMessages.didMutate {
                 restoredTabsMutated = true
             }
+            let legacyDefaultTitles = ["Chat", "\(persisted.agentType.displayName) Chat"]
+            let title = !persisted.isTitleManuallySet && legacyDefaultTitles.contains(persisted.title)
+                ? automaticChatTabTitle(
+                    agentType: persisted.agentType,
+                    modelId: persisted.modelId,
+                    reasoningLevel: persisted.reasoningLevel
+                )
+                : persisted.title
+            if title != persisted.title {
+                restoredTabsMutated = true
+            }
             return ChatTabEntry(
                 identifier: persisted.identifier,
                 agentType: persisted.agentType,
-                title: persisted.title,
+                title: title,
                 messages: normalizedMessages.messages,
                 draftInput: persisted.draftInput,
                 draftAttachments: persisted.draftAttachments,
@@ -46,6 +69,7 @@ extension ThreadDetailViewController {
                 modelId: persisted.modelId,
                 reasoningLevel: persisted.reasoningLevel,
                 isPinned: persisted.isPinned,
+                isTitleManuallySet: persisted.isTitleManuallySet,
                 viewController: nil
             )
         }
@@ -89,6 +113,7 @@ extension ThreadDetailViewController {
         conversationSessionID: String? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
+        isTitleManuallySet: Bool = false,
         initialPrompt: String? = nil
     ) {
         if let existingIndex = tabSlots.firstIndex(of: .chat(identifier: identifier)) {
@@ -112,6 +137,7 @@ extension ThreadDetailViewController {
             modelId: modelId,
             reasoningLevel: reasoningLevel,
             isPinned: false,
+            isTitleManuallySet: isTitleManuallySet,
             viewController: nil
         )
         chatTabs.append(entry)
@@ -361,10 +387,13 @@ extension ThreadDetailViewController {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         let newTitle = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !newTitle.isEmpty, newTitle != currentTitle else { return }
+        guard !newTitle.isEmpty else { return }
 
-        chatTabs[chatIndex].title = newTitle
-        tabItems[displayIndex].titleLabel.stringValue = newTitle
+        chatTabs[chatIndex].isTitleManuallySet = true
+        if newTitle != currentTitle {
+            chatTabs[chatIndex].title = newTitle
+            tabItems[displayIndex].titleLabel.stringValue = newTitle
+        }
         persistChatTabs()
         refreshTabTooltips()
     }
@@ -448,7 +477,11 @@ extension ThreadDetailViewController {
         let trimmedCustomTitle = customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = (trimmedCustomTitle?.isEmpty == false)
             ? trimmedCustomTitle!
-            : "\(targetAgent.displayName) Chat"
+            : automaticChatTabTitle(
+                agentType: targetAgent,
+                modelId: modelId,
+                reasoningLevel: reasoningLevel
+            )
         let previousSelectedIndex = currentTabIndex
 
         openChatTab(
@@ -457,6 +490,7 @@ extension ThreadDetailViewController {
             title: title,
             modelId: modelId,
             reasoningLevel: reasoningLevel,
+            isTitleManuallySet: trimmedCustomTitle?.isEmpty == false,
             initialPrompt: prompt
         )
 
@@ -1265,7 +1299,8 @@ extension ThreadDetailViewController {
                 conversationSessionID: entry.conversationSessionID,
                 modelId: entry.modelId,
                 reasoningLevel: entry.reasoningLevel,
-                isPinned: entry.isPinned
+                isPinned: entry.isPinned,
+                isTitleManuallySet: entry.isTitleManuallySet
             )
         }
         threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)
@@ -1306,7 +1341,24 @@ extension ThreadDetailViewController {
         guard chatTabs[index].modelId != modelId || chatTabs[index].reasoningLevel != reasoningLevel else { return }
         chatTabs[index].modelId = modelId
         chatTabs[index].reasoningLevel = reasoningLevel
+        refreshAutomaticChatTabTitle(at: index)
         persistChatTabs()
+    }
+
+    private func refreshAutomaticChatTabTitle(at chatIndex: Int) {
+        guard chatTabs.indices.contains(chatIndex) else { return }
+        let entry = chatTabs[chatIndex]
+        guard !entry.isTitleManuallySet else { return }
+
+        let newTitle = automaticChatTabTitle(
+            agentType: entry.agentType,
+            modelId: entry.modelId,
+            reasoningLevel: entry.reasoningLevel
+        )
+        chatTabs[chatIndex].title = newTitle
+        if let displayIndex = tabSlots.firstIndex(of: .chat(identifier: entry.identifier)) {
+            tabItems[displayIndex].titleLabel.stringValue = newTitle
+        }
     }
 
     private func syncChatModelReasoningFromAgentMessage(chatIndex: Int, output: String) {
@@ -1346,6 +1398,7 @@ extension ThreadDetailViewController {
             chatTabs[chatIndex].reasoningLevel = reasoningLevel
             AgentLastSelectionStore.saveReasoning(reasoningLevel, for: agentType, modelId: chatTabs[chatIndex].modelId)
         }
+        refreshAutomaticChatTabTitle(at: chatIndex)
     }
 
     private func resolveClaudeModelID(fromModelLabel modelLabel: String) -> String? {

@@ -272,6 +272,17 @@ extension ThreadManager {
         if initialPrompt?.isEmpty == false, isAgentTab, shouldSubmitInitialPrompt, !startFresh {
             scheduleAgentConversationIDRefresh(threadId: currentThread.id, sessionName: tmuxSessionName)
         }
+        if let prompt = initialPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prompt.isEmpty,
+           isAgentTab {
+            Task { [weak self] in
+                await self?.autoRenameTabIfNeeded(
+                    threadId: currentThread.id,
+                    sessionName: tmuxSessionName,
+                    prompt: prompt
+                )
+            }
+        }
 
         return tab
     }

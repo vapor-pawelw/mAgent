@@ -29,8 +29,9 @@
 
 - Kept Terminal and Diff tabs visible beside thread actions while user-created tabs use the flexible, scrollable space to their left.
 - Matched busy and completed tabs to their sidebar thread capsules with animated busy borders and green completion backgrounds.
+- Codex chat tabs now show the selected model and reasoning effort in their names, with a clear Chat suffix; unfinished Claude chat entry points are hidden for now.
 - Reopen cached recent threads immediately more often and let users tune how many terminal views Magent keeps for fast switching.
-- Automatically give agent tabs a concise AI-generated name from their first prompt, while preserving every manually renamed tab.
+- Automatically give agent tabs a concise AI-generated name from their prompts, retrying after transient failures while preserving every manually renamed tab.
 - Added a toolbar reminder with a first-time hint to reopen dismissed lost-prompt recovery banners without discarding the saved prompt.
 - Rounded the initial prompt input in the new thread and new tab sheets.
 

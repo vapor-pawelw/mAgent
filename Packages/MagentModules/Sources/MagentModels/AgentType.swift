@@ -127,7 +127,12 @@ public nonisolated enum AgentType: String, Codable, CaseIterable, Sendable {
     }
 
     public func supportedSurfaces(chatsEnabled: Bool) -> [AgentSurface] {
-        supportedSurfaces.filter { chatsEnabled || $0 == .terminal }
+        supportedSurfaces.filter { surface in
+            guard surface == .chat else { return true }
+            // Claude chat remains implemented for possible future development, but it is
+            // intentionally not exposed while that runtime is not ready for use.
+            return chatsEnabled && self == .codex
+        }
     }
 
     public var defaultSurface: AgentSurface {
