@@ -175,7 +175,7 @@ The response includes a `status` object with all UI-visible indicators:
 |-------|------|-------------|
 | `isBusy` | bool | Agent is actively working (spinner in UI) |
 | `isWaitingForInput` | bool | Agent needs user input (yellow `!` in UI) |
-| `hasUnreadCompletion` | bool | Agent finished, not yet viewed (green dot) |
+| `hasUnreadCompletion` | bool | Agent finished, not yet viewed (green completion capsule in the GUI) |
 | `isDirty` | bool | Uncommitted changes in worktree (orange dot) |
 | `isFullyDelivered` | bool | All commits merged to base branch |
 | `showArchiveSuggestion` | bool | Thread is fully delivered, idle, and has no unsubmitted input |

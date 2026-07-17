@@ -102,4 +102,47 @@ struct ThreadRowCapsuleStyleTests {
         #expect(completion == .completed)
         #expect(selectedCompletion == .selected)
     }
+
+    @MainActor
+    @Test("Completed capsule style uses the shared green fill and border treatment")
+    func completedCapsuleStyle() throws {
+        let layer = CALayer()
+        let appearance = try #require(NSAppearance(named: .aqua))
+
+        CompletedCapsuleStyle.apply(to: layer, appearance: appearance)
+
+        #expect(layer.borderWidth == 1)
+        #expect(abs((layer.backgroundColor?.alpha ?? 0) - 0.06) < 0.001)
+        #expect(abs((layer.borderColor?.alpha ?? 0) - 0.5) < 0.001)
+    }
+
+    @Test("Tab completion capsule yields to higher-priority attention states")
+    func tabCompletionPrecedence() {
+        func shouldPresent(
+            selected: Bool = false,
+            corruption: Bool = false,
+            waiting: Bool = false,
+            busy: Bool = false,
+            rateLimited: Bool = false,
+            unreadRateLimit: Bool = false
+        ) -> Bool {
+            CompletedCapsuleStyle.shouldPresentOnTab(
+                isSelected: selected,
+                hasUnreadCompletion: true,
+                hasTerminalCorruption: corruption,
+                hasWaitingForInput: waiting,
+                hasBusy: busy,
+                hasRateLimit: rateLimited,
+                hasUnreadRateLimit: unreadRateLimit
+            )
+        }
+
+        #expect(shouldPresent())
+        #expect(!shouldPresent(selected: true))
+        #expect(!shouldPresent(corruption: true))
+        #expect(!shouldPresent(waiting: true))
+        #expect(!shouldPresent(busy: true))
+        #expect(!shouldPresent(rateLimited: true))
+        #expect(!shouldPresent(unreadRateLimit: true))
+    }
 }

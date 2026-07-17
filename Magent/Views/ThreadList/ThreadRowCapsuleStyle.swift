@@ -24,6 +24,38 @@ enum ThreadRowCapsuleVisualState: Equatable {
     }
 }
 
+enum CompletedCapsuleStyle {
+    static let fillOpacity: CGFloat = 0.06
+    static let borderOpacity: CGFloat = 0.5
+    static let borderWidth: CGFloat = 1
+
+    static func apply(to layer: CALayer, appearance: NSAppearance) {
+        appearance.performAsCurrentDrawingAppearance {
+            layer.backgroundColor = NSColor.systemGreen.withAlphaComponent(fillOpacity).cgColor
+            layer.borderWidth = borderWidth
+            layer.borderColor = NSColor.systemGreen.withAlphaComponent(borderOpacity).cgColor
+        }
+    }
+
+    static func shouldPresentOnTab(
+        isSelected: Bool,
+        hasUnreadCompletion: Bool,
+        hasTerminalCorruption: Bool,
+        hasWaitingForInput: Bool,
+        hasBusy: Bool,
+        hasRateLimit: Bool,
+        hasUnreadRateLimit: Bool
+    ) -> Bool {
+        hasUnreadCompletion
+            && !isSelected
+            && !hasTerminalCorruption
+            && !hasWaitingForInput
+            && !hasBusy
+            && !hasRateLimit
+            && !hasUnreadRateLimit
+    }
+}
+
 enum ThreadCapsuleSectionMarkerStyle {
     static let capsuleCornerRadius: CGFloat = 8
     static let capsuleLeadingInset: CGFloat = 12

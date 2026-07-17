@@ -7,17 +7,20 @@ final class TabItemView: NSView, NSMenuDelegate {
     let keepAliveIcon: NSImageView
     let typeIcon: NSImageView
     let detachedIcon: NSImageView
-    let busySpinner: NSProgressIndicator
-    let completionDot: NSView
+    let waitingDot: NSView
     let rateLimitIcon: NSImageView
     let terminalCorruptionIcon: NSImageView
     let titleLabel: NSTextField
     let closeButton: NSButton
     var isDragging = false
     private let contentStack: NSStackView
+    private lazy var busyBorderAnimator = BusyCapsuleBorderAnimator(hostLayer: layer!)
 
     var isSelected = false {
-        didSet { updateAppearance() }
+        didSet {
+            updateAppearance()
+            updateBusyBorderAnimation()
+        }
     }
 
     var showCloseButton: Bool {
@@ -92,29 +95,20 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     private func updateIndicator() {
         if hasTerminalCorruption {
-            busySpinner.stopAnimation(nil)
-            busySpinner.isHidden = true
             rateLimitIcon.isHidden = true
-            completionDot.isHidden = true
+            waitingDot.isHidden = true
             terminalCorruptionIcon.toolTip = "Terminal corruption detected. Repair terminal."
             terminalCorruptionIcon.isHidden = false
         } else if hasWaitingForInput {
-            busySpinner.stopAnimation(nil)
-            busySpinner.isHidden = true
             rateLimitIcon.isHidden = true
             terminalCorruptionIcon.isHidden = true
-            completionDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
-            completionDot.isHidden = false
+            waitingDot.isHidden = false
         } else if hasBusy {
-            completionDot.isHidden = true
+            waitingDot.isHidden = true
             rateLimitIcon.isHidden = true
             terminalCorruptionIcon.isHidden = true
-            busySpinner.isHidden = false
-            busySpinner.startAnimation(nil)
         } else if hasRateLimit {
-            busySpinner.stopAnimation(nil)
-            busySpinner.isHidden = true
-            completionDot.isHidden = true
+            waitingDot.isHidden = true
             terminalCorruptionIcon.isHidden = true
             let agentIcon: NSImage? = switch rateLimitAgentType {
             case .claude, .custom, nil: NSImage(resource: .claudeIcon)
@@ -125,26 +119,26 @@ final class TabItemView: NSView, NSMenuDelegate {
             rateLimitIcon.toolTip = rateLimitTooltip ?? "Rate limit reached"
             rateLimitIcon.isHidden = false
         } else if hasUnreadCompletion {
-            busySpinner.stopAnimation(nil)
-            busySpinner.isHidden = true
             rateLimitIcon.isHidden = true
             terminalCorruptionIcon.isHidden = true
-            completionDot.layer?.backgroundColor = NSColor.systemGreen.cgColor
-            completionDot.isHidden = false
+            waitingDot.isHidden = true
         } else {
-            busySpinner.stopAnimation(nil)
-            busySpinner.isHidden = true
-            completionDot.isHidden = true
+            waitingDot.isHidden = true
             rateLimitIcon.isHidden = true
             terminalCorruptionIcon.isHidden = true
         }
+        updateAppearance()
+        updateBusyBorderAnimation()
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window != nil, !busySpinner.isHidden {
-            busySpinner.startAnimation(nil)
-        }
+        updateBusyBorderAnimation()
+    }
+
+    override func layout() {
+        super.layout()
+        updateBusyBorderAnimation()
     }
 
     var onSelect: (() -> Void)?
@@ -179,8 +173,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         keepAliveIcon = NSImageView()
         typeIcon = NSImageView()
         detachedIcon = NSImageView()
-        busySpinner = NSProgressIndicator()
-        completionDot = NSView()
+        waitingDot = NSView()
         rateLimitIcon = NSImageView()
         terminalCorruptionIcon = NSImageView()
         titleLabel = NSTextField(labelWithString: title)
@@ -225,23 +218,14 @@ final class TabItemView: NSView, NSMenuDelegate {
         detachedIcon.setContentHuggingPriority(.required, for: .horizontal)
         detachedIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        // Completion dot (green circle)
-        completionDot.wantsLayer = true
-        completionDot.layer?.backgroundColor = NSColor.systemGreen.cgColor
-        completionDot.layer?.cornerRadius = 4
-        completionDot.translatesAutoresizingMaskIntoConstraints = false
-        completionDot.isHidden = true
-        completionDot.setContentHuggingPriority(.required, for: .horizontal)
-        completionDot.setContentCompressionResistancePriority(.required, for: .horizontal)
-
-        // Busy spinner
-        busySpinner.style = .spinning
-        busySpinner.controlSize = .small
-        busySpinner.isIndeterminate = true
-        busySpinner.translatesAutoresizingMaskIntoConstraints = false
-        busySpinner.isHidden = true
-        busySpinner.setContentHuggingPriority(.required, for: .horizontal)
-        busySpinner.setContentCompressionResistancePriority(.required, for: .horizontal)
+        // Waiting-for-input dot
+        waitingDot.wantsLayer = true
+        waitingDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
+        waitingDot.layer?.cornerRadius = 4
+        waitingDot.translatesAutoresizingMaskIntoConstraints = false
+        waitingDot.isHidden = true
+        waitingDot.setContentHuggingPriority(.required, for: .horizontal)
+        waitingDot.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         // Rate-limit icon
         rateLimitIcon.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Rate limited")
@@ -290,8 +274,7 @@ final class TabItemView: NSView, NSMenuDelegate {
             keepAliveIcon,
             typeIcon,
             detachedIcon,
-            completionDot,
-            busySpinner,
+            waitingDot,
             rateLimitIcon,
             terminalCorruptionIcon,
             titleLabel,
@@ -315,10 +298,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             typeIcon.heightAnchor.constraint(equalToConstant: 14),
             detachedIcon.widthAnchor.constraint(equalToConstant: 10),
             detachedIcon.heightAnchor.constraint(equalToConstant: 10),
-            completionDot.widthAnchor.constraint(equalToConstant: 8),
-            completionDot.heightAnchor.constraint(equalToConstant: 8),
-            busySpinner.widthAnchor.constraint(equalToConstant: 10),
-            busySpinner.heightAnchor.constraint(equalToConstant: 10),
+            waitingDot.widthAnchor.constraint(equalToConstant: 8),
+            waitingDot.heightAnchor.constraint(equalToConstant: 8),
             rateLimitIcon.widthAnchor.constraint(equalToConstant: 10),
             rateLimitIcon.heightAnchor.constraint(equalToConstant: 10),
             terminalCorruptionIcon.widthAnchor.constraint(equalToConstant: 10),
@@ -342,6 +323,33 @@ final class TabItemView: NSView, NSMenuDelegate {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateAppearance()
+        updateBusyBorderAnimation()
+    }
+
+    private func updateBusyBorderAnimation() {
+        let isBusyIndicatorActive = hasBusy && !hasTerminalCorruption && !hasWaitingForInput
+        busyBorderAnimator.update(
+            isActive: isBusyIndicatorActive,
+            canAnimate: window != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            bounds: bounds,
+            borderRect: bounds.insetBy(dx: 1, dy: 1),
+            cornerRadius: max(0, (layer?.cornerRadius ?? 0) - 1),
+            borderWidth: 2,
+            isSelected: isSelected,
+            appearance: effectiveAppearance
+        )
+    }
+
+    private var showsCompletionCapsule: Bool {
+        CompletedCapsuleStyle.shouldPresentOnTab(
+            isSelected: isSelected,
+            hasUnreadCompletion: hasUnreadCompletion,
+            hasTerminalCorruption: hasTerminalCorruption,
+            hasWaitingForInput: hasWaitingForInput,
+            hasBusy: hasBusy,
+            hasRateLimit: hasRateLimit,
+            hasUnreadRateLimit: hasUnreadRateLimit
+        )
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -491,20 +499,26 @@ final class TabItemView: NSView, NSMenuDelegate {
         // Resolve NSColors into CGColors within the correct appearance context so
         // adaptive colors (Surface, PrimaryBrand, etc.) pick up light-mode values
         // when the window is in light mode.
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            if self.isSelected {
-                let alpha: CGFloat = self.isUtilityTab ? 0.12 : 0.18
-                self.layer?.backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(alpha).cgColor
-            } else {
-                let alpha: CGFloat = self.isUtilityTab ? 0.42 : 0.62
-                self.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(alpha).cgColor
-            }
-            if self.isUtilityTab {
-                self.layer?.borderWidth = 1
-                self.layer?.borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(self.isSelected ? 0.45 : 0.3).cgColor
-            } else {
-                self.layer?.borderWidth = 0
-                self.layer?.borderColor = NSColor.clear.cgColor
+        if showsCompletionCapsule, let layer {
+            CompletedCapsuleStyle.apply(to: layer, appearance: effectiveAppearance)
+        } else {
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                if self.isSelected {
+                    let alpha: CGFloat = self.isUtilityTab ? 0.12 : 0.18
+                    self.layer?.backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(alpha).cgColor
+                } else {
+                    let alpha: CGFloat = self.isUtilityTab ? 0.42 : 0.62
+                    self.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(alpha).cgColor
+                }
+                if self.isUtilityTab {
+                    self.layer?.borderWidth = 1
+                    self.layer?.borderColor = NSColor(resource: .primaryBrand)
+                        .withAlphaComponent(self.isSelected ? 0.45 : 0.3)
+                        .cgColor
+                } else {
+                    self.layer?.borderWidth = 0
+                    self.layer?.borderColor = NSColor.clear.cgColor
+                }
             }
         }
         titleLabel.textColor = titleColor

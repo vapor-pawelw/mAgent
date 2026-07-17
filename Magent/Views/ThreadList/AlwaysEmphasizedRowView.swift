@@ -12,7 +12,6 @@ private final class ArchivingRowOverlayView: NSView {
 }
 
 final class AlwaysEmphasizedRowView: NSTableRowView {
-    private static let busyBorderRotationAnimationKey = "busy-border-rotation"
     static let capsuleLeadingInset = ThreadCapsuleSectionMarkerStyle.capsuleLeadingInset
     static let capsuleTrailingInset = ThreadCapsuleSectionMarkerStyle.capsuleTrailingInset
     static let capsuleVerticalInset = ThreadCapsuleSectionMarkerStyle.capsuleVerticalInset
@@ -25,13 +24,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     /// Vertical content padding from capsule inner edge (inside the border).
     static let capsuleContentVPadding: CGFloat = 12
     private var archivingOverlay: ArchivingRowOverlayView?
-    /// Container layer for the rotating conic gradient border.
-    private var busyBorderContainer: CALayer?
-
-    /// Single shared animation start time so all busy threads rotate in phase.
-    /// Set once when any thread first becomes busy;
-    /// never reset (the epoch is meaningless, only the phase matters).
-    private static var sharedAnimationEpoch: CFTimeInterval = 0
+    private lazy var busyBorderAnimator = BusyCapsuleBorderAnimator(hostLayer: layer!)
 
     /// Legacy property — kept so the data source assignment compiles but
     /// no longer drives per-thread phase tracking.
@@ -113,7 +106,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             for case let cell as NSTableCellView in subviews {
                 cell.backgroundStyle = style
             }
-            updateBusyBorderSelectionColors()
+            updateBusyShimmerAnimation()
         }
     }
 
@@ -128,7 +121,12 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
 
     override func layout() {
         super.layout()
-        layoutBusyBorderLayers()
+        updateBusyShimmerAnimation()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateBusyShimmerAnimation()
     }
 
     // MARK: - Capsule Style
@@ -177,8 +175,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             )
         case .completed:
             return CapsuleStyle(
-                fill: NSColor.systemGreen.withAlphaComponent(0.06),
-                border: NSColor.systemGreen.withAlphaComponent(0.5)
+                fill: NSColor.systemGreen.withAlphaComponent(CompletedCapsuleStyle.fillOpacity),
+                border: NSColor.systemGreen.withAlphaComponent(CompletedCapsuleStyle.borderOpacity)
             )
         case .poppedOut:
             return CapsuleStyle(
@@ -268,7 +266,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             fillPath.fill()
             drawSectionMarker(in: fillPath)
 
-            if busyBorderContainer == nil, showsContextMenuHighlight {
+            if !busyBorderAnimator.isVisible, showsContextMenuHighlight {
                 let insetRect = capsuleRect.insetBy(dx: 0.5, dy: 0.5)
                 let borderPath = NSBezierPath(
                     roundedRect: insetRect,
@@ -304,174 +302,17 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     }
 
     private func updateBusyShimmerAnimation() {
-        if showsBusyShimmer {
-            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                stopBusyBorderAnimation()
-                return
-            }
-            startBusyBorderAnimation()
-        } else {
-            stopBusyBorderAnimation()
-        }
-    }
-
-    // MARK: - Busy Border Animation
-
-    private func makeBorderRotationAnimation() -> CABasicAnimation {
-        let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
-        rotation.fromValue = 0.0
-        rotation.toValue = CGFloat.pi * 2
-        rotation.duration = 3.0
-        rotation.repeatCount = .infinity
-        rotation.timingFunction = CAMediaTimingFunction(name: .linear)
-        // Pin to the original start time so CA computes the correct phase
-        // even when the animation is re-added after being dropped.
-        rotation.beginTime = Self.sharedAnimationEpoch
-        return rotation
-    }
-
-    private func startBusyBorderAnimation() {
-        guard window != nil else { return }
-        if let existing = busyBorderContainer {
-            // Re-add rotation if CA dropped it (e.g. view left and re-entered window).
-            if let gradient = existing.sublayers?.first as? CAGradientLayer,
-               gradient.animation(forKey: Self.busyBorderRotationAnimationKey) == nil {
-                gradient.add(makeBorderRotationAnimation(), forKey: Self.busyBorderRotationAnimationKey)
-            }
-            return
-        }
-
-        let rect = capsuleRect
-        let cornerRadius = Self.capsuleCornerRadius
-        let borderWidth = currentCapsuleBorderWidth
-
-        // Container sits behind content but above row background.
-        let container = CALayer()
-        container.frame = bounds
-        container.zPosition = -1
-        layer?.addSublayer(container)
-
-        // The conic gradient that will rotate. Made larger than the capsule
-        // so the gradient sweep looks smooth even at the corners.
-        let gradientLayer = CAGradientLayer()
-        gradientLayer.type = .conic
-        gradientLayer.startPoint = CGPoint(x: 0.5, y: 0.5)
-        gradientLayer.endPoint = CGPoint(x: 0.5, y: 0)
-
-        applyBorderGradientColors(gradientLayer, selected: isSelected)
-        gradientLayer.locations = [0.0, 0.08, 0.16, 0.5, 0.84, 0.92, 1.0]
-
-        // Expand gradient frame so rotation doesn't clip.
-        let diagonal = sqrt(rect.width * rect.width + rect.height * rect.height)
-        gradientLayer.frame = CGRect(
-            x: rect.midX - diagonal / 2,
-            y: rect.midY - diagonal / 2,
-            width: diagonal,
-            height: diagonal
+        busyBorderAnimator.update(
+            isActive: showsBusyShimmer,
+            canAnimate: window != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            bounds: bounds,
+            borderRect: capsuleRect,
+            cornerRadius: Self.capsuleCornerRadius,
+            borderWidth: currentCapsuleBorderWidth,
+            isSelected: isSelected,
+            appearance: effectiveAppearance,
+            zPosition: -1
         )
-        container.addSublayer(gradientLayer)
-
-        // Mask the gradient to just the capsule border stroke.
-        let borderPath = CGPath(
-            roundedRect: rect,
-            cornerWidth: cornerRadius,
-            cornerHeight: cornerRadius,
-            transform: nil
-        )
-        let shapeMask = CAShapeLayer()
-        shapeMask.path = borderPath
-        shapeMask.fillColor = nil
-        shapeMask.strokeColor = NSColor.white.cgColor
-        shapeMask.lineWidth = borderWidth
-        container.mask = shapeMask
-
-        // Record a shared epoch the first time any thread starts animating.
-        // All threads use this same epoch so their rotations stay in phase.
-        if Self.sharedAnimationEpoch == 0 {
-            Self.sharedAnimationEpoch = CACurrentMediaTime()
-        }
-        gradientLayer.add(makeBorderRotationAnimation(), forKey: Self.busyBorderRotationAnimationKey)
-
-        busyBorderContainer = container
-    }
-
-    /// Set the gradient colors based on selection state.
-    private func applyBorderGradientColors(_ gradientLayer: CAGradientLayer, selected: Bool) {
-        let brightColor: NSColor
-        let dimColor: NSColor
-        if selected {
-            brightColor = NSColor.white.withAlphaComponent(0.9)
-            dimColor = NSColor.white.withAlphaComponent(0.25)
-        } else {
-            let accentColor = NSColor.controlAccentColor
-            var hue: CGFloat = 0, sat: CGFloat = 0, bri: CGFloat = 0, alpha: CGFloat = 0
-            accentColor.usingColorSpace(.sRGB)?.getHue(&hue, saturation: &sat, brightness: &bri, alpha: &alpha)
-            brightColor = NSColor(hue: hue, saturation: max(sat * 0.7, 0.3), brightness: min(bri * 1.1, 1.0), alpha: 0.8)
-            // Keep unselected busy rows consistent with idle rows: only the moving arc draws a border.
-            dimColor = .clear
-        }
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            gradientLayer.colors = [
-                brightColor.cgColor,
-                brightColor.withAlphaComponent(selected ? 0.5 : 0.4).cgColor,
-                dimColor.cgColor,
-                dimColor.cgColor,
-                dimColor.cgColor,
-                brightColor.withAlphaComponent(selected ? 0.5 : 0.4).cgColor,
-                brightColor.cgColor,
-            ]
-        }
-    }
-
-    private func updateBusyBorderSelectionColors() {
-        guard let container = busyBorderContainer,
-              let gradient = container.sublayers?.first as? CAGradientLayer else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        applyBorderGradientColors(gradient, selected: isSelected)
-        if let shapeMask = container.mask as? CAShapeLayer {
-            shapeMask.lineWidth = currentCapsuleBorderWidth
-        }
-        CATransaction.commit()
-    }
-
-    private func stopBusyBorderAnimation() {
-        guard busyBorderContainer != nil else { return }
-        busyBorderContainer?.removeFromSuperlayer()
-        busyBorderContainer = nil
-        // Don't reset sharedAnimationEpoch — other threads may still be
-        // animating and new busy threads should join in phase.
-    }
-
-    private func layoutBusyBorderLayers() {
-        guard let container = busyBorderContainer else { return }
-        // Disable implicit animations so frame/path changes don't
-        // create transactions that reset the running rotation.
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        container.frame = bounds
-        let rect = capsuleRect
-        let cornerRadius = Self.capsuleCornerRadius
-
-        if let gradientLayer = container.sublayers?.first as? CAGradientLayer {
-            let diagonal = sqrt(rect.width * rect.width + rect.height * rect.height)
-            gradientLayer.frame = CGRect(
-                x: rect.midX - diagonal / 2,
-                y: rect.midY - diagonal / 2,
-                width: diagonal,
-                height: diagonal
-            )
-        }
-        if let shapeMask = container.mask as? CAShapeLayer {
-            shapeMask.path = CGPath(
-                roundedRect: rect,
-                cornerWidth: cornerRadius,
-                cornerHeight: cornerRadius,
-                transform: nil
-            )
-            shapeMask.lineWidth = currentCapsuleBorderWidth
-        }
-        CATransaction.commit()
     }
 
     private func updateArchivingOverlay() {
