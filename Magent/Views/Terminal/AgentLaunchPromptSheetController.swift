@@ -489,10 +489,12 @@ private final class RoundedLaunchPromptScrollView: NSScrollView {
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
-            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.2).cgColor
+            layer?.borderColor = NSColor.separatorColor
+                .withAlphaComponent(PromptInputSurfaceStyle.borderOpacity)
+                .cgColor
         }
         layer?.borderWidth = 1
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = PromptInputSurfaceStyle.cornerRadius
         layer?.masksToBounds = true
     }
 
@@ -928,7 +930,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             promptTextView.isVerticallyResizable = true
             promptTextView.isHorizontallyResizable = false
             promptTextView.allowsUndo = true
-            promptTextView.textContainerInset = NSSize(width: 8, height: 8)
+            promptTextView.textContainerInset = NSSize(
+                width: PromptInputSurfaceStyle.horizontalTextInset,
+                height: PromptInputSurfaceStyle.verticalTextInset
+            )
             promptTextView.textContainer?.widthTracksTextView = true
             promptTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
             promptTextView.delegate = self

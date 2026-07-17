@@ -1873,7 +1873,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         let composerContainer = composerContainerView
         composerContainer.translatesAutoresizingMaskIntoConstraints = false
         composerContainer.wantsLayer = true
-        composerContainer.layer?.cornerRadius = 12
+        composerContainer.layer?.cornerRadius = PromptInputSurfaceStyle.cornerRadius
         composerContainer.layer?.borderWidth = 1
         composerContainer.layer?.masksToBounds = true
         rootStack.addArrangedSubview(composerContainer)
@@ -1943,7 +1943,10 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         inputTextView.isAutomaticTextReplacementEnabled = false
         inputTextView.isHorizontallyResizable = false
         inputTextView.isVerticallyResizable = true
-        inputTextView.textContainerInset = NSSize(width: 6, height: 6)
+        inputTextView.textContainerInset = NSSize(
+            width: PromptInputSurfaceStyle.horizontalTextInset,
+            height: PromptInputSurfaceStyle.verticalTextInset
+        )
         inputTextView.delegate = self
         inputTextView.string = initialDraftInput
         inputTextView.textContainer?.widthTracksTextView = true
@@ -2148,11 +2151,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
 
     private func updateComposerAppearance() {
         composerContainerView.effectiveAppearance.performAsCurrentDrawingAppearance {
-            composerContainerView.layer?.backgroundColor = NSColor(resource: .surface)
-                .withAlphaComponent(0.82)
-                .cgColor
+            composerContainerView.layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
             composerContainerView.layer?.borderColor = NSColor.separatorColor
-                .withAlphaComponent(0.55)
+                .withAlphaComponent(PromptInputSurfaceStyle.borderOpacity)
                 .cgColor
         }
     }

@@ -6,7 +6,7 @@
 - User prompts remain right-aligned bubbles, while ordinary assistant replies render unboxed at a wider readable measure. Status messages keep a contained treatment so errors, cancellations, and approval blockers remain distinct.
 - In-progress assistant work uses an unboxed inline spinner and elapsed status text instead of an animated placeholder bubble.
 - Message timestamps and sent model/reasoning metadata stay out of the transcript and remain available from the message hover tooltip.
-- The composer uses one adaptive rounded surface: a multiline text area above an integrated footer containing attachment, model, reasoning, and send controls.
+- The composer uses the same rounded prompt surface styling as new thread and new tab sheets: a multiline text area above an integrated footer containing attachment, model, reasoning, and send controls.
 - Codex chat tabs expose fast mode from the bottom-left reasoning picker as `⚡ Fast`; it is stored and passed as Codex `reasoningLevel: "none"`.
 - Tool activity should read like concise actions first: `Run command`, `Read file`, `Search`, or `Tool output`.
 - Patch edits should read as `Apply patch` / `Patch applied` and summarize changed files instead of rendering the raw patch inline. Expanded filenames are links that open the thread's existing Diff tab focused on that file.

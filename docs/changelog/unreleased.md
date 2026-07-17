@@ -23,6 +23,7 @@
 
 #### Improvements
 
+- Matched the chat composer’s prompt surface to the rounded input used when creating threads and tabs.
 - Added Codex fast mode to chat reasoning controls and the `/fast` chat shortcut.
 - Made assistant replies easier to read with a wider unboxed layout while keeping user prompts and important statuses visually distinct.
 - Replaced the animated working bubble with a quieter inline progress row.
