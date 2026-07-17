@@ -1800,12 +1800,22 @@ final class ThreadDetailViewController: NSViewController {
 
     @objc private func handleThreadsDidChange() {
         guard let latest = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
+        let previous = thread
         let didTabStructureChange =
-            ThreadTabStructureFingerprint(thread: thread)
+            ThreadTabStructureFingerprint(thread: previous)
             != ThreadTabStructureFingerprint(thread: latest)
-        thread = latest
+        let canApplyRenameInPlace = ThreadTabStructureFingerprint.isTabSessionRename(
+            from: previous,
+            to: latest
+        )
 
-        if didTabStructureChange {
+        if canApplyRenameInPlace || (!didTabStructureChange && previous.customTabNames != latest.customTabNames) {
+            handleRename(latest)
+        } else {
+            thread = latest
+        }
+
+        if didTabStructureChange && !canApplyRenameInPlace {
             // Local Cmd+T / draft-to-agent flows run a two-phase placeholder→session
             // reconciliation and explicitly own selection. Rebuilding via setupTabs()
             // during that window can transiently jump between tabs.

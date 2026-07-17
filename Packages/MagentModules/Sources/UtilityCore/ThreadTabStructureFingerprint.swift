@@ -36,4 +36,40 @@ public struct ThreadTabStructureFingerprint: Equatable, Sendable {
             PersistedTab(identifier: persisted.identifier, isPinned: persisted.isPinned)
         }
     }
+
+    /// Returns whether a fingerprint change is the identity re-key performed by
+    /// `renameTab`, rather than a tab being added, removed, reordered, or pinned.
+    public static func isTabSessionRename(from previous: MagentThread, to updated: MagentThread) -> Bool {
+        let previousFingerprint = Self(thread: previous)
+        let updatedFingerprint = Self(thread: updated)
+
+        guard previousFingerprint.webTabs == updatedFingerprint.webTabs,
+              previousFingerprint.draftTabs == updatedFingerprint.draftTabs,
+              previousFingerprint.chatTabs == updatedFingerprint.chatTabs,
+              previous.tmuxSessionNames.count == updated.tmuxSessionNames.count,
+              previous.tmuxSessionNames != updated.tmuxSessionNames else {
+            return false
+        }
+
+        let previousNames = Set(previous.tmuxSessionNames)
+        let updatedNames = Set(updated.tmuxSessionNames)
+        var renameMap: [String: String] = [:]
+
+        for (oldName, newName) in zip(previous.tmuxSessionNames, updated.tmuxSessionNames) where oldName != newName {
+            // Existing names moving between positions are a reorder, not a rename.
+            guard !updatedNames.contains(oldName),
+                  !previousNames.contains(newName),
+                  let previousCreatedAt = previous.sessionCreatedAts[oldName],
+                  updated.sessionCreatedAts[newName] == previousCreatedAt,
+                  updated.manuallyRenamedTabs.contains(newName),
+                  updated.customTabNames[newName] != nil else {
+                return false
+            }
+            renameMap[oldName] = newName
+        }
+
+        guard !renameMap.isEmpty else { return false }
+        let remappedPins = previous.pinnedTmuxSessions.map { renameMap[$0] ?? $0 }
+        return remappedPins == updated.pinnedTmuxSessions
+    }
 }
