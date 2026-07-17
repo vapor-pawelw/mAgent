@@ -51,8 +51,8 @@
 - Added a disabled-by-default Threads setting for showing worktree folder names on the second line of sidebar rows.
 - Added collapsed-by-default hidden-thread groups that can be expanded independently in each sidebar section or project.
 - Added toolbar and empty-state repository actions for creating, importing, or cloning repositories.
-- Replaced thread activity durations with tiny `Busy` and `Stale` badges; stale threads appear after 7 days and escalate from yellow to orange at 14 days and red at 30 days.
-- Made sidebar status badges right-clickable while preserving left-click thread selection, including direct numbered PR/MR opening, the full Jira menu, quick Hide and Archive actions from stale-thread badges, precise Stale/Busy context, and quick menus for priority, favorite, pinned, and hidden states.
+- Replaced thread activity durations with compact indicators: a colored spinner for long-running busy threads and a `zzz` symbol for stale threads, with the existing hover details and quick actions.
+- Made sidebar status items right-clickable while preserving left-click thread selection, including direct numbered PR/MR opening, the full Jira menu, quick Hide and Archive actions from stale indicators, precise Stale/Busy context, and quick menus for priority, favorite, pinned, and hidden states.
 
 #### Improvements
 
@@ -63,9 +63,9 @@
 - Mark the priority matching a thread's Jira ticket in sidebar priority menus.
 - Simplified section headers to plain rows and moved their color cue to diagonal top-right bands on thread capsules.
 - Matched main-worktree capsules to the neutral thread background and kept a compact, optically aligned home icon inline when other thread icons are hidden.
-- Consolidated thread metadata into a full-width status row, with favorite beside pinned/hidden markers and combined PR/MR number-and-status badges before Jira and activity; Jira keys are now highlighted directly in branch names instead of repeated on a separate line.
+- Reordered thread status rows so priority, Jira, and PR workflow details lead while local state icons and activity trail; explicit Keep Alive shields now remain visible on pinned threads.
 - Anchored sidebar status rows closer to the bottom edge of thread capsules for clearer separation from branch and description text.
-- Improved compact Stale/Busy, PR/MR, Jira, and section-count badge readability with larger, higher-contrast appearance-aware text on subtle tinted backgrounds.
+- Improved compact activity, PR/MR, Jira, and section-count indicator readability with higher-contrast appearance-aware colors.
 - Aligned pinned, favorite, and hidden sidebar markers, matched them to thread-description color and dimming, and reduced the visual weight of pinned/favorite icons.
 - Replaced sidebar dividers between pinned, normal, and hidden threads with cleaner spacing.
 - Tightened Hidden disclosure spacing while preserving separation from the next section when collapsed.

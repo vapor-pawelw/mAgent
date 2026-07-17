@@ -1,6 +1,53 @@
 import Cocoa
 import MagentCore
 
+private final class ActivityProgressIndicatorView: NSView {
+    private let indicatorLayer = CAShapeLayer()
+    private static let rotationKey = "activity-progress-rotation"
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        indicatorLayer.fillColor = NSColor.clear.cgColor
+        indicatorLayer.lineWidth = 1.5
+        indicatorLayer.lineCap = .round
+        indicatorLayer.strokeStart = 0
+        indicatorLayer.strokeEnd = 0.72
+        layer?.addSublayer(indicatorLayer)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        indicatorLayer.frame = bounds
+        indicatorLayer.path = CGPath(
+            ellipseIn: bounds.insetBy(dx: 1.25, dy: 1.25),
+            transform: nil
+        )
+    }
+
+    func setColor(_ color: NSColor) {
+        indicatorLayer.strokeColor = color.cgColor
+    }
+
+    func startAnimation() {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              indicatorLayer.animation(forKey: Self.rotationKey) == nil else { return }
+        let animation = CABasicAnimation(keyPath: "transform.rotation.z")
+        animation.fromValue = 0
+        animation.toValue = CGFloat.pi * 2
+        animation.duration = 0.8
+        animation.repeatCount = .infinity
+        indicatorLayer.add(animation, forKey: Self.rotationKey)
+    }
+
+    func stopAnimation() {
+        indicatorLayer.removeAnimation(forKey: Self.rotationKey)
+    }
+}
+
 /// A compact, borderless priority indicator.
 private final class PriorityIndicatorView: RightClickMenuView {
     let label: NSTextField = {
@@ -61,6 +108,15 @@ private final class TopBorderBadge: RightClickMenuView {
         return iv
     }()
 
+    let progressIndicator: ActivityProgressIndicatorView = {
+        let indicator = ActivityProgressIndicatorView()
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        indicator.setContentHuggingPriority(.required, for: .horizontal)
+        indicator.setContentCompressionResistancePriority(.required, for: .horizontal)
+        indicator.isHidden = true
+        return indicator
+    }()
+
     private let cornerDot: NSView = {
         let view = NSView()
         view.translatesAutoresizingMaskIntoConstraints = false
@@ -84,6 +140,7 @@ private final class TopBorderBadge: RightClickMenuView {
         wantsLayer = true
 
         contentStack.addArrangedSubview(iconView)
+        contentStack.addArrangedSubview(progressIndicator)
         contentStack.addArrangedSubview(label)
         addSubview(contentStack)
         addSubview(cornerDot)
@@ -99,6 +156,8 @@ private final class TopBorderBadge: RightClickMenuView {
             iconView.heightAnchor.constraint(equalToConstant: ThreadRowBadgeLayout.standardStatusIconSize),
         ]
         NSLayoutConstraint.activate(contentEdgeConstraints + iconSizeConstraints + [
+            progressIndicator.widthAnchor.constraint(equalToConstant: ThreadRowBadgeLayout.compactLeadingStatusIconSize),
+            progressIndicator.heightAnchor.constraint(equalToConstant: ThreadRowBadgeLayout.compactLeadingStatusIconSize),
             cornerDot.widthAnchor.constraint(equalToConstant: 2),
             cornerDot.heightAnchor.constraint(equalToConstant: 2),
             cornerDot.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -224,7 +283,7 @@ final class ThreadCell: NSTableCellView {
     private var durationTimer: Timer?
     private var currentDurationSince: Date?
     private var isCurrentDurationBusy = false
-    /// 5-dot priority capsule rendered beside the duration badge in the leading status group.
+    /// 5-dot priority capsule rendered first in the leading workflow-status group.
     /// Hidden (detached from the stack) when the thread has no priority set.
     private var priorityCapsule: PriorityIndicatorView?
     private var claudeRateLimitBadge: TopBorderBadge?
@@ -834,10 +893,9 @@ final class ThreadCell: NSTableCellView {
             jiraSyncBadge?.isHidden = true
             jiraSyncBadge?.toolTip = nil
         }
-        // Show shield when thread has Keep Alive, but hide it when pinned threads
-        // are already implicitly protected via the protectPinnedFromEviction setting.
-        let showKeepAliveShield = thread.isKeepAlive
-            && !(cellSettings.protectPinnedFromEviction && thread.isPinned)
+        let showKeepAliveShield = ThreadRowBadgeLayout.showsKeepAliveBadge(
+            isKeepAlive: thread.isKeepAlive
+        )
         if showKeepAliveShield {
             ensureKeepAliveBadge()
             keepAliveBadge?.toolTip = "Keep Alive — protected from idle eviction"
@@ -1105,9 +1163,9 @@ final class ThreadCell: NSTableCellView {
     }
 
     private var durationBadge: TopBorderBadge?
-    /// Holds priority on the leading side of the status row.
+    /// Holds workflow metadata on the leading side of the status row.
     private weak var bottomLeftBadgeStack: NSStackView?
-    /// Holds state indicators on the trailing side of the status row.
+    /// Holds local state indicators on the trailing side of the status row.
     private var bottomRightBadgeStack: NSStackView?
 
     private func ensureBottomRightBadgeStack() {
@@ -1161,12 +1219,10 @@ final class ThreadCell: NSTableCellView {
 
         let badge = TopBorderBadge()
         badge.iconView.isHidden = true
+        badge.progressIndicator.isHidden = true
         badge.isHidden = true
-        badge.label.font = .systemFont(
-            ofSize: ThreadRowBadgeLayout.compactTextFontSize,
-            weight: .medium
-        )
-        badge.setContentInsets(horizontal: 3, vertical: 1)
+        badge.label.isHidden = true
+        badge.setIconSize(ThreadRowBadgeLayout.compactLeadingStatusIconSize)
 
         let capsule = PriorityIndicatorView()
         capsule.label.font = Self.priorityDotsFont()
@@ -1458,27 +1514,24 @@ final class ThreadCell: NSTableCellView {
 
         let leadingItems = ThreadRowBadgeLayout.LeadingStatusItem.allCases.compactMap { item -> NSView? in
             switch item {
-            case .pinned: pinnedBadge
-            case .hidden: hiddenBadge
-            case .stoppedSessions: stoppedSessionsBadge
-            case .favorite: favoriteBadge
             case .priority: priorityCapsule
-            }
-        }
-        let fixedTrailingItems: [NSView?] = [
-            claudeRateLimitBadge,
-            codexRateLimitBadge,
-            keepAliveBadge,
-        ]
-        let trailingItems = ThreadRowBadgeLayout.TrailingStatusItem.allCases.compactMap { item -> NSView? in
-            switch item {
-            case .pullRequestStatus: prStatusBadge
             case .jiraStatus: jiraStatusBadge
-            case .activityDuration: durationBadge
-            case .jiraSync: jiraSyncBadge
+            case .pullRequestStatus: prStatusBadge
             }
         }
-        let statusItems = leadingItems + fixedTrailingItems.compactMap { $0 } + trailingItems
+        let trailingItems = ThreadRowBadgeLayout.TrailingStatusItem.allCases.flatMap { item -> [NSView] in
+            switch item {
+            case .rateLimit: [claudeRateLimitBadge, codexRateLimitBadge].compactMap { $0 }
+            case .jiraSync: [jiraSyncBadge].compactMap { $0 }
+            case .keepAlive: [keepAliveBadge].compactMap { $0 }
+            case .stoppedSessions: [stoppedSessionsBadge].compactMap { $0 }
+            case .hidden: [hiddenBadge].compactMap { $0 }
+            case .pinned: [pinnedBadge].compactMap { $0 }
+            case .favorite: [favoriteBadge].compactMap { $0 }
+            case .activityDuration: [durationBadge].compactMap { $0 }
+            }
+        }
+        let statusItems = leadingItems + trailingItems
 
         for item in statusItems {
             (item.superview as? NSStackView)?.removeArrangedSubview(item)
@@ -1487,7 +1540,7 @@ final class ThreadCell: NSTableCellView {
         for item in leadingItems {
             leadingStack.addArrangedSubview(item)
         }
-        for item in fixedTrailingItems.compactMap({ $0 }) + trailingItems {
+        for item in trailingItems {
             trailingStack.addArrangedSubview(item)
         }
     }
@@ -1536,6 +1589,9 @@ final class ThreadCell: NSTableCellView {
         } else {
             durationLabel?.stringValue = ""
             durationLabel?.isHidden = true
+            durationBadge?.iconView.isHidden = true
+            durationBadge?.progressIndicator.stopAnimation()
+            durationBadge?.progressIndicator.isHidden = true
             durationBadge?.isHidden = true
             durationBadge?.toolTip = nil
             stopDurationTimer()
@@ -1549,10 +1605,21 @@ final class ThreadCell: NSTableCellView {
             isBusy: isCurrentDurationBusy,
             isMainWorktree: isConfiguredAsMain
         )
-        durationLabel?.stringValue = switch badge?.label {
-        case .idle: String(localized: .ThreadStrings.threadActivityBadgeIdle)
-        case .busy: String(localized: .ThreadStrings.threadActivityBadgeBusy)
-        case nil: ""
+        durationLabel?.stringValue = ""
+        switch badge?.label {
+        case .stale:
+            durationBadge?.iconView.image = Self.cachedSymbolImage("zzz")
+            durationBadge?.iconView.isHidden = false
+            durationBadge?.progressIndicator.stopAnimation()
+            durationBadge?.progressIndicator.isHidden = true
+        case .busy:
+            durationBadge?.iconView.isHidden = true
+            durationBadge?.progressIndicator.isHidden = false
+            durationBadge?.progressIndicator.startAnimation()
+        case nil:
+            durationBadge?.iconView.isHidden = true
+            durationBadge?.progressIndicator.stopAnimation()
+            durationBadge?.progressIndicator.isHidden = true
         }
         updateDurationBadgeColors()
         let text = elapsedDurationText(elapsed)
@@ -1575,7 +1642,12 @@ final class ThreadCell: NSTableCellView {
             )
         } != nil
         durationBadge?.isHidden = !hasBadge
-        durationLabel?.isHidden = !hasBadge
+        if !hasBadge {
+            durationBadge?.iconView.isHidden = true
+            durationBadge?.progressIndicator.stopAnimation()
+            durationBadge?.progressIndicator.isHidden = true
+        }
+        durationLabel?.isHidden = true
     }
 
     private func elapsedDurationText(_ elapsed: Int) -> String {
@@ -1600,12 +1672,13 @@ final class ThreadCell: NSTableCellView {
             }
             durationBadge?.layer?.borderColor = NSColor.clear.cgColor
             durationBadge?.layer?.borderWidth = 0
-            durationBadge?.layer?.cornerRadius = 3
-            durationBadge?.layer?.backgroundColor = color.withAlphaComponent(0.1).cgColor
-            durationLabel?.textColor = BadgeForegroundStyle.color(
+            durationBadge?.layer?.backgroundColor = NSColor.clear.cgColor
+            let foregroundColor = BadgeForegroundStyle.color(
                 tintColor: color,
                 appearance: effectiveAppearance
             )
+            durationBadge?.iconView.contentTintColor = foregroundColor
+            durationBadge?.progressIndicator.setColor(foregroundColor)
         }
     }
 

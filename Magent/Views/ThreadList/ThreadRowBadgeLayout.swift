@@ -86,7 +86,7 @@ enum ThreadRowBadgeLayout {
     }
 
     enum ActivityBadgeLabel: Equatable {
-        case idle
+        case stale
         case busy
     }
 
@@ -120,9 +120,9 @@ enum ThreadRowBadgeLayout {
         } else {
             switch elapsed {
             case ..<604_800: nil
-            case ..<1_209_600: ActivityBadge(label: .idle, tone: .yellow)
-            case ..<2_592_000: ActivityBadge(label: .idle, tone: .orange)
-            default: ActivityBadge(label: .idle, tone: .red)
+            case ..<1_209_600: ActivityBadge(label: .stale, tone: .yellow)
+            case ..<2_592_000: ActivityBadge(label: .stale, tone: .orange)
+            default: ActivityBadge(label: .stale, tone: .red)
             }
         }
     }
@@ -151,17 +151,23 @@ enum ThreadRowBadgeLayout {
     }
 
     enum LeadingStatusItem: CaseIterable {
-        case pinned
-        case hidden
-        case stoppedSessions
-        case favorite
         case priority
+        case jiraStatus
+        case pullRequestStatus
     }
 
     enum TrailingStatusItem: CaseIterable {
-        case pullRequestStatus
-        case jiraStatus
-        case activityDuration
+        case rateLimit
         case jiraSync
+        case keepAlive
+        case stoppedSessions
+        case hidden
+        case pinned
+        case favorite
+        case activityDuration
+    }
+
+    static func showsKeepAliveBadge(isKeepAlive: Bool) -> Bool {
+        isKeepAlive
     }
 }

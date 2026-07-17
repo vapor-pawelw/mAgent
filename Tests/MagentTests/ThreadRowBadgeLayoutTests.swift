@@ -13,7 +13,7 @@ struct ThreadRowBadgeLayoutTests {
         #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 86_400, isBusy: true)?.tone == .red)
 
         #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 604_799, isBusy: false) == nil)
-        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 604_800, isBusy: false) == .init(label: .idle, tone: .yellow))
+        #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 604_800, isBusy: false) == .init(label: .stale, tone: .yellow))
         #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 1_209_599, isBusy: false)?.tone == .yellow)
         #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 1_209_600, isBusy: false)?.tone == .orange)
         #expect(ThreadRowBadgeLayout.activityBadge(forElapsed: 2_591_999, isBusy: false)?.tone == .orange)
@@ -50,10 +50,10 @@ struct ThreadRowBadgeLayoutTests {
         ).isEmpty)
     }
 
-    @Test("Stopped sessions follow pinned and hidden indicators on the left edge")
+    @Test("Workflow metadata leads with priority, Jira, then pull request status")
     func leadingStatusOrder() {
         #expect(ThreadRowBadgeLayout.LeadingStatusItem.allCases == [
-            .pinned, .hidden, .stoppedSessions, .favorite, .priority,
+            .priority, .jiraStatus, .pullRequestStatus,
         ])
     }
 
@@ -64,11 +64,18 @@ struct ThreadRowBadgeLayoutTests {
         #expect(ThreadRowBadgeLayout.priorityOptionLabel("Priority 3", level: 3, jiraPriority: nil, jiraAnnotation: "(Jira)") == "Priority 3")
     }
 
-    @Test("Trailing status indicators preserve their established order")
+    @Test("Local state indicators trail workflow metadata with activity last")
     func trailingStatusOrderPreservesStateIndicatorOrder() {
         #expect(ThreadRowBadgeLayout.TrailingStatusItem.allCases == [
-            .pullRequestStatus, .jiraStatus, .activityDuration, .jiraSync,
+            .rateLimit, .jiraSync, .keepAlive, .stoppedSessions,
+            .hidden, .pinned, .favorite, .activityDuration,
         ])
+    }
+
+    @Test("Explicit Keep Alive always shows its shield")
+    func keepAliveBadgeVisibility() {
+        #expect(ThreadRowBadgeLayout.showsKeepAliveBadge(isKeepAlive: true))
+        #expect(!ThreadRowBadgeLayout.showsKeepAliveBadge(isKeepAlive: false))
     }
 
     @Test("Pull request badge combines the short number and status")
