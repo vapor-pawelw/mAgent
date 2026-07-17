@@ -11,12 +11,12 @@ import MagentCore
 enum TabNameAllocator {
 
     static func shouldAttemptAutoRename(thread: MagentThread, sessionName: String) -> Bool {
-        guard thread.tmuxSessionNames.contains(sessionName),
-              !thread.manuallyRenamedTabs.contains(sessionName) else { return false }
-        guard let currentName = thread.customTabNames[sessionName] else { return true }
-        return TmuxSessionNaming.looksLikeDefaultTabName(
-            currentName,
-            for: thread.sessionAgentTypes[sessionName]
+        guard thread.tmuxSessionNames.contains(sessionName) else { return false }
+        return TmuxSessionNaming.isPromptBasedTabRenameEligible(
+            currentName: thread.customTabNames[sessionName],
+            agentType: thread.sessionAgentTypes[sessionName],
+            isManuallyRenamed: thread.manuallyRenamedTabs.contains(sessionName),
+            isRenameInProgress: false
         )
     }
 
