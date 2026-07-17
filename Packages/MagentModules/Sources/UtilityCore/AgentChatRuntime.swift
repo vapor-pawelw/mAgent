@@ -1,5 +1,6 @@
 import Foundation
 import MagentModels
+import os
 import ShellInfra
 
 public nonisolated struct AgentChatExecutionResult: Sendable, Equatable {
@@ -13,14 +14,149 @@ public nonisolated struct AgentChatExecutionResult: Sendable, Equatable {
 }
 
 public nonisolated struct AgentChatStreamingUpdate: Sendable, Equatable {
+    public nonisolated enum TextKind: Sendable, Equatable {
+        case delta
+        case replacement
+    }
+
     public let itemID: String
     public let text: String
+    public let textKind: TextKind
     public let isFinal: Bool
 
-    public init(itemID: String, text: String, isFinal: Bool) {
+    public init(
+        itemID: String,
+        text: String,
+        textKind: TextKind = .replacement,
+        isFinal: Bool
+    ) {
         self.itemID = itemID
         self.text = text
+        self.textKind = textKind
         self.isFinal = isFinal
+    }
+}
+
+public nonisolated struct AgentChatJSONLineBuffer: Sendable {
+    private var buffer = Data()
+
+    public init() {}
+
+    public mutating func append(_ data: Data) -> [String] {
+        guard !data.isEmpty else { return [] }
+        buffer.append(data)
+
+        var lines: [String] = []
+        var lineStart = buffer.startIndex
+        while lineStart < buffer.endIndex,
+              let newlineIndex = buffer[lineStart...].firstIndex(of: 0x0A) {
+            lines.append(String(decoding: buffer[lineStart..<newlineIndex], as: UTF8.self))
+            lineStart = buffer.index(after: newlineIndex)
+        }
+
+        if lineStart > buffer.startIndex {
+            buffer.removeSubrange(buffer.startIndex..<lineStart)
+        }
+        return lines
+    }
+
+    public var remainingText: String {
+        String(decoding: buffer, as: UTF8.self)
+    }
+}
+
+public nonisolated final class AgentChatStreamingCoalescer: Sendable {
+    private struct State: Sendable {
+        var pendingTextByItemID: [String: String] = [:]
+        var pendingItemIDs: [String] = []
+        var pendingItemIDSet: Set<String> = []
+        var deliveryScheduled = false
+    }
+
+    private let deliveryInterval: Duration
+    private let onUpdate: @Sendable @MainActor (AgentChatStreamingUpdate) -> Void
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    public init(
+        deliveryInterval: Duration = .milliseconds(67),
+        onUpdate: @escaping @Sendable @MainActor (AgentChatStreamingUpdate) -> Void
+    ) {
+        self.deliveryInterval = deliveryInterval
+        self.onUpdate = onUpdate
+    }
+
+    public func begin(itemID: String, initialText: String = "") {
+        guard !initialText.isEmpty else { return }
+        state.withLock { state in
+            state.pendingTextByItemID[itemID, default: ""].append(initialText)
+            markPending(itemID: itemID, state: &state)
+            scheduleDeliveryIfNeeded(state: &state)
+        }
+    }
+
+    public func append(delta: String, itemID: String) {
+        guard !delta.isEmpty else { return }
+        state.withLock { state in
+            state.pendingTextByItemID[itemID, default: ""].append(delta)
+            markPending(itemID: itemID, state: &state)
+            scheduleDeliveryIfNeeded(state: &state)
+        }
+    }
+
+    public func finish(itemID: String, finalText: String) {
+        state.withLock { state in
+            state.pendingTextByItemID.removeValue(forKey: itemID)
+            state.pendingItemIDs.removeAll { $0 == itemID }
+            state.pendingItemIDSet.remove(itemID)
+            if !finalText.isEmpty {
+                enqueue(AgentChatStreamingUpdate(
+                    itemID: itemID,
+                    text: finalText,
+                    textKind: .replacement,
+                    isFinal: true
+                ))
+            }
+        }
+    }
+
+    private func markPending(itemID: String, state: inout State) {
+        if state.pendingItemIDSet.insert(itemID).inserted {
+            state.pendingItemIDs.append(itemID)
+        }
+    }
+
+    private func scheduleDeliveryIfNeeded(state: inout State) {
+        guard !state.deliveryScheduled else { return }
+        state.deliveryScheduled = true
+        Task.detached(priority: .userInitiated) { [deliveryInterval] in
+            try? await Task.sleep(for: deliveryInterval)
+            self.deliverPendingUpdates()
+        }
+    }
+
+    private func deliverPendingUpdates() {
+        state.withLock { state in
+            let itemIDs = state.pendingItemIDs
+            state.pendingItemIDs.removeAll(keepingCapacity: true)
+            state.pendingItemIDSet.removeAll(keepingCapacity: true)
+            state.deliveryScheduled = false
+
+            for itemID in itemIDs {
+                guard let text = state.pendingTextByItemID.removeValue(forKey: itemID) else { continue }
+                enqueue(AgentChatStreamingUpdate(
+                    itemID: itemID,
+                    text: text,
+                    textKind: .delta,
+                    isFinal: false
+                ))
+            }
+        }
+    }
+
+    private func enqueue(_ update: AgentChatStreamingUpdate) {
+        DispatchQueue.main.async { [onUpdate] in
+            onUpdate(update)
+        }
     }
 }
 
@@ -271,7 +407,7 @@ public nonisolated enum AgentChatRuntime {
         onStreamingUpdate: (@Sendable @MainActor (AgentChatStreamingUpdate) -> Void)?
     ) -> AgentChatExecutionResult {
         final class State {
-            var stdoutBuffer = Data()
+            var stdoutBuffer = AgentChatJSONLineBuffer()
             var stderrBuffer = Data()
             var threadID: String?
             var activeTurnID: String?
@@ -285,6 +421,9 @@ public nonisolated enum AgentChatRuntime {
         }
 
         let state = State()
+        let streamingCoalescer = onStreamingUpdate.map {
+            AgentChatStreamingCoalescer(onUpdate: $0)
+        }
         let lock = NSLock()
         let threadReadySemaphore = DispatchSemaphore(value: 0)
         let turnCompletedSemaphore = DispatchSemaphore(value: 0)
@@ -490,15 +629,7 @@ public nonisolated enum AgentChatRuntime {
                 }
                 let itemText = state.assistantMessagesByID[itemID] ?? ""
                 lock.unlock()
-                if !itemText.isEmpty {
-                    Task { @MainActor in
-                        onStreamingUpdate?(AgentChatStreamingUpdate(
-                            itemID: itemID,
-                            text: itemText,
-                            isFinal: false
-                        ))
-                    }
-                }
+                streamingCoalescer?.begin(itemID: itemID, initialText: itemText)
             case "item/agentMessage/delta":
                 guard let itemID = normalizedNonEmpty(params["itemId"] as? String),
                       let delta = params["delta"] as? String else {
@@ -510,17 +641,8 @@ public nonisolated enum AgentChatRuntime {
                     state.assistantMessageOrder.append(itemID)
                 }
                 state.assistantMessagesByID[itemID, default: ""].append(delta)
-                let itemText = state.assistantMessagesByID[itemID] ?? ""
                 lock.unlock()
-                if !itemText.isEmpty {
-                    Task { @MainActor in
-                        onStreamingUpdate?(AgentChatStreamingUpdate(
-                            itemID: itemID,
-                            text: itemText,
-                            isFinal: false
-                        ))
-                    }
-                }
+                streamingCoalescer?.append(delta: delta, itemID: itemID)
             case "item/completed":
                 guard let item = params["item"] as? [String: Any],
                       let itemType = item["type"] as? String,
@@ -535,17 +657,8 @@ public nonisolated enum AgentChatRuntime {
                     state.assistantMessageOrder.append(itemID)
                 }
                 state.assistantMessagesByID[itemID] = finalText
-                let itemText = state.assistantMessagesByID[itemID] ?? ""
                 lock.unlock()
-                if !itemText.isEmpty {
-                    Task { @MainActor in
-                        onStreamingUpdate?(AgentChatStreamingUpdate(
-                            itemID: itemID,
-                            text: itemText,
-                            isFinal: true
-                        ))
-                    }
-                }
+                streamingCoalescer?.finish(itemID: itemID, finalText: finalText)
             case "turn/completed":
                 let turn = params["turn"] as? [String: Any]
                 let status = turn?["status"] as? String
@@ -578,14 +691,11 @@ public nonisolated enum AgentChatRuntime {
             if data.isEmpty { return }
 
             lock.lock()
-            state.stdoutBuffer.append(data)
+            let lines = state.stdoutBuffer.append(data)
 
-            while let newlineRange = state.stdoutBuffer.firstRange(of: Data([0x0A])) {
-                let lineData = state.stdoutBuffer.subdata(in: state.stdoutBuffer.startIndex..<newlineRange.lowerBound)
-                state.stdoutBuffer.removeSubrange(state.stdoutBuffer.startIndex...newlineRange.lowerBound)
-                if let line = String(data: lineData, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                   !line.isEmpty {
+            for rawLine in lines {
+                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !line.isEmpty {
                     lock.unlock()
                     handleJSONLine(line)
                     lock.lock()
@@ -760,7 +870,7 @@ public nonisolated enum AgentChatRuntime {
 
         lock.lock()
         let stderr = String(data: state.stderrBuffer, encoding: .utf8) ?? ""
-        let stdout = String(data: state.stdoutBuffer, encoding: .utf8) ?? ""
+        let stdout = state.stdoutBuffer.remainingText
         let failure = state.failure
         let mergedAssistant = mergedAssistantText(state)
         lock.unlock()
