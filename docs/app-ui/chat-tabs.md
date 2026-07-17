@@ -10,6 +10,7 @@
 - The composer uses the same rounded prompt surface styling as new thread and new tab sheets: a multiline text area above an integrated footer containing attachment, model, reasoning, and send controls.
 - Codex chat tabs expose the `None` reasoning effort from the bottom-left picker and store/pass it as Codex `reasoningLevel: "none"`.
 - Codex chat tab titles mirror terminal tab naming from the selected model and reasoning effort, with ` (Chat)` appended. On the first submitted prompt, the regular automatic tab-naming setting can replace that default with a concise task name. Automatic updates preserve manually renamed chat tabs.
+- Long transcripts retain a bounded 160-message view window. Use Earlier/Newer to navigate older pages without keeping every AppKit message hierarchy alive.
 - Tool activity should read like concise actions first: `Run command`, `Read file`, `Search`, or `Tool output`.
 - Patch edits should read as `Apply patch` / `Patch applied` and summarize changed files instead of rendering the raw patch inline. Expanded filenames are links that open the thread's existing Diff tab focused on that file.
 - Consecutive routine tool rows are compacted in the visible chat transcript into one collapsed assistant-side activity disclosure. Its header and expanded rows use tinted SF Symbols, while the saved transcript remains unmodified for export, restore, and agent handoff.
@@ -30,6 +31,9 @@
 - `ChatToolDisclosureLayoutPolicy` gives all tool disclosures a stable available width; ordinary messages may still size to their content up to the readable maximum.
 - `ChatTranscriptDisplayCompactor.compactedMessages(_:)` is display-only. It summarizes consecutive routine tool messages before rendering and exposes activity summaries through `ChatMessageDisplayPlanner` as collapsed disclosure rows; it must not compact statuses or tool presentations that expand by default, and must not be used for persistence, export, or resume context.
 - `ChatMessageBubbleView` consumes `ChatMessageDisplayPlanner` output, renders ordinary assistant and tool plans without a bubble background, keeps user/status messages contained, renders tool plans as SF Symbol disclosure rows, and hides tool detail bodies while collapsed.
+- Codex app-server deltas are coalesced to roughly 15 UI deliveries per second. Existing assistant bubbles append the delivered delta directly, re-style only a bounded Markdown tail, and perform one authoritative full render on completion.
+- `ChatTranscriptRenderWindow` bounds compaction, diffing, text systems, and constraints to one navigable page. Streaming updates for an older, offscreen page update model state without rebuilding that page.
+- Draft edits are staged in memory immediately, while disk writes use a trailing debounce. Active streams use one periodic checkpoint task so uninterrupted output remains recoverable without allocating a persistence task per delta.
 - `ChatFinalAssistantMessageReconciler` attaches `toolEvent` when final assistant text is itself a tool transcript, so live completions and restored transcripts follow the same presentation path.
 - `CodexChatTranscriptReconciler` and `ClaudeChatTranscriptReconciler` pair matching tool calls/results into one persisted message when transcript IDs are available, falling back to standalone output messages when a pair cannot be found.
   Restored tool messages should carry both backward-compatible transcript text and `toolEvent`.

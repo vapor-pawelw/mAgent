@@ -763,6 +763,14 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private var toolDisclosureFontSize: CGFloat = 12
     private var toolDisclosureTextColor: NSColor = .labelColor
     private let loadingPlaceholderText: String
+    private var renderedMessage: PersistedChatMessage
+    private var renderedBaseTextColor: NSColor = .labelColor
+    private var renderedCodeColor: NSColor = .secondaryLabelColor
+    private var renderedFontSize: CGFloat = NSFont.systemFontSize
+    private var pendingAuthoritativeMarkdownRestyle: DispatchWorkItem?
+    private var streamingMarkdownTail: String
+    private var streamingInsideCodeFence: Bool
+    private let supportsStreamingUpdate: Bool
 
     private enum AssistantDisplayState {
         case normal
@@ -788,6 +796,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         self.rendersAsSeparator = message.role == .system
         self.isLoadingIndicatorBubble = message.role == .assistant && Self.isThinkingPlaceholderText(message.text)
         self.loadingPlaceholderText = message.text
+        self.renderedMessage = message
+        self.streamingMarkdownTail = String(message.text.suffix(256))
+        self.streamingInsideCodeFence = Self.hasUnclosedCodeFence(message.text)
         let displayPlan = ChatMessageDisplayPlanner.plan(for: message)
         switch displayPlan.kind {
         case .message:
@@ -797,6 +808,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         case .status(let presentation):
             self.statusPresentation = presentation
         }
+        self.supportsStreamingUpdate = displayPlan.role == .assistant
+            && displayPlan.kind == .message
+            && message.attachments.isEmpty
         self.isUnboxedAssistant = displayPlan.role == .assistant && self.statusPresentation == nil
         self.toolExpanded = self.toolPresentation?.isExpandedByDefault ?? false
         super.init(frame: .zero)
@@ -866,6 +880,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 codeColor = NSColor(resource: .textSecondary)
             }
         }
+        self.renderedBaseTextColor = baseTextColor
+        self.renderedCodeColor = codeColor
+        self.renderedFontSize = fontSize
 
         if isLoadingIndicatorBubble {
             let loadingStack = NSStackView()
@@ -1087,18 +1104,165 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
     private func refreshMeasuredLayout() {
         guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
-        if let layoutManager = messageTextView.layoutManager,
-           let textStorage = messageTextView.textStorage {
-            layoutManager.invalidateLayout(
-                forCharacterRange: NSRange(location: 0, length: textStorage.length),
-                actualCharacterRange: nil
+        needsLayout = true
+        superview?.needsLayout = true
+    }
+
+    func updateMessageInPlace(_ message: PersistedChatMessage) -> Bool {
+        guard message.id == renderedMessage.id,
+              renderedMessage.role == .assistant,
+              message.role == .assistant,
+              renderedMessage.attachments.isEmpty,
+              message.attachments.isEmpty,
+              !isLoadingIndicatorBubble,
+              !rendersAsSeparator,
+              case .message = ChatMessageDisplayPlanner.plan(for: renderedMessage).kind,
+              case .message = ChatMessageDisplayPlanner.plan(for: message).kind else {
+            return false
+        }
+
+        let mutation = ChatStreamingTextMutationPlanner.plan(
+            previous: renderedMessage.text,
+            next: message.text
+        )
+        applyStreamingTextMutation(mutation, finalText: message.text)
+        renderedMessage = message
+        messageTextHidden = message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        messageTextView.isHidden = messageTextHidden
+        if mutation != .noChange {
+            scheduleAuthoritativeMarkdownRestyle(expectedText: message.text)
+        }
+        scheduleMeasuredLayoutRefresh()
+        return true
+    }
+
+    func updateStreamingMessageInPlace(
+        _ update: AgentChatStreamingUpdate,
+        authoritativeMessage message: PersistedChatMessage
+    ) -> Bool {
+        guard message.id == renderedMessage.id,
+              supportsStreamingUpdate,
+              message.role == .assistant,
+              message.attachments.isEmpty,
+              !isLoadingIndicatorBubble,
+              !rendersAsSeparator else {
+            return false
+        }
+
+        pendingAuthoritativeMarkdownRestyle?.cancel()
+        switch update.textKind {
+        case .delta:
+            applyStreamingDelta(update.text)
+            if update.isFinal {
+                messageTextView.textStorage?.setAttributedString(styledMessageText(message.text))
+                resetStreamingMarkdownState(for: message.text)
+            }
+        case .replacement:
+            messageTextView.textStorage?.setAttributedString(styledMessageText(message.text))
+            resetStreamingMarkdownState(for: message.text)
+        }
+        renderedMessage = message
+        if update.textKind == .replacement {
+            messageTextHidden = message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            messageTextView.isHidden = messageTextHidden
+        } else if !update.text.isEmpty {
+            messageTextHidden = false
+            messageTextView.isHidden = false
+        }
+        if update.textKind == .delta, !update.isFinal {
+            scheduleAuthoritativeMarkdownRestyle(expectedText: message.text)
+        }
+        scheduleMeasuredLayoutRefresh()
+        return true
+    }
+
+    private func applyStreamingDelta(_ delta: String) {
+        guard !delta.isEmpty, let textStorage = messageTextView.textStorage else { return }
+        if streamingInsideCodeFence {
+            let attributes: [NSAttributedString.Key: Any]
+            if textStorage.length > 0 {
+                attributes = textStorage.attributes(at: textStorage.length - 1, effectiveRange: nil)
+            } else {
+                attributes = [
+                    .font: NSFont.monospacedSystemFont(ofSize: max(11, renderedFontSize - 1), weight: .regular),
+                    .foregroundColor: renderedCodeColor,
+                ]
+            }
+            textStorage.append(NSAttributedString(string: delta, attributes: attributes))
+        } else {
+            let replaceLength = min(streamingMarkdownTail.utf16.count, textStorage.length)
+            let combinedTail = streamingMarkdownTail + delta
+            textStorage.replaceCharacters(
+                in: NSRange(location: textStorage.length - replaceLength, length: replaceLength),
+                with: styledMessageText(combinedTail)
             )
         }
-        needsLayout = true
-        layoutSubtreeIfNeeded()
-        updateBubbleLayout()
-        superview?.needsLayout = true
-        superview?.layoutSubtreeIfNeeded()
+        streamingMarkdownTail = String((streamingMarkdownTail + delta).suffix(256))
+        if Self.hasOddCodeFenceCount(delta) {
+            streamingInsideCodeFence.toggle()
+        }
+    }
+
+    private func resetStreamingMarkdownState(for text: String) {
+        streamingMarkdownTail = String(text.suffix(256))
+        streamingInsideCodeFence = Self.hasUnclosedCodeFence(text)
+    }
+
+    private static func hasUnclosedCodeFence(_ text: String) -> Bool {
+        hasOddCodeFenceCount(text)
+    }
+
+    private static func hasOddCodeFenceCount(_ text: String) -> Bool {
+        (text.components(separatedBy: "```").count - 1) % 2 == 1
+    }
+
+    private func applyStreamingTextMutation(_ mutation: ChatStreamingTextMutation, finalText: String) {
+        guard let textStorage = messageTextView.textStorage else { return }
+        switch mutation {
+        case .noChange:
+            break
+        case .replace:
+            textStorage.setAttributedString(styledMessageText(finalText))
+        case .appendStyledTail(let replaceFromUTF16Offset, let replacementText):
+            let start = min(max(0, replaceFromUTF16Offset), textStorage.length)
+            textStorage.replaceCharacters(
+                in: NSRange(location: start, length: textStorage.length - start),
+                with: styledMessageText(replacementText)
+            )
+        case .appendUsingPreviousAttributes(let delta):
+            let attributes: [NSAttributedString.Key: Any]
+            if textStorage.length > 0 {
+                attributes = textStorage.attributes(at: textStorage.length - 1, effectiveRange: nil)
+            } else {
+                attributes = [
+                    .font: NSFont.monospacedSystemFont(ofSize: max(11, renderedFontSize - 1), weight: .regular),
+                    .foregroundColor: renderedCodeColor,
+                ]
+            }
+            textStorage.append(NSAttributedString(string: delta, attributes: attributes))
+        }
+    }
+
+    private func scheduleAuthoritativeMarkdownRestyle(expectedText: String) {
+        pendingAuthoritativeMarkdownRestyle?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.renderedMessage.text == expectedText else { return }
+            self.messageTextView.textStorage?.setAttributedString(self.styledMessageText(expectedText))
+            self.scheduleMeasuredLayoutRefresh()
+            self.pendingAuthoritativeMarkdownRestyle = nil
+        }
+        pendingAuthoritativeMarkdownRestyle = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
+    }
+
+    private func styledMessageText(_ text: String) -> NSAttributedString {
+        Self.styledMarkdownText(
+            text,
+            baseColor: renderedBaseTextColor,
+            codeColor: renderedCodeColor,
+            linkColor: NSColor(resource: .primaryBrand),
+            baseFontSize: renderedFontSize
+        )
     }
 
     func clearSelection() {
@@ -1126,6 +1290,8 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             layoutSubtreeIfNeeded()
         }
     }
+
+    var updatesRelativeTimestamp: Bool { isLoadingIndicatorBubble }
 
 
     private func configureSeparatorMessage(text: String, fontSize: CGFloat) {
@@ -1801,6 +1967,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private let modelPicker = NSPopUpButton()
     private let reasoningPicker = NSPopUpButton()
     private let modelReasoningRow = NSStackView()
+    private let transcriptNavigationRow = NSStackView()
+    private let olderMessagesButton = NSButton()
+    private let newerMessagesButton = NSButton()
     private var relativeTimestampTimer: Timer?
     private var inputScrollView: NSScrollView?
     private let backgroundClickGesture = NSClickGestureRecognizer()
@@ -1813,9 +1982,14 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private var pendingQueuedUserMessageIDs: Set<UUID>
     private var draftAttachments: [PersistedChatAttachment]
     private var renderedDisplayMessages: [PersistedChatMessage] = []
+    private var renderedSourceMessages: [PersistedChatMessage] = []
+    private var transcriptPageEnd: Int?
+    private weak var loadingMessageBubble: ChatMessageBubbleView?
     private var messageRenderGeneration = UUID()
     private var postMessageLayoutUpdateScheduled = false
     private var pendingPostMessageScrollToBottom = false
+    private var followsLatestOutput = true
+    private var isAdjustingScrollPosition = false
     private weak var mediaPreviewOverlayView: ChatImagePreviewOverlayView?
     private let initialDraftInput: String
 
@@ -1825,6 +1999,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private static let slashAutocompleteCellIdentifier = NSUserInterfaceItemIdentifier("slash-autocomplete-cell")
     private static let progressiveFullReloadThreshold = 60
     private static let progressiveFullReloadBatchSize = 20
+    private static let maximumRenderedSourceMessages = 160
 
     init(
         identifier: String,
@@ -1920,6 +2095,39 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         updateSlashAutocompleteForCurrentInput()
     }
 
+    @discardableResult
+    func applyStreamingMessageUpdate(
+        _ update: AgentChatStreamingUpdate,
+        authoritativeMessage message: PersistedChatMessage,
+        messageIndex: Int
+    ) -> Bool {
+        guard messages.indices.contains(messageIndex), messages[messageIndex].id == message.id else {
+            return false
+        }
+        guard let sourceIndex = renderedSourceMessages.firstIndex(where: { $0.id == message.id }) else {
+            if transcriptPageEnd != nil {
+                messages[messageIndex] = message
+                return true
+            }
+            return false
+        }
+        guard
+              let displayIndex = renderedDisplayMessages.firstIndex(where: { $0.id == message.id }),
+              messagesStack.arrangedSubviews.indices.contains(displayIndex),
+              let bubble = messagesStack.arrangedSubviews[displayIndex] as? ChatMessageBubbleView else {
+            return false
+        }
+
+        let shouldAutoScroll = isNearBottomForAutoScroll()
+        guard bubble.updateStreamingMessageInPlace(update, authoritativeMessage: message) else { return false }
+
+        messages[messageIndex] = message
+        renderedSourceMessages[sourceIndex] = message
+        renderedDisplayMessages[displayIndex] = message
+        schedulePostMessageLayoutUpdate(shouldScrollToBottom: shouldAutoScroll)
+        return true
+    }
+
     func focusComposer() {
         view.window?.makeFirstResponder(inputTextView)
     }
@@ -1960,6 +2168,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
 
         let doc = NSView()
         doc.translatesAutoresizingMaskIntoConstraints = false
+        doc.postsFrameChangedNotifications = true
         messagesStack.translatesAutoresizingMaskIntoConstraints = false
         messagesStack.orientation = .vertical
         messagesStack.alignment = .leading
@@ -1968,6 +2177,25 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         doc.addSubview(messagesStack)
         scrollView.documentView = doc
         messagesContainer.addSubview(scrollView)
+
+        transcriptNavigationRow.translatesAutoresizingMaskIntoConstraints = false
+        transcriptNavigationRow.orientation = .horizontal
+        transcriptNavigationRow.alignment = .centerY
+        transcriptNavigationRow.spacing = 8
+        transcriptNavigationRow.wantsLayer = true
+        olderMessagesButton.title = String(localized: .ThreadStrings.chatTranscriptEarlierMessages)
+        olderMessagesButton.bezelStyle = .roundRect
+        olderMessagesButton.controlSize = .small
+        olderMessagesButton.target = self
+        olderMessagesButton.action = #selector(showEarlierMessages)
+        newerMessagesButton.title = String(localized: .ThreadStrings.chatTranscriptNewerMessages)
+        newerMessagesButton.bezelStyle = .roundRect
+        newerMessagesButton.controlSize = .small
+        newerMessagesButton.target = self
+        newerMessagesButton.action = #selector(showNewerMessages)
+        transcriptNavigationRow.addArrangedSubview(olderMessagesButton)
+        transcriptNavigationRow.addArrangedSubview(newerMessagesButton)
+        messagesContainer.addSubview(transcriptNavigationRow)
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: messagesContainer.topAnchor),
@@ -1982,6 +2210,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             messagesStack.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
             messagesStack.trailingAnchor.constraint(equalTo: doc.trailingAnchor),
             messagesStack.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
+            transcriptNavigationRow.topAnchor.constraint(equalTo: messagesContainer.topAnchor, constant: 8),
+            transcriptNavigationRow.centerXAnchor.constraint(equalTo: messagesContainer.centerXAnchor),
         ])
 
         let composerContainer = composerContainerView
@@ -2149,6 +2379,12 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             selector: #selector(scrollBoundsChanged),
             name: NSView.boundsDidChangeNotification,
             object: scrollView.contentView
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(chatDocumentFrameChanged),
+            name: NSView.frameDidChangeNotification,
+            object: doc
         )
 
         setupModelReasoningRow(parentStack: composerContentStack)
@@ -2414,10 +2650,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     }
 
     private func refreshVisibleRelativeTimestamps() {
-        let now = Date()
-        for case let bubble as ChatMessageBubbleView in messagesStack.arrangedSubviews {
-            bubble.refreshRelativeTimestamp(now: now)
-        }
+        loadingMessageBubble?.refreshRelativeTimestamp(now: Date())
     }
 
     private func installBackgroundClickGesture() {
@@ -2494,6 +2727,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
                 self?.openAttachmentPreview(attachment)
             }
         )
+        if bubble.updatesRelativeTimestamp {
+            loadingMessageBubble = bubble
+        }
         return bubble
     }
 
@@ -2504,6 +2740,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     }
 
     private func removeAllRenderedBubbles() {
+        loadingMessageBubble = nil
         for subview in messagesStack.arrangedSubviews {
             messagesStack.removeArrangedSubview(subview)
             subview.removeFromSuperview()
@@ -2531,6 +2768,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             for _ in 0..<removeTailCount {
                 guard let last = messagesStack.arrangedSubviews.last else { break }
                 messagesStack.removeArrangedSubview(last)
+                if last === loadingMessageBubble { loadingMessageBubble = nil }
                 last.removeFromSuperview()
             }
         }
@@ -2539,7 +2777,12 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             guard displayMessages.indices.contains(index) else { continue }
             guard messagesStack.arrangedSubviews.indices.contains(index) else { continue }
             let old = messagesStack.arrangedSubviews[index]
+            if let bubble = old as? ChatMessageBubbleView,
+               bubble.updateMessageInPlace(displayMessages[index]) {
+                continue
+            }
             messagesStack.removeArrangedSubview(old)
+            if old === loadingMessageBubble { loadingMessageBubble = nil }
             old.removeFromSuperview()
             let bubble = makeMessageBubble(for: displayMessages[index])
             messagesStack.insertArrangedSubview(bubble, at: index)
@@ -2562,13 +2805,36 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         let shouldAutoScroll = shouldScrollToBottom && isNearBottomForAutoScroll()
         messageRenderGeneration = UUID()
         let renderGeneration = messageRenderGeneration
-        let settings = PersistenceService.shared.loadSettings()
-        chatAppearance = ChatAppearance.resolve(from: settings)
-        chatFontSize = Self.resolvedChatFontSize(from: settings)
-        inputTextView.font = .systemFont(ofSize: chatFontSize)
-        updateComposerHeight()
+        let renderWindow = ChatTranscriptRenderWindow(
+            messageCount: messages.count,
+            pageSize: Self.maximumRenderedSourceMessages,
+            endingAt: transcriptPageEnd
+        )
+        let sourceMessages = Array(messages[renderWindow.range])
+        olderMessagesButton.isHidden = !renderWindow.hasOlderMessages
+        newerMessagesButton.isHidden = !renderWindow.hasNewerMessages
+        transcriptNavigationRow.isHidden = !renderWindow.hasOlderMessages && !renderWindow.hasNewerMessages
+        scrollView.contentInsets.top = transcriptNavigationRow.isHidden ? 0 : 38
 
-        let displayMessages = ChatTranscriptDisplayCompactor.compactedMessages(messages)
+        let sourcePlan = ChatMessageRenderPlanner.plan(previous: renderedSourceMessages, next: sourceMessages)
+        let displayMessages: [PersistedChatMessage]
+        if case .incremental(let removeTailCount, let appendRange, let changedIndices) = sourcePlan,
+           removeTailCount == 0,
+           appendRange.isEmpty,
+           changedIndices.count == 1,
+           let sourceIndex = changedIndices.first,
+           renderedSourceMessages.indices.contains(sourceIndex),
+           sourceMessages.indices.contains(sourceIndex),
+           case .message = ChatMessageDisplayPlanner.plan(for: renderedSourceMessages[sourceIndex]).kind,
+           case .message = ChatMessageDisplayPlanner.plan(for: sourceMessages[sourceIndex]).kind,
+           sourceMessages[sourceIndex].role == .assistant,
+           let displayIndex = renderedDisplayMessages.firstIndex(where: { $0.id == sourceMessages[sourceIndex].id }) {
+            var updatedDisplayMessages = renderedDisplayMessages
+            updatedDisplayMessages[displayIndex] = sourceMessages[sourceIndex]
+            displayMessages = updatedDisplayMessages
+        } else {
+            displayMessages = ChatTranscriptDisplayCompactor.compactedMessages(sourceMessages)
+        }
         let plan = ChatMessageRenderPlanner.plan(previous: renderedDisplayMessages, next: displayMessages)
         let shouldFullReload: Bool = {
             switch plan {
@@ -2583,6 +2849,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             let snapshot = displayMessages
             removeAllRenderedBubbles()
             renderedDisplayMessages = []
+            renderedSourceMessages = sourceMessages
             renderMessageBubblesProgressively(
                 snapshot: snapshot,
                 nextIndex: 0,
@@ -2605,6 +2872,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             }
         }
         renderedDisplayMessages = displayMessages
+        renderedSourceMessages = sourceMessages
         refreshVisibleRelativeTimestamps()
 
         schedulePostMessageLayoutUpdate(shouldScrollToBottom: shouldAutoScroll)
@@ -2639,6 +2907,30 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         schedulePostMessageLayoutUpdate(shouldScrollToBottom: shouldScrollToBottom, generation: generation)
     }
 
+    @objc private func showEarlierMessages() {
+        let window = ChatTranscriptRenderWindow(
+            messageCount: messages.count,
+            pageSize: Self.maximumRenderedSourceMessages,
+            endingAt: transcriptPageEnd
+        )
+        guard let previousEnd = window.previousPageEnd() else { return }
+        transcriptPageEnd = previousEnd
+        reloadMessages(shouldScrollToBottom: false, forceFullReload: true)
+    }
+
+    @objc private func showNewerMessages() {
+        let window = ChatTranscriptRenderWindow(
+            messageCount: messages.count,
+            pageSize: Self.maximumRenderedSourceMessages,
+            endingAt: transcriptPageEnd
+        )
+        transcriptPageEnd = window.nextPageEnd(
+            messageCount: messages.count,
+            pageSize: Self.maximumRenderedSourceMessages
+        )
+        reloadMessages(shouldScrollToBottom: transcriptPageEnd == nil, forceFullReload: true)
+    }
+
     private func isNearBottomForAutoScroll() -> Bool {
         guard isViewLoaded, scrollView.documentView != nil else { return true }
         return distanceFromBottom(for: scrollView.contentView) < 80
@@ -2649,6 +2941,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         generation: UUID? = nil
     ) {
         pendingPostMessageScrollToBottom = pendingPostMessageScrollToBottom || shouldScrollToBottom
+        if shouldScrollToBottom {
+            followsLatestOutput = true
+        }
         guard !postMessageLayoutUpdateScheduled else { return }
         postMessageLayoutUpdateScheduled = true
 
@@ -2662,7 +2957,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             let shouldScroll = self.pendingPostMessageScrollToBottom
             self.pendingPostMessageScrollToBottom = false
             if shouldScroll {
-                self.scrollToBottom(animated: false)
+                self.fulfillPinnedScrollPosition()
             } else {
                 self.updateScrollToBottomButtonVisibility()
             }
@@ -2706,21 +3001,34 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     }
 
     @objc private func scrollToBottomTapped() {
+        followsLatestOutput = true
         scrollToBottom(animated: true)
     }
 
     @objc private func scrollBoundsChanged() {
+        if !isAdjustingScrollPosition {
+            followsLatestOutput = distanceFromBottom(for: scrollView.contentView) < 24
+        }
         updateScrollToBottomButtonVisibility()
     }
 
-    private func scrollToBottom(animated: Bool) {
-        // Ensure Auto Layout has finalized message bubble heights before we compute maxY.
-        view.layoutSubtreeIfNeeded()
-        scrollView.layoutSubtreeIfNeeded()
-        scrollView.documentView?.layoutSubtreeIfNeeded()
+    @objc private func chatDocumentFrameChanged() {
+        fulfillPinnedScrollPosition()
+    }
 
+    private func fulfillPinnedScrollPosition() {
+        guard followsLatestOutput else {
+            updateScrollToBottomButtonVisibility()
+            return
+        }
+        scrollToBottom(animated: false)
+    }
+
+    private func scrollToBottom(animated: Bool) {
         let clip = scrollView.contentView
         let target = NSPoint(x: 0, y: bottomContentOffsetY(for: clip))
+        isAdjustingScrollPosition = true
+        defer { isAdjustingScrollPosition = false }
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.2
@@ -2733,23 +3041,6 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             scrollView.reflectScrolledClipView(clip)
         }
 
-        // A follow-up pass on the next run-loop keeps us pinned to the real bottom
-        // when constraints settle after the initial scroll calculation.
-        DispatchQueue.main.async { [weak self] in
-            self?.snapToBottomIfNeeded()
-        }
-    }
-
-    private func snapToBottomIfNeeded() {
-        view.layoutSubtreeIfNeeded()
-        scrollView.layoutSubtreeIfNeeded()
-        scrollView.documentView?.layoutSubtreeIfNeeded()
-
-        let clip = scrollView.contentView
-        let epsilon: CGFloat = 1
-        guard distanceFromBottom(for: clip) > epsilon else { return }
-        clip.setBoundsOrigin(NSPoint(x: 0, y: bottomContentOffsetY(for: clip)))
-        scrollView.reflectScrolledClipView(clip)
     }
 
     private func updateScrollToBottomButtonVisibility() {
@@ -3346,6 +3637,11 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
 
     @objc private func settingsDidChange() {
         sendButton.contentTintColor = .appPrimary
+        let settings = PersistenceService.shared.loadSettings()
+        chatAppearance = ChatAppearance.resolve(from: settings)
+        chatFontSize = Self.resolvedChatFontSize(from: settings)
+        inputTextView.font = .systemFont(ofSize: chatFontSize)
+        updateComposerHeight()
         reloadMessages(shouldScrollToBottom: false, forceFullReload: true)
         updateSlashAutocompleteAppearance()
         updateScrollToBottomButtonAppearance()

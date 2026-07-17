@@ -2641,6 +2641,28 @@
         }
       }
     },
+    "chatTranscriptEarlierMessages": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier"
+          }
+        }
+      }
+    },
+    "chatTranscriptNewerMessages": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Newer"
+          }
+        }
+      }
+    },
     "chatAttachmentPreviewZoomIn": {
       "extractionState": "manual",
       "localizations": {

@@ -128,8 +128,6 @@ extension ThreadDetailViewController {
 
         let effectiveTitle: String
         if TmuxSessionNaming.looksLikeDefaultChatTabName(title, for: agentType) {
-            let modelLabel = AgentModelsService.shared.config(for: agentType)?
-                .models.first(where: { $0.id == modelId })?.label
             effectiveTitle = automaticChatTabTitle(
                 agentType: agentType,
                 modelId: modelId,
