@@ -68,6 +68,10 @@ public struct RateLimitCacheEntry: Codable, Equatable {
 public final class PersistenceService {
 
     public static let shared = PersistenceService()
+    private static let threadsFileLock = NSRecursiveLock()
+    private static let asyncChatWritesSuspended = OSAllocatedUnfairLock(initialState: false)
+
+    public init() {}
     private static let ignoredRateLimitResetAtPrefix = "reset-at: "
     private static let ignoredRateLimitDateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
@@ -420,6 +424,8 @@ public final class PersistenceService {
     }
 
     public func loadThreads() -> [MagentThread] {
+        Self.threadsFileLock.lock()
+        defer { Self.threadsFileLock.unlock() }
         switch tryLoadThreads() {
         case .loaded(let loadedThreads):
             let threads = recoverChatTabsIfNeeded(in: loadedThreads)
@@ -437,6 +443,8 @@ public final class PersistenceService {
     }
 
     public func saveThreads(_ threads: [MagentThread]) throws {
+        Self.threadsFileLock.lock()
+        defer { Self.threadsFileLock.unlock() }
         try ensureWritesAllowed(for: threadsURL.lastPathComponent)
         BackupService.shared.createRollingBackup(of: threadsURL)
         let envelope = VersionedEnvelope(schemaVersion: SchemaVersion.threads, data: threads)
@@ -449,8 +457,43 @@ public final class PersistenceService {
     /// already on disk. Use this instead of `saveThreads(_:)` when `threads` only
     /// contains active threads (the normal ThreadManager in-memory list).
     public func saveActiveThreads(_ activeThreads: [MagentThread]) throws {
+        Self.threadsFileLock.lock()
+        defer { Self.threadsFileLock.unlock() }
         let existingArchived = loadThreads().filter { $0.isArchived }
         try saveThreads(activeThreads + existingArchived)
+    }
+
+    /// Updates only one thread's chat payload from the latest on-disk snapshot.
+    /// The transaction shares the same lock as all threads.json reads and writes,
+    /// so a delayed chat checkpoint cannot replace newer non-chat thread state.
+    public func saveChatTabs(_ chatTabs: [PersistedChatTab], for threadID: UUID) throws {
+        Self.threadsFileLock.lock()
+        defer { Self.threadsFileLock.unlock() }
+        guard !Self.asyncChatWritesSuspended.withLock({ $0 }) else { return }
+        let update = Self.applyingChatTabs(chatTabs, for: threadID, to: loadThreads())
+        guard update.didUpdate else { return }
+        try saveThreads(update.threads)
+    }
+
+    /// Prevents delayed chat checkpoints from writing after the app's final
+    /// synchronous thread snapshot has started.
+    public static func suspendAsyncChatWrites() {
+        threadsFileLock.lock()
+        asyncChatWritesSuspended.withLock { $0 = true }
+        threadsFileLock.unlock()
+    }
+
+    public static func applyingChatTabs(
+        _ chatTabs: [PersistedChatTab],
+        for threadID: UUID,
+        to threads: [MagentThread]
+    ) -> (threads: [MagentThread], didUpdate: Bool) {
+        guard let index = threads.firstIndex(where: { $0.id == threadID }) else {
+            return (threads, false)
+        }
+        var updated = threads
+        updated[index].persistedChatTabs = chatTabs
+        return (updated, true)
     }
 
     /// Applies sidecar chat-tab recovery for threads whose inline `persistedChatTabs`
@@ -945,5 +988,50 @@ public final class PersistenceService {
         }
         guard let data = try? encoder.encode(raw) else { return }
         try? data.write(to: ignoredRateLimitFingerprintsURL, options: .atomic)
+    }
+}
+
+/// Serializes chat-triggered thread snapshots on a worker-owned persistence service.
+/// The owned service keeps its mutable encoders and file state confined to this actor.
+public nonisolated struct ChatPersistenceRevisionGate: Sendable {
+    private var latestRevisionByThreadID: [UUID: UInt64] = [:]
+
+    public init() {}
+
+    public mutating func accepts(threadID: UUID, revision: UInt64) -> Bool {
+        guard revision > latestRevisionByThreadID[threadID, default: 0] else { return false }
+        latestRevisionByThreadID[threadID] = revision
+        return true
+    }
+
+    public func isCurrent(threadID: UUID, revision: UInt64) -> Bool {
+        latestRevisionByThreadID[threadID] == revision
+    }
+}
+
+public actor ChatThreadsPersistenceWorker {
+    public static let shared = ChatThreadsPersistenceWorker()
+
+    private let persistence = PersistenceService()
+    private var revisionGate = ChatPersistenceRevisionGate()
+
+    public func saveChatTabs(
+        _ chatTabs: [PersistedChatTab],
+        for threadID: UUID,
+        revision: UInt64,
+        writesAllowed: Bool
+    ) async {
+        guard writesAllowed, revisionGate.accepts(threadID: threadID, revision: revision) else { return }
+        for attempt in 1...3 {
+            guard revisionGate.isCurrent(threadID: threadID, revision: revision) else { return }
+            do {
+                try persistence.saveChatTabs(chatTabs, for: threadID)
+                return
+            } catch {
+                logger.error("Chat persistence revision \(revision) for thread \(threadID) failed on attempt \(attempt): \(error.localizedDescription)")
+                guard attempt < 3 else { return }
+                try? await Task.sleep(nanoseconds: UInt64(attempt) * 100_000_000)
+            }
+        }
     }
 }

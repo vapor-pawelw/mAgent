@@ -242,6 +242,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             worktreesBasePaths: knownWorktreesBasePaths
         )
         ThreadManager.shared.cacheThreadSessionState()
+        NotificationCenter.default.post(name: .magentStageChatStateForPersistence, object: nil)
+        PersistenceService.suspendAsyncChatWrites()
+        ThreadManager.shared.flushThreadsToPersistence()
         ThreadManager.shared.cleanupManagedZdotdir()
     }
 

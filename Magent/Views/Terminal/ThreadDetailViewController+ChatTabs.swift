@@ -20,6 +20,7 @@ extension ThreadDetailViewController {
 
     func restoreChatTabItems() {
         var restoredTabsMutated = false
+        chatTabIndicesByIdentifier.removeAll()
         chatTabs = thread.persistedChatTabs.map { persisted in
             let reconciledMessages: (messages: [PersistedChatMessage], didMutate: Bool)
             if persisted.agentType == .codex, let conversationSessionID = persisted.conversationSessionID {
@@ -347,6 +348,11 @@ extension ThreadDetailViewController {
         chatQueuedPromptsByIdentifier.removeValue(forKey: identifier)
         chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
         chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
+        chatDraftPersistenceTasksByIdentifier[identifier]?.cancel()
+        chatDraftPersistenceTasksByIdentifier.removeValue(forKey: identifier)
+        chatPersistenceScheduleState.cancelDraft(identifier: identifier)
+        chatStreamingAssistantMessageIndicesByIdentifier.removeValue(forKey: identifier)
+        chatTabIndicesByIdentifier.removeValue(forKey: identifier)
         chatAutoRenameTasksByIdentifier[identifier]?.cancel()
         chatAutoRenameTasksByIdentifier.removeValue(forKey: identifier)
         threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: identifier)
@@ -832,6 +838,7 @@ extension ThreadDetailViewController {
         chatTabs[chatIndex].messages.append(pendingAssistant)
         chatPendingAssistantMessageIDsByIdentifier[identifier] = pendingAssistant.id
         chatStreamingAssistantMessageIDsByIdentifier[identifier] = [:]
+        chatStreamingAssistantMessageIndicesByIdentifier[identifier] = [:]
         chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
         chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
         persistChatTabs()
@@ -910,6 +917,7 @@ extension ThreadDetailViewController {
                 self.chatTabs[currentIndex].messages = reconciledMessages.messages
 
                 self.chatStreamingAssistantMessageIDsByIdentifier.removeValue(forKey: identifier)
+                self.chatStreamingAssistantMessageIndicesByIdentifier.removeValue(forKey: identifier)
                 self.chatTabs[currentIndex].conversationSessionID = response.conversationSessionID
                 self.syncChatModelReasoningFromAgentMessage(chatIndex: currentIndex, output: response.assistantText)
                 self.persistChatTabs()
@@ -945,6 +953,7 @@ extension ThreadDetailViewController {
         chatSteerInputContinuationsByIdentifier[identifier]?.finish()
         chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
         chatStreamingAssistantMessageIDsByIdentifier.removeValue(forKey: identifier)
+        chatStreamingAssistantMessageIndicesByIdentifier.removeValue(forKey: identifier)
         chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
         chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
 
@@ -996,32 +1005,62 @@ extension ThreadDetailViewController {
         metadata: (modelId: String?, reasoningLevel: String?),
         update: AgentChatStreamingUpdate
     ) {
-        guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+        guard let chatIndex = chatIndex(for: identifier) else { return }
 
         var messageIDsByItem = chatStreamingAssistantMessageIDsByIdentifier[identifier] ?? [:]
         let bubbleMessageID = messageIDsByItem[update.itemID]
-        let trimmedText = update.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
+        var didInsertMessage = false
+        let replacementText = update.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch update.textKind {
+        case .delta where update.text.isEmpty:
+            return
+        case .replacement where replacementText.isEmpty:
+            return
+        default:
+            break
+        }
 
         if let bubbleMessageID,
-           let messageIndex = chatTabs[chatIndex].messages.firstIndex(where: { $0.id == bubbleMessageID }) {
-            chatTabs[chatIndex].messages[messageIndex].text = trimmedText
+           let messageIndex = streamingMessageIndex(
+               identifier: identifier,
+               itemID: update.itemID,
+               messageID: bubbleMessageID,
+               chatIndex: chatIndex
+           ) {
+            switch update.textKind {
+            case .delta:
+                chatTabs[chatIndex].messages[messageIndex].text += update.text
+            case .replacement:
+                chatTabs[chatIndex].messages[messageIndex].text = replacementText
+            }
             chatTabs[chatIndex].messages[messageIndex].modelId = metadata.modelId
             chatTabs[chatIndex].messages[messageIndex].reasoningLevel = metadata.reasoningLevel
         } else {
+            let initialText: String
+            switch update.textKind {
+            case .delta:
+                initialText = update.text
+            case .replacement:
+                initialText = replacementText
+            }
             let assistantMessage = PersistedChatMessage(
                 role: .assistant,
-                text: trimmedText,
+                text: initialText,
                 modelId: metadata.modelId,
                 reasoningLevel: metadata.reasoningLevel
             )
+            let insertedIndex: Int
             if let pendingIndex = chatTabs[chatIndex].messages.firstIndex(where: { $0.id == pendingAssistantID }) {
                 chatTabs[chatIndex].messages.insert(assistantMessage, at: pendingIndex)
+                insertedIndex = pendingIndex
             } else {
                 chatTabs[chatIndex].messages.append(assistantMessage)
+                insertedIndex = chatTabs[chatIndex].messages.count - 1
             }
             messageIDsByItem[update.itemID] = assistantMessage.id
             chatStreamingAssistantMessageIDsByIdentifier[identifier] = messageIDsByItem
+            chatStreamingAssistantMessageIndicesByIdentifier[identifier, default: [:]][update.itemID] = insertedIndex
+            didInsertMessage = true
         }
 
         ensurePendingAssistantPlaceholder(
@@ -1035,10 +1074,25 @@ extension ThreadDetailViewController {
             text: ChatBusyStateRecovery.continuedWorkPlaceholderText
         )
 
+        scheduleChatStreamingCheckpointPersist(identifier: identifier)
         if activeChatTabId != identifier {
-            // Background chat tabs still accumulate full streamed content in model state,
-            // but skip per-delta UI rendering work until the tab is visible again.
-            scheduleChatStreamingCheckpointPersist(identifier: identifier)
+            // Background chat tabs still accumulate streamed content in model state,
+            // but skip UI rendering work until the tab is visible again.
+            return
+        }
+        if !didInsertMessage,
+           let messageID = chatStreamingAssistantMessageIDsByIdentifier[identifier]?[update.itemID],
+           let messageIndex = streamingMessageIndex(
+               identifier: identifier,
+               itemID: update.itemID,
+               messageID: messageID,
+               chatIndex: chatIndex
+           ),
+           chatTabs[chatIndex].viewController?.applyStreamingMessageUpdate(
+               update,
+               authoritativeMessage: chatTabs[chatIndex].messages[messageIndex],
+               messageIndex: messageIndex
+           ) == true {
             return
         }
         refreshChatTabView(chatIndex: chatIndex)
@@ -1050,7 +1104,7 @@ extension ThreadDetailViewController {
         metadata: (modelId: String?, reasoningLevel: String?)
     ) {
         guard chatRequestTasksByIdentifier[identifier] != nil else { return }
-        guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+        guard let chatIndex = chatIndex(for: identifier) else { return }
         guard !chatTabs[chatIndex].messages.contains(where: { $0.id == pendingAssistantID }) else { return }
 
         let pendingAssistant = PersistedChatMessage(
@@ -1065,16 +1119,13 @@ extension ThreadDetailViewController {
     }
 
     private func setPendingAssistantMessage(identifier: String, pendingAssistantID: UUID, text: String) {
-        guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }),
+        guard let chatIndex = chatIndex(for: identifier),
               let messageIndex = chatTabs[chatIndex].messages.firstIndex(where: { $0.id == pendingAssistantID }) else {
             return
         }
         guard chatTabs[chatIndex].messages[messageIndex].text != text else { return }
         chatTabs[chatIndex].messages[messageIndex].text = text
         persistChatTabs()
-        if activeChatTabId == identifier {
-            refreshChatTabView(chatIndex: chatIndex)
-        }
     }
 
     private func normalizeFinalAssistantMessage(_ raw: String) -> String {
@@ -1380,7 +1431,12 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func persistChatTabs() {
+    func persistChatTabs() {
+        stageChatTabsInMemory()
+        threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)
+    }
+
+    private func stageChatTabsInMemory() {
         thread.persistedChatTabs = chatTabs.map { entry in
             PersistedChatTab(
                 identifier: entry.identifier,
@@ -1396,30 +1452,89 @@ extension ThreadDetailViewController {
                 isTitleManuallySet: entry.isTitleManuallySet
             )
         }
-        threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)
+        threadManager.stagePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)
+    }
+
+    @objc func stageChatStateForPersistence() {
+        stageChatTabsInMemory()
     }
 
     private func scheduleChatStreamingCheckpointPersist(identifier: String) {
-        chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
+        guard chatStreamingCheckpointTasksByIdentifier[identifier] == nil else { return }
+        let interval = chatPersistenceScheduleState.streamCheckpointInterval
         chatStreamingCheckpointTasksByIdentifier[identifier] = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 400_000_000) // 0.4s trailing-edge throttle
-            await MainActor.run {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                guard !Task.isCancelled else { return }
                 guard let self else { return }
                 guard self.chatRequestTasksByIdentifier[identifier] != nil else {
                     self.chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
                     return
                 }
                 self.persistChatTabs()
-                self.chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
             }
         }
     }
 
     private func updateChatDraftInput(identifier: String, draftInput: String) {
-        guard let index = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+        guard let index = chatIndex(for: identifier) else { return }
         guard chatTabs[index].draftInput != draftInput else { return }
         chatTabs[index].draftInput = draftInput
-        persistChatTabs()
+        stageChatTabsInMemory()
+        scheduleChatDraftPersist(identifier: identifier)
+    }
+
+    private func scheduleChatDraftPersist(identifier: String) {
+        let shouldStartWorker = chatPersistenceScheduleState.recordDraftChange(identifier: identifier, now: Date())
+        guard shouldStartWorker else { return }
+        chatDraftPersistenceTasksByIdentifier[identifier] = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self,
+                      let action = self.chatPersistenceScheduleState.draftAction(identifier: identifier, now: Date()) else {
+                    return
+                }
+                switch action {
+                case .wait(let deadline):
+                    let delay = max(0, deadline.timeIntervalSinceNow)
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    guard !Task.isCancelled else { return }
+                case .persist:
+                    self.persistChatTabs()
+                    self.chatDraftPersistenceTasksByIdentifier.removeValue(forKey: identifier)
+                    return
+                }
+            }
+        }
+    }
+
+    private func chatIndex(for identifier: String) -> Int? {
+        if let cached = chatTabIndicesByIdentifier[identifier],
+           chatTabs.indices.contains(cached),
+           chatTabs[cached].identifier == identifier {
+            return cached
+        }
+        guard let index = chatTabs.firstIndex(where: { $0.identifier == identifier }) else {
+            chatTabIndicesByIdentifier.removeValue(forKey: identifier)
+            return nil
+        }
+        chatTabIndicesByIdentifier[identifier] = index
+        return index
+    }
+
+    private func streamingMessageIndex(
+        identifier: String,
+        itemID: String,
+        messageID: UUID,
+        chatIndex: Int
+    ) -> Int? {
+        if let cached = chatStreamingAssistantMessageIndicesByIdentifier[identifier]?[itemID],
+           chatTabs[chatIndex].messages.indices.contains(cached),
+           chatTabs[chatIndex].messages[cached].id == messageID {
+            return cached
+        }
+        guard let index = chatTabs[chatIndex].messages.firstIndex(where: { $0.id == messageID }) else { return nil }
+        chatStreamingAssistantMessageIndicesByIdentifier[identifier, default: [:]][itemID] = index
+        return index
     }
 
     private func updateChatDraftAttachments(identifier: String, draftAttachments: [PersistedChatAttachment]) {

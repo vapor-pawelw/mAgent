@@ -238,7 +238,11 @@ final class ThreadDetailViewController: NSViewController {
     var chatRequestTaskTokensByIdentifier: [String: UUID] = [:]
     var chatPendingAssistantMessageIDsByIdentifier: [String: UUID] = [:]
     var chatStreamingAssistantMessageIDsByIdentifier: [String: [String: UUID]] = [:]
+    var chatStreamingAssistantMessageIndicesByIdentifier: [String: [String: Int]] = [:]
+    var chatTabIndicesByIdentifier: [String: Int] = [:]
     var chatStreamingCheckpointTasksByIdentifier: [String: Task<Void, Never>] = [:]
+    var chatDraftPersistenceTasksByIdentifier: [String: Task<Void, Never>] = [:]
+    var chatPersistenceScheduleState = ChatPersistenceScheduleState()
     var chatStreamingUIRefreshTasksByIdentifier: [String: Task<Void, Never>] = [:]
     var chatStreamingLastUIRefreshAtByIdentifier: [String: Date] = [:]
     var chatSteerInputContinuationsByIdentifier: [String: AsyncStream<String>.Continuation] = [:]
@@ -584,6 +588,12 @@ final class ThreadDetailViewController: NSViewController {
             name: .magentTabReturnedToThread,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(stageChatStateForPersistence),
+            name: .magentStageChatStateForPersistence,
+            object: nil
+        )
 
         refreshRecoveryBanner()
         refreshAgentShellBanner()
@@ -609,6 +619,11 @@ final class ThreadDetailViewController: NSViewController {
         promptTOCNavigationTask?.cancel()
         promptTOCNavigationTask = nil
         promptTOCNavigationGeneration = nil
+        if !chatDraftPersistenceTasksByIdentifier.isEmpty {
+            persistChatTabs()
+        }
+        chatDraftPersistenceTasksByIdentifier.values.forEach { $0.cancel() }
+        chatDraftPersistenceTasksByIdentifier.removeAll()
         notifyDiffTabDidDeactivate()
         hideDiffViewer()
         // DiffImageOverlayView lives on window.contentView, not on our view,
@@ -631,9 +646,13 @@ final class ThreadDetailViewController: NSViewController {
         chatRequestTaskTokensByIdentifier.removeAll()
         chatPendingAssistantMessageIDsByIdentifier.removeAll()
         chatStreamingAssistantMessageIDsByIdentifier.removeAll()
+        chatStreamingAssistantMessageIndicesByIdentifier.removeAll()
+        chatTabIndicesByIdentifier.removeAll()
         chatStreamingCheckpointTasksByIdentifier.removeAll()
         chatRequestTasks.forEach { $0.cancel() }
         chatStreamingCheckpointTasks.forEach { $0.cancel() }
+        chatDraftPersistenceTasksByIdentifier.values.forEach { $0.cancel() }
+        chatDraftPersistenceTasksByIdentifier.removeAll()
         chatStreamingUIRefreshTasksByIdentifier.values.forEach { $0.cancel() }
         chatStreamingUIRefreshTasksByIdentifier.removeAll()
         chatStreamingLastUIRefreshAtByIdentifier.removeAll()

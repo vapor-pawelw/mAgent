@@ -1,6 +1,7 @@
 import Foundation
 
 extension Notification.Name {
+    static let magentStageChatStateForPersistence = Notification.Name("magentStageChatStateForPersistence")
     static let magentArchivedThreadsDidChange = Notification.Name("magentArchivedThreadsDidChange")
     static let magentDeadSessionsDetected = Notification.Name("magentDeadSessionsDetected")
     static let magentAgentCompletionDetected = Notification.Name("magentAgentCompletionDetected")

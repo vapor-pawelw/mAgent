@@ -129,6 +129,8 @@ final class SessionLifecycleService {
     /// `checkForWaitingForInput` (which normally clears on idle prompt, not interactive prompt).
     var rateLimitLiftPendingResumeSessions: Set<String> = []
 
+    private var chatPersistenceRevisionByThreadID: [UUID: UInt64] = [:]
+
     // MARK: - Init
 
     init(store: ThreadStore, sessionTracker: SessionTracker, persistence: PersistenceService, tmux: TmuxService) {
@@ -841,9 +843,28 @@ final class SessionLifecycleService {
     }
 
     func updatePersistedChatTabs(for threadId: UUID, chatTabs: [PersistedChatTab]) {
-        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard stagePersistedChatTabs(for: threadId, chatTabs: chatTabs) else { return }
+        let revision = max(
+            DispatchTime.now().uptimeNanoseconds,
+            chatPersistenceRevisionByThreadID[threadId, default: 0] + 1
+        )
+        chatPersistenceRevisionByThreadID[threadId] = revision
+        let writesAllowed = !persistence.hasBlockedWrites
+        Task {
+            await ChatThreadsPersistenceWorker.shared.saveChatTabs(
+                chatTabs,
+                for: threadId,
+                revision: revision,
+                writesAllowed: writesAllowed
+            )
+        }
+    }
+
+    @discardableResult
+    func stagePersistedChatTabs(for threadId: UUID, chatTabs: [PersistedChatTab]) -> Bool {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return false }
         store.threads[index].persistedChatTabs = chatTabs
-        try? persistence.saveActiveThreads(store.threads)
+        return true
     }
 
     // MARK: - Waiting-for-Input Detection
