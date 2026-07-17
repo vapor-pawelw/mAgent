@@ -16,9 +16,10 @@
 ## Implementation Notes
 
 - Keep the main split view structure stable: swap detail content inside a persistent container instead of removing and re-adding split-view items.
+- Configure both split items during `SplitViewController` initialization, before AppKit runs `NSSplitViewController.viewDidLoad`; adding them from `viewDidLoad` leaves AppKit's divider setup with an empty item array and crashes at launch.
 - Preserve the sidebar width during detail-content swaps with `SplitViewController.preserveSidebarWidthDuringContentChange(...)`.
 - Use `SidebarTrackingSplitView` as the controller's split view and scope drag state around its `super.mouseDown(with:)` call. `NSSplitView` owns the synchronous divider tracking loop, so this exactly matches AppKit's effective divider hit target and keeps drag state active until tracking ends without relying on application event monitors, coordinate tolerances, or global button polling.
-- Every `NSSplitViewDelegate` override on `SplitViewController` must call `super`; `NSSplitViewController` provides required controller-specific divider behavior before Magent applies its width policy.
+- Call `super` only for delegate callbacks that `NSSplitViewController` actually implements. In particular, `splitView(_:constrainSplitPosition:ofSubviewAt:)` is an optional delegate callback without a superclass implementation; calling it through `super` raises an unrecognized-selector exception.
 - Keep `splitView(_:constrainSplitPosition:ofSubviewAt:)` locked to `preferredSidebarWidth` whenever a real divider drag, sidebar collapse animation, or explicit content-swap enforcement is not active. This makes sidebar width an invariant even when newly selected detail content resolves constraints in later layout passes.
 - Load the saved sidebar width into `preferredSidebarWidth` before startup selection/detail work begins, and apply the initial divider position no later than `viewWillAppear`. If launch-time content swaps run first, AppKit will build sidebar rows against the default width and then reflow them again when the saved width is restored.
 - Route thread-row height through `ThreadCell.sidebarRowHeight(descriptionLines:hasSubtitle:hasPRRow:narrowThreads:)` which computes per-thread height from actual content with a minimum enforced by `minimumContentHeight(narrowThreads:)`.
