@@ -1079,9 +1079,12 @@ final class RenameService {
         guard persistence.loadSettings().autoRenameTabs else { return }
         guard let initialThread = store.threads.first(where: { $0.id == threadId }),
               initialThread.tmuxSessionNames.contains(sessionName),
-              !initialThread.manuallyRenamedTabs.contains(sessionName),
-              initialThread.customTabNames[sessionName] == nil,
-              !autoTabRenameInProgress.contains(sessionName) else { return }
+              TmuxSessionNaming.isPromptBasedTabRenameEligible(
+                  currentName: initialThread.customTabNames[sessionName],
+                  agentType: initialThread.sessionAgentTypes[sessionName],
+                  isManuallyRenamed: initialThread.manuallyRenamedTabs.contains(sessionName),
+                  isRenameInProgress: autoTabRenameInProgress.contains(sessionName)
+              ) else { return }
 
         autoTabRenameInProgress.insert(sessionName)
         defer { autoTabRenameInProgress.remove(sessionName) }
@@ -1117,8 +1120,12 @@ final class RenameService {
             guard let index = store.threads.firstIndex(where: { $0.id == threadId }),
                   persistence.loadSettings().autoRenameTabs,
                   store.threads[index].tmuxSessionNames.contains(sessionName),
-                  !store.threads[index].manuallyRenamedTabs.contains(sessionName),
-                  store.threads[index].customTabNames[sessionName] == nil else { return }
+                  TmuxSessionNaming.isPromptBasedTabRenameEligible(
+                      currentName: store.threads[index].customTabNames[sessionName],
+                      agentType: store.threads[index].sessionAgentTypes[sessionName],
+                      isManuallyRenamed: store.threads[index].manuallyRenamedTabs.contains(sessionName),
+                      isRenameInProgress: false
+                  ) else { return }
             let uniqueName = allocateUniqueTabDisplayNameCallback?(generatedName, index, sessionName) ?? generatedName
             store.threads[index].customTabNames[sessionName] = uniqueName
             // This shared protection set prevents every automatic naming pass from

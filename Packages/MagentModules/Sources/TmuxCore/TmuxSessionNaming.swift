@@ -133,6 +133,22 @@ public enum TmuxSessionNaming {
         return inner.unicodeScalars.allSatisfy { validChars.contains($0) }
     }
 
+    public static func isPromptBasedTabRenameEligible(
+        currentName: String?,
+        agentType: AgentType?,
+        isManuallyRenamed: Bool,
+        isRenameInProgress: Bool
+    ) -> Bool {
+        guard !isManuallyRenamed, !isRenameInProgress else { return false }
+        guard let currentName else { return true }
+        if let agentType {
+            return looksLikeDefaultTabName(currentName, for: agentType)
+        }
+        return [AgentType.claude, .codex, .custom].contains {
+            looksLikeDefaultTabName(currentName, for: $0)
+        }
+    }
+
     public static func isMagentSession(_ name: String) -> Bool {
         name.hasPrefix("ma-") || name.hasPrefix("magent-")
     }

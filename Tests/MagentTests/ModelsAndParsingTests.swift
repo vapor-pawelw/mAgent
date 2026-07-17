@@ -482,6 +482,70 @@ struct TmuxSessionNamingTests {
         #expect(!TmuxSessionNaming.looksLikeDefaultTabName("Codex (M)", for: .claude))
     }
 
+    @Test("Default agent labels remain eligible for prompt-based naming")
+    func defaultAgentLabelsArePromptRenameEligible() {
+        #expect(TmuxSessionNaming.isPromptBasedTabRenameEligible(
+            currentName: nil,
+            agentType: .codex,
+            isManuallyRenamed: false,
+            isRenameInProgress: false
+        ))
+        #expect(TmuxSessionNaming.isPromptBasedTabRenameEligible(
+            currentName: "Codex",
+            agentType: .codex,
+            isManuallyRenamed: false,
+            isRenameInProgress: false
+        ))
+        #expect(TmuxSessionNaming.isPromptBasedTabRenameEligible(
+            currentName: "Codex (5.4, H)",
+            agentType: .codex,
+            isManuallyRenamed: false,
+            isRenameInProgress: false
+        ))
+        #expect(TmuxSessionNaming.isPromptBasedTabRenameEligible(
+            currentName: "Claude (Sonnet 4.6, H)",
+            agentType: .claude,
+            isManuallyRenamed: false,
+            isRenameInProgress: false
+        ))
+        #expect(TmuxSessionNaming.isPromptBasedTabRenameEligible(
+            currentName: "Codex (5.4, H)",
+            agentType: nil,
+            isManuallyRenamed: false,
+            isRenameInProgress: false
+        ))
+    }
+
+    @Test("Explicit and generated labels remain protected from prompt-based naming")
+    func protectedLabelsAreNotPromptRenameEligible() {
+        for currentName in ["Fix terminal naming", "Codex (my notes!)"] {
+            #expect(!TmuxSessionNaming.isPromptBasedTabRenameEligible(
+                currentName: currentName,
+                agentType: .codex,
+                isManuallyRenamed: false,
+                isRenameInProgress: false
+            ))
+        }
+        for currentName in ["Generated label", "Codex (5.4, H)"] {
+            #expect(!TmuxSessionNaming.isPromptBasedTabRenameEligible(
+                currentName: currentName,
+                agentType: .codex,
+                isManuallyRenamed: true,
+                isRenameInProgress: false
+            ))
+        }
+    }
+
+    @Test("A concurrent prompt-based rename remains ineligible")
+    func inFlightPromptRenameIsIneligible() {
+        #expect(!TmuxSessionNaming.isPromptBasedTabRenameEligible(
+            currentName: "Codex (5.4, H)",
+            agentType: .codex,
+            isManuallyRenamed: false,
+            isRenameInProgress: true
+        ))
+    }
+
     @Test("renamedSessionName rewrites prefix for exact match")
     func renameExact() {
         let renamed = TmuxSessionNaming.renamedSessionName(
