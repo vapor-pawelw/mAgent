@@ -463,7 +463,7 @@ private final class ContextChipView: NSView {
 
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            self.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.1).cgColor
+            self.layer?.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.1).cgColor
         }
         layer?.cornerRadius = 6
     }
@@ -924,7 +924,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             if config.showDraftCheckbox {
                 draftCheckbox.state = .off
                 draftCheckbox.font = .systemFont(ofSize: 11)
-                draftCheckbox.contentTintColor = .controlAccentColor
+                draftCheckbox.contentTintColor = .appPrimary
                 draftCheckbox.toolTip = "Save this prompt as a draft tab instead of running it immediately"
                 draftCheckbox.target = self
                 draftCheckbox.action = #selector(draftCheckboxChanged)
@@ -1054,7 +1054,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         rememberCheckbox.action = #selector(rememberCheckboxToggled)
         rememberCheckbox.state = PersistenceService.shared.loadSettings().rememberLastTypeSelection ? .on : .off
         rememberCheckbox.font = .systemFont(ofSize: 11)
-        rememberCheckbox.contentTintColor = .controlAccentColor
+        rememberCheckbox.contentTintColor = .appPrimary
         stack.addArrangedSubview(rememberCheckbox)
         stack.setCustomSpacing(4, after: rememberCheckbox)
 
@@ -1065,14 +1065,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             switchToNewThreadCheckbox.action = #selector(switchToNewThreadCheckboxToggled)
             switchToNewThreadCheckbox.state = PersistenceService.shared.loadSettings().switchToNewlyCreatedThread ? .on : .off
             switchToNewThreadCheckbox.font = .systemFont(ofSize: 11)
-            switchToNewThreadCheckbox.contentTintColor = .controlAccentColor
+            switchToNewThreadCheckbox.contentTintColor = .appPrimary
             stack.addArrangedSubview(switchToNewThreadCheckbox)
         case .newTab:
             switchToNewTabCheckbox.target = self
             switchToNewTabCheckbox.action = #selector(switchToNewTabCheckboxToggled)
             switchToNewTabCheckbox.state = PersistenceService.shared.loadSettings().switchToNewlyCreatedTab ? .on : .off
             switchToNewTabCheckbox.font = .systemFont(ofSize: 11)
-            switchToNewTabCheckbox.contentTintColor = .controlAccentColor
+            switchToNewTabCheckbox.contentTintColor = .appPrimary
             stack.addArrangedSubview(switchToNewTabCheckbox)
         }
 
@@ -1283,7 +1283,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         iconView.image = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
         iconView.image = iconView.image?.withSymbolConfiguration(symbolConfig)
-        iconView.contentTintColor = .controlAccentColor
+        iconView.contentTintColor = .appPrimary
         iconView.translatesAutoresizingMaskIntoConstraints = false
 
         // Build attributed string: "Project: " in medium accent + "MyProject" in semibold primary

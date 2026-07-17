@@ -1041,7 +1041,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     accessibilityDescription: "Add Thread to \(project.name)"
                 )?.withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
                 addButton.image = plusImage ?? NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Thread")
-                addButton.contentTintColor = .controlAccentColor
+                addButton.contentTintColor = .appPrimary
                 addButton.objectValue = project.projectId.uuidString
                 addButton.toolTip = "Add thread to \(project.name). Right-click for agent options. Option-click to use project default."
                 addButton.isEnabled = !isCreatingThread && !project.isMissing
@@ -1051,7 +1051,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             }
             if project.isPinned {
                 cell.imageView?.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
-                cell.imageView?.contentTintColor = NSColor(resource: .primaryBrand)
+                cell.imageView?.contentTintColor = NSColor.appPrimary
                 cell.imageView?.isHidden = false
             } else {
                 cell.imageView?.image = nil

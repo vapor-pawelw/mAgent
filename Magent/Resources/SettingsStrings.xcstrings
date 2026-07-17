@@ -315,7 +315,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clears custom chat colors and restores the built-in appearance."
+            "value": "Clears custom chat colors. The user bubble follows the app primary color, while the agent bubble returns to its neutral default."
           }
         }
       }
@@ -536,6 +536,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chats"
+          }
+        }
+      }
+    },
+    "settingsAppearancePrimaryColorTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Primary Color"
+          }
+        }
+      }
+    },
+    "settingsAppearancePrimaryColorDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the color used for primary actions, selections, highlights, and default user chat bubbles throughout Magent."
+          }
+        }
+      }
+    },
+    "settingsAppearancePrimaryColorLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Primary color"
+          }
+        }
+      }
+    },
+    "settingsAppearanceResetPrimaryColor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset to Default"
           }
         }
       }

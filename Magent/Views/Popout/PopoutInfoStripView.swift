@@ -168,8 +168,8 @@ final class PopoutInfoStripView: NSView {
             self.descriptionLabel.textColor = NSColor(resource: .textPrimary)
             self.branchLabel.textColor = NSColor(resource: .textSecondary)
             self.keepAliveIndicator.contentTintColor = .systemCyan
-            self.favoriteIndicator.contentTintColor = NSColor(resource: .primaryBrand)
-            self.pinnedIndicator.contentTintColor = NSColor(resource: .primaryBrand)
+            self.favoriteIndicator.contentTintColor = NSColor.appPrimary
+            self.pinnedIndicator.contentTintColor = NSColor.appPrimary
         }
     }
 
@@ -406,7 +406,7 @@ final class PopoutInfoStripView: NSView {
         }
 
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let accentColor = NSColor.controlAccentColor
+            let accentColor = NSColor.appPrimary
             var hue: CGFloat = 0
             var saturation: CGFloat = 0
             var brightness: CGFloat = 0

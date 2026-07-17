@@ -28,6 +28,14 @@ struct SidebarSettingsFingerprintTests {
     }
 
     @Test
+    func changingPrimaryColorRequiresSidebarRefresh() {
+        let pink = AppSettings(appPrimaryColorHex: "#D12D82")
+        let blue = AppSettings(appPrimaryColorHex: "#007AFF")
+
+        #expect(SidebarSettingsFingerprint(settings: pink) != SidebarSettingsFingerprint(settings: blue))
+    }
+
+    @Test
     func changingAllowedJiraPrefixesRequiresSidebarRefresh() {
         let ipOnly = AppSettings(jiraTicketDetectionPrefixes: "IP")
         let multiplePrefixes = AppSettings(jiraTicketDetectionPrefixes: "IP, APPL")

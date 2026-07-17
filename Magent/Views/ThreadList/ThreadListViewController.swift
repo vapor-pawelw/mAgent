@@ -819,6 +819,9 @@ final class ThreadListViewController: NSViewController {
         pendingSettingsReloadWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             self?.reloadData()
+            self?.diffPanelView?.refreshPrimaryColor()
+            self?.applySelectedThreadJumpCapsuleStyle()
+            self?.updateSelectedThreadJumpCapsuleVisibility()
             self?.refreshSidebarLayout(forceColumnRefit: true)
         }
         pendingSettingsReloadWorkItem = work
@@ -1082,7 +1085,7 @@ final class ThreadListViewController: NSViewController {
             selectedThreadJumpCapsule.layer?.cornerRadius = 16
             selectedThreadJumpCapsule.layer?.borderWidth = 1
             selectedThreadJumpCapsule.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-            selectedThreadJumpCapsule.layer?.borderColor = NSColor(resource: .primaryBrand).cgColor
+            selectedThreadJumpCapsule.layer?.borderColor = NSColor.appPrimary.cgColor
         }
     }
 
@@ -1887,7 +1890,7 @@ final class ThreadListViewController: NSViewController {
             systemSymbolName: iconSymbolName,
             accessibilityDescription: iconAccessibilityDescription
         )
-        selectedThreadJumpIconView.contentTintColor = NSColor(resource: .primaryBrand)
+        selectedThreadJumpIconView.contentTintColor = NSColor.appPrimary
         selectedThreadJumpIconView.isHidden = !persistence.loadSettings().showThreadIcons
         selectedThreadJumpTitleLabel.stringValue = SelectedThreadJumpPresenter.title(for: selectedThread)
 

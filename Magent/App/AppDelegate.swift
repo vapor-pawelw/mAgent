@@ -372,6 +372,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     private func applyAppAppearanceAndTerminalPreferences() {
         let settings = PersistenceService.shared.loadSettings()
+        AppTheme.apply(settings)
         let appAppearance: NSAppearance?
 
         switch settings.appAppearanceMode {

@@ -3,7 +3,6 @@ import MagentCore
 
 @MainActor
 struct ChatAppearance {
-    static let defaultUserBubbleColor = NSColor.controlAccentColor
     static let defaultUserTextColor = NSColor.white
     static let defaultAgentBubbleColor = NSColor(resource: .surface)
     static let defaultAgentTextColor = NSColor.labelColor
@@ -15,7 +14,7 @@ struct ChatAppearance {
 
     static func resolve(from settings: AppSettings) -> ChatAppearance {
         ChatAppearance(
-            userBubbleColor: NSColor(hex: settings.chatUserBubbleColorHex ?? "") ?? defaultUserBubbleColor,
+            userBubbleColor: NSColor(hex: settings.effectiveChatUserBubbleColorHex) ?? NSColor.appPrimary,
             userTextColor: NSColor(hex: settings.chatUserTextColorHex ?? "") ?? defaultUserTextColor,
             agentBubbleColor: NSColor(hex: settings.chatAssistantBubbleColorHex ?? "") ?? defaultAgentBubbleColor,
             agentTextColor: NSColor(hex: settings.chatAssistantTextColorHex ?? "") ?? defaultAgentTextColor

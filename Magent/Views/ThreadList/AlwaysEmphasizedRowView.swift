@@ -159,11 +159,11 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         case .selected:
             let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let fillColor = isDark
-                ? NSColor.controlAccentColor.withAlphaComponent(0.1)
-                : NSColor.controlAccentColor.withAlphaComponent(0.2)
+                ? NSColor.appPrimary.withAlphaComponent(0.1)
+                : NSColor.appPrimary.withAlphaComponent(0.2)
             return CapsuleStyle(
                 fill: fillColor,
-                border: .controlAccentColor
+                border: .appPrimary
             )
         case .rateLimited:
             return CapsuleStyle(
@@ -403,7 +403,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             brightColor = NSColor.white.withAlphaComponent(0.9)
             dimColor = NSColor.white.withAlphaComponent(0.25)
         } else {
-            let accentColor = NSColor.controlAccentColor
+            let accentColor = NSColor.appPrimary
             var hue: CGFloat = 0, sat: CGFloat = 0, bri: CGFloat = 0, alpha: CGFloat = 0
             accentColor.usingColorSpace(.sRGB)?.getHue(&hue, saturation: &sat, brightness: &bri, alpha: &alpha)
             brightColor = NSColor(hue: hue, saturation: max(sat * 0.7, 0.3), brightness: min(bri * 1.1, 1.0), alpha: 0.8)

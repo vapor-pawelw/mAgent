@@ -163,7 +163,7 @@ private final class ChatAttachmentDropOverlayView: NSView {
 
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
         messageLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        messageLabel.textColor = .controlAccentColor
+        messageLabel.textColor = .appPrimary
         addSubview(messageLabel)
 
         NSLayoutConstraint.activate([
@@ -198,9 +198,10 @@ private final class ChatAttachmentDropOverlayView: NSView {
     }
 
     func updateAppearance() {
+        messageLabel.textColor = .appPrimary
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            dashLayer.strokeColor = NSColor.controlAccentColor.withAlphaComponent(0.9).cgColor
-            dashLayer.fillColor = NSColor.controlAccentColor.withAlphaComponent(0.10).cgColor
+            dashLayer.strokeColor = NSColor.appPrimary.withAlphaComponent(0.9).cgColor
+            dashLayer.fillColor = NSColor.appPrimary.withAlphaComponent(0.10).cgColor
             dashLayer.lineWidth = 1.5
             dashLayer.lineDashPattern = [8, 5]
         }
@@ -865,9 +866,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             timestampLabel.alignment = .right
         case .system:
             effectiveAppearance.performAsCurrentDrawingAppearance {
-                container.layer?.backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.10).cgColor
+                container.layer?.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.10).cgColor
                 container.layer?.borderWidth = 1
-                container.layer?.borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.22).cgColor
+                container.layer?.borderColor = NSColor.appPrimary.withAlphaComponent(0.22).cgColor
             }
             baseTextColor = NSColor(resource: .textSecondary)
             codeColor = baseTextColor
@@ -924,7 +925,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             messageTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
             messageTextView.delegate = self
             messageTextView.linkTextAttributes = [
-                .foregroundColor: NSColor(resource: .primaryBrand),
+                .foregroundColor: NSColor.appPrimary,
                 .font: NSFont.systemFont(ofSize: fontSize, weight: .regular),
             ]
             let queuedSuffix = Self.queuedSubmissionSuffix
@@ -942,7 +943,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                     renderedMessageText,
                     baseColor: baseTextColor,
                     codeColor: codeColor,
-                    linkColor: NSColor(resource: .primaryBrand),
+                    linkColor: NSColor.appPrimary,
                     baseFontSize: fontSize
                 )
             )
@@ -1449,7 +1450,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 layer.borderWidth = 1
-                layer.borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.35).cgColor
+                layer.borderColor = NSColor.appPrimary.withAlphaComponent(0.35).cgColor
             }
             return
         }
@@ -1502,9 +1503,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     }
 
     private func applyLoadingBorderGradientColors(_ gradientLayer: CAGradientLayer) {
-        let bright = NSColor(resource: .primaryBrand).withAlphaComponent(0.85)
-        let mid = NSColor(resource: .primaryBrand).withAlphaComponent(0.45)
-        let dim = NSColor(resource: .primaryBrand).withAlphaComponent(0.12)
+        let bright = NSColor.appPrimary.withAlphaComponent(0.85)
+        let mid = NSColor.appPrimary.withAlphaComponent(0.45)
+        let dim = NSColor.appPrimary.withAlphaComponent(0.12)
         effectiveAppearance.performAsCurrentDrawingAppearance {
             gradientLayer.colors = [
                 bright.cgColor,
@@ -1635,7 +1636,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         )
 
         let sectionFont = NSFont.systemFont(ofSize: max(11, baseFontSize - 1), weight: .semibold)
-        let sectionColor = NSColor(resource: .primaryBrand)
+        let sectionColor = NSColor.appPrimary
         let full = attributed.string as NSString
         full.enumerateSubstrings(in: fullRange, options: [.byLines, .substringNotRequired]) { _, range, _, _ in
             guard range.length > 0 else { return }
@@ -2066,7 +2067,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         sendButton.imagePosition = .imageOnly
         sendButton.bezelStyle = .rounded
         sendButton.controlSize = .large
-        sendButton.contentTintColor = .controlAccentColor
+        sendButton.contentTintColor = .appPrimary
         sendButton.target = self
         sendButton.action = #selector(sendTapped)
         sendButton.toolTip = "Return sends. Shift+Return inserts newline. Esc or Ctrl+C cancels running request."
@@ -3286,6 +3287,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     }
 
     @objc private func settingsDidChange() {
+        sendButton.contentTintColor = .appPrimary
         reloadMessages(shouldScrollToBottom: false, forceFullReload: true)
         updateSlashAutocompleteAppearance()
         updateScrollToBottomButtonAppearance()

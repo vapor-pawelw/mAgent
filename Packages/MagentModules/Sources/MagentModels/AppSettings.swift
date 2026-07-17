@@ -127,6 +127,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public static let minChatFontSize: Double = 12
     public static let maxChatFontSize: Double = 22
     public static let defaultChatFontSize: Double = 14
+    public static let defaultPrimaryColorHex = "#D12D82"
     public static let defaultTerminalSurfaceCacheLimit = 8
     public static let minTerminalSurfaceCacheLimit = 1
     public static let maxTerminalSurfaceCacheLimit = 100
@@ -180,6 +181,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var syncLocalPathsOnArchive: Bool
     public var externalLinkOpenPreference: ExternalLinkOpenPreference
     public var appAppearanceMode: AppAppearanceMode
+    public var appPrimaryColorHex: String?
     public var terminalMouseWheelBehavior: TerminalMouseWheelBehavior
     public var showScrollToBottomIndicator: Bool
     public var showTerminalScrollOverlay: Bool
@@ -253,6 +255,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         syncLocalPathsOnArchive: Bool = true,
         externalLinkOpenPreference: ExternalLinkOpenPreference = .inApp,
         appAppearanceMode: AppAppearanceMode = .system,
+        appPrimaryColorHex: String? = nil,
         terminalMouseWheelBehavior: TerminalMouseWheelBehavior = .magentDefaultScroll,
         showScrollToBottomIndicator: Bool = true,
         showTerminalScrollOverlay: Bool = true,
@@ -325,6 +328,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.syncLocalPathsOnArchive = syncLocalPathsOnArchive
         self.externalLinkOpenPreference = externalLinkOpenPreference
         self.appAppearanceMode = appAppearanceMode
+        self.appPrimaryColorHex = appPrimaryColorHex
         self.terminalMouseWheelBehavior = terminalMouseWheelBehavior
         self.showScrollToBottomIndicator = showScrollToBottomIndicator
         self.showTerminalScrollOverlay = showTerminalScrollOverlay
@@ -414,6 +418,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         syncLocalPathsOnArchive = try container.decodeIfPresent(Bool.self, forKey: .syncLocalPathsOnArchive) ?? true
         externalLinkOpenPreference = try container.decodeIfPresent(ExternalLinkOpenPreference.self, forKey: .externalLinkOpenPreference) ?? .inApp
         appAppearanceMode = try container.decodeIfPresent(AppAppearanceMode.self, forKey: .appAppearanceMode) ?? .system
+        appPrimaryColorHex = try container.decodeIfPresent(String.self, forKey: .appPrimaryColorHex)
         terminalMouseWheelBehavior = try container.decodeIfPresent(TerminalMouseWheelBehavior.self, forKey: .terminalMouseWheelBehavior) ?? .magentDefaultScroll
         showScrollToBottomIndicator = try container.decodeIfPresent(Bool.self, forKey: .showScrollToBottomIndicator) ?? true
         showTerminalScrollOverlay = try container.decodeIfPresent(Bool.self, forKey: .showTerminalScrollOverlay) ?? true
@@ -498,6 +503,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(syncLocalPathsOnArchive, forKey: .syncLocalPathsOnArchive)
         try container.encode(externalLinkOpenPreference, forKey: .externalLinkOpenPreference)
         try container.encode(appAppearanceMode, forKey: .appAppearanceMode)
+        try container.encodeIfPresent(appPrimaryColorHex, forKey: .appPrimaryColorHex)
         try container.encode(terminalMouseWheelBehavior, forKey: .terminalMouseWheelBehavior)
         try container.encode(showScrollToBottomIndicator, forKey: .showScrollToBottomIndicator)
         try container.encode(showTerminalScrollOverlay, forKey: .showTerminalScrollOverlay)
@@ -695,6 +701,14 @@ public nonisolated struct AppSettings: Codable, Sendable {
         limit.map { min(max($0, minTerminalSurfaceCacheLimit), maxTerminalSurfaceCacheLimit) }
     }
 
+    public var effectivePrimaryColorHex: String {
+        appPrimaryColorHex ?? Self.defaultPrimaryColorHex
+    }
+
+    public var effectiveChatUserBubbleColorHex: String {
+        chatUserBubbleColorHex ?? effectivePrimaryColorHex
+    }
+
     private enum CodingKeys: String, CodingKey {
         case projects
         case activeAgents
@@ -746,6 +760,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case syncLocalPathsOnArchive
         case externalLinkOpenPreference
         case appAppearanceMode
+        case appPrimaryColorHex
         case terminalMouseWheelBehavior
         case showScrollToBottomIndicator
         case showTerminalScrollOverlay

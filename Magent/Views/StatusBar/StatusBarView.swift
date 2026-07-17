@@ -403,7 +403,7 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
         case .rateLimited:
             return .systemRed
         case .favorites:
-            return NSColor(resource: .primaryBrand)
+            return NSColor.appPrimary
         }
     }
 
@@ -708,7 +708,7 @@ private final class ThreadStatusPopoverRowView: NSView {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.cornerRadius = 8
             layer?.backgroundColor = isHovered
-                ? NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
+                ? NSColor.appPrimary.withAlphaComponent(0.12).cgColor
                 : NSColor.clear.cgColor
         }
     }
@@ -809,7 +809,7 @@ private final class ThreadStatusPopoverSeparatorView: NSView {
         }
 
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let accentColor = NSColor.controlAccentColor
+            let accentColor = NSColor.appPrimary
             var hue: CGFloat = 0
             var saturation: CGFloat = 0
             var brightness: CGFloat = 0
@@ -962,7 +962,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
             heart.translatesAutoresizingMaskIntoConstraints = false
             heart.image = NSImage(systemSymbolName: "heart.fill", accessibilityDescription: nil)?
                 .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
-            heart.contentTintColor = NSColor(resource: .primaryBrand)
+            heart.contentTintColor = NSColor.appPrimary
 
             let infoLabel = NSTextField(labelWithString: limitReachedMessage)
             infoLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -1373,7 +1373,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
                 ? NSColor(resource: .surface)
                 : NSColor(resource: .appBackground)
             layer?.backgroundColor = bg.cgColor
-            inlineFavoriteDropIndicator.layer?.backgroundColor = NSColor(resource: .primaryBrand).cgColor
+            inlineFavoriteDropIndicator.layer?.backgroundColor = NSColor.appPrimary.cgColor
         }
     }
 
@@ -2007,7 +2007,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
     private func inlineBadgeTintColor(for kind: ThreadStatusSummaryKind) -> NSColor {
         if kind == .favorites {
-            return NSColor(resource: .primaryBrand)
+            return NSColor.appPrimary
         }
         return kind.color
     }

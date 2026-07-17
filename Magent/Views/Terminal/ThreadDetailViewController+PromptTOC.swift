@@ -1172,6 +1172,10 @@ private final class PromptTOCEntryRowView: NSView {
         updateAppearance()
     }
 
+    func refreshPrimaryColor() {
+        updateAppearance()
+    }
+
     private func setupUI() {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
@@ -1209,8 +1213,8 @@ private final class PromptTOCEntryRowView: NSView {
         layer.borderWidth = 1
 
         if isSelected {
-            layer.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.18).cgColor
-            layer.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.55).cgColor
+            layer.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.18).cgColor
+            layer.borderColor = NSColor.appPrimary.withAlphaComponent(0.55).cgColor
             return
         }
 
@@ -1351,6 +1355,11 @@ final class PromptTableOfContentsView: NSView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateAppearance()
+    }
+
+    func refreshPrimaryColor() {
+        updateAppearance()
+        rowViews.forEach { $0.refreshPrimaryColor() }
     }
 
     override func mouseEntered(with event: NSEvent) {

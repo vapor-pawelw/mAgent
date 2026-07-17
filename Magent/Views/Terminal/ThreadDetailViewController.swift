@@ -1829,6 +1829,10 @@ final class ThreadDetailViewController: NSViewController {
 
     @objc private func handleSettingsChanged(_ notification: Notification) {
         let settings = PersistenceService.shared.loadSettings()
+        tabItems.forEach { $0.refreshPrimaryColor() }
+        draftTabs.forEach { $0.viewController?.refreshPrimaryColor() }
+        promptTOCView?.refreshPrimaryColor()
+        diffVC?.refreshPrimaryColor()
         let previousMouseWheelBehavior = currentTerminalMouseWheelBehavior
         currentTerminalMouseWheelBehavior = settings.terminalMouseWheelBehavior
 

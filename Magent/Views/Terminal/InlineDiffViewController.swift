@@ -170,6 +170,11 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
         applyChromeMode()
     }
 
+    func refreshPrimaryColor() {
+        guard isViewLoaded else { return }
+        applyAppearance()
+    }
+
     override func loadView() {
         let hostView = DiffHostView()
         hostView.onAppearanceChange = { [weak self] in
@@ -547,16 +552,16 @@ final class InlineDiffViewController: NSViewController, WKNavigationDelegate, WK
             view.layer?.backgroundColor = background
             webView.layer?.backgroundColor = background
             loadingOverlay.layer?.backgroundColor = background
-            commitReviewBannerView.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
-            commitReviewBannerView.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.55).cgColor
+            commitReviewBannerView.layer?.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.12).cgColor
+            commitReviewBannerView.layer?.borderColor = NSColor.appPrimary.withAlphaComponent(0.55).cgColor
             findBar.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.94).cgColor
             findBar.layer?.borderColor = NSColor.separatorColor.cgColor
             if #available(macOS 12.0, *) {
                 webView.underPageBackgroundColor = backgroundColor
             }
         }
-        commitReviewIconView.contentTintColor = .controlAccentColor
-        commitReviewLabel.textColor = .controlAccentColor
+        commitReviewIconView.contentTintColor = .appPrimary
+        commitReviewLabel.textColor = .appPrimary
         let isDark = view.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         evaluateRendererCall("window.magentDiffRenderer?.setTheme(\(jsonString(isDark ? "dark" : "light")))")
     }
