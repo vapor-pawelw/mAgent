@@ -1053,9 +1053,6 @@ extension ThreadDetailViewController {
             return applyChatSlashModelCommand(identifier: identifier, chatIndex: chatIndex, args: args)
         case "/effort":
             return applyChatSlashEffortCommand(identifier: identifier, chatIndex: chatIndex, args: args)
-        case "/fast":
-            guard agentType == .codex else { return false }
-            return applyChatSlashEffortCommand(identifier: identifier, chatIndex: chatIndex, args: ["fast"])
         case "/help":
             appendChatSlashHelpMessage(chatIndex: chatIndex)
             return true
@@ -1063,7 +1060,7 @@ extension ThreadDetailViewController {
             if agentType == .codex {
                 appendChatAssistantMessage(
                     identifier: identifier,
-                    text: "Codex chat supports /help, /clear, /fast, /model, and /effort."
+                    text: "Codex chat supports /help, /clear, /model, and /effort."
                 )
                 return true
             }
@@ -1076,7 +1073,7 @@ extension ThreadDetailViewController {
         let commands: [String]
         switch agentType {
         case .codex:
-            commands = ["/help", "/clear", "/fast", "/model <id>", "/effort <fast|low|medium|high|xhigh>"]
+            commands = ["/help", "/clear", "/model <id>", "/effort <none|low|medium|high|xhigh>"]
         case .claude:
             commands = ["/help", "/clear", "/model <id>", "/effort <low|medium|high>"]
         case .custom:

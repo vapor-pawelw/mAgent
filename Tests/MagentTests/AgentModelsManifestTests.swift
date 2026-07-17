@@ -26,15 +26,15 @@ struct AgentModelsManifestTests {
         #expect(!codexConfig.effectiveReasoningLevels(for: "gpt-5.6-luna").contains("ultra"))
     }
 
-    @Test("Bundled manifest exposes Codex fast reasoning")
-    func bundledManifestExposesCodexFastReasoning() throws {
+    @Test("Bundled manifest exposes Codex none reasoning")
+    func bundledManifestExposesCodexNoneReasoning() throws {
         let manifest = try loadRepositoryManifest()
         let codexConfig = try #require(manifest.config(for: .codex))
 
         #expect(codexConfig.reasoningLevels.first == "none")
-        #expect(AgentReasoningLevelPresentation.storageValue("fast", for: .codex) == "none")
-        #expect(AgentReasoningLevelPresentation.pickerTitle(for: "none", agentType: .codex) == "⚡ Fast")
-        #expect(AgentReasoningLevelPresentation.verboseTitle(for: "none", agentType: .codex) == "fast")
+        #expect(AgentReasoningLevelPresentation.storageValue("none", for: .codex) == "none")
+        #expect(AgentReasoningLevelPresentation.pickerTitle(for: "none", agentType: .codex) == "None")
+        #expect(AgentReasoningLevelPresentation.verboseTitle(for: "none", agentType: .codex) == "none")
     }
 
     private func loadRepositoryManifest() throws -> AgentModelsManifest {

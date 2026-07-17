@@ -533,10 +533,10 @@ struct TmuxSessionNamingTests {
         #expect(TmuxSessionNaming.defaultTabDisplayName(for: .codex, reasoningLevel: "ultra") == "Codex (Ultra)")
     }
 
-    @Test("Codex tab name shows fast reasoning as lightning")
-    func codexFastEffort() {
-        #expect(TmuxSessionNaming.defaultTabDisplayName(for: .codex, reasoningLevel: "none") == "Codex (⚡)")
-        #expect(TmuxSessionNaming.defaultTabDisplayName(for: .codex, modelLabel: "GPT 5.5", reasoningLevel: "none") == "Codex (5.5, ⚡)")
+    @Test("Codex tab name shows none reasoning explicitly")
+    func codexNoneEffort() {
+        #expect(TmuxSessionNaming.defaultTabDisplayName(for: .codex, reasoningLevel: "none") == "Codex (None)")
+        #expect(TmuxSessionNaming.defaultTabDisplayName(for: .codex, modelLabel: "GPT 5.5", reasoningLevel: "none") == "Codex (5.5, None)")
     }
 
     @Test("Claude combines model and effort with comma")

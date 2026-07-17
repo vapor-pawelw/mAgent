@@ -2670,7 +2670,6 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         [
             slashCommand("/help", detail: String(localized: .ThreadStrings.chatSlashCommandHelpDescription)),
             slashCommand("/clear", detail: String(localized: .ThreadStrings.chatSlashCommandClearDescription)),
-            slashCommand("/fast", detail: String(localized: .ThreadStrings.chatSlashCommandFastDescription)),
             slashCommand("/model", detail: String(localized: .ThreadStrings.chatSlashCommandModelDescription)),
             slashCommand("/effort", detail: String(localized: .ThreadStrings.chatSlashCommandEffortDescription)),
         ]

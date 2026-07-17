@@ -55,25 +55,16 @@ public enum AgentReasoningLevelPresentation {
         let normalized = level.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
 
-        if agentType == .codex, normalized == "fast" {
-            return "none"
-        }
         return normalized
     }
 
     public static func pickerTitle(for level: String, agentType: AgentType) -> String {
         let normalized = storageValue(level, for: agentType) ?? level
-        if agentType == .codex, normalized == "none" {
-            return "⚡ Fast"
-        }
         return normalized.capitalized
     }
 
     public static func verboseTitle(for level: String, agentType: AgentType) -> String {
         let normalized = storageValue(level, for: agentType) ?? level
-        if agentType == .codex, normalized == "none" {
-            return "fast"
-        }
         return normalized.lowercased()
     }
 
@@ -82,8 +73,8 @@ public enum AgentReasoningLevelPresentation {
         guard let trimmed, !trimmed.isEmpty else { return nil }
 
         switch trimmed.lowercased() {
-        case "none", "fast":
-            return agentType == .codex ? "⚡" : trimmed
+        case "none":
+            return "None"
         case "low":
             return "L"
         case "medium":

@@ -46,8 +46,8 @@ struct ChatModelChangeNoticeTests {
         #expect(updated[1].text == "Model changed to GPT-5 (high)")
     }
 
-    @Test("renders none reasoning as fast")
-    func rendersNoneReasoningAsFast() {
+    @Test("renders none reasoning explicitly")
+    func rendersNoneReasoningExplicitly() {
         let previous = PersistedChatMessage(role: .user, text: "hello", modelId: "gpt-5", reasoningLevel: "high")
         let updated = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
             into: [previous],
@@ -57,7 +57,7 @@ struct ChatModelChangeNoticeTests {
         )
 
         #expect(updated.map(\.role) == [.user, .system])
-        #expect(updated[1].text == "Model changed to GPT-5 (fast)")
+        #expect(updated[1].text == "Model changed to GPT-5 (none)")
     }
 
     @Test("does not inject duplicate notice for unchanged metadata")

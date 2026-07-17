@@ -24,7 +24,6 @@
 #### Improvements
 
 - Matched the chat composer’s prompt surface to the rounded input used when creating threads and tabs.
-- Added Codex fast mode to chat reasoning controls and the `/fast` chat shortcut.
 - Made assistant replies easier to read with a wider unboxed layout while keeping user prompts and important statuses visually distinct.
 - Replaced the animated working bubble with a quieter inline progress row.
 - Moved per-message timestamps and model metadata into hover details to make conversations denser and easier to scan.
@@ -37,6 +36,7 @@
 
 #### Bug Fixes
 
+- Fixed Codex’s no-reasoning option being labeled `Fast` in chat controls.
 - Fixed Codex chat tabs crashing when restored activity summaries contained multiple icon rows.
 - Keep failed or still-running tools and action-required chat statuses visible instead of hiding them inside collapsed activity summaries.
 

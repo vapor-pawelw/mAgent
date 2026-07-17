@@ -5,7 +5,7 @@ public enum IPCAgentDocs {
 
     /// CLI commands available through magent-cli.
     nonisolated private static let cliCommands = """
-    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning fast|low|medium|high|xhigh|max|ultra] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--priority 1-5] [--select] [--no-submit]
+    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning none|low|medium|high|xhigh|max|ultra] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--priority 1-5] [--select] [--no-submit]
     /tmp/magent-cli batch-create --project <name> --file <specs.json> [--from-thread <name|main|none>] [--no-submit]
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
@@ -16,7 +16,7 @@ public enum IPCAgentDocs {
     /tmp/magent-cli delete-thread --thread <name>
     /tmp/magent-cli list-tabs --thread <name>
     /tmp/magent-cli read-tab --thread <name> (--session <name> | --index <n>) [--limit <n>] [--json]
-    /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning fast|low|medium|high|xhigh|max|ultra] [--name <text>|--title <text>] [--fresh|--no-resume] [--prompt <text>]
+    /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning none|low|medium|high|xhigh|max|ultra] [--name <text>|--title <text>] [--fresh|--no-resume] [--prompt <text>]
     /tmp/magent-cli create-web-tab --thread <name> --url <http(s)-url> [--name <text>|--title <text>]
     /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
     /tmp/magent-cli rename-tab --thread <name> (--index <n> | --session <name>) --name <text>

@@ -7,7 +7,7 @@
 - In-progress assistant work uses an unboxed inline spinner and elapsed status text instead of an animated placeholder bubble.
 - Message timestamps and sent model/reasoning metadata stay out of the transcript and remain available from the message hover tooltip.
 - The composer uses the same rounded prompt surface styling as new thread and new tab sheets: a multiline text area above an integrated footer containing attachment, model, reasoning, and send controls.
-- Codex chat tabs expose fast mode from the bottom-left reasoning picker as `⚡ Fast`; it is stored and passed as Codex `reasoningLevel: "none"`.
+- Codex chat tabs expose the `None` reasoning effort from the bottom-left picker and store/pass it as Codex `reasoningLevel: "none"`.
 - Tool activity should read like concise actions first: `Run command`, `Read file`, `Search`, or `Tool output`.
 - Patch edits should read as `Apply patch` / `Patch applied` and summarize changed files instead of rendering the raw patch inline. Expanded filenames are links that open the thread's existing Diff tab focused on that file.
 - Consecutive routine tool rows are compacted in the visible chat transcript into one collapsed assistant-side activity disclosure. Its header and expanded rows use tinted SF Symbols, while the saved transcript remains unmodified for export, restore, and agent handoff.
@@ -28,7 +28,7 @@
 - `ChatFinalAssistantMessageReconciler` attaches `toolEvent` when final assistant text is itself a tool transcript, so live completions and restored transcripts follow the same presentation path.
 - `CodexChatTranscriptReconciler` and `ClaudeChatTranscriptReconciler` pair matching tool calls/results into one persisted message when transcript IDs are available, falling back to standalone output messages when a pair cannot be found.
   Restored tool messages should carry both backward-compatible transcript text and `toolEvent`.
-- Codex `/fast` is handled by Magent as a shortcut for setting the same `none` effort used by the `⚡ Fast` picker entry; `/effort fast` is accepted as an alias.
+- Codex `/effort none` selects the `none` reasoning effort.
 
 ## Gotchas
 

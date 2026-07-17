@@ -839,7 +839,7 @@ actor IPCSocketServer {
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal|codex:chat] [--model <id>] [--reasoning fast|low|medium|high|xhigh|max|ultra] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--priority 1-5] [--select] [--no-submit]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal|codex:chat] [--model <id>] [--reasoning none|low|medium|high|xhigh|max|ultra] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--priority 1-5] [--select] [--no-submit]"
             [ -z "$base_thread" ] || [ -z "$base_branch" ] || die "Use either --base-thread or --base-branch, not both"
             if [ -n "$priority" ]; then
                 case "$priority" in
@@ -1155,7 +1155,7 @@ actor IPCSocketServer {
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] || die "Usage: magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning fast|low|medium|high|xhigh|max|ultra] [--name <text> | --title <text>] [--fresh|--no-resume] [--prompt <text>]"
+            [ -n "$thread" ] || die "Usage: magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning none|low|medium|high|xhigh|max|ultra] [--name <text> | --title <text>] [--fresh|--no-resume] [--prompt <text>]"
             json="{$(json_kv command create-tab),$(json_kv threadName "$thread")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
             [ -n "$model" ] && json="$json,$(json_kv modelId "$model")"
@@ -1631,7 +1631,7 @@ actor IPCSocketServer {
             echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
             echo "Thread commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal|codex:chat] [--model <id>] [--reasoning fast|low|medium|high|xhigh|max|ultra] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--priority 1-5] [--select] [--no-submit]"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal|codex:chat] [--model <id>] [--reasoning none|low|medium|high|xhigh|max|ultra] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--priority 1-5] [--select] [--no-submit]"
             echo "  batch-create         --project <name> --file <specs.json> [--no-submit]  (parallel thread creation; per-spec keys: agentType (claude/codex/custom/terminal or codex:chat), modelId, reasoningLevel, prompt, ...)"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
@@ -1642,7 +1642,7 @@ actor IPCSocketServer {
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
             echo "  list-tabs            (--thread <name> | --thread-id <id>)"
             echo "  read-tab             (--thread <name> | --thread-id <id>) (--index <n> | --session <name>) [--limit <n>] [--json]"
-            echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning fast|low|medium|high|xhigh|max|ultra] [--name <text>|--title <text>] [--fresh|--no-resume] [--prompt <text>]"
+            echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning none|low|medium|high|xhigh|max|ultra] [--name <text>|--title <text>] [--fresh|--no-resume] [--prompt <text>]"
             echo "  create-web-tab       --thread <name> --url <http(s)-url> [--name <text>|--title <text>]    (opens an in-app web tab at the given URL)"
             echo "  start-agent          [--session <tmux-session>] [--print-command] [--json]"
             echo "  close-tab            --thread <name> (--index <n> | --session <name>)"
