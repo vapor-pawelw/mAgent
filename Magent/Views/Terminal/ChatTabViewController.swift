@@ -757,6 +757,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private var messageAttachmentStripHeight: CGFloat = 0
     private var messageTextHidden = false
     private var toolPresentation: ChatToolTranscriptPresentation?
+    private var isActivitySummary: Bool { toolPresentation?.title == "Activity" }
     private var statusPresentation: ChatMessageStatusPresentation?
     private var toolExpanded = false
     private var toolDisclosureFontSize: CGFloat = 12
@@ -1199,10 +1200,14 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
         let measuredLineWidth = max(0, Self.maxLineWidth(in: layoutManager, textContainer: textContainer))
         let measuredToolHeaderWidth = toolPresentation == nil ? 0 : ceil(toolDisclosureButton.intrinsicContentSize.width)
-        let targetBubbleWidth = min(
-            maxBubbleWidth,
-            max(minBubbleWidth, ceil(max(measuredLineWidth, measuredToolHeaderWidth) + bubbleHorizontalPadding))
-        )
+        let targetBubbleWidth = CGFloat(ChatToolDisclosureLayoutPolicy.targetWidth(
+            isActivitySummary: isActivitySummary,
+            maximumWidth: Double(maxBubbleWidth),
+            minimumWidth: Double(minBubbleWidth),
+            measuredLineWidth: Double(measuredLineWidth),
+            measuredHeaderWidth: Double(measuredToolHeaderWidth),
+            horizontalPadding: Double(bubbleHorizontalPadding)
+        ))
         if abs(bubbleWidthConstraint.constant - targetBubbleWidth) > 0.5 {
             bubbleWidthConstraint.constant = targetBubbleWidth
         }
@@ -1349,9 +1354,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         toolDisclosureButton.alignment = .left
         toolDisclosureButton.font = .systemFont(ofSize: max(11, fontSize - 1), weight: .medium)
         toolDisclosureButton.contentTintColor = textColor.withAlphaComponent(0.85)
-        toolDisclosureButton.lineBreakMode = .byWordWrapping
-        toolDisclosureButton.cell?.wraps = true
-        toolDisclosureButton.cell?.lineBreakMode = .byWordWrapping
+        toolDisclosureButton.lineBreakMode = isActivitySummary ? .byTruncatingTail : .byWordWrapping
+        toolDisclosureButton.cell?.wraps = !isActivitySummary
+        toolDisclosureButton.cell?.lineBreakMode = isActivitySummary ? .byTruncatingTail : .byWordWrapping
         toolDisclosureButton.target = self
         toolDisclosureButton.action = #selector(toggleToolExpanded)
         toolDisclosureButton.setButtonType(.momentaryChange)
@@ -1367,7 +1372,12 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         let title = NSMutableAttributedString()
         let baseFontSize = max(11, toolDisclosureFontSize - 1)
         title.append(NSAttributedString(
-            string: toolPresentation.title,
+            string: isActivitySummary
+                ? ChatToolDisclosureLayoutPolicy.headerTitle(
+                    title: toolPresentation.title,
+                    detail: toolPresentation.detail
+                )
+                : toolPresentation.title,
             attributes: [
                 .font: NSFont.systemFont(ofSize: baseFontSize, weight: .semibold),
                 .foregroundColor: toolDisclosureTextColor,
@@ -1375,7 +1385,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         ))
         let trimmedDetail = toolPresentation.detail?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if let detail = trimmedDetail, !detail.isEmpty {
+        if !isActivitySummary, let detail = trimmedDetail, !detail.isEmpty {
             title.append(NSAttributedString(
                 string: "\n\(detail)",
                 attributes: [
