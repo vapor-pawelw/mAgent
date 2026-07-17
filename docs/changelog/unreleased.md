@@ -40,6 +40,7 @@
 - Fixed Codex’s no-reasoning option being labeled `Fast` in chat controls.
 - Fixed Codex chat tabs crashing when restored activity summaries contained multiple icon rows.
 - Keep failed or still-running tools and action-required chat statuses visible instead of hiding them inside collapsed activity summaries.
+- Fixed `Continue in...` from a Codex chat showing only Claude Code instead of including and preferring the configured Codex default.
 
 ### Terminal
 

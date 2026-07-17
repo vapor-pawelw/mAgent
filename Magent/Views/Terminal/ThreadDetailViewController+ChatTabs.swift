@@ -418,11 +418,14 @@ extension ThreadDetailViewController {
     func presentContinueChatTabSheet(for index: Int) {
         guard index < tabSlots.count, case .chat(let identifier) = tabSlots[index] else { return }
         guard let window = view.window else { return }
-        guard let chatEntry = chatTabs.first(where: { $0.identifier == identifier }) else { return }
+        guard chatTabs.contains(where: { $0.identifier == identifier }) else { return }
 
         let settings = PersistenceService.shared.loadSettings()
-        let agents = settings.availableActiveAgents.filter { $0 != chatEntry.agentType }
-        guard !agents.isEmpty else {
+        let targets = AgentContinuationTargetResolver.resolve(
+            availableAgents: settings.availableActiveAgents,
+            preferredAgent: threadManager.effectiveAgentType(for: thread.projectId)
+        )
+        guard !targets.agents.isEmpty else {
             NSSound.beep()
             return
         }
@@ -431,8 +434,8 @@ extension ThreadDetailViewController {
             title: "Continue In",
             acceptButtonTitle: "Continue",
             draftScope: .newTab(threadId: thread.id),
-            availableAgents: agents,
-            defaultAgentType: agents.first,
+            availableAgents: targets.agents,
+            defaultAgentType: targets.defaultAgentType,
             isAgentOnly: true,
             subtitle: chatContinueSubtitle(),
             showDescriptionAndBranchFields: false,

@@ -45,6 +45,7 @@
 - Do not expand successful tool output by default. Long command logs quickly bury the conversation and make restored sessions hard to scan.
 - Do not surface successful exit-code metadata (`Exit code: 0`, `Process exited with code 0`) in titles or details; keep it as parsed metadata only.
 - Do not promote command output into completed tool titles or show transport controls such as `yield_time_ms` and `max_output_tokens`. Failures and running commands may still show concise state metadata and expand automatically.
+- `Continue in...` must offer every enabled terminal agent, including the chat's current provider, and initially select the project/global default agent.
 - Keep failed and running tools, errors, cancellations, and approval blockers outside compact Activity summaries so attention-required information remains immediately visible.
 - Do not let display compaction change persisted chat messages. The compact activity row is only a view-layer artifact.
 - Resolve all activity-summary icon insertion offsets against the immutable rendered text, then apply insertions from the end. Forward mutation invalidates later attributed-string ranges and can crash while restoring a chat tab.

@@ -784,12 +784,11 @@ extension ThreadDetailViewController {
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
             case .chat(let identifier):
-                let currentAgent = chatTabs.first(where: { $0.identifier == identifier })?.agentType
                 let sessionNameForMenu = chatSessionNameForMenu(identifier: identifier)
-                let availableAgents = settings.availableActiveAgents.filter { agent in
-                    guard let currentAgent else { return true }
-                    return agent != currentAgent
-                }
+                let targets = AgentContinuationTargetResolver.resolve(
+                    availableAgents: settings.availableActiveAgents,
+                    preferredAgent: threadManager.effectiveAgentType(for: thread.projectId)
+                )
                 item.onRename = { [weak self] in self?.showChatTabRenameDialog(at: i) }
                 item.allowsDoubleClickRename = true
                 item.onResumeAgentInNewTab = nil
@@ -805,7 +804,7 @@ extension ThreadDetailViewController {
                 }
                 item.tmuxSessionNameForMenu = sessionNameForMenu
                 item.showsMinimalSessionMenu = true
-                item.availableAgentsForContinue = availableAgents
+                item.availableAgentsForContinue = targets.agents
                 item.showKeepAliveIcon = false
             case .diff:
                 item.showCloseButton = false

@@ -874,15 +874,18 @@ extension ThreadDetailViewController {
         guard let window = view.window else { return }
 
         let settings = PersistenceService.shared.loadSettings()
-        let agents = settings.availableActiveAgents
-        guard !agents.isEmpty else { return }
+        let targets = AgentContinuationTargetResolver.resolve(
+            availableAgents: settings.availableActiveAgents,
+            preferredAgent: threadManager.effectiveAgentType(for: thread.projectId)
+        )
+        guard !targets.agents.isEmpty else { return }
 
         let config = AgentLaunchSheetConfig(
             title: "Continue In",
             acceptButtonTitle: "Continue",
             draftScope: .newTab(threadId: thread.id),
-            availableAgents: agents,
-            defaultAgentType: threadManager.effectiveAgentType(for: thread.projectId),
+            availableAgents: targets.agents,
+            defaultAgentType: targets.defaultAgentType,
             isAgentOnly: true,
             subtitle: tabSheetSubtitle(),
             showDescriptionAndBranchFields: false,
