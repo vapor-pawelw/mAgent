@@ -3,6 +3,63 @@ import MagentCore
 
 extension ThreadDetailViewController {
 
+    func configureTopBarLayout(prJiraHostedInInfoStrip: Bool) {
+        for item in ThreadTopBarLayout.items(prJiraHostedInInfoStrip: prJiraHostedInInfoStrip) {
+            let view: NSView = switch item {
+            case .addTab: addTabButton
+            case .review: reviewButton
+            case .continueIn: continueInButton
+            case .scrollLeft: tabScrollLeftButton
+            case .userTabs: tabBarScrollView
+            case .scrollRight: tabScrollRightButton
+            case .fixedTabs: fixedTabBarStack
+            case .fixedTabsSeparator: fixedTabsSeparator
+            case .openPR: openPRButton
+            case .openJira: openInJiraButton
+            case .prJiraSeparator: prJiraSeparator
+            case .openXcode: openInXcodeButton
+            case .openFinder: openInFinderButton
+            case .exportContext: exportContextButton
+            case .resyncLocalPaths: resyncLocalPathsButton
+            case .archiveSeparator: archiveSeparator
+            case .popOut: popOutThreadButton
+            case .archive: archiveThreadButton
+            }
+            topBar.addArrangedSubview(view)
+        }
+
+        // The scroll region absorbs extra width; the fixed spacing preserves a
+        // clear handoff to permanent tabs without separating a visible arrow
+        // from the scroll region it controls.
+        updateUserToFixedTabSpacing(showsScrollArrows: false)
+
+        let trailingTopBarSpacing: CGFloat = 8
+        var customSpacingAfter: [NSView] = [fixedTabsSeparator]
+        if !prJiraHostedInInfoStrip {
+            customSpacingAfter.append(contentsOf: [openPRButton, openInJiraButton, prJiraSeparator])
+        }
+        customSpacingAfter.append(contentsOf: [
+            openInXcodeButton,
+            openInFinderButton,
+            exportContextButton,
+            resyncLocalPathsButton,
+            archiveSeparator,
+            popOutThreadButton,
+        ])
+        for view in customSpacingAfter {
+            topBar.setCustomSpacing(trailingTopBarSpacing, after: view)
+        }
+    }
+
+    func updateUserToFixedTabSpacing(showsScrollArrows: Bool) {
+        let spacing = ThreadTopBarLayout.userToFixedSpacing(
+            showsScrollArrows: showsScrollArrows,
+            regularSpacing: topBar.spacing
+        )
+        topBar.setCustomSpacing(spacing.afterScrollView, after: tabBarScrollView)
+        topBar.setCustomSpacing(spacing.afterRightArrow, after: tabScrollRightButton)
+    }
+
     // MARK: - Tab Bar Scroll View
 
     /// Wraps `tabBarStack` inside `tabBarScrollView` so the tab strip can
@@ -68,6 +125,7 @@ extension ThreadDetailViewController {
 
         tabScrollLeftButton.isHidden = !overflow
         tabScrollRightButton.isHidden = !overflow
+        updateUserToFixedTabSpacing(showsScrollArrows: overflow)
 
         if overflow {
             let epsilon: CGFloat = 0.5
@@ -87,7 +145,7 @@ extension ThreadDetailViewController {
 
     private func tabScrollStep() -> CGFloat {
         // Prefer one tab width when available, otherwise a sensible default.
-        let width = tabItems.first?.frame.width ?? 120
+        let width = tabItems.dropFirst(Self.fixedTabCount).first?.frame.width ?? 120
         return max(80, width + tabBarStack.spacing)
     }
 
@@ -113,36 +171,34 @@ extension ThreadDetailViewController {
             tabBarStack.removeArrangedSubview(sv)
             sv.removeFromSuperview()
         }
+        for sv in fixedTabBarStack.arrangedSubviews {
+            fixedTabBarStack.removeArrangedSubview(sv)
+            sv.removeFromSuperview()
+        }
 
-        let tabCount = tabItems.count
-        let fixedCount = min(Self.fixedTabCount, tabCount)
-        let pinnedUpperBound = min(max(pinnedCount, 0), tabCount)
-        let pinnedStart = min(fixedCount, pinnedUpperBound)
-        let unpinnedStart = min(max(pinnedUpperBound, fixedCount), tabCount)
+        let groups = ThreadTopBarLayout.tabGroups(
+            tabCount: tabItems.count,
+            fixedCount: Self.fixedTabCount,
+            pinnedBoundary: pinnedCount
+        )
 
-        // Fixed tabs always first.
-        for i in 0..<fixedCount {
+        // Fixed tabs stay at the trailing edge, outside the user-tab scroll region.
+        for i in groups.fixed {
             tabItems[i].showPinIcon = false
-            tabBarStack.addArrangedSubview(tabItems[i])
+            fixedTabBarStack.addArrangedSubview(tabItems[i])
         }
-        if fixedCount > 0,
-           tabCount > fixedCount,
-           tabBarStack.arrangedSubviews.contains(tabItems[fixedCount - 1]) {
-            let anchor = tabItems[fixedCount - 1]
-            tabBarStack.setCustomSpacing(tabBarStack.spacing + 4, after: anchor)
-            tabBarStack.addArrangedSubview(fixedTabsSeparator)
-            tabBarStack.setCustomSpacing(tabBarStack.spacing + 4, after: fixedTabsSeparator)
-        }
+        fixedTabBarStack.isHidden = groups.fixed.isEmpty
+        fixedTabsSeparator.isHidden = groups.fixed.isEmpty
 
         // Pinned tabs (excluding fixed tabs)
-        for i in pinnedStart..<pinnedUpperBound {
+        for i in groups.pinned {
             tabItems[i].showPinIcon = true
             tabBarStack.addArrangedSubview(tabItems[i])
         }
 
-        if pinnedUpperBound > fixedCount && pinnedUpperBound < tabCount {
+        if !groups.pinned.isEmpty && groups.unpinned.lowerBound < tabItems.count {
             // Extra 4 pt padding on each side of the separator (stack spacing = 4, so total gap = 8)
-            let anchor = tabItems[pinnedUpperBound - 1]
+            let anchor = tabItems[groups.pinned.upperBound - 1]
             guard tabBarStack.arrangedSubviews.contains(anchor) else {
                 DispatchQueue.main.async { [weak self] in
                     self?.refreshTabScrollArrowsVisibility()
@@ -155,7 +211,7 @@ extension ThreadDetailViewController {
         }
 
         // Unpinned tabs
-        for i in unpinnedStart..<tabCount {
+        for i in groups.unpinned {
             tabItems[i].showPinIcon = false
             tabBarStack.addArrangedSubview(tabItems[i])
         }

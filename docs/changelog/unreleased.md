@@ -27,6 +27,7 @@
 
 #### Improvements
 
+- Kept Terminal and Diff tabs visible beside thread actions while user-created tabs use the flexible, scrollable space to their left.
 - Reopen cached recent threads immediately more often and let users tune how many terminal views Magent keeps for fast switching.
 - Automatically give agent tabs a concise AI-generated name from their first prompt, while preserving every manually renamed tab.
 - Added a toolbar reminder with a first-time hint to reopen dismissed lost-prompt recovery banners without discarding the saved prompt.

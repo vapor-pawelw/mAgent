@@ -134,6 +134,7 @@ final class ThreadDetailViewController: NSViewController {
     let threadManager = ThreadManager.shared
     let headerInfoStrip = PopoutInfoStripView()
     let tabBarStack = NSStackView()
+    let fixedTabBarStack = NSStackView()
     let tabBarScrollView = TabBarScrollView()
     let tabScrollLeftButton = NSButton()
     let tabScrollRightButton = NSButton()
@@ -300,6 +301,7 @@ final class ThreadDetailViewController: NSViewController {
     let prJiraSeparator = VerticalSeparatorView()
     let pinSeparator = VerticalSeparatorView()
     let fixedTabsSeparator = VerticalSeparatorView()
+    let archiveSeparator = VerticalSeparatorView()
 
     private var usesMainWindowToolbarThreadBar: Bool {
         showsHeaderInfoStrip && !isPopoutContext
@@ -582,6 +584,13 @@ final class ThreadDetailViewController: NSViewController {
         tabBarStack.alignment = .centerY
         tabBarStack.translatesAutoresizingMaskIntoConstraints = false
 
+        fixedTabBarStack.orientation = .horizontal
+        fixedTabBarStack.spacing = 4
+        fixedTabBarStack.alignment = .centerY
+        fixedTabBarStack.translatesAutoresizingMaskIntoConstraints = false
+        fixedTabBarStack.setContentHuggingPriority(.required, for: .horizontal)
+        fixedTabBarStack.setContentCompressionResistancePriority(.required, for: .horizontal)
+
         configureTabBarScrollView()
 
         // PR/Jira buttons live in a `PopoutInfoStripView`'s capsule action row when
@@ -712,7 +721,6 @@ final class ThreadDetailViewController: NSViewController {
         prJiraSeparator.setContentHuggingPriority(.required, for: .vertical)
         prJiraSeparator.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        let archiveSeparator = VerticalSeparatorView()
         archiveSeparator.translatesAutoresizingMaskIntoConstraints = false
         archiveSeparator.isHidden = thread.isMain
         archiveSeparator.setContentHuggingPriority(.required, for: .horizontal)
@@ -720,31 +728,19 @@ final class ThreadDetailViewController: NSViewController {
         archiveSeparator.setContentHuggingPriority(.required, for: .vertical)
         archiveSeparator.setContentCompressionResistancePriority(.required, for: .vertical)
 
+        fixedTabsSeparator.translatesAutoresizingMaskIntoConstraints = false
+        fixedTabsSeparator.isHidden = true
+        fixedTabsSeparator.setContentHuggingPriority(.required, for: .horizontal)
+        fixedTabsSeparator.setContentCompressionResistancePriority(.required, for: .horizontal)
+        fixedTabsSeparator.setContentHuggingPriority(.required, for: .vertical)
+        fixedTabsSeparator.setContentCompressionResistancePriority(.required, for: .vertical)
+
         topBar.orientation = .horizontal
         topBar.spacing = 4
         topBar.alignment = .centerY
         topBar.detachesHiddenViews = true
         topBar.translatesAutoresizingMaskIntoConstraints = false
-        // Review button next to add-tab, then tab bar scroll view, then (optionally) PR/Jira,
-        // then utility buttons, then pop-out/archive. PR/Jira move into the header info strip
-        // when it's shown; otherwise fall back to the top bar position.
-        var topBarViews: [NSView] = [addTabButton, reviewButton, continueInButton, tabScrollLeftButton, tabBarScrollView, tabScrollRightButton]
-        if !prJiraHostedInInfoStrip {
-            topBarViews.append(contentsOf: [openPRButton, openInJiraButton, prJiraSeparator])
-        }
-        topBarViews.append(contentsOf: [openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, popOutThreadButton, archiveThreadButton])
-        for view in topBarViews {
-            topBar.addArrangedSubview(view)
-        }
-        let trailingTopBarSpacing: CGFloat = 8
-        var customSpacingAfter: [NSView] = [tabBarScrollView]
-        if !prJiraHostedInInfoStrip {
-            customSpacingAfter.append(contentsOf: [openPRButton, openInJiraButton, prJiraSeparator])
-        }
-        customSpacingAfter.append(contentsOf: [openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, popOutThreadButton])
-        for view in customSpacingAfter {
-            topBar.setCustomSpacing(trailingTopBarSpacing, after: view)
-        }
+        configureTopBarLayout(prJiraHostedInInfoStrip: prJiraHostedInInfoStrip)
 
         terminalContainer.translatesAutoresizingMaskIntoConstraints = false
         terminalContainer.wantsLayer = true

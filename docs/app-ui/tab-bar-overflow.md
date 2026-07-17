@@ -4,7 +4,8 @@ How the thread tab strip handles overflow when there are more tabs than horizont
 
 ## User-facing behavior
 
-- The tab strip is wrapped in a horizontal scroll view. When tabs overflow the available width, the strip scrolls instead of compressing tabs.
+- User-created tabs are wrapped in a horizontal scroll view. When they overflow the available width, the strip scrolls instead of compressing tabs.
+- The permanent Terminal and Diff tabs stay visible at the trailing edge, after at least 16 pt of separation from user tabs and before the trailing open/export/archive actions. A separator divides the permanent tabs from those actions.
 - Two chevron arrow buttons (`tabScrollLeftButton`, `tabScrollRightButton`) flank the scroll region. They are hidden entirely when there is no overflow; when shown, the arrow at whichever edge has been reached is dimmed via `isEnabled = false`.
 - Clicking an arrow scrolls by one tab width (with an 80pt minimum) using a 0.2s animated `setBoundsOrigin` on the clip view.
 - The native scroll bar is never shown — overflow is communicated only via the arrow buttons. `hasHorizontalScroller = false` enforces this.
@@ -15,13 +16,13 @@ How the thread tab strip handles overflow when there are more tabs than horizont
 
 - `Magent/Views/Terminal/TabBarScrollView.swift` is the scroll-view subclass: chrome-less (no border, no background, hidden scroller), horizontal-only elasticity, and overrides `scrollWheel(with:)` to axis-swap purely vertical scroll events into horizontal panning. Trackpad events that already carry `scrollingDeltaX` pass through unchanged so their natural pan still works.
 - `ThreadDetailViewController+TabBar.configureTabBarScrollView()` wraps `tabBarStack` inside a document container view and pins the document's height to the scroll view's clip view height. This forces the scroll view to scroll only on the X axis even though the stack's intrinsic height could otherwise drive vertical content size.
-- `tabBarScrollView` sits inside the `topBar` `NSStackView` with low horizontal hugging (`.defaultLow - 1`) and low compression resistance, so it absorbs all leftover horizontal space before any sibling button compresses.
+- `tabBarScrollView` sits inside the `topBar` `NSStackView` with low horizontal hugging (`.defaultLow - 1`) and low compression resistance, so it absorbs all leftover horizontal space before any sibling button compresses. Terminal and Diff live in the separate, non-scrolling `fixedTabBarStack` immediately after the scroll controls.
 - Arrow visibility is recomputed by `refreshTabScrollArrowsVisibility()`. It compares `documentContainer.bounds.width` against `contentView.bounds.width` and uses `isHidden` (with `NSStackView.detachesHiddenViews = true`) to fully collapse the buttons out of the layout when there is no overflow. When visible, `isEnabled` is updated based on the current `clipView.bounds.origin.x` vs `0` and `documentWidth - clipWidth`.
 - The refresh runs from four entry points: `rebuildTabBar()` (deferred via `DispatchQueue.main.async` so the new layout settles first), `viewDidLayout()`, and `NSView.boundsDidChangeNotification` / `frameDidChangeNotification` observers on `tabBarScrollView.contentView`. Both notifications require the clip view to opt-in via `postsBoundsChangedNotifications = true` and `postsFrameChangedNotifications = true`, set during `configureTabBarScrollView()`.
 
 ## Gotchas
 
-- Do not add a trailing flex spacer back into `tabBarStack`. The previous layout used one to keep tabs left-aligned inside an unbounded stack, but the scroll view now provides that left-alignment naturally. Adding a spacer would inflate the document's intrinsic width and force the scroll view to think it is permanently in overflow.
+- Do not add a trailing flex spacer back into `tabBarStack`. The scroll view provides left alignment and absorbs flexible width at the top-bar level; adding a spacer inside the document would inflate its intrinsic width and force permanent overflow.
 - When measuring overflow inside `refreshTabScrollArrowsVisibility()`, use the `documentContainer` width and clip view width — not the stack's intrinsic content size. `NSStackView.fittingSize` may report a stale value when called between subview rearrangements.
 - `rebuildTabBar()` runs synchronously while the stack's arranged subviews change, so the visibility refresh must be deferred (`DispatchQueue.main.async`) until after the next layout pass. Calling it inline gives wrong widths.
 - `scrollWheel` axis-swap (`NSEvent.withHorizontalDelta`) needs `cgEvent?.copy()` — using the original `cgEvent` mutates the in-flight event and breaks downstream listeners. Always copy first.
