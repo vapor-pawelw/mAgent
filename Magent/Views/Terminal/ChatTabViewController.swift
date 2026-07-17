@@ -1192,7 +1192,8 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
               let layoutManager = messageTextView.layoutManager,
               let bubbleWidthConstraint else { return }
 
-        let maxTextWidth = max(1, maxBubbleWidth - bubbleHorizontalPadding)
+        let availableBubbleWidth = min(maxBubbleWidth, max(minBubbleWidth, bounds.width))
+        let maxTextWidth = max(1, availableBubbleWidth - bubbleHorizontalPadding)
         if abs(textContainer.containerSize.width - maxTextWidth) > 0.5 {
             textContainer.containerSize = NSSize(width: maxTextWidth, height: CGFloat.greatestFiniteMagnitude)
         }
@@ -1201,8 +1202,8 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         let measuredLineWidth = max(0, Self.maxLineWidth(in: layoutManager, textContainer: textContainer))
         let measuredToolHeaderWidth = toolPresentation == nil ? 0 : ceil(toolDisclosureButton.intrinsicContentSize.width)
         let targetBubbleWidth = CGFloat(ChatToolDisclosureLayoutPolicy.targetWidth(
-            isActivitySummary: isActivitySummary,
-            maximumWidth: Double(maxBubbleWidth),
+            isToolDisclosure: toolPresentation != nil,
+            maximumWidth: Double(availableBubbleWidth),
             minimumWidth: Double(minBubbleWidth),
             measuredLineWidth: Double(measuredLineWidth),
             measuredHeaderWidth: Double(measuredToolHeaderWidth),
@@ -1354,9 +1355,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         toolDisclosureButton.alignment = .left
         toolDisclosureButton.font = .systemFont(ofSize: max(11, fontSize - 1), weight: .medium)
         toolDisclosureButton.contentTintColor = textColor.withAlphaComponent(0.85)
-        toolDisclosureButton.lineBreakMode = isActivitySummary ? .byTruncatingTail : .byWordWrapping
-        toolDisclosureButton.cell?.wraps = !isActivitySummary
-        toolDisclosureButton.cell?.lineBreakMode = isActivitySummary ? .byTruncatingTail : .byWordWrapping
+        toolDisclosureButton.lineBreakMode = .byTruncatingTail
+        toolDisclosureButton.cell?.wraps = false
+        toolDisclosureButton.cell?.lineBreakMode = .byTruncatingTail
         toolDisclosureButton.target = self
         toolDisclosureButton.action = #selector(toggleToolExpanded)
         toolDisclosureButton.setButtonType(.momentaryChange)
@@ -1372,28 +1373,15 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         let title = NSMutableAttributedString()
         let baseFontSize = max(11, toolDisclosureFontSize - 1)
         title.append(NSAttributedString(
-            string: isActivitySummary
-                ? ChatToolDisclosureLayoutPolicy.headerTitle(
-                    title: toolPresentation.title,
-                    detail: toolPresentation.detail
-                )
-                : toolPresentation.title,
+            string: ChatToolDisclosureLayoutPolicy.headerTitle(
+                title: toolPresentation.title,
+                detail: toolPresentation.detail
+            ),
             attributes: [
                 .font: NSFont.systemFont(ofSize: baseFontSize, weight: .semibold),
                 .foregroundColor: toolDisclosureTextColor,
             ]
         ))
-        let trimmedDetail = toolPresentation.detail?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !isActivitySummary, let detail = trimmedDetail, !detail.isEmpty {
-            title.append(NSAttributedString(
-                string: "\n\(detail)",
-                attributes: [
-                    .font: NSFont.monospacedSystemFont(ofSize: max(10, baseFontSize - 1), weight: .regular),
-                    .foregroundColor: toolDisclosureTextColor.withAlphaComponent(0.72),
-                ]
-            ))
-        }
         toolDisclosureButton.attributedTitle = title
         let chevronName = toolExpanded ? "chevron.down" : "chevron.right"
         toolDisclosureButton.image = NSImage(
@@ -1446,41 +1434,157 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         let result = NSMutableAttributedString()
         let baseFont = NSFont.systemFont(ofSize: baseFontSize)
         let codeFont = NSFont.monospacedSystemFont(ofSize: max(11, baseFontSize - 1), weight: .regular)
-        let linkFont = NSFont.systemFont(ofSize: baseFontSize, weight: .regular)
+        let blocks = ChatMarkdownBlockParser.parse(source)
 
-        let baseAttributes: [NSAttributedString.Key: Any] = [
-            .font: baseFont,
-            .foregroundColor: baseColor,
-        ]
-        let boldAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: baseFontSize, weight: .bold),
-            .foregroundColor: baseColor,
-        ]
-        let codeAttributes: [NSAttributedString.Key: Any] = [
-            .font: codeFont,
-            .foregroundColor: codeColor,
-        ]
-        let linkAttributes: [NSAttributedString.Key: Any] = [
-            .font: linkFont,
-            .foregroundColor: linkColor,
-        ]
+        for (index, block) in blocks.enumerated() {
+            let blockStart = result.length
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineSpacing = 2
+            paragraphStyle.paragraphSpacing = 2
 
-        for token in ChatMarkdownTokenizer.tokenize(source) {
-            switch token {
-            case .text(let text):
-                result.append(NSAttributedString(string: text, attributes: baseAttributes))
-            case .bold(let text):
-                result.append(NSAttributedString(string: text, attributes: boldAttributes))
-            case .code(let text):
-                result.append(NSAttributedString(string: text, attributes: codeAttributes))
-            case .link(let label, let target):
-                let display = label.isEmpty ? target : label
-                let attrs = linkAttributes.merging([.link: target]) { current, _ in current }
-                result.append(NSAttributedString(string: display, attributes: attrs))
+            switch block {
+            case .paragraph(let text):
+                appendInlineMarkdown(
+                    text,
+                    to: result,
+                    baseFont: baseFont,
+                    boldFont: .systemFont(ofSize: baseFontSize, weight: .bold),
+                    baseColor: baseColor,
+                    codeFont: codeFont,
+                    codeColor: codeColor,
+                    linkColor: linkColor
+                )
+            case .heading(let level, let text):
+                let headingSize = baseFontSize + (level == 1 ? 5 : level == 2 ? 3 : 1)
+                paragraphStyle.paragraphSpacingBefore = 8
+                paragraphStyle.paragraphSpacing = 4
+                appendInlineMarkdown(
+                    text,
+                    to: result,
+                    baseFont: .systemFont(ofSize: headingSize, weight: .semibold),
+                    boldFont: .systemFont(ofSize: headingSize, weight: .bold),
+                    baseColor: baseColor,
+                    codeFont: .monospacedSystemFont(ofSize: headingSize - 1, weight: .medium),
+                    codeColor: codeColor,
+                    linkColor: linkColor
+                )
+            case .unorderedListItem(let text):
+                paragraphStyle.headIndent = 18
+                paragraphStyle.firstLineHeadIndent = 0
+                paragraphStyle.tabStops = [NSTextTab(textAlignment: .left, location: 18)]
+                paragraphStyle.paragraphSpacing = 3
+                result.append(NSAttributedString(string: "•\t", attributes: [.font: baseFont, .foregroundColor: baseColor]))
+                appendInlineMarkdown(
+                    text,
+                    to: result,
+                    baseFont: baseFont,
+                    boldFont: .systemFont(ofSize: baseFontSize, weight: .bold),
+                    baseColor: baseColor,
+                    codeFont: codeFont,
+                    codeColor: codeColor,
+                    linkColor: linkColor
+                )
+            case .orderedListItem(let number, let text):
+                paragraphStyle.headIndent = 24
+                paragraphStyle.firstLineHeadIndent = 0
+                paragraphStyle.tabStops = [NSTextTab(textAlignment: .left, location: 24)]
+                paragraphStyle.paragraphSpacing = 3
+                result.append(NSAttributedString(string: "\(number).\t", attributes: [.font: baseFont, .foregroundColor: baseColor]))
+                appendInlineMarkdown(
+                    text,
+                    to: result,
+                    baseFont: baseFont,
+                    boldFont: .systemFont(ofSize: baseFontSize, weight: .bold),
+                    baseColor: baseColor,
+                    codeFont: codeFont,
+                    codeColor: codeColor,
+                    linkColor: linkColor
+                )
+            case .blockQuote(let text):
+                paragraphStyle.headIndent = 12
+                paragraphStyle.firstLineHeadIndent = 0
+                paragraphStyle.paragraphSpacing = 4
+                result.append(NSAttributedString(
+                    string: "│  ",
+                    attributes: [.font: baseFont, .foregroundColor: baseColor.withAlphaComponent(0.45)]
+                ))
+                appendInlineMarkdown(
+                    text,
+                    to: result,
+                    baseFont: baseFont,
+                    boldFont: .systemFont(ofSize: baseFontSize, weight: .bold),
+                    baseColor: baseColor.withAlphaComponent(0.82),
+                    codeFont: codeFont,
+                    codeColor: codeColor,
+                    linkColor: linkColor
+                )
+            case .codeBlock(_, let code):
+                paragraphStyle.headIndent = 10
+                paragraphStyle.firstLineHeadIndent = 10
+                paragraphStyle.tailIndent = -10
+                paragraphStyle.paragraphSpacingBefore = 5
+                paragraphStyle.paragraphSpacing = 5
+                result.append(NSAttributedString(
+                    string: code,
+                    attributes: [
+                        .font: codeFont,
+                        .foregroundColor: codeColor,
+                        .backgroundColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.18),
+                    ]
+                ))
+            case .separator:
+                paragraphStyle.paragraphSpacingBefore = 7
+                paragraphStyle.paragraphSpacing = 7
+                result.append(NSAttributedString(
+                    string: "────────────",
+                    attributes: [.font: baseFont, .foregroundColor: baseColor.withAlphaComponent(0.25)]
+                ))
+            case .blankLine:
+                break
+            }
+
+            if case .blankLine = block {
+                result.append(NSAttributedString(string: "\n"))
+            } else {
+                let blockRange = NSRange(location: blockStart, length: result.length - blockStart)
+                if blockRange.length > 0 {
+                    result.addAttribute(.paragraphStyle, value: paragraphStyle, range: blockRange)
+                }
+                if index < blocks.count - 1 {
+                    result.append(NSAttributedString(string: "\n"))
+                }
             }
         }
 
         return result
+    }
+
+    private static func appendInlineMarkdown(
+        _ source: String,
+        to result: NSMutableAttributedString,
+        baseFont: NSFont,
+        boldFont: NSFont,
+        baseColor: NSColor,
+        codeFont: NSFont,
+        codeColor: NSColor,
+        linkColor: NSColor
+    ) {
+        for token in ChatMarkdownTokenizer.tokenize(source) {
+            switch token {
+            case .text(let text):
+                result.append(NSAttributedString(string: text, attributes: [.font: baseFont, .foregroundColor: baseColor]))
+            case .bold(let text):
+                result.append(NSAttributedString(string: text, attributes: [.font: boldFont, .foregroundColor: baseColor]))
+            case .code(let text):
+                result.append(NSAttributedString(string: text, attributes: [.font: codeFont, .foregroundColor: codeColor]))
+            case .link(let label, let target):
+                let display = label.isEmpty ? target : label
+                result.append(NSAttributedString(
+                    string: display,
+                    attributes: [.font: baseFont, .foregroundColor: linkColor, .link: target]
+                ))
+            }
+        }
     }
 
     private static func applyDiffLineHighlights(to attributed: NSMutableAttributedString, baseFontSize: CGFloat) {

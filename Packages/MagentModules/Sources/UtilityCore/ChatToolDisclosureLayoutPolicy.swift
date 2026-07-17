@@ -2,14 +2,14 @@ import Foundation
 
 public enum ChatToolDisclosureLayoutPolicy {
     public static func targetWidth(
-        isActivitySummary: Bool,
+        isToolDisclosure: Bool,
         maximumWidth: Double,
         minimumWidth: Double,
         measuredLineWidth: Double,
         measuredHeaderWidth: Double,
         horizontalPadding: Double
     ) -> Double {
-        if isActivitySummary {
+        if isToolDisclosure {
             return maximumWidth
         }
 

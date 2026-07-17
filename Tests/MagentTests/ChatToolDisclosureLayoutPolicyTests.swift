@@ -6,7 +6,7 @@ struct ChatToolDisclosureLayoutPolicyTests {
     @Test("Activity summaries keep a readable transcript width")
     func activitySummariesUseMaximumWidth() {
         let width = ChatToolDisclosureLayoutPolicy.targetWidth(
-            isActivitySummary: true,
+            isToolDisclosure: true,
             maximumWidth: 760,
             minimumWidth: 44,
             measuredLineWidth: 0,
@@ -15,6 +15,20 @@ struct ChatToolDisclosureLayoutPolicyTests {
         )
 
         #expect(width == 760)
+    }
+
+    @Test("Every tool disclosure keeps a stable readable width")
+    func toolDisclosuresUseMaximumWidth() {
+        let width = ChatToolDisclosureLayoutPolicy.targetWidth(
+            isToolDisclosure: true,
+            maximumWidth: 540,
+            minimumWidth: 44,
+            measuredLineWidth: 18,
+            measuredHeaderWidth: 34,
+            horizontalPadding: 0
+        )
+
+        #expect(width == 540)
     }
 
     @Test("Activity count stays on the disclosure headline")

@@ -4,6 +4,7 @@
 
 - Chat tabs render agent messages, user prompts, attachments, model-change markers, and restored tool activity from Claude/Codex transcripts.
 - User prompts remain right-aligned bubbles, while ordinary assistant replies render unboxed at a wider readable measure. Status messages keep a contained treatment so errors, cancellations, and approval blockers remain distinct.
+- Assistant Markdown renders headings, ordered and unordered lists, block quotes, separators, fenced code blocks, inline code, bold text, and links instead of exposing their source markers.
 - In-progress assistant work uses an unboxed inline spinner and elapsed status text instead of an animated placeholder bubble.
 - Message timestamps and sent model/reasoning metadata stay out of the transcript and remain available from the message hover tooltip.
 - The composer uses the same rounded prompt surface styling as new thread and new tab sheets: a multiline text area above an integrated footer containing attachment, model, reasoning, and send controls.
@@ -15,6 +16,7 @@
 - Successful tool output stays collapsed by default so long transcripts remain scannable.
 - Failed tool output and still-running command output expand by default because those states usually need immediate attention.
 - Tool details keep the raw command, arguments, output, and status available behind disclosure.
+- Every tool disclosure uses the same stable readable measure in collapsed and expanded states. Header details stay on one truncated headline so narrow intrinsic button measurements cannot collapse the disclosure into a character-wide column.
 - Completed command headers describe the command action, never the first output line. Transport-only arguments such as yield time, output-token limits, TTY, and login-shell flags are omitted from display.
 
 ## Implementation Notes
@@ -24,6 +26,8 @@
 - `ChatToolTranscriptFormatter.presentation(for:)` is the presentation adapter from structured tool events to the disclosure UI copy/body.
 - Patch file summaries use `magent-diff://file?path=...` links. `ChatMarkdownLinkResolver` maps those to `.diffFile`, and `ThreadDetailViewController` posts a thread-scoped `magentShowDiffViewer` notification so main and pop-out windows route the focused diff correctly.
 - `ChatMessageDisplayPlanner.plan(for:)` is the UI-facing classification boundary. It turns persisted messages into ordinary message, tool, or status display plans.
+- `ChatMarkdownBlockParser` handles block structure before `ChatMarkdownTokenizer` adds inline emphasis and links. Keep block syntax out of the AppKit layout code so parsing behavior remains independently testable.
+- `ChatToolDisclosureLayoutPolicy` gives all tool disclosures a stable available width; ordinary messages may still size to their content up to the readable maximum.
 - `ChatTranscriptDisplayCompactor.compactedMessages(_:)` is display-only. It summarizes consecutive routine tool messages before rendering and exposes activity summaries through `ChatMessageDisplayPlanner` as collapsed disclosure rows; it must not compact statuses or tool presentations that expand by default, and must not be used for persistence, export, or resume context.
 - `ChatMessageBubbleView` consumes `ChatMessageDisplayPlanner` output, renders ordinary assistant and tool plans without a bubble background, keeps user/status messages contained, renders tool plans as SF Symbol disclosure rows, and hides tool detail bodies while collapsed.
 - `ChatFinalAssistantMessageReconciler` attaches `toolEvent` when final assistant text is itself a tool transcript, so live completions and restored transcripts follow the same presentation path.
@@ -45,3 +49,4 @@
 - Do not let display compaction change persisted chat messages. The compact activity row is only a view-layer artifact.
 - Resolve all activity-summary icon insertion offsets against the immutable rendered text, then apply insertions from the end. Forward mutation invalidates later attributed-string ranges and can crash while restoring a chat tab.
 - Do not drop raw details from persisted tool messages; users still need to inspect exact commands, arguments, and output when debugging agent behavior.
+- Hidden disclosure bodies must not participate in width measurement. Tool rows take the available readable width directly, capped by the transcript measure and current view width.
