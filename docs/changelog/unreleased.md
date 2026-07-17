@@ -36,6 +36,7 @@
 
 #### Bug Fixes
 
+- Fixed Codex chat tabs crashing when restored activity summaries contained multiple icon rows.
 - Keep failed or still-running tools and action-required chat statuses visible instead of hiding them inside collapsed activity summaries.
 
 ### Terminal

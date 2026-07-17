@@ -1555,38 +1555,23 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             )
         }
 
-        let rawLines = rawText.components(separatedBy: "\n")
-        let plainLines = ChatTranscriptDisplayCompactor.plainText(fromActivitySummary: rawText)
-            .components(separatedBy: "\n")
-        var searchLocation = 0
-        var insertionOffset = 0
-        let currentString = attributed.string as NSString
-        for (rawLine, plainLine) in zip(rawLines, plainLines) {
-            guard let icon = ChatTranscriptDisplayCompactor.sfSymbolName(fromActivitySummaryLine: rawLine) else {
-                searchLocation += (plainLine as NSString).length + 1
-                continue
-            }
-            let plainLineLength = (plainLine as NSString).length
-            let searchRange = NSRange(
-                location: min(searchLocation, currentString.length),
-                length: max(0, currentString.length - min(searchLocation, currentString.length))
-            )
-            let lineRange = currentString.range(of: plainLine, options: [], range: searchRange)
-            guard lineRange.location != NSNotFound, lineRange.length > 0 else { continue }
-
+        let insertions = ChatTranscriptDisplayCompactor.activitySummarySymbolInsertions(
+            rawText: rawText,
+            renderedText: attributed.string
+        )
+        for insertion in insertions.reversed() {
             let attachment = NSTextAttachment()
             let symbolConfiguration = NSImage.SymbolConfiguration(
                 paletteColors: [baseColor.withAlphaComponent(0.62)]
             )
-            let image = NSImage(systemSymbolName: icon.symbolName, accessibilityDescription: nil)?
+            let image = NSImage(systemSymbolName: insertion.symbolName, accessibilityDescription: nil)?
                 .withSymbolConfiguration(symbolConfiguration)
             attachment.image = image
             attachment.bounds = NSRect(x: 0, y: -2, width: baseFontSize, height: baseFontSize)
             let iconString = NSMutableAttributedString(attachment: attachment)
             iconString.append(NSAttributedString(string: " "))
-            attributed.insert(iconString, at: lineRange.location + insertionOffset)
-            insertionOffset += iconString.length
-            searchLocation = lineRange.location + plainLineLength + 1
+            guard insertion.utf16Offset <= attributed.length else { continue }
+            attributed.insert(iconString, at: insertion.utf16Offset)
         }
     }
 

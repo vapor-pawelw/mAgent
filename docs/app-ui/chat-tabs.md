@@ -40,4 +40,5 @@
 - Do not promote command output into completed tool titles or show transport controls such as `yield_time_ms` and `max_output_tokens`. Failures and running commands may still show concise state metadata and expand automatically.
 - Keep failed and running tools, errors, cancellations, and approval blockers outside compact Activity summaries so attention-required information remains immediately visible.
 - Do not let display compaction change persisted chat messages. The compact activity row is only a view-layer artifact.
+- Resolve all activity-summary icon insertion offsets against the immutable rendered text, then apply insertions from the end. Forward mutation invalidates later attributed-string ranges and can crash while restoring a chat tab.
 - Do not drop raw details from persisted tool messages; users still need to inspect exact commands, arguments, and output when debugging agent behavior.

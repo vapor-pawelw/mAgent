@@ -1783,6 +1783,32 @@ struct ChatTranscriptDisplayCompactorTests {
         #expect(presentation.body.contains("checkmark.circle Command finished: git status --short"))
         #expect(!presentation.isExpandedByDefault)
     }
+
+    @Test("Activity symbol insertions remain valid when multiple icons shift the text")
+    func activitySymbolInsertionsApplyFromEnd() {
+        let rawText = """
+        Activity
+        3 actions
+        play.circle Run command: echo 👋
+        checkmark.circle Command finished: echo 👋
+        message Explained the result
+        """
+        let renderedText = ChatTranscriptDisplayCompactor.plainText(fromActivitySummary: rawText)
+        let insertions = ChatTranscriptDisplayCompactor.activitySummarySymbolInsertions(
+            rawText: rawText,
+            renderedText: renderedText
+        )
+
+        #expect(insertions.map(\.symbolName) == ["play.circle", "checkmark.circle", "message"])
+        let rendered = NSMutableString(string: renderedText)
+        for insertion in insertions.reversed() {
+            rendered.insert("[icon] ", at: insertion.utf16Offset)
+        }
+
+        #expect(rendered.contains("[icon] Run command: echo 👋"))
+        #expect(rendered.contains("[icon] Command finished: echo 👋"))
+        #expect(rendered.contains("[icon] Explained the result"))
+    }
 }
 
 // MARK: - PersistedDraftTab

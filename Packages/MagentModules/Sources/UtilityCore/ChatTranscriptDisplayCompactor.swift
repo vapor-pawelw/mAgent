@@ -2,6 +2,16 @@ import Foundation
 import MagentModels
 
 public enum ChatTranscriptDisplayCompactor {
+    public struct ActivitySummarySymbolInsertion: Equatable, Sendable {
+        public let symbolName: String
+        public let utf16Offset: Int
+
+        public init(symbolName: String, utf16Offset: Int) {
+            self.symbolName = symbolName
+            self.utf16Offset = utf16Offset
+        }
+    }
+
     private static let minimumRunLength = 2
     private static let maximumVisibleItems = 12
     private static let maximumSummaryLineLength = 96
@@ -174,6 +184,41 @@ public enum ChatTranscriptDisplayCompactor {
                 return sfSymbolName(fromActivitySummaryLine: string)?.text ?? string
             }
             .joined(separator: "\n")
+    }
+
+    public static func activitySummarySymbolInsertions(
+        rawText: String,
+        renderedText: String
+    ) -> [ActivitySummarySymbolInsertion] {
+        let rawLines = rawText.components(separatedBy: "\n")
+        let plainLines = plainText(fromActivitySummary: rawText).components(separatedBy: "\n")
+        let rendered = renderedText as NSString
+        var searchLocation = 0
+        var insertions: [ActivitySummarySymbolInsertion] = []
+
+        for (rawLine, plainLine) in zip(rawLines, plainLines) {
+            let plainLineLength = (plainLine as NSString).length
+            defer { searchLocation += plainLineLength + 1 }
+            guard let icon = sfSymbolName(fromActivitySummaryLine: rawLine), plainLineLength > 0 else {
+                continue
+            }
+            let clampedLocation = min(searchLocation, rendered.length)
+            let lineRange = rendered.range(
+                of: plainLine,
+                options: [],
+                range: NSRange(
+                    location: clampedLocation,
+                    length: rendered.length - clampedLocation
+                )
+            )
+            guard lineRange.location != NSNotFound else { continue }
+            insertions.append(ActivitySummarySymbolInsertion(
+                symbolName: icon.symbolName,
+                utf16Offset: lineRange.location
+            ))
+            searchLocation = lineRange.location
+        }
+        return insertions
     }
 
     public static func activityPresentation(for message: PersistedChatMessage) -> ChatToolTranscriptPresentation? {
