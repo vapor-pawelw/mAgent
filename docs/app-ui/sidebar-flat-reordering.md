@@ -8,6 +8,8 @@ This thread changed flat-sidebar behavior so projects whose section grouping is 
 - New unpinned threads are created at the bottom of the visible unpinned list, regardless of their stored section.
 - Auto-reorder-on-completion moves a finished thread to the top of its visible pin group in flat mode, matching sectioned-mode semantics.
 - Users can drag regular threads within a project to reorder them in flat mode.
+- In sectioned mode, users can drop a thread into an empty section and can place
+  the final visible thread immediately above a collapsed hidden-thread group.
 - Drag-hovering over project or section headers while reordering does not expand/collapse them; disclosure stays click-only.
 - Dragging still respects the pinned/unpinned split used by the flat list:
   - pinned threads can only move within the pinned block
@@ -25,6 +27,9 @@ This thread changed flat-sidebar behavior so projects whose section grouping is 
 - `bumpThreadToTopOfSection(...)` now uses the same project-wide ordering scope in flat mode, so agent completions rise within the visible pin group without needing to move sections.
 - `ThreadListViewController+DataSource.swift` handles flat-list drops on `SidebarProject` by computing the insertion index within the visible pin group and calling `reorderThreadInVisibleProjectList(...)`.
 - `SidebarSection.items` interleaves `SidebarGroupSeparator` rows between thread groups for rendering. Section drop validation/reorder code must convert raw outline indices back to thread-only indices before comparing group boundaries or calling `reorderThread(...)`.
+- Synthetic hidden-thread disclosure rows redirect drops to their position in the
+  parent section. Project-level drop proposals that point at an empty section
+  redirect to a drop on that section, since it has no child rows of its own.
 - `SidebarOutlineView` tracks local/destination drag state so `shouldSelectItem`, `shouldExpandItem`, and `shouldCollapseItem` can suppress header disclosure while a drag is active.
 - Persistence still uses the existing `displayOrder` field; there is still no separate flat-order storage model.
 - **Drag-time reload deferral**: `reloadData()` checks `SidebarOutlineView.isDragInteractionActive` at the top and returns early (setting `pendingReloadAfterDrag = true`) for background-triggered reloads that fire during a drag (e.g. tmux state polling, busy-state changes). The `draggingSession endedAt` delegate flushes the pending reload after the drag ends. Reloads triggered by `acceptDrop` itself are allowed through via the `isInsideAcceptDrop` flag, which is set for the duration of the accept-drop call.

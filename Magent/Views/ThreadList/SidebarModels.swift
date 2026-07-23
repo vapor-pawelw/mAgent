@@ -92,8 +92,26 @@ class SidebarSection {
         items.count
     }
 
+    var hiddenThreadsToggleIndex: Int? {
+        items.firstIndex { $0 is SidebarHiddenThreadsToggle }
+    }
+
     var hasArchivableThreads: Bool {
         !threads.isEmpty
+    }
+}
+
+enum SidebarThreadDropTarget {
+    static func emptySection(
+        in project: SidebarProject,
+        atProjectChildIndex index: Int
+    ) -> SidebarSection? {
+        guard project.children.indices.contains(index),
+              let section = project.children[index] as? SidebarSection,
+              section.threads.isEmpty else {
+            return nil
+        }
+        return section
     }
 }
 

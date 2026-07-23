@@ -237,6 +237,14 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         }
     }
 
+    private func parentSection(of toggle: SidebarHiddenThreadsToggle) -> SidebarSection? {
+        sidebarRootItems
+            .compactMap { $0 as? SidebarProject }
+            .filter { $0.projectId == toggle.projectId }
+            .flatMap { $0.children.compactMap { $0 as? SidebarSection } }
+            .first { $0.sectionId == toggle.sectionId }
+    }
+
     func outlineView(
         _ outlineView: NSOutlineView,
         validateDrop info: NSDraggingInfo,
@@ -268,9 +276,29 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             return []
         }
 
+        if let toggle = item as? SidebarHiddenThreadsToggle,
+           let section = parentSection(of: toggle),
+           section.projectId == thread.projectId,
+           let toggleIndex = section.hiddenThreadsToggleIndex {
+            outlineView.setDropItem(section, dropChildIndex: toggleIndex)
+            let counts = threadGroupCounts(in: section)
+            let threadIndex = adjustedDropIndex(toggleIndex, in: section)
+            return validDropIndex(threadIndex, for: thread.sidebarListState, in: counts) ? .move : []
+        }
+
         if let project = item as? SidebarProject {
             let settings = persistence.loadSettings()
-            guard !settings.shouldUseThreadSections(for: project.projectId) else { return [] }
+            if settings.shouldUseThreadSections(for: project.projectId) {
+                guard thread.projectId == project.projectId,
+                      let emptySection = SidebarThreadDropTarget.emptySection(
+                          in: project,
+                          atProjectChildIndex: index
+                      ) else {
+                    return []
+                }
+                outlineView.setDropItem(emptySection, dropChildIndex: NSOutlineViewDropOnItemIndex)
+                return .move
+            }
             return validateFlatProjectDrop(for: thread, in: project, childIndex: index)
         }
 
