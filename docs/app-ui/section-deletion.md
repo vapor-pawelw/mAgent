@@ -26,7 +26,7 @@
 
 ### Gotchas
 
-- Menu-triggered sidebar rename starts after AppKit dismisses a context menu and reloads the outline. The inline editor may not be materialized immediately, so focus must scroll/materialize the section row and retry briefly instead of assuming `view(atColumn:row:)` is available synchronously.
+- Menu-triggered sidebar rename must be handed off from the menu action to `menuDidClose(_:)` before reloading the outline. Reloading while AppKit is still tracking the context menu can discard the inline editor transition. After the menu closes, focus still scrolls/materializes the section row and retries briefly instead of assuming `view(atColumn:row:)` is available synchronously.
 
 - Global section deletion must not sweep up threads from projects that use custom section overrides. Those projects are out of scope for global section membership and reassignment.
 - Effective membership matters more than stored `thread.sectionId`. A thread with an unknown section ID may still currently belong to the default section and therefore count toward the move warning.

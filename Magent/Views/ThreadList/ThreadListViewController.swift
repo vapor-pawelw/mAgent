@@ -339,6 +339,7 @@ final class ThreadListViewController: NSViewController {
     var suppressNextSectionRowToggle = false
     var suppressNextProjectRowToggle = false
     var activeSectionRename: (projectId: UUID, sectionId: UUID, originalName: String)?
+    var sectionRenameMenuHandoff = SidebarSectionRenameMenuHandoff()
     var pendingSectionNameToggleWorkItem: DispatchWorkItem?
     var pendingSectionNameToggleKey: String?
     var contextMenuSectionColorTarget: (projectId: UUID, sectionId: UUID)?

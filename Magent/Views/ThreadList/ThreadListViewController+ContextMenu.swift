@@ -1225,8 +1225,16 @@ extension ThreadListViewController {
               let projectIdRaw = info["projectId"],
               let sectionIdRaw = info["sectionId"],
               let projectId = UUID(uuidString: projectIdRaw),
-              let sectionId = UUID(uuidString: sectionIdRaw) else { return }
-        beginRenamingSection(projectId: projectId, sectionId: sectionId, fallbackName: info["sectionName"])
+              let sectionId = UUID(uuidString: sectionIdRaw),
+              let menu = sender.menu else { return }
+        sectionRenameMenuHandoff.request(
+            SidebarSectionRenameRequest(
+                projectId: projectId,
+                sectionId: sectionId,
+                fallbackName: info["sectionName"]
+            ),
+            originatingMenuIdentifier: ObjectIdentifier(menu)
+        )
     }
 
     @objc private func addSectionFromMenu(_ sender: NSMenuItem) {
@@ -1916,6 +1924,17 @@ extension ThreadListViewController: NSMenuDelegate {
                 menu.addItem(item)
             }
         }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard let request = sectionRenameMenuHandoff.consumeAfterMenuCloses(
+            menuIdentifier: ObjectIdentifier(menu)
+        ) else { return }
+        beginRenamingSection(
+            projectId: request.projectId,
+            sectionId: request.sectionId,
+            fallbackName: request.fallbackName
+        )
     }
 }
 

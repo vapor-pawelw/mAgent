@@ -105,6 +105,36 @@ enum SidebarInlineRenameFocusPolicy {
     }
 }
 
+struct SidebarSectionRenameRequest: Equatable {
+    let projectId: UUID
+    let sectionId: UUID
+    let fallbackName: String?
+}
+
+struct SidebarSectionRenameMenuHandoff {
+    private(set) var pendingRequest: SidebarSectionRenameRequest?
+    private var originatingMenuIdentifier: ObjectIdentifier?
+
+    mutating func request(
+        _ request: SidebarSectionRenameRequest,
+        originatingMenuIdentifier: ObjectIdentifier
+    ) {
+        pendingRequest = request
+        self.originatingMenuIdentifier = originatingMenuIdentifier
+    }
+
+    mutating func consumeAfterMenuCloses(
+        menuIdentifier: ObjectIdentifier
+    ) -> SidebarSectionRenameRequest? {
+        guard menuIdentifier == originatingMenuIdentifier else { return nil }
+        defer {
+            pendingRequest = nil
+            originatingMenuIdentifier = nil
+        }
+        return pendingRequest
+    }
+}
+
 final class SidebarSpacer {}
 final class SidebarTopPadding {
     let height = SidebarVerticalSpacing.sidebarTopInset
