@@ -64,12 +64,20 @@ struct ThreadRowBadgeLayoutTests {
         #expect(ThreadRowBadgeLayout.priorityOptionLabel("Priority 3", level: 3, jiraPriority: nil, jiraAnnotation: "(Jira)") == "Priority 3")
     }
 
-    @Test("Local state indicators trail workflow metadata with activity last")
+    @Test("Local state indicators keep stale, stopped, favorite, and pinned together at the trailing edge")
     func trailingStatusOrderPreservesStateIndicatorOrder() {
         #expect(ThreadRowBadgeLayout.TrailingStatusItem.allCases == [
-            .rateLimit, .jiraSync, .keepAlive, .stoppedSessions,
-            .hidden, .pinned, .favorite, .activityDuration,
+            .rateLimit, .jiraSync, .keepAlive, .hidden,
+            .activityDuration, .stoppedSessions, .favorite, .pinned,
         ])
+    }
+
+    @Test("Stopped sessions use the unfilled red xmark indicator")
+    func stoppedSessionsBadgePresentation() {
+        #expect(ThreadRowBadgeLayout.stoppedSessionsBadge == .init(
+            symbolName: "xmark.circle",
+            tone: .red
+        ))
     }
 
     @Test("Explicit Keep Alive always shows its shield")

@@ -101,6 +101,16 @@ enum ThreadRowBadgeLayout {
         let tone: ActivityBadgeTone
     }
 
+    struct StoppedSessionsBadge: Equatable {
+        let symbolName: String
+        let tone: ActivityBadgeTone
+    }
+
+    static let stoppedSessionsBadge = StoppedSessionsBadge(
+        symbolName: "xmark.circle",
+        tone: .red
+    )
+
     static func activityBadge(
         forElapsed elapsed: Int,
         isBusy: Bool,
@@ -160,11 +170,11 @@ enum ThreadRowBadgeLayout {
         case rateLimit
         case jiraSync
         case keepAlive
-        case stoppedSessions
         case hidden
-        case pinned
-        case favorite
         case activityDuration
+        case stoppedSessions
+        case favorite
+        case pinned
     }
 
     static func showsKeepAliveBadge(isKeepAlive: Bool) -> Bool {

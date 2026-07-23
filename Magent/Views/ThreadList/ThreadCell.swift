@@ -1470,7 +1470,9 @@ final class ThreadCell: NSTableCellView {
         if stoppedSessionsBadge == nil {
             let badge = TopBorderBadge()
             badge.label.isHidden = true
-            badge.iconView.image = Self.cachedSymbolImage("xmark.circle.fill")
+            badge.iconView.image = Self.cachedSymbolImage(
+                ThreadRowBadgeLayout.stoppedSessionsBadge.symbolName
+            )
             badge.iconView.imageAlignment = .alignCenter
             badge.iconView.imageScaling = .scaleProportionallyDown
             badge.iconView.isHidden = false
@@ -1560,7 +1562,15 @@ final class ThreadCell: NSTableCellView {
         favoriteBadge?.iconView.contentTintColor = descriptionColor
         pinnedBadge?.iconView.contentTintColor = descriptionColor
         hiddenBadge?.iconView.contentTintColor = descriptionColor
-        stoppedSessionsBadge?.iconView.contentTintColor = descriptionColor
+        let stoppedSessionsColor: NSColor = switch ThreadRowBadgeLayout.stoppedSessionsBadge.tone {
+        case .yellow: .systemYellow
+        case .orange: .systemOrange
+        case .red: .systemRed
+        }
+        stoppedSessionsBadge?.iconView.contentTintColor = BadgeForegroundStyle.color(
+            tintColor: stoppedSessionsColor,
+            appearance: effectiveAppearance
+        )
         updateStatusItemOpacities()
         if let popout = popoutImageView {
             popout.contentTintColor = .systemPurple
