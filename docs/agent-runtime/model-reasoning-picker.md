@@ -31,8 +31,8 @@ A JSON file defines available models and reasoning levels per agent. The file li
     },
     "codex": {
       "models": [
-        { "id": "gpt-5.6-sol", "label": "GPT 5.6 Sol", "reasoningLevels": ["none", "low", "medium", "high", "xhigh", "max"] },
-        { "id": "gpt-5.6-terra", "label": "GPT 5.6 Terra", "reasoningLevels": ["none", "low", "medium", "high", "xhigh", "max"] },
+        { "id": "gpt-5.6-sol", "label": "GPT 5.6 Sol", "reasoningLevels": ["none", "low", "medium", "high", "xhigh", "max", "ultra"] },
+        { "id": "gpt-5.6-terra", "label": "GPT 5.6 Terra", "reasoningLevels": ["none", "low", "medium", "high", "xhigh", "max", "ultra"] },
         { "id": "gpt-5.6-luna", "label": "GPT 5.6 Luna", "reasoningLevels": ["none", "low", "medium", "high", "xhigh", "max"] },
         { "id": "gpt-5.5", "label": "GPT 5.5" },
         { "id": "gpt-5.4", "label": "GPT 5.4" },
@@ -46,7 +46,7 @@ A JSON file defines available models and reasoning levels per agent. The file li
 ```
 
 - **Agent-level `reasoningLevels`** — default reasoning options for all models under that agent.
-- **Per-model `reasoningLevels` override** — optional. When present on a model object, replaces the agent-level list for that model. GPT 5.6 Codex models use this to expose `none` and `max` while older Codex models keep the default `low`/`medium`/`high`/`xhigh` set. Example:
+- **Per-model `reasoningLevels` override** — optional. When present on a model object, replaces the agent-level list for that model. GPT 5.6 Codex models use this to expose `none` and `max`; Sol and Terra also expose Codex Ultra, while Luna does not. Ultra combines maximum reasoning with automatic task delegation and still depends on the signed-in account being eligible. Older Codex models keep the default `low`/`medium`/`high`/`xhigh` set. Example:
   ```json
   { "id": "gpt-5.1-codex-mini", "label": "GPT 5.1 Codex Mini", "reasoningLevels": ["medium", "high"] }
   ```
@@ -86,7 +86,7 @@ Switching models within the same agent restores that model's own last-used reaso
 
 If the user's last-selected model no longer exists in the current JSON (after a remote update), silently fall back to "Auto."
 
-When a new thread or agent tab is created without an explicit custom title, Magent keeps the default title focused on the agent name and appends a single suffix for any visible model label plus reasoning. Built-in reasoning labels are abbreviated to `L`, `M`, `H`, `xH`, and `Max`; any other value is left as-is.
+When a new thread or agent tab is created without an explicit custom title, Magent keeps the default title focused on the agent name and appends a single suffix for any visible model label plus reasoning. Built-in reasoning labels are abbreviated to `L`, `M`, `H`, and `xH`, while `Max` and `Ultra` keep their names; any other value is left as-is.
 
 ## Auto-Sync Tab Name from `/model` Output
 
@@ -216,6 +216,7 @@ codex -m <id> -c model_reasoning_effort=<level>
 
 - `-m` omitted when "Auto"
 - `-c model_reasoning_effort=...` omitted when "Auto"
+- For example, GPT 5.6 Sol with Ultra launches as `codex -m gpt-5.6-sol -c 'model_reasoning_effort="ultra"'`
 - `-c service_tier="fast"` appended when the Codex Fast mode lightning toggle is filled
 
 ### Resume

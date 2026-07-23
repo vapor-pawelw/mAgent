@@ -460,6 +460,7 @@ struct TmuxSessionNamingTests {
         #expect(TmuxSessionNaming.defaultTabDisplayName(for: .claude, reasoningLevel: "medium") == "Claude (M)")
         #expect(TmuxSessionNaming.defaultTabDisplayName(for: .claude, reasoningLevel: "xhigh") == "Claude (xH)")
         #expect(TmuxSessionNaming.defaultTabDisplayName(for: .claude, reasoningLevel: "max") == "Claude (Max)")
+        #expect(TmuxSessionNaming.defaultTabDisplayName(for: .codex, reasoningLevel: "ultra") == "Codex (Ultra)")
     }
 
     @Test("Claude combines model and effort with comma")
@@ -484,13 +485,17 @@ struct TmuxSessionNamingTests {
     func codex56ReasoningOverrides() {
         let config = AgentModelConfig(
             models: [
-                AgentModel(id: "gpt-5.6-sol", label: "GPT 5.6 Sol", reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max"]),
+                AgentModel(id: "gpt-5.6-sol", label: "GPT 5.6 Sol", reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max", "ultra"]),
+                AgentModel(id: "gpt-5.6-terra", label: "GPT 5.6 Terra", reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max", "ultra"]),
+                AgentModel(id: "gpt-5.6-luna", label: "GPT 5.6 Luna", reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max"]),
                 AgentModel(id: "gpt-5.5", label: "GPT 5.5"),
             ],
             reasoningLevels: ["low", "medium", "high", "xhigh"]
         )
 
-        #expect(config.effectiveReasoningLevels(for: "gpt-5.6-sol") == ["none", "low", "medium", "high", "xhigh", "max"])
+        #expect(config.effectiveReasoningLevels(for: "gpt-5.6-sol") == ["none", "low", "medium", "high", "xhigh", "max", "ultra"])
+        #expect(config.effectiveReasoningLevels(for: "gpt-5.6-terra") == ["none", "low", "medium", "high", "xhigh", "max", "ultra"])
+        #expect(config.effectiveReasoningLevels(for: "gpt-5.6-luna") == ["none", "low", "medium", "high", "xhigh", "max"])
         #expect(config.effectiveReasoningLevels(for: "gpt-5.5") == ["low", "medium", "high", "xhigh"])
     }
 

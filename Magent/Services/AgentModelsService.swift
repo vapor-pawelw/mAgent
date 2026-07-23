@@ -149,8 +149,8 @@ final class AgentModelsService: @unchecked Sendable {
                 ),
                 "codex": AgentModelConfig(
                     models: [
-                        AgentModel(id: "gpt-5.6-sol", label: "GPT 5.6 Sol", reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max"]),
-                        AgentModel(id: "gpt-5.6-terra", label: "GPT 5.6 Terra", reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max"]),
+                        AgentModel(id: "gpt-5.6-sol", label: "GPT 5.6 Sol", reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max", "ultra"]),
+                        AgentModel(id: "gpt-5.6-terra", label: "GPT 5.6 Terra", reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max", "ultra"]),
                         AgentModel(id: "gpt-5.6-luna", label: "GPT 5.6 Luna", reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max"]),
                         AgentModel(id: "gpt-5.5", label: "GPT 5.5"),
                         AgentModel(id: "gpt-5.4", label: "GPT 5.4"),

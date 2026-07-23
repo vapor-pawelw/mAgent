@@ -114,6 +114,8 @@ public enum TmuxSessionNaming {
             return "xH"
         case "max":
             return "Max"
+        case "ultra":
+            return "Ultra"
         default:
             return trimmed
         }
