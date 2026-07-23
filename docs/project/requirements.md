@@ -242,6 +242,7 @@ For the main thread, the sidebar uses these rules:
   - Priority badge: show numeric level and label (`Lowest` ... `Highest`)
   - Activity badge: show `Busy` for busy activity older than 1 hour and `Stale` for last activity older than 7 days, using yellow for 7–14 days, orange for 14–30 days, and red after 30 days; never show the stale state on a main worktree
   - Favorite, pinned, and keep-alive badges: identify the protection/pinning/favorite state
+  - At the trailing end of the status row, order stale activity, stopped sessions, favorite, then pinned; use a red `xmark.circle` for stopped sessions
   - Jira badge: show the ticket key and status
   - PR/MR badge: show the provider-specific PR/MR number and status
 - Left-clicks on status-row badges select the thread. Badge-specific actions are right-click only: PR/MR opens the numbered review, Jira reuses the thread context menu's Jira submenu, Busy shows precise informational context, and Stale adds the same Hide/Unhide and Archive actions used by the full thread context menu because it represents last activity.

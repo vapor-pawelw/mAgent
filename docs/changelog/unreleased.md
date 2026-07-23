@@ -67,6 +67,7 @@
 #### Improvements
 
 - Reduced the sidebar's minimum width so it takes less space on small screens.
+- Ordered stale, stopped-session, favorite, and pinned thread indicators consistently, with a clearer red stopped-session icon.
 - Moved thread signs inline before descriptions for a cleaner, more compact sidebar presentation, with signs dimming together with inactive thread text and a matching status icon identifying threads whose tmux sessions are stopped.
 - Tightened spacing between sidebar threads while preserving stronger pinned, hidden, and section boundaries.
 - Keep last-known PR/MR, Jira, hidden-thread, and stopped-session sidebar state visible immediately after relaunch while fresh checks run.
