@@ -424,7 +424,7 @@ final class SessionLifecycleService {
     /// Manually kills a single tmux session, preserving tab metadata.
     /// Uses the same eviction model as idle cleanup: evict from cache, mark evicted, kill tmux.
     func killSession(threadId: UUID, sessionName: String) async {
-        guard let idx = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard store.thread(byId: threadId) != nil else { return }
 
         await MainActor.run {
             ReusableTerminalViewCache.shared.evictSessions([sessionName])
@@ -435,8 +435,9 @@ final class SessionLifecycleService {
         do {
             try await tmux.killSession(name: sessionName)
             sessionTracker.knownGoodSessionContexts.removeValue(forKey: sessionName)
-            store.threads[idx].deadSessions.insert(sessionName)
-            onThreadsChanged?()
+            if store.update(id: threadId, { $0.deadSessions.insert(sessionName) }) {
+                onThreadsChanged?()
+            }
         } catch {
             sessionTracker.evictedIdleSessions.remove(sessionName)
             NSLog("[SessionCleanup] Manual kill failed for \(sessionName): \(error)")
@@ -445,8 +446,7 @@ final class SessionLifecycleService {
 
     /// Manually kills all live tmux sessions for a thread, preserving tab metadata.
     func killAllSessions(threadId: UUID) async {
-        guard let idx = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
-        let thread = store.threads[idx]
+        guard let thread = store.thread(byId: threadId) else { return }
 
         let liveNames = thread.tmuxSessionNames.filter {
             !thread.deadSessions.contains($0) && !sessionTracker.evictedIdleSessions.contains($0)
@@ -462,7 +462,7 @@ final class SessionLifecycleService {
             do {
                 try await tmux.killSession(name: sessionName)
                 sessionTracker.knownGoodSessionContexts.removeValue(forKey: sessionName)
-                store.threads[idx].deadSessions.insert(sessionName)
+                store.update(id: threadId) { $0.deadSessions.insert(sessionName) }
             } catch {
                 sessionTracker.evictedIdleSessions.remove(sessionName)
                 NSLog("[SessionCleanup] Manual kill failed for \(sessionName): \(error)")
@@ -1062,8 +1062,8 @@ final class SessionLifecycleService {
         }
 
         var changed = false
-        for (index, thread) in store.threads.enumerated() {
-            guard !thread.isArchived else { continue }
+        let threadSnapshot = store.threads.filter { !$0.isArchived }
+        for thread in threadSnapshot {
 
             let currentDead = Set(thread.tmuxSessionNames.filter {
                 !liveSessions.contains($0)
@@ -1071,8 +1071,12 @@ final class SessionLifecycleService {
             guard currentDead != thread.deadSessions || !thread.cachedDeadSessions.isEmpty else { continue }
 
             let newlyDead = currentDead.subtracting(thread.deadSessions)
-            store.threads[index].deadSessions = currentDead
-            store.threads[index].cachedDeadSessions = []
+            guard store.update(id: thread.id, {
+                $0.deadSessions = currentDead
+                $0.cachedDeadSessions = []
+            }) else {
+                continue
+            }
             changed = true
 
             // Auto-recreate the currently visible session so the user isn't
@@ -1435,13 +1439,14 @@ final class SessionLifecycleService {
                     // Codex: busy while active "Working"/interrupt/background status
                     // markers are visible in the latest scope.
                     let isBusy = await paneShowsEscToInterrupt(sessionName: session)
-                    guard let i = store.threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                    let wasBusy = store.threads[i].busySessions.contains(session)
+                    guard let currentThread = store.thread(byId: threadId) else { continue }
+                    let wasBusy = currentThread.busySessions.contains(session)
                     if isBusy {
                         if !wasBusy {
-                            store.threads[i].busySessions.insert(session)
-                            changed = true
-                            busyChangedThreadIds.insert(store.threads[i].id)
+                            if store.update(id: threadId, { $0.busySessions.insert(session) }) {
+                                changed = true
+                                busyChangedThreadIds.insert(threadId)
+                            }
                         }
                         let recoveredIds = await clearRateLimitAfterRecovery?(threadId, session, nil) ?? []
                         if !recoveredIds.isEmpty {
@@ -1450,9 +1455,10 @@ final class SessionLifecycleService {
                         }
                     } else {
                         if wasBusy {
-                            store.threads[i].busySessions.remove(session)
-                            changed = true
-                            busyChangedThreadIds.insert(store.threads[i].id)
+                            if store.update(id: threadId, { $0.busySessions.remove(session) }) {
+                                changed = true
+                                busyChangedThreadIds.insert(threadId)
+                            }
                         }
 
                         if await syncUnsubmittedInputState(threadId: threadId, sessionName: session, agentType: .codex) {
@@ -1477,8 +1483,8 @@ final class SessionLifecycleService {
 
                     if wasBusy
                         && !isBusy
-                        && !store.threads[i].waitingForInputSessions.contains(session)
-                        && store.threads[i].rateLimitedSessions[session] == nil {
+                        && store.thread(byId: threadId)?.waitingForInputSessions.contains(session) == false
+                        && store.thread(byId: threadId)?.rateLimitedSessions[session] == nil {
                         await processAgentCompletionSessions([session])
                     }
 

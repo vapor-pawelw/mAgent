@@ -1106,27 +1106,30 @@ final class AgentSetupService {
         return persistedAgentType
     }
 
-    func migrateSessionAgentTypes(threadIndex index: Int) async -> Bool {
-        guard store.threads.indices.contains(index) else { return false }
+    func migrateSessionAgentTypes(threadId: UUID) async -> Bool {
+        guard let thread = store.thread(byId: threadId) else { return false }
 
-        let validAgentSessions = Set(store.threads[index].agentTmuxSessions)
-        let filtered = store.threads[index].sessionAgentTypes.filter { validAgentSessions.contains($0.key) }
-        var updated = filtered
-        var changed = filtered.count != store.threads[index].sessionAgentTypes.count
+        var detectedTypes: [String: AgentType] = [:]
 
-        for sessionName in store.threads[index].agentTmuxSessions {
-            guard updated[sessionName] == nil else { continue }
+        for sessionName in thread.agentTmuxSessions {
+            guard thread.sessionAgentTypes[sessionName] == nil else { continue }
             if let live = await liveSessionAgentType(sessionName: sessionName)
-                ?? inferredStoredAgentType(for: store.threads[index], sessionName: sessionName)
-                ?? effectiveAgentTypeForProject?(store.threads[index].projectId) {
-                updated[sessionName] = live
-                changed = true
+                ?? inferredStoredAgentType(for: thread, sessionName: sessionName)
+                ?? effectiveAgentTypeForProject?(thread.projectId) {
+                detectedTypes[sessionName] = live
             }
         }
 
-        guard changed else { return false }
-        store.threads[index].sessionAgentTypes = updated
-        return true
+        guard let currentThread = store.thread(byId: threadId) else { return false }
+        let merged = AsyncSessionStateReconciler.mergingDetectedAgentTypes(
+            detectedTypes,
+            into: currentThread.sessionAgentTypes,
+            validSessions: Set(currentThread.agentTmuxSessions)
+        )
+        guard merged != currentThread.sessionAgentTypes else { return false }
+        return store.update(id: threadId) {
+            $0.sessionAgentTypes = merged
+        }
     }
 
     @discardableResult
@@ -1266,14 +1269,14 @@ final class AgentSetupService {
     }
 
     func refreshAgentConversationID(threadId: UUID, sessionName: String) async {
-        guard let threadIndex = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
-        guard store.threads[threadIndex].agentTmuxSessions.contains(sessionName) else { return }
-        guard !store.threads[threadIndex].freshAgentSessions.contains(sessionName) else { return }
+        guard let thread = store.thread(byId: threadId) else { return }
+        guard thread.agentTmuxSessions.contains(sessionName) else { return }
+        guard !thread.freshAgentSessions.contains(sessionName) else { return }
 
-        let agentType = agentType(for: store.threads[threadIndex], sessionName: sessionName)
-        let worktreePath = store.threads[threadIndex].worktreePath
+        let agentType = agentType(for: thread, sessionName: sessionName)
+        let worktreePath = thread.worktreePath
         let minimumCreatedAt = (
-            store.threads[threadIndex].sessionCreatedAts[sessionName] ?? store.threads[threadIndex].createdAt
+            thread.sessionCreatedAts[sessionName] ?? thread.createdAt
         ).addingTimeInterval(-2)
 
         let conversationID: String?
@@ -1293,9 +1296,15 @@ final class AgentSetupService {
         }
 
         guard let conversationID, !conversationID.isEmpty else { return }
-        guard store.threads[threadIndex].sessionConversationIDs[sessionName] != conversationID else { return }
-
-        store.threads[threadIndex].sessionConversationIDs[sessionName] = conversationID
+        guard let currentThread = store.thread(byId: threadId),
+              currentThread.agentTmuxSessions.contains(sessionName),
+              !currentThread.freshAgentSessions.contains(sessionName),
+              currentThread.sessionConversationIDs[sessionName] != conversationID else {
+            return
+        }
+        store.update(id: threadId) {
+            $0.sessionConversationIDs[sessionName] = conversationID
+        }
         try? persistence.saveActiveThreads(store.threads)
     }
 

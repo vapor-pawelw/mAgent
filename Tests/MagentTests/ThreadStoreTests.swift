@@ -114,6 +114,25 @@ struct ThreadStoreTests {
     }
 
     @Test
+    func updateByIdTargetsSurvivingThreadAfterArrayShrinks() {
+        let projectId = UUID()
+        let archived = makeThread(projectId: projectId, name: "archived")
+        let surviving = makeThread(projectId: projectId, name: "surviving")
+        let store = ThreadStore()
+        store.threads = [archived, surviving]
+        let staleIndex = 1
+
+        store.threads.removeAll { $0.id == archived.id }
+        let didUpdate = store.update(id: surviving.id) { value in
+            value.name = "updated"
+        }
+
+        #expect(!store.threads.indices.contains(staleIndex))
+        #expect(didUpdate)
+        #expect(store.thread(byId: surviving.id)?.name == "updated")
+    }
+
+    @Test
     func updateAtReturnsFalseForOutOfBoundsIndex() {
         let projectId = UUID()
         let thread = makeThread(projectId: projectId, name: "only")

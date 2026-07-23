@@ -569,10 +569,9 @@ final class GitStateService {
     }
 
     func switchToExpectedBranch(threadId: UUID) async throws {
-        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else {
+        guard let thread = store.thread(byId: threadId) else {
             throw ThreadManagerError.threadNotFound
         }
-        let thread = store.threads[index]
         guard let expected = resolveExpectedBranch(for: thread) else {
             throw ThreadManagerError.noExpectedBranch
         }
@@ -580,8 +579,12 @@ final class GitStateService {
 
         // Refresh branch state immediately
         let actual = await git.getCurrentBranch(workingDirectory: thread.worktreePath)
-        store.threads[index].actualBranch = actual
-        store.threads[index].hasBranchMismatch = actual != nil && actual != expected
+        guard store.update(id: threadId, {
+            $0.actualBranch = actual
+            $0.hasBranchMismatch = actual != nil && actual != expected
+        }) else {
+            throw ThreadManagerError.threadNotFound
+        }
         onThreadsChanged?()
     }
 

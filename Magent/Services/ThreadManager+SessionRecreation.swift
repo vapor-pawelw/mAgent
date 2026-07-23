@@ -1,4 +1,5 @@
 import Foundation
+import GhosttyBridge
 import MagentCore
 
 // MARK: - ThreadManager+SessionRecreation
@@ -25,11 +26,19 @@ extension ThreadManager {
         thread: MagentThread,
         onAction: (@MainActor @Sendable (SessionRecreationAction?) -> Void)? = nil
     ) async -> Bool {
-        await sessionRecreationService.recreateSessionIfNeeded(
+        let recreated = await sessionRecreationService.recreateSessionIfNeeded(
             sessionName: sessionName,
             thread: thread,
             onAction: onAction
         )
+        if recreated, await tmux.hasSession(name: sessionName) {
+            await MainActor.run {
+                GhosttyAppManager.shared.restoreSurfacesAfterServerRestart(
+                    liveTmuxSessions: [sessionName]
+                )
+            }
+        }
+        return recreated
     }
 
     func markSessionContextKnownGood(

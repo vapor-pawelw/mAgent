@@ -256,8 +256,8 @@ extension ThreadManager {
         await agentSetupService.loadingOverlayAgentType(for: thread, sessionName: sessionName)
     }
 
-    func migrateSessionAgentTypes(threadIndex index: Int) async -> Bool {
-        await agentSetupService.migrateSessionAgentTypes(threadIndex: index)
+    func migrateSessionAgentTypes(threadId: UUID) async -> Bool {
+        await agentSetupService.migrateSessionAgentTypes(threadId: threadId)
     }
 
     @discardableResult

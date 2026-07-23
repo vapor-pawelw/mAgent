@@ -6,6 +6,31 @@ import MagentCore
 struct SessionTrackerTests {
 
     @Test
+    func terminationDrainIncludesSessionsAddedAfterInitialSnapshot() {
+        var drain = SessionTerminationDrain()
+
+        #expect(drain.takePending(from: ["old"]) == ["old"])
+        #expect(drain.takePending(from: ["old", "renamed", "added"]) == ["renamed", "added"])
+        #expect(drain.takePending(from: ["old", "renamed", "added"]).isEmpty)
+    }
+
+    @Test
+    func asyncSessionReconciliationPreservesConcurrentSessionChanges() {
+        let renamed = AsyncSessionStateReconciler.applyingRenameMap(
+            ["old": "renamed"],
+            to: ["old", "added"]
+        )
+        let mergedTypes = AsyncSessionStateReconciler.mergingDetectedAgentTypes(
+            ["old": .claude],
+            into: ["old": .codex, "added": .claude, "removed": .codex],
+            validSessions: ["old", "added"]
+        )
+
+        #expect(renamed == ["renamed", "added"])
+        #expect(mergedTypes == ["old": .codex, "added": .claude])
+    }
+
+    @Test
     func cleanupForThreadRemovesAllTrackedStateForProvidedSessions() {
         let tracker = SessionTracker()
         let now = Date()

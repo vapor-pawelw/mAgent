@@ -109,7 +109,7 @@
 - Fixed the sidebar icon visibility setting so changing it updates thread rows immediately.
 - Fixed idle sidebar thread-duration tooltips incorrectly claiming the thread was busy; they now show the last activity time.
 - Fixed section-header `Rename Section` context-menu actions failing to enter inline rename mode.
-- Fixed a crash that could happen after archiving or deleting the selected thread.
+- Fixed recurring crashes after archiving or deleting threads while background terminal checks or tmux recovery were running.
 - Prevented newly created thread selection from being undone by stale sidebar scroll restores.
 - Fixed collapsed sidebar sections corrupting row geometry after reloads, which could leave huge gaps or overlap project and section headers.
 - Fixed sidebar rows and headers overlapping during new-thread creation.

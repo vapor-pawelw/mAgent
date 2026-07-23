@@ -23,8 +23,8 @@ extension ThreadManager {
         let settings = persistence.loadSettings()
         var changed = false
 
-        for i in threads.indices {
-            let thread = threads[i]
+        let threadSnapshot = threads.filter { !$0.isArchived }
+        for thread in threadSnapshot {
             guard thread.tmuxSessionNames.contains(where: { $0.hasPrefix("magent-") }) else { continue }
             guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { continue }
 
@@ -69,8 +69,13 @@ extension ThreadManager {
             let newNames = oldNames.map { renameMap[$0] ?? $0 }
             try? await renameTmuxSessions(from: oldNames, to: newNames)
 
+            guard let i = store.threadIndex(byId: thread.id) else { continue }
+
             // Update all references
-            threads[i].tmuxSessionNames = newNames
+            threads[i].tmuxSessionNames = AsyncSessionStateReconciler.applyingRenameMap(
+                renameMap,
+                to: threads[i].tmuxSessionNames
+            )
             threads[i].agentTmuxSessions = threads[i].agentTmuxSessions.map { renameMap[$0] ?? $0 }
             threads[i].pinnedTmuxSessions = threads[i].pinnedTmuxSessions.map { renameMap[$0] ?? $0 }
             threads[i].protectedTmuxSessions = Set(threads[i].protectedTmuxSessions.map { renameMap[$0] ?? $0 })

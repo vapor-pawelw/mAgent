@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import GhosttyBridge
 import MagentCore
 
 extension ThreadManager {
@@ -356,6 +357,13 @@ extension ThreadManager {
                     recreatedCount += 1
                 }
             }
+        }
+
+        let liveSessions = Set((try? await tmux.listSessions()) ?? [])
+        await MainActor.run {
+            GhosttyAppManager.shared.restoreSurfacesAfterServerRestart(
+                liveTmuxSessions: liveSessions
+            )
         }
 
         await ensureBellPipes()

@@ -161,6 +161,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 GhosttyAppManager.shared.freeSurfaces(forTmuxSession: sessionName)
             }
         }
+        TmuxService.shared.setPreKillServerHook {
+            await MainActor.run {
+                GhosttyAppManager.shared.freeAllTmuxSurfacesForShutdown()
+            }
+        }
         ContextExporter.cleanupExpiredContextFiles(
             worktreePaths: knownWorktreePaths,
             worktreesBasePaths: knownWorktreesBasePaths

@@ -1085,57 +1085,83 @@ final class ThreadLifecycleService {
             return .mainThreadMissing
         }
 
-        guard let index = store.threads.firstIndex(where: { $0.id == thread.id }) else {
+        guard store.thread(byId: thread.id) != nil else {
             return .failed(ThreadManagerError.threadNotFound)
         }
 
         do {
             // Prune stale worktree references
             await git.pruneWorktrees(repoPath: project.repoPath)
+            guard store.thread(byId: thread.id) != nil else {
+                return .failed(ThreadManagerError.threadNotFound)
+            }
 
             // Kill any stale tmux sessions for this thread
-            for sessionName in store.threads[index].tmuxSessionNames {
-                try? await tmux.killSession(name: sessionName)
+            var sessionDrain = SessionTerminationDrain()
+            while let currentThread = store.thread(byId: thread.id) {
+                let pendingSessionNames = sessionDrain.takePending(from: currentThread.tmuxSessionNames)
+                guard !pendingSessionNames.isEmpty else { break }
+                for sessionName in pendingSessionNames {
+                    try? await tmux.killSession(name: sessionName)
+                    guard store.thread(byId: thread.id) != nil else {
+                        return .failed(ThreadManagerError.threadNotFound)
+                    }
+                }
             }
-            store.threads[index].tmuxSessionNames = []
-            store.threads[index].sessionConversationIDs = [:]
-            store.threads[index].sessionCreatedAts = [:]
-            store.threads[index].freshAgentSessions = []
-            store.threads[index].forwardedTmuxSessions = []
-            store.threads[index].submittedPromptsBySession = [:]
-            store.threads[index].lastSelectedTabIdentifier = nil
+            guard let currentThread = store.thread(byId: thread.id) else {
+                return .failed(ThreadManagerError.threadNotFound)
+            }
+            let branchName = currentThread.branchName
+            let worktreePath = currentThread.worktreePath
+            let baseBranch = currentThread.baseBranch
+            store.update(id: thread.id) {
+                $0.tmuxSessionNames = []
+                $0.sessionConversationIDs = [:]
+                $0.sessionCreatedAts = [:]
+                $0.freshAgentSessions = []
+                $0.forwardedTmuxSessions = []
+                $0.submittedPromptsBySession = [:]
+                $0.lastSelectedTabIdentifier = nil
+            }
 
             // Re-create the worktree
-            let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: thread.branchName)
+            let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: branchName)
+            guard store.thread(byId: thread.id) != nil else {
+                return .failed(ThreadManagerError.threadNotFound)
+            }
             if branchExists {
                 _ = try await git.addWorktreeForExistingBranch(
                     repoPath: project.repoPath,
-                    branchName: thread.branchName,
-                    worktreePath: thread.worktreePath
+                    branchName: branchName,
+                    worktreePath: worktreePath
                 )
             } else {
-                let persistedBaseBranch = store.threads[index].baseBranch?
+                let persistedBaseBranch = baseBranch?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                let baseBranch: String?
+                let resolvedBaseBranch: String?
                 if let persistedBaseBranch, !persistedBaseBranch.isEmpty {
-                    baseBranch = persistedBaseBranch
+                    resolvedBaseBranch = persistedBaseBranch
                 } else if let projectDefault = project.defaultBranch?
                     .trimmingCharacters(in: .whitespacesAndNewlines),
                           !projectDefault.isEmpty {
-                    baseBranch = projectDefault
+                    resolvedBaseBranch = projectDefault
                 } else {
-                    baseBranch = nil
+                    resolvedBaseBranch = nil
                 }
                 _ = try await git.createWorktree(
                     repoPath: project.repoPath,
-                    branchName: thread.branchName,
-                    worktreePath: thread.worktreePath,
-                    baseBranch: baseBranch
+                    branchName: branchName,
+                    worktreePath: worktreePath,
+                    baseBranch: resolvedBaseBranch
                 )
             }
 
+            guard store.thread(byId: thread.id) != nil else {
+                return .failed(ThreadManagerError.threadNotFound)
+            }
+
             // Trust the directory for the agent if needed
-            trustDirectoryIfNeeded?(thread.worktreePath, effectiveAgentType?(thread.projectId))
+            trustDirectoryIfNeeded?(worktreePath, effectiveAgentType?(thread.projectId))
 
             // Persist updated threads
             try persistence.saveActiveThreads(store.threads)

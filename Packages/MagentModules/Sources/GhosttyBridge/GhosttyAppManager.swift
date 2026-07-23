@@ -46,6 +46,10 @@ public final class GhosttyAppManager {
     /// without this, libghostty calls `_exit()` on the app when the PTY closes
     /// while the surface is still alive.
     private let liveTerminalViews = NSHashTable<TerminalSurfaceView>.weakObjects()
+    /// Views whose surfaces were freed for a whole-server restart. Attached
+    /// views do not receive `viewDidMoveToWindow`, so the recovery flow must
+    /// explicitly recreate their surfaces once their tmux sessions are live.
+    private let serverRestartTerminalViews = NSHashTable<TerminalSurfaceView>.weakObjects()
     private var embeddedPreferences = GhosttyEmbeddedPreferences()
     private var lastWrittenOverrideConfig: String? = nil
 
@@ -212,6 +216,50 @@ public final class GhosttyAppManager {
         Self.log("freeSurfaces(forTmuxSession: \(sessionName)) matched \(matching.count) view(s)")
         for view in matching {
             view.freeSurfaceForShutdown()
+        }
+    }
+
+    /// Synchronously frees every live surface before the entire tmux server is
+    /// terminated. Snapshotting is required because each free unregisters its view.
+    public func freeAllTmuxSurfacesForShutdown() {
+        let views = liveTerminalViews.allObjects.filter { $0.tmuxSessionName != nil }
+        guard !views.isEmpty else { return }
+        for view in views {
+            serverRestartTerminalViews.add(view)
+        }
+        Self.log("freeAllTmuxSurfacesForShutdown matched \(views.count) view(s)")
+        for view in views {
+            view.freeSurfaceForShutdown()
+        }
+    }
+
+    /// Recreates surfaces that stayed attached to a window while tmux was
+    /// restarted. Attached views whose sessions are still unavailable remain
+    /// queued for a later recreation; detached cached views recreate themselves
+    /// when reattached.
+    public func restoreSurfacesAfterServerRestart(liveTmuxSessions: Set<String>) {
+        let views = serverRestartTerminalViews.allObjects
+        var restoredCount = 0
+        for view in views {
+            switch TmuxSurfaceRestartPolicy.resolution(
+                sessionName: view.tmuxSessionName,
+                isAttachedToWindow: view.window != nil,
+                liveTmuxSessions: liveTmuxSessions
+            ) {
+            case .restore:
+                view.createSurface()
+                if view.surface != nil {
+                    serverRestartTerminalViews.remove(view)
+                    restoredCount += 1
+                }
+            case .keepPending:
+                continue
+            case .discard:
+                serverRestartTerminalViews.remove(view)
+            }
+        }
+        if restoredCount > 0 {
+            Self.log("restoreSurfacesAfterServerRestart restored \(restoredCount) view(s)")
         }
     }
 
