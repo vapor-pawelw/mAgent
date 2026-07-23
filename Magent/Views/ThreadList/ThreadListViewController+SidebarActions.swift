@@ -449,31 +449,19 @@ extension ThreadListViewController {
         }
 
         let defaultBranchName = project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Only prefill the base branch field when explicitly creating from another thread's branch.
-        // When nil, the field stays empty and uses the default branch placeholder.
-        let resolvedBaseBranchPrefill: String? = baseBranch
-
-        let isFork = sourceThread != nil && baseBranch != nil
-        let sheetTitle = isFork ? "Fork Thread" : "New Thread"
-        let sheetSubtitle: String? = {
-            guard isFork, let src = sourceThread else { return nil }
-            if src.isMain {
-                return "Thread: Main"
-            }
-            if let desc = src.taskDescription {
-                return "Thread: \(desc) (\(src.branchName))"
-            }
-            return "Thread: \(src.branchName)"
-        }()
+        let sourceOptionsByProjectId = threadCreationSourceOptions(
+            projects: settings.projects,
+            settings: settings
+        )
 
         let config = AgentLaunchSheetConfig(
-            title: sheetTitle,
+            title: "New Thread",
             acceptButtonTitle: "Create Thread",
             draftScope: .newThread(projectId: project.id),
             availableAgents: settings.availableActiveAgents,
             defaultAgentType: threadManager.effectiveAgentType(for: project.id),
-            subtitle: sheetSubtitle,
-            availableProjects: isFork ? [project] : settings.projects,
+            subtitle: nil,
+            availableProjects: settings.projects,
             showDescriptionAndBranchFields: true,
             autoGenerateHint: autoGenerateHint,
             terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
@@ -481,23 +469,29 @@ extension ThreadListViewController {
             recoveryPrefill: recoveryPrefill,
             sectionsByProjectId: sectionsByProjectId,
             defaultSectionIdByProjectId: defaultSectionIdByProjectId,
-            baseBranchPrefill: resolvedBaseBranchPrefill,
+            baseBranchPrefill: baseBranch,
             baseBranchRepoPath: project.repoPath,
             defaultBranchName: defaultBranchName,
+            sourceOptionsByProjectId: sourceOptionsByProjectId,
+            initialSourceThreadId: sourceThread?.id,
             showDraftCheckbox: true
         )
-        let capturedSourceThread = sourceThread
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
             guard let self, let result else { return }
             let targetProject = result.selectedProject ?? project
+            let selectedSourceThread = result.sourceThreadId.flatMap { sourceId in
+                self.threadManager.threads.first {
+                    $0.id == sourceId && $0.projectId == targetProject.id && !$0.isArchived
+                }
+            }
 
             // Insert after the source thread when in the same project, section, and
             // sidebar group. When the source is pinned, place at the top of the visible
             // group instead (right below pinned threads).
             let effectiveInsertAfter: UUID?
             let insertAtTop: Bool
-            if let source = capturedSourceThread, targetProject.id == source.projectId {
+            if let source = selectedSourceThread, targetProject.id == source.projectId {
                 let settings = self.persistence.loadSettings()
                 let sourceSectionId = self.threadManager.effectiveSectionId(for: source, settings: settings)
                 let sameSection = sourceSectionId == result.selectedSectionId
@@ -520,7 +514,7 @@ extension ThreadListViewController {
                 for: targetProject,
                 requestedAgentType: result.agentType,
                 useAgentCommand: (result.isDraft || result.agentSurface == .chat) ? false : result.useAgentCommand,
-                sourceThread: capturedSourceThread,
+                sourceThread: selectedSourceThread,
                 baseBranch: result.baseBranch,
                 initialPrompt: (result.isDraft || result.agentSurface == .chat) ? nil : result.prompt,
                 shouldSubmitInitialPrompt: !result.isDraft && result.agentSurface != .chat,
@@ -552,9 +546,68 @@ extension ThreadListViewController {
                 modelId: result.modelId,
                 reasoningLevel: result.reasoningLevel,
                 codexFastMode: result.codexFastMode,
-                localFileSyncEntriesOverride: isFork ? capturedSourceThread?.localFileSyncEntriesSnapshot : nil
+                localFileSyncEntriesOverride: selectedSourceThread?.localFileSyncEntriesSnapshot
             )
         }
+    }
+
+    private func threadCreationSourceOptions(
+        projects: [Project],
+        settings: AppSettings
+    ) -> [UUID: [ThreadCreationSourceOption]] {
+        var result: [UUID: [ThreadCreationSourceOption]] = [:]
+
+        for project in projects {
+            let sectionsById = Dictionary(
+                uniqueKeysWithValues: settings.sections(for: project.id).map { ($0.id, $0) }
+            )
+            let projectThreads = threadManager.threads
+                .filter { $0.projectId == project.id && !$0.isArchived }
+                .sorted { left, right in
+                    if left.isMain != right.isMain {
+                        return left.isMain
+                    }
+                    if left.sidebarListState != right.sidebarListState {
+                        return left.sidebarListState.rawValue < right.sidebarListState.rawValue
+                    }
+                    return left.displayOrder < right.displayOrder
+                }
+
+            result[project.id] = projectThreads.map { thread in
+                let trimmedDescription = thread.taskDescription?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let branchName = thread.currentBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+                let effectiveBranch = branchName.isEmpty
+                    ? (project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "main")
+                    : branchName
+                let sectionID = thread.isMain
+                    ? nil
+                    : threadManager.effectiveSectionId(for: thread, settings: settings)
+                let hasDescription = trimmedDescription?.isEmpty == false
+                let displayName = thread.isMain
+                    ? String(localized: .ThreadStrings.threadInfoMainWorktree)
+                    : (hasDescription ? trimmedDescription ?? effectiveBranch : effectiveBranch)
+                let subtitle = thread.isMain || hasDescription
+                    ? effectiveBranch
+                    : nil
+
+                return ThreadCreationSourceOption(
+                    descriptor: ThreadCreationSourceDescriptor(
+                        threadID: thread.id,
+                        branchName: effectiveBranch,
+                        displayName: displayName,
+                        isMainWorktree: thread.isMain
+                    ),
+                    subtitle: subtitle,
+                    signEmoji: thread.signEmoji,
+                    icon: thread.threadIcon,
+                    sectionColor: sectionID.flatMap { sectionsById[$0]?.color },
+                    sectionID: sectionID
+                )
+            }
+        }
+
+        return result
     }
 
     func buildAgentSubmenu(for project: Project, extraData: [String: String] = [:]) -> NSMenu {
@@ -700,8 +753,7 @@ extension ThreadListViewController {
             presentNewThreadSheet(
                 for: project,
                 anchorView: outlineView,
-                presentingWindow: presentingWindow,
-                sourceThread: sourceInSameProject
+                presentingWindow: presentingWindow
             )
         }
     }

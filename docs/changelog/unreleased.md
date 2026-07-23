@@ -31,6 +31,10 @@
 
 ### Thread
 
+#### Features
+
+- Unified new and forked thread creation with a visual source picker for starting from the main worktree, another thread, or any branch.
+
 #### Improvements
 
 - Hide icon controls and skip work-type classification during AI rename when automatic thread icons are disabled.
