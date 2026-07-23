@@ -169,6 +169,52 @@ struct SidebarSectionOutlineChildCountTests {
     }
 
     @Test
+    func hiddenDisclosureExposesDropPositionAfterLastVisibleThread() {
+        let projectId = UUID()
+        let section = SidebarSection(
+            projectId: projectId,
+            sectionId: UUID(),
+            name: "Work",
+            color: .systemBlue,
+            threads: [
+                makeThread(projectId: projectId, name: "visible"),
+                makeThread(projectId: projectId, name: "hidden", isSidebarHidden: true),
+            ]
+        )
+
+        #expect(section.hiddenThreadsToggleIndex == 1)
+    }
+
+    @Test
+    func projectChildDropResolvesEmptySectionButNotPopulatedSection() {
+        let projectId = UUID()
+        let emptySection = SidebarSection(
+            projectId: projectId,
+            sectionId: UUID(),
+            name: "Empty",
+            color: .systemBlue,
+            threads: []
+        )
+        let populatedSection = SidebarSection(
+            projectId: projectId,
+            sectionId: UUID(),
+            name: "Work",
+            color: .systemBlue,
+            threads: [makeThread(projectId: projectId, name: "work")]
+        )
+        let project = SidebarProject(
+            projectId: projectId,
+            name: "Project",
+            isPinned: false,
+            children: [emptySection, populatedSection]
+        )
+
+        #expect(SidebarThreadDropTarget.emptySection(in: project, atProjectChildIndex: 0) === emptySection)
+        #expect(SidebarThreadDropTarget.emptySection(in: project, atProjectChildIndex: 1) == nil)
+        #expect(SidebarThreadDropTarget.emptySection(in: project, atProjectChildIndex: 2) == nil)
+    }
+
+    @Test
     func inlineRenameFocusRetriesWhileEditorIsNotMaterialized() {
         #expect(SidebarInlineRenameFocusPolicy.shouldRetry(editorIsAvailable: false, attempt: 0))
         #expect(SidebarInlineRenameFocusPolicy.shouldRetry(editorIsAvailable: false, attempt: 2))

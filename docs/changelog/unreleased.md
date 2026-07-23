@@ -94,6 +94,7 @@
 
 #### Bug Fixes
 
+- Fixed sidebar drag-and-drop so threads can move into empty sections and can be placed immediately above collapsed hidden threads.
 - Fixed Magent crashing during startup while constructing the main sidebar and content split view.
 - Kept dirty-branch dots orange when their sidebar thread is selected.
 - Fixed main worktree branch text clipping and kept status-free sidebar thread rows from stretching their text layout.
