@@ -74,6 +74,21 @@ struct ThreadActivityIndicatorPreferenceTests {
 @Suite("Automatic tab naming")
 struct AutomaticTabNamingTests {
 
+    @Test("Background naming commands cannot load tools or MCP configuration")
+    func backgroundNamingIsIsolated() {
+        let codex = BackgroundAICommandBuilder.codex(escapedPrompt: "'Name this tab'")
+        let claude = BackgroundAICommandBuilder.claude(escapedPrompt: "'Name this tab'")
+
+        #expect(codex.contains("command codex exec"))
+        #expect(codex.contains("--ignore-user-config"))
+        #expect(codex.contains("--ignore-rules"))
+        #expect(codex.contains("--ephemeral"))
+        #expect(claude.contains("command claude -p"))
+        #expect(claude.contains("--tools \"\""))
+        #expect(claude.contains("--setting-sources \"\""))
+        #expect(claude.contains("--no-session-persistence"))
+    }
+
     @Test("Default agent labels remain eligible for automatic naming")
     func defaultLabelIsEligible() {
         let sessionName = "ma-project-codex"

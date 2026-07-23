@@ -219,15 +219,6 @@ final class RenameService {
         case failed(reason: String)
     }
 
-    private func codexBackgroundExecCommand(escapedPrompt: String) -> String {
-        // ShellExecutor uses a minimal PATH; include common user-local install
-        // locations so background rename/description jobs can resolve Codex.
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-        let localBin = ShellExecutor.shellQuote("\(homeDir)/.local/bin")
-        let miseShims = ShellExecutor.shellQuote("\(homeDir)/.local/share/mise/shims")
-        return "PATH=\(localBin):\(miseShims):$PATH command codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none < /dev/null"
-    }
-
     private func backgroundGenerationWorkingDirectory(projectId: UUID?) -> String? {
         guard let projectId else { return nil }
         let settings = persistence.loadSettings()
@@ -256,15 +247,9 @@ final class RenameService {
         let command: String
         switch agentType {
         case .codex:
-            command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
+            command = BackgroundAICommandBuilder.codex(escapedPrompt: escapedPrompt)
         default:
-            // Use claude for .claude, .custom, and nil (claude is a prerequisite for this app)
-            // --tools "" prevents any tool invocations, keeping the response purely textual.
-            // --setting-sources "" skips loading CLAUDE.md/AGENTS.md entirely so the system
-            // prompt stays minimal — large workspace instruction files were the primary cause
-            // of slug-generation calls timing out.
-            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\" < /dev/null"
+            command = BackgroundAICommandBuilder.claude(escapedPrompt: escapedPrompt)
         }
 
         let agentLabel = agentType.map(String.init(describing:)) ?? "claude"
@@ -323,10 +308,9 @@ final class RenameService {
         let command: String
         switch agentType {
         case .codex:
-            command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
+            command = BackgroundAICommandBuilder.codex(escapedPrompt: escapedPrompt)
         default:
-            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\" < /dev/null"
+            command = BackgroundAICommandBuilder.claude(escapedPrompt: escapedPrompt)
         }
 
         let agentLabel = agentType.map(String.init(describing:)) ?? "claude"
@@ -911,10 +895,9 @@ final class RenameService {
         let command: String
         switch agentType {
         case .codex:
-            command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
+            command = BackgroundAICommandBuilder.codex(escapedPrompt: escapedPrompt)
         default:
-            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\" < /dev/null"
+            command = BackgroundAICommandBuilder.claude(escapedPrompt: escapedPrompt)
         }
 
         let shellResult = await executeWithTimeout(command: command, workingDirectory: workingDirectory, timeoutNanos: 60_000_000_000)
@@ -1098,10 +1081,9 @@ final class RenameService {
             let command: String
             switch agent {
             case .codex:
-                command = codexBackgroundExecCommand(escapedPrompt: escapedPrompt)
+                command = BackgroundAICommandBuilder.codex(escapedPrompt: escapedPrompt)
             case .claude:
-                let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-                command = "PATH=\(homeDir)/.local/bin:$PATH command claude -p \(escapedPrompt) --model haiku --no-session-persistence --tools \"\" --setting-sources \"\" < /dev/null"
+                command = BackgroundAICommandBuilder.claude(escapedPrompt: escapedPrompt)
             default:
                 continue
             }
