@@ -226,6 +226,35 @@ struct SidebarSectionOutlineChildCountTests {
         #expect(!SidebarInlineRenameFocusPolicy.shouldRetry(editorIsAvailable: false, attempt: 3))
     }
 
+    @Test
+    func sectionContextMenuRenameWaitsForMenuCloseAndIsConsumedOnce() {
+        let request = SidebarSectionRenameRequest(
+            projectId: UUID(),
+            sectionId: UUID(),
+            fallbackName: "Work"
+        )
+        var handoff = SidebarSectionRenameMenuHandoff()
+        let originatingMenu = NSObject()
+        let unrelatedMenu = NSObject()
+
+        handoff.request(
+            request,
+            originatingMenuIdentifier: ObjectIdentifier(originatingMenu)
+        )
+
+        #expect(handoff.pendingRequest == request)
+        #expect(handoff.consumeAfterMenuCloses(
+            menuIdentifier: ObjectIdentifier(unrelatedMenu)
+        ) == nil)
+        #expect(handoff.pendingRequest == request)
+        #expect(handoff.consumeAfterMenuCloses(
+            menuIdentifier: ObjectIdentifier(originatingMenu)
+        ) == request)
+        #expect(handoff.consumeAfterMenuCloses(
+            menuIdentifier: ObjectIdentifier(originatingMenu)
+        ) == nil)
+    }
+
     private func makeThread(
         projectId: UUID,
         name: String,
