@@ -1142,6 +1142,40 @@ struct AppSettingsTerminalSurfaceCacheTests {
 @Suite("AppSettings chat appearance fields")
 struct AppSettingsChatAppearanceTests {
 
+    @Test("Primary color defaults to the Magent brand color")
+    func primaryColorDefaultsToBrandColor() throws {
+        let settings = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"projects":[]}"#.utf8))
+
+        #expect(settings.appPrimaryColorHex == nil)
+        #expect(settings.effectivePrimaryColorHex == AppSettings.defaultPrimaryColorHex)
+    }
+
+    @Test("Custom primary color round-trips through settings")
+    func customPrimaryColorRoundTrips() throws {
+        let original = AppSettings(appPrimaryColorHex: "#123456")
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(original))
+
+        #expect(decoded.appPrimaryColorHex == "#123456")
+        #expect(decoded.effectivePrimaryColorHex == "#123456")
+    }
+
+    @Test("Default user bubble follows the app primary color")
+    func defaultUserBubbleFollowsPrimaryColor() {
+        let settings = AppSettings(appPrimaryColorHex: "#345678")
+
+        #expect(settings.effectiveChatUserBubbleColorHex == "#345678")
+    }
+
+    @Test("Custom user bubble stays independent from the app primary color")
+    func customUserBubbleOverridesPrimaryColor() {
+        let settings = AppSettings(
+            appPrimaryColorHex: "#345678",
+            chatUserBubbleColorHex: "#ABCDEF"
+        )
+
+        #expect(settings.effectiveChatUserBubbleColorHex == "#ABCDEF")
+    }
+
     @Test("Defaults stay nil when custom chat colors are not set")
     func defaultsNil() throws {
         let data = try JSONEncoder().encode(AppSettings())

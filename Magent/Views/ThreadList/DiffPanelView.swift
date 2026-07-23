@@ -33,7 +33,7 @@ private final class DiffFileRowView: NSView {
         didSet {
             wantsLayer = true
             if isFileSelected {
-                layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
+                layer?.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.2).cgColor
                 layer?.cornerRadius = 4
             } else {
                 layer?.backgroundColor = nil
@@ -119,7 +119,7 @@ private final class CommitRowView: NSView {
         didSet {
             wantsLayer = true
             layer?.backgroundColor = isSelected
-                ? NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
+                ? NSColor.appPrimary.withAlphaComponent(0.2).cgColor
                 : nil
             layer?.cornerRadius = isSelected ? 4 : 0
         }
@@ -229,6 +229,8 @@ final class DiffPanelView: NSView {
     private var hasMoreCommits = false
     private var forceVisible = false
     private var contextThreadIndicatorText: String?
+    private var contextThreadIndicatorIsPopout = false
+    private weak var loadMoreCommitsButton: NSButton?
 
     // MARK: - Collapse state
     private static let collapsedKey = "DiffPanelView.collapsed"
@@ -386,15 +388,15 @@ final class DiffPanelView: NSView {
         contextThreadBadgeView.wantsLayer = true
         contextThreadBadgeView.layer?.cornerRadius = 5
         contextThreadBadgeView.layer?.borderWidth = 1
-        contextThreadBadgeView.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.1).cgColor
-        contextThreadBadgeView.layer?.borderColor = NSColor.controlAccentColor.cgColor
+        contextThreadBadgeView.layer?.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.1).cgColor
+        contextThreadBadgeView.layer?.borderColor = NSColor.appPrimary.cgColor
         contextThreadBadgeView.translatesAutoresizingMaskIntoConstraints = false
         contextThreadBadgeView.isHidden = true
         addSubview(contextThreadBadgeView)
 
         // Context badge label — highlights when diff panel shows a non-selected thread.
         commitContextLabel.font = .systemFont(ofSize: 10, weight: .semibold)
-        commitContextLabel.textColor = NSColor.controlAccentColor
+        commitContextLabel.textColor = NSColor.appPrimary
         commitContextLabel.lineBreakMode = .byTruncatingTail
         commitContextLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         commitContextLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -432,7 +434,7 @@ final class DiffPanelView: NSView {
 
         baseBranchButton.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
         baseBranchButton.isBordered = false
-        baseBranchButton.contentTintColor = NSColor.controlAccentColor
+        baseBranchButton.contentTintColor = NSColor.appPrimary
         baseBranchButton.target = self
         baseBranchButton.action = #selector(baseBranchTapped)
         baseBranchButton.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
@@ -482,7 +484,7 @@ final class DiffPanelView: NSView {
         // Commit detail header — replaces tab bar in commit detail mode
         backButton.title = "‹ Back"
         backButton.font = .systemFont(ofSize: 11, weight: .semibold)
-        backButton.contentTintColor = NSColor.controlAccentColor
+        backButton.contentTintColor = NSColor.appPrimary
         backButton.isBordered = false
         backButton.target = self
         backButton.action = #selector(backButtonTapped)
@@ -1327,9 +1329,19 @@ final class DiffPanelView: NSView {
     func setContextThreadIndicator(_ text: String?, isPopout: Bool = false) {
         let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
         contextThreadIndicatorText = (trimmed?.isEmpty == false) ? trimmed : nil
+        contextThreadIndicatorIsPopout = isPopout
         commitContextLabel.stringValue = contextThreadIndicatorText ?? ""
         applyContextBadgeColors(isPopout: isPopout)
         updateContextThreadIndicatorVisibility()
+    }
+
+    func refreshPrimaryColor() {
+        applyContextBadgeColors(isPopout: contextThreadIndicatorIsPopout)
+        baseBranchButton.contentTintColor = .appPrimary
+        backButton.contentTintColor = .appPrimary
+        loadMoreCommitsButton?.contentTintColor = .appPrimary
+        updateRowSelectionAppearance()
+        updateCommitRowSelectionAppearance()
     }
 
     func clearContextThreadIndicator() {
@@ -1337,7 +1349,7 @@ final class DiffPanelView: NSView {
     }
 
     private func applyContextBadgeColors(isPopout: Bool) {
-        let baseColor: NSColor = isPopout ? .systemPurple : .controlAccentColor
+        let baseColor: NSColor = isPopout ? .systemPurple : .appPrimary
         effectiveAppearance.performAsCurrentDrawingAppearance {
             self.contextThreadBadgeView.layer?.backgroundColor = baseColor.withAlphaComponent(0.1).cgColor
             self.contextThreadBadgeView.layer?.borderColor = baseColor.withAlphaComponent(0.7).cgColor
@@ -1902,9 +1914,10 @@ final class DiffPanelView: NSView {
         let button = NSButton(title: "Load More Commits", target: self, action: #selector(loadMoreCommitsTapped))
         button.isBordered = false
         button.font = .systemFont(ofSize: 11, weight: .medium)
-        button.contentTintColor = NSColor.controlAccentColor
+        button.contentTintColor = NSColor.appPrimary
         button.alignment = .left
         button.translatesAutoresizingMaskIntoConstraints = false
+        loadMoreCommitsButton = button
         container.addSubview(button)
 
         NSLayoutConstraint.activate([

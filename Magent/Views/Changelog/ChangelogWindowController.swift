@@ -243,7 +243,7 @@ final class ChangelogWindowController: NSWindowController {
     private static func attributedReleaseNotes(from markdown: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
 
-        let brandColor = NSColor(resource: .primaryBrand)
+        let brandColor = NSColor.appPrimary
         let separatorColor = brandColor.withAlphaComponent(0.45)
 
         let titleAttributes: [NSAttributedString.Key: Any] = [

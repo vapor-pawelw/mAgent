@@ -191,7 +191,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         // Pin icon
         pinIcon.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
         pinIcon.image?.isTemplate = true
-        pinIcon.contentTintColor = NSColor(resource: .primaryBrand)
+        pinIcon.contentTintColor = NSColor.appPrimary
         pinIcon.translatesAutoresizingMaskIntoConstraints = false
         pinIcon.isHidden = true
         pinIcon.setContentHuggingPriority(.required, for: .horizontal)
@@ -336,7 +336,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             cornerRadius: max(0, (layer?.cornerRadius ?? 0) - 1),
             borderWidth: 2,
             isSelected: isSelected,
-            appearance: effectiveAppearance
+            appearance: effectiveAppearance,
+            accentColor: .appPrimary
         )
     }
 
@@ -350,6 +351,10 @@ final class TabItemView: NSView, NSMenuDelegate {
             hasRateLimit: hasRateLimit,
             hasUnreadRateLimit: hasUnreadRateLimit
         )
+    }
+
+    func refreshPrimaryColor() {
+        updateAppearance()
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -479,7 +484,7 @@ final class TabItemView: NSView, NSMenuDelegate {
             titleColor = .systemRed
             titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         } else if hasUnreadDiff && !isSelected {
-            titleColor = NSColor(resource: .primaryBrand)
+            titleColor = NSColor.appPrimary
             titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         } else if isSelected {
             titleColor = NSColor(resource: .textPrimary)
@@ -497,7 +502,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         let secondaryColor = NSColor(resource: .textSecondary).withAlphaComponent(0.82)
 
         // Resolve NSColors into CGColors within the correct appearance context so
-        // adaptive colors (Surface, PrimaryBrand, etc.) pick up light-mode values
+        // Adaptive catalog colors such as Surface pick up light-mode values
         // when the window is in light mode.
         if showsCompletionCapsule, let layer {
             CompletedCapsuleStyle.apply(to: layer, appearance: effectiveAppearance)
@@ -505,14 +510,14 @@ final class TabItemView: NSView, NSMenuDelegate {
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 if self.isSelected {
                     let alpha: CGFloat = self.isUtilityTab ? 0.12 : 0.18
-                    self.layer?.backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(alpha).cgColor
+                    self.layer?.backgroundColor = NSColor.appPrimary.withAlphaComponent(alpha).cgColor
                 } else {
                     let alpha: CGFloat = self.isUtilityTab ? 0.42 : 0.62
                     self.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(alpha).cgColor
                 }
                 if self.isUtilityTab {
                     self.layer?.borderWidth = 1
-                    self.layer?.borderColor = NSColor(resource: .primaryBrand)
+                    self.layer?.borderColor = NSColor.appPrimary
                         .withAlphaComponent(self.isSelected ? 0.45 : 0.3)
                         .cgColor
                 } else {

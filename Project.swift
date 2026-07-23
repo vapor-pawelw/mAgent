@@ -63,6 +63,7 @@ let project = Project(
                 "Magent/Services/WhatsNewContent.swift",
                 "Magent/Services/WhatsNewService.swift",
                 "Magent/Utilities/AgentMenuBuilder.swift",
+                "Magent/Utilities/AppTheme.swift",
                 "Magent/Utilities/ChatAppearance.swift",
                 "Magent/Utilities/ColorDot.swift",
                 "Magent/Utilities/OpenActionIcons.swift",

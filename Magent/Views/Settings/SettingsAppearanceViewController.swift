@@ -9,6 +9,8 @@ final class SettingsAppearanceViewController: NSViewController {
     private var didInitialScrollToTop = false
     private var appearancePopup: NSPopUpButton!
     private var preserveAgentColorThemeCheckbox: NSButton!
+    private let primaryColorWell = NSColorWell()
+    private var primaryColorSaveTask: Task<Void, Never>?
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
@@ -69,6 +71,31 @@ final class SettingsAppearanceViewController: NSViewController {
         agentThemeNote.textColor = NSColor(resource: .textSecondary)
         appearanceSection.addArrangedSubview(agentThemeNote)
 
+        let (primaryColorCard, primaryColorSection) = createSectionCard(
+            title: String(localized: .SettingsStrings.settingsAppearancePrimaryColorTitle),
+            description: String(localized: .SettingsStrings.settingsAppearancePrimaryColorDescription)
+        )
+        stackView.addArrangedSubview(primaryColorCard)
+
+        primaryColorWell.color = NSColor(hex: settings.effectivePrimaryColorHex) ?? NSColor.appPrimary
+        primaryColorWell.target = self
+        primaryColorWell.action = #selector(primaryColorChanged)
+        primaryColorSection.addArrangedSubview(
+            labeledColorRow(
+                label: String(localized: .SettingsStrings.settingsAppearancePrimaryColorLabel),
+                colorWell: primaryColorWell
+            )
+        )
+
+        let resetPrimaryColorButton = NSButton(
+            title: String(localized: .SettingsStrings.settingsAppearanceResetPrimaryColor),
+            target: self,
+            action: #selector(resetPrimaryColorTapped)
+        )
+        resetPrimaryColorButton.bezelStyle = .rounded
+        resetPrimaryColorButton.controlSize = .small
+        primaryColorSection.addArrangedSubview(resetPrimaryColorButton)
+
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stackView)
@@ -89,6 +116,7 @@ final class SettingsAppearanceViewController: NSViewController {
 
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
             appearanceCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            primaryColorCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             appearanceNote.widthAnchor.constraint(equalTo: appearanceSection.widthAnchor),
         ])
 
@@ -125,6 +153,7 @@ final class SettingsAppearanceViewController: NSViewController {
         settings = persistence.loadSettings()
         mutate(&settings)
         try? persistence.saveSettings(settings)
+        AppTheme.apply(settings)
         NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
     }
 
@@ -138,6 +167,24 @@ final class SettingsAppearanceViewController: NSViewController {
         titleLabel.font = .systemFont(ofSize: 12)
         row.addArrangedSubview(titleLabel)
         row.addArrangedSubview(popup)
+        return row
+    }
+
+    private func labeledColorRow(label: String, colorWell: NSColorWell) -> NSStackView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+
+        let titleLabel = NSTextField(labelWithString: label)
+        titleLabel.font = .systemFont(ofSize: 12)
+        row.addArrangedSubview(titleLabel)
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        row.addArrangedSubview(spacer)
+        row.addArrangedSubview(colorWell)
         return row
     }
 
@@ -188,5 +235,29 @@ final class SettingsAppearanceViewController: NSViewController {
         saveSettingsAndNotify { settings in
             settings.preserveAgentColorTheme = preserveAgentColorThemeCheckbox.state == .on
         }
+    }
+
+    @objc private func primaryColorChanged() {
+        primaryColorSaveTask?.cancel()
+        let colorHex = primaryColorWell.color.hexString
+        let persistence = persistence
+        primaryColorSaveTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+
+            var latestSettings = persistence.loadSettings()
+            latestSettings.appPrimaryColorHex = colorHex
+            try? persistence.saveSettings(latestSettings)
+            AppTheme.apply(latestSettings)
+            NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+        }
+    }
+
+    @objc private func resetPrimaryColorTapped() {
+        primaryColorSaveTask?.cancel()
+        saveSettingsAndNotify { settings in
+            settings.appPrimaryColorHex = nil
+        }
+        primaryColorWell.color = NSColor(hex: AppSettings.defaultPrimaryColorHex) ?? NSColor.appPrimary
     }
 }

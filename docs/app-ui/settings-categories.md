@@ -3,12 +3,15 @@
 ## User-facing behavior
 
 - App-wide preferences stay in `Settings > General`.
+- Appearance and color preferences live in `Settings > Appearance`.
 - Terminal-specific preferences now live in `Settings > Terminal`.
 - Thread-focused preferences now live in `Settings > Threads`.
 - `General` currently owns update controls, archive defaults, the keyboard shortcuts reference card, the Data Backup backup/restore card, and the environment-variable reference used by startup injection settings.
-- `Terminal` owns app/terminal light-dark appearance, the "Don't override agent color theme" toggle, Ghostty mouse-wheel override behavior, and terminal overlay visibility toggles.
+- `Appearance` owns app/terminal light-dark appearance, the app primary color, and the "Don't override agent color theme" toggle.
+- `Terminal` owns Ghostty mouse-wheel override behavior and terminal overlay visibility toggles.
 - `Threads` owns thread naming defaults, thread sections, recently archived thread restore history, startup injection fields, the review prompt, sidebar display options (wide threads, thread icons, optional worktree names, PR/Jira status badge toggles, busy/idle duration toggle), and session management (idle session eviction limit, terminal surface cache limit, and "Protect pinned threads and tabs from eviction" toggle).
 - Section color editing now reuses a single system color picker per settings screen, so switching to another section keeps the earlier section's custom dot color intact instead of resetting it.
+- Changing the primary color updates Magent's primary actions, selections, highlights, and brand accents across open windows. Chat user bubbles follow it whenever they do not have a custom bubble-color override; resetting chat colors restores that relationship.
 - Debug-only features may still appear in Settings during local development, but they should be clearly annotated with `Debug builds only` and fully hidden from release builds.
 - A dedicated `Debug` sidebar category exists in debug builds only (`#if DEBUG`). It currently exposes "Reset Onboarding State" (clears `isConfigured` and offers to relaunch), "Relaunch App", and an `Experimental` card with `Chats` plus `Enable tab detaching` toggles (both off by default). Add new developer utilities here rather than sprinkling ad-hoc debug actions into other panes.
 
@@ -54,6 +57,8 @@
 - Project-list selection callbacks must resolve the detail project from the table's newly selected row. `currentProjectID` tracks the detail already on screen and must not override a new click.
 - Both section editors use `NSColorPanel.shared`, so they must set the active `sectionId` and temporarily detach target/action before assigning `panel.color`, then restore the callback after the programmatic update.
 - App appearance is applied centrally from `AppDelegate`: `NSApp.appearance` controls the AppKit chrome, and Ghostty receives the matching light/dark preference through `GhosttyAppManager`.
+- `AppTheme` owns the resolved runtime primary color. Apply a new settings snapshot before broadcasting `magentSettingsDidChange`, so view refresh observers never read the previous cached color.
+- Keep semantic status colors such as errors, warnings, Jira states, priorities, and pop-out purple independent from the customizable primary color.
 
 ## Appearance Mode Switch Gotchas
 

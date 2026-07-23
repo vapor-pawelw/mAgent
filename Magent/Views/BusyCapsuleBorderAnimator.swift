@@ -25,6 +25,7 @@ final class BusyCapsuleBorderAnimator {
         borderWidth: CGFloat,
         isSelected: Bool,
         appearance: NSAppearance,
+        accentColor: NSColor = .controlAccentColor,
         zPosition: CGFloat = 0
     ) {
         guard isActive, canAnimate else {
@@ -40,6 +41,7 @@ final class BusyCapsuleBorderAnimator {
                 borderWidth: borderWidth,
                 isSelected: isSelected,
                 appearance: appearance,
+                accentColor: accentColor,
                 zPosition: zPosition
             )
         } else {
@@ -49,7 +51,7 @@ final class BusyCapsuleBorderAnimator {
                 cornerRadius: cornerRadius,
                 borderWidth: borderWidth
             )
-            updateColors(isSelected: isSelected, appearance: appearance)
+            updateColors(isSelected: isSelected, appearance: appearance, accentColor: accentColor)
             restoreAnimationIfNeeded()
         }
     }
@@ -66,6 +68,7 @@ final class BusyCapsuleBorderAnimator {
         borderWidth: CGFloat,
         isSelected: Bool,
         appearance: NSAppearance,
+        accentColor: NSColor,
         zPosition: CGFloat
     ) {
         guard let hostLayer else { return }
@@ -94,7 +97,7 @@ final class BusyCapsuleBorderAnimator {
             cornerRadius: cornerRadius,
             borderWidth: borderWidth
         )
-        updateColors(isSelected: isSelected, appearance: appearance)
+        updateColors(isSelected: isSelected, appearance: appearance, accentColor: accentColor)
 
         if Self.sharedAnimationEpoch == 0 {
             Self.sharedAnimationEpoch = CACurrentMediaTime()
@@ -136,7 +139,7 @@ final class BusyCapsuleBorderAnimator {
         CATransaction.commit()
     }
 
-    private func updateColors(isSelected: Bool, appearance: NSAppearance) {
+    private func updateColors(isSelected: Bool, appearance: NSAppearance, accentColor: NSColor) {
         guard let gradient = containerLayer?.sublayers?.first as? CAGradientLayer else { return }
 
         CATransaction.begin()
@@ -148,7 +151,6 @@ final class BusyCapsuleBorderAnimator {
                 brightColor = NSColor.white.withAlphaComponent(0.9)
                 dimColor = NSColor.white.withAlphaComponent(0.25)
             } else {
-                let accentColor = NSColor.controlAccentColor
                 var hue: CGFloat = 0
                 var saturation: CGFloat = 0
                 var brightness: CGFloat = 0

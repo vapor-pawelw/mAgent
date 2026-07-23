@@ -15,6 +15,7 @@ struct SidebarSettingsFingerprint: Equatable {
     let jiraTicketDetectionPrefixes: Set<String>
     let showBusyStateDuration: Bool
     let threadActivityIndicatorStyle: ThreadActivityIndicatorStyle
+    let appPrimaryColorHex: String
     let narrowThreads: Bool
 
     init(settings: AppSettings) {
@@ -30,6 +31,7 @@ struct SidebarSettingsFingerprint: Equatable {
         jiraTicketDetectionPrefixes = settings.jiraTicketDetectionPrefixFilterSet
         showBusyStateDuration = settings.showBusyStateDuration
         threadActivityIndicatorStyle = settings.threadActivityIndicatorStyle
+        appPrimaryColorHex = settings.effectivePrimaryColorHex
         narrowThreads = !settings.wideThreads
     }
 }

@@ -597,7 +597,7 @@ final class ThreadCell: NSTableCellView {
         guard let tf = textField else { return }
         tf.layer?.removeAnimation(forKey: Self.renamePulseAnimationKey)
         if active {
-            tf.textColor = .controlAccentColor
+            tf.textColor = .appPrimary
             guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                   window != nil else {
                 tf.layer?.opacity = 1.0
@@ -1086,7 +1086,7 @@ final class ThreadCell: NSTableCellView {
             ticketKey: ticketKey,
             font: font,
             baseColor: renderedBaseColor,
-            highlightColor: NSColor(resource: .primaryBrand),
+            highlightColor: NSColor.appPrimary,
             paragraphStyle: paragraphStyle
         ) else { return }
         field.attributedStringValue = attributedText
@@ -1430,7 +1430,7 @@ final class ThreadCell: NSTableCellView {
             badge.iconView.imageAlignment = .alignCenter
             badge.iconView.imageScaling = .scaleProportionallyDown
             badge.setIconSize(ThreadRowBadgeLayout.compactLeadingStatusIconSize)
-            badge.iconView.contentTintColor = NSColor(resource: .primaryBrand)
+            badge.iconView.contentTintColor = NSColor.appPrimary
             badge.iconView.isHidden = false
             badge.isHidden = true
             favoriteBadge = badge
@@ -1445,7 +1445,7 @@ final class ThreadCell: NSTableCellView {
             badge.iconView.imageAlignment = .alignCenter
             badge.iconView.imageScaling = .scaleProportionallyDown
             badge.setIconSize(ThreadRowBadgeLayout.compactLeadingStatusIconSize)
-            badge.iconView.contentTintColor = NSColor(resource: .primaryBrand)
+            badge.iconView.contentTintColor = NSColor.appPrimary
             badge.iconView.isHidden = false
             badge.isHidden = true
             pinnedBadge = badge
@@ -1725,7 +1725,7 @@ final class ThreadCell: NSTableCellView {
             } else if hasUnreadCompletion {
                 imageView?.contentTintColor = .systemGreen
             } else {
-                imageView?.contentTintColor = configuredSectionColor ?? NSColor(resource: .primaryBrand)
+                imageView?.contentTintColor = configuredSectionColor ?? NSColor.appPrimary
             }
         }
     }

@@ -89,7 +89,7 @@ final class StickyHeaderOverlayView: NSView {
         projectContainer.addSubview(projectNameLabel)
 
         projectPinIcon.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
-        projectPinIcon.contentTintColor = NSColor(resource: .primaryBrand)
+        projectPinIcon.contentTintColor = NSColor.appPrimary
         projectPinIcon.translatesAutoresizingMaskIntoConstraints = false
         projectPinIcon.isHidden = true
         projectContainer.addSubview(projectPinIcon)
@@ -106,7 +106,7 @@ final class StickyHeaderOverlayView: NSView {
             accessibilityDescription: "Add Thread"
         )?.withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
         projectAddButton.image = plusImage ?? NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Thread")
-        projectAddButton.contentTintColor = .controlAccentColor
+        projectAddButton.contentTintColor = .appPrimary
         projectContainer.addSubview(projectAddButton)
 
         // Section header row

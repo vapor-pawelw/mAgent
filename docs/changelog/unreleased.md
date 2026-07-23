@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Appearance
+
+#### Features
+
+- Customize Magent's primary color from Appearance settings, with app highlights and default user chat bubbles staying in sync.
+
 ### Settings
 
 #### Improvements

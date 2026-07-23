@@ -166,7 +166,7 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
 
         for checkbox in [iconCheckbox, descriptionCheckbox, branchCheckbox] {
             checkbox.font = .systemFont(ofSize: 12)
-            checkbox.contentTintColor = .controlAccentColor
+            checkbox.contentTintColor = .appPrimary
             checkbox.target = self
             checkbox.action = #selector(checkboxChanged)
             checkboxRow.addArrangedSubview(checkbox)
@@ -194,7 +194,7 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
         renameButton.keyEquivalent = "\r"
         renameButton.bezelStyle = .rounded
         renameButton.controlSize = .large
-        (renameButton.cell as? NSButtonCell)?.backgroundColor = .controlAccentColor
+        (renameButton.cell as? NSButtonCell)?.backgroundColor = .appPrimary
         buttonRow.addArrangedSubview(renameButton)
 
         stack.addArrangedSubview(buttonRow)

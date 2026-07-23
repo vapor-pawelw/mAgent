@@ -85,6 +85,11 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
         view.window?.makeFirstResponder(promptTextView)
     }
 
+    func refreshPrimaryColor() {
+        proceedButton.contentTintColor = .appPrimary
+        (proceedButton.cell as? NSButtonCell)?.backgroundColor = .appPrimary
+    }
+
     override func viewDidLayout() {
         super.viewDidLayout()
         let viewSize = view.bounds.size
@@ -238,8 +243,8 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
 
         proceedButton.title = "Start Agent"
         proceedButton.bezelStyle = .rounded
-        proceedButton.contentTintColor = .controlAccentColor
-        (proceedButton.cell as? NSButtonCell)?.backgroundColor = .controlAccentColor
+        proceedButton.contentTintColor = .appPrimary
+        (proceedButton.cell as? NSButtonCell)?.backgroundColor = .appPrimary
         proceedButton.keyEquivalent = "\r"
         proceedButton.target = self
         proceedButton.action = #selector(proceedTapped)
