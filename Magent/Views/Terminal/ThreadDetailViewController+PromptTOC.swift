@@ -70,6 +70,13 @@ extension ThreadDetailViewController {
         tocView.onResizeGesture = { [weak self] gesture, corner in
             self?.handlePromptTOCResize(gesture, corner: corner)
         }
+        tocView.onPinnedResizeGesture = { [weak self] gesture in
+            self?.handlePromptTOCPinnedResize(gesture)
+        }
+        tocView.onPinToggle = { [weak self] in
+            guard let self else { return }
+            self.setPromptTOCPinned(!self.isPromptTOCPinned)
+        }
 
         terminalContainer.addSubview(tocView)
         tocView.onHoverStateChanged = { [weak self] expanded in
@@ -92,6 +99,13 @@ extension ThreadDetailViewController {
             }
         }
 
+        promptTOCView = tocView
+        installFloatingPromptTOCConstraints()
+        bringPromptTOCOverlayToFront()
+    }
+
+    private func installFloatingPromptTOCConstraints() {
+        guard let tocView = promptTOCView else { return }
         let top = tocView.topAnchor.constraint(equalTo: terminalContainer.topAnchor, constant: 12)
         let trailing = tocView.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor, constant: -12)
         let width = tocView.widthAnchor.constraint(equalToConstant: Self.promptTOCCollapsedWidth)
@@ -100,16 +114,73 @@ extension ThreadDetailViewController {
         promptTOCTrailingConstraint = trailing
         promptTOCWidthConstraint = width
         promptTOCHeightConstraint = height
+        promptTOCFloatingConstraints = [top, trailing, width, height]
+        NSLayoutConstraint.activate(promptTOCFloatingConstraints)
+    }
 
-        NSLayoutConstraint.activate([
-            top,
-            trailing,
-            width,
-            height,
-        ])
+    func restorePromptTOCPinnedState() {
+        setPromptTOCPinned(
+            UserDefaults.standard.bool(forKey: Self.promptTOCPinnedDefaultsKey),
+            persist: false
+        )
+    }
 
-        promptTOCView = tocView
-        bringPromptTOCOverlayToFront()
+    private func setPromptTOCPinned(_ pinned: Bool, persist: Bool = true) {
+        guard let tocView = promptTOCView else { return }
+        isPromptTOCPinned = pinned
+        if persist {
+            UserDefaults.standard.set(pinned, forKey: Self.promptTOCPinnedDefaultsKey)
+        }
+
+        NSLayoutConstraint.deactivate(promptTOCFloatingConstraints)
+        NSLayoutConstraint.deactivate(promptTOCPinnedConstraints)
+        terminalTrailingToPromptTOCConstraint?.isActive = false
+        promptTOCFloatingConstraints.removeAll()
+        promptTOCPinnedConstraints.removeAll()
+        tocView.removeFromSuperview()
+
+        if pinned {
+            terminalTrailingToViewConstraint?.isActive = false
+            tocView.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(tocView, positioned: .above, relativeTo: terminalContainer)
+
+            let pinnedWidth = PromptTOCPresentationState.pinnedWidth(
+                requestedWidth: promptTOCExpandedSize.width,
+                availableWidth: view.bounds.width,
+                minimumTOCWidth: Self.promptTOCMinimumWidth,
+                minimumContentWidth: 320
+            )
+            promptTOCExpandedSize.width = pinnedWidth
+
+            let width = tocView.widthAnchor.constraint(equalToConstant: pinnedWidth)
+            promptTOCPinnedWidthConstraint = width
+            promptTOCPinnedConstraints = [
+                tocView.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+                tocView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                tocView.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
+                width,
+            ]
+            NSLayoutConstraint.activate(promptTOCPinnedConstraints)
+
+            let contentTrailing = terminalContainer.trailingAnchor.constraint(equalTo: tocView.leadingAnchor)
+            terminalTrailingToPromptTOCConstraint = contentTrailing
+            contentTrailing.isActive = !tocView.isHidden
+            terminalTrailingToViewConstraint?.isActive = tocView.isHidden
+        } else {
+            promptTOCPinnedWidthConstraint = nil
+            terminalTrailingToPromptTOCConstraint = nil
+            terminalTrailingToViewConstraint?.isActive = true
+            tocView.translatesAutoresizingMaskIntoConstraints = false
+            terminalContainer.addSubview(tocView)
+            installFloatingPromptTOCConstraints()
+            if let sessionName = promptTOCSessionName {
+                restorePromptTOCPosition(for: sessionName)
+            }
+        }
+
+        tocView.setPinned(pinned)
+        view.layoutSubtreeIfNeeded()
+        applyPromptTOCVisibility(restoringPosition: !pinned)
     }
 
     func schedulePromptTOCRefresh(after delay: TimeInterval = 0) {
@@ -823,6 +894,7 @@ extension ThreadDetailViewController {
     }
 
     private func handlePromptTOCDrag(_ gesture: NSPanGestureRecognizer) {
+        guard !isPromptTOCPinned else { return }
         guard let tocView = promptTOCView else { return }
 
         switch gesture.state {
@@ -856,6 +928,7 @@ extension ThreadDetailViewController {
     }
 
     private func handlePromptTOCResize(_ gesture: NSPanGestureRecognizer, corner: TOCResizeCorner) {
+        guard !isPromptTOCPinned else { return }
         guard promptTOCView != nil else { return }
         guard let widthConstraint = promptTOCWidthConstraint,
               let heightConstraint = promptTOCHeightConstraint,
@@ -944,7 +1017,35 @@ extension ThreadDetailViewController {
         }
     }
 
+    private func handlePromptTOCPinnedResize(_ gesture: NSPanGestureRecognizer) {
+        guard isPromptTOCPinned,
+              let widthConstraint = promptTOCPinnedWidthConstraint else { return }
+
+        switch gesture.state {
+        case .began:
+            promptTOCPinnedResizeStartWidth = widthConstraint.constant
+        case .changed:
+            let translation = gesture.translation(in: view)
+            widthConstraint.constant = PromptTOCPresentationState.pinnedWidth(
+                requestedWidth: promptTOCPinnedResizeStartWidth - translation.x,
+                availableWidth: view.bounds.width,
+                minimumTOCWidth: Self.promptTOCMinimumWidth,
+                minimumContentWidth: 320
+            )
+            promptTOCExpandedSize.width = widthConstraint.constant
+            view.layoutSubtreeIfNeeded()
+        case .ended, .cancelled:
+            promptTOCExpandedSize.width = widthConstraint.constant
+            if let sessionName = promptTOCSessionName {
+                savePromptTOCSize(for: sessionName)
+            }
+        default:
+            break
+        }
+    }
+
     func clampPromptTOCPositionIfNeeded() {
+        guard !isPromptTOCPinned else { return }
         // Skip clamping while the diff viewer is open — terminalContainer is shorter
         // during that time, and clamping would shift the TOC to a position that
         // persists incorrectly once the diff viewer is closed.
@@ -967,6 +1068,7 @@ extension ThreadDetailViewController {
     }
 
     private func handleTOCHoverStateChanged(_ expanded: Bool) {
+        guard !isPromptTOCPinned else { return }
         guard let widthConstraint = promptTOCWidthConstraint,
               let heightConstraint = promptTOCHeightConstraint else { return }
         if expanded {
@@ -1007,6 +1109,12 @@ extension ThreadDetailViewController {
 
         promptTOCView?.isHidden = !canShow
 
+        if isPromptTOCPinned {
+            terminalTrailingToPromptTOCConstraint?.isActive = canShow
+            terminalTrailingToViewConstraint?.isActive = !canShow
+            view.layoutSubtreeIfNeeded()
+        }
+
         guard canShow else { return }
 
         bringPromptTOCOverlayToFront()
@@ -1025,6 +1133,7 @@ extension ThreadDetailViewController {
     }
 
     private func savePromptTOCPosition(for sessionName: String) {
+        guard !isPromptTOCPinned else { return }
         // Don't persist position while diff viewer is open — bounds are reduced and
         // the saved normalized values would be wrong relative to the full container.
         guard diffVC == nil else { return }
@@ -1057,6 +1166,7 @@ extension ThreadDetailViewController {
     }
 
     private func restorePromptTOCPosition(for sessionName: String) {
+        guard !isPromptTOCPinned else { return }
         guard let values = UserDefaults.standard.array(forKey: promptTOCPositionDefaultsKey(for: sessionName)) as? [Double],
               values.count == 2,
               let top = promptTOCTopConstraint,
@@ -1090,17 +1200,21 @@ extension ThreadDetailViewController {
         guard let values = UserDefaults.standard.array(forKey: promptTOCSizeDefaultsKey(for: sessionName)) as? [Double],
               values.count == 2 else {
             promptTOCExpandedSize = NSSize(width: Self.promptTOCMinimumWidth, height: Self.promptTOCMinimumHeight)
+            promptTOCPinnedWidthConstraint?.constant = promptTOCExpandedSize.width
             return
         }
 
         let minimumWidth = Self.promptTOCMinimumWidth
         let minimumHeight = Self.promptTOCMinimumHeight
-        let maxWidth = max(minimumWidth, terminalContainer.bounds.width - 8)
+        let maxWidth = isPromptTOCPinned
+            ? max(minimumWidth, view.bounds.width - 320)
+            : max(minimumWidth, terminalContainer.bounds.width - 8)
         let maxHeight = max(minimumHeight, terminalContainer.bounds.height - 8)
         promptTOCExpandedSize = NSSize(
             width: min(max(minimumWidth, values[0]), maxWidth),
             height: min(max(minimumHeight, values[1]), maxHeight)
         )
+        promptTOCPinnedWidthConstraint?.constant = promptTOCExpandedSize.width
     }
 
     private func promptTOCPositionDefaultsKey(for sessionName: String) -> String {
@@ -1112,8 +1226,12 @@ extension ThreadDetailViewController {
     }
 
     func bringPromptTOCOverlayToFront() {
-        guard let tocView = promptTOCView, tocView.superview === terminalContainer else { return }
-        terminalContainer.addSubview(tocView, positioned: .above, relativeTo: nil)
+        guard let tocView = promptTOCView else { return }
+        if tocView.superview === terminalContainer {
+            terminalContainer.addSubview(tocView, positioned: .above, relativeTo: nil)
+        } else if tocView.superview === view {
+            view.addSubview(tocView, positioned: .above, relativeTo: terminalContainer)
+        }
     }
 
     private func sanitizedDefaultsKeySegment(_ text: String) -> String {
@@ -1238,6 +1356,8 @@ final class PromptTableOfContentsView: NSView {
     var onResizeGesture: ((NSPanGestureRecognizer, TOCResizeCorner) -> Void)?
     var onHoverStateChanged: ((Bool) -> Void)?
     var onCollapseCompleted: (() -> Void)?
+    var onPinnedResizeGesture: ((NSPanGestureRecognizer) -> Void)?
+    var onPinToggle: (() -> Void)?
 
     private let titleLabel = NSTextField(labelWithString: "Table of Contents")
     private let countBadgeView = NSView()
@@ -1248,6 +1368,9 @@ final class PromptTableOfContentsView: NSView {
     private let spinner = NSProgressIndicator()
     private let headerBackgroundView = NSView()
     private let headerIcon = NSImageView()
+    private let pinButton = NSButton()
+    private let pinnedResizeHandle = NSView()
+    private let pinnedDivider = NSView()
     private var resizeHandleIconView: NSImageView?
     private var cornerHandleViews: [NSView] = []
     private var scrollBottomConstraint: NSLayoutConstraint!
@@ -1255,7 +1378,7 @@ final class PromptTableOfContentsView: NSView {
     private var rowViews: [PromptTOCEntryRowView] = []
     private var selectedEntryIndex: Int?
     private var tocEntries: [PromptTOCEntry] = []
-    private var isHovered = false
+    private var presentationState = PromptTOCPresentationState(isPinned: false, isHovered: false)
     private(set) var isExpanded = false
     private var shouldRestoreScrollToBottomAfterReload = true
     private var preservedScrollOffsetY: CGFloat = 0
@@ -1363,25 +1486,45 @@ final class PromptTableOfContentsView: NSView {
         rowViews.forEach { $0.refreshPrimaryColor() }
     }
 
+    func setPinned(_ pinned: Bool) {
+        presentationState.isPinned = pinned
+        isExpanded = presentationState.isExpanded
+        updatePinButton()
+        pinnedResizeHandle.isHidden = !pinned
+        pinnedDivider.isHidden = !pinned
+
+        if pinned {
+            alphaValue = Self.hoverAlpha
+            setCollapsedState(false, animated: false)
+        } else {
+            updateBackground(animated: false)
+            setCollapsedState(!presentationState.isExpanded, animated: false)
+        }
+    }
+
     override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-        isExpanded = true
+        presentationState.isHovered = true
+        isExpanded = presentationState.isExpanded
+        updatePinButton()
         updateBackground(animated: true)
+        guard !presentationState.isPinned else { return }
         setCollapsedState(false, animated: true)
     }
 
     override func mouseExited(with event: NSEvent) {
-        isHovered = false
-        isExpanded = false
+        presentationState.isHovered = false
+        isExpanded = presentationState.isExpanded
+        updatePinButton()
         updateBackground(animated: true)
+        guard !presentationState.isPinned else { return }
         setCollapsedState(true, animated: true)
     }
 
     private func updateBackground(animated: Bool) {
-        let target = isHovered ? Self.hoverAlpha : Self.normalAlpha
+        let target = presentationState.isExpanded ? Self.hoverAlpha : Self.normalAlpha
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = isHovered ? 0.15 : 0.22
+                ctx.duration = presentationState.isExpanded ? 0.15 : 0.22
                 self.animator().alphaValue = target
             }
         } else {
@@ -1442,7 +1585,21 @@ final class PromptTableOfContentsView: NSView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        let headerStack = NSStackView(views: [headerIcon, titleLabel, NSView(), countBadgeView, spinner])
+        pinButton.bezelStyle = .inline
+        pinButton.isBordered = false
+        pinButton.imagePosition = .imageOnly
+        pinButton.translatesAutoresizingMaskIntoConstraints = false
+        pinButton.target = self
+        pinButton.action = #selector(handlePinToggle)
+        pinButton.setContentHuggingPriority(.required, for: .horizontal)
+        pinButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        NSLayoutConstraint.activate([
+            pinButton.widthAnchor.constraint(equalToConstant: 20),
+            pinButton.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        updatePinButton()
+
+        let headerStack = NSStackView(views: [headerIcon, titleLabel, NSView(), countBadgeView, spinner, pinButton])
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.spacing = 5
@@ -1488,11 +1645,22 @@ final class PromptTableOfContentsView: NSView {
         let cornerHandles = makeCornerHandles(size: cornerSize)
         cornerHandleViews = cornerHandles
 
+        pinnedResizeHandle.translatesAutoresizingMaskIntoConstraints = false
+        pinnedResizeHandle.isHidden = true
+        let pinnedResizePan = NSPanGestureRecognizer(target: self, action: #selector(handlePinnedResize(_:)))
+        pinnedResizeHandle.addGestureRecognizer(pinnedResizePan)
+
+        pinnedDivider.translatesAutoresizingMaskIntoConstraints = false
+        pinnedDivider.wantsLayer = true
+        pinnedDivider.isHidden = true
+
         addSubview(headerBackgroundView)
         addSubview(headerStack)
         addSubview(scrollView)
         addSubview(emptyLabel)
         for handle in cornerHandles { addSubview(handle) }
+        addSubview(pinnedResizeHandle)
+        pinnedResizeHandle.addSubview(pinnedDivider)
 
         scrollBottomConstraint = scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8)
         scrollViewCollapseConstraint = scrollView.heightAnchor.constraint(equalToConstant: 0)
@@ -1536,6 +1704,16 @@ final class PromptTableOfContentsView: NSView {
             cornerHandles[3].heightAnchor.constraint(equalToConstant: cornerSize),
             cornerHandles[3].trailingAnchor.constraint(equalTo: trailingAnchor),
             cornerHandles[3].bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            pinnedResizeHandle.topAnchor.constraint(equalTo: topAnchor),
+            pinnedResizeHandle.leadingAnchor.constraint(equalTo: leadingAnchor),
+            pinnedResizeHandle.bottomAnchor.constraint(equalTo: bottomAnchor),
+            pinnedResizeHandle.widthAnchor.constraint(equalToConstant: 8),
+
+            pinnedDivider.topAnchor.constraint(equalTo: pinnedResizeHandle.topAnchor),
+            pinnedDivider.centerXAnchor.constraint(equalTo: pinnedResizeHandle.centerXAnchor),
+            pinnedDivider.bottomAnchor.constraint(equalTo: pinnedResizeHandle.bottomAnchor),
+            pinnedDivider.widthAnchor.constraint(equalToConstant: 1),
         ])
 
         updateAppearance()
@@ -1587,7 +1765,10 @@ final class PromptTableOfContentsView: NSView {
                     self.scrollView.isHidden = false
                     self.headerBackgroundView.alphaValue = 0
                     self.headerBackgroundView.isHidden = false
-                    self.cornerHandleViews.forEach { $0.alphaValue = 0; $0.isHidden = false }
+                    self.cornerHandleViews.forEach {
+                        $0.alphaValue = 0
+                        $0.isHidden = !self.presentationState.showsCornerResizeHandles
+                    }
 
                     NSAnimationContext.runAnimationGroup { ctx in
                         ctx.duration = 0.14
@@ -1625,7 +1806,7 @@ final class PromptTableOfContentsView: NSView {
             scrollView.isHidden = collapsed
             headerBackgroundView.isHidden = collapsed
             if collapsed { emptyLabel.isHidden = true }
-            cornerHandleViews.forEach { $0.isHidden = collapsed }
+            cornerHandleViews.forEach { $0.isHidden = !presentationState.showsCornerResizeHandles }
         }
 
         layer?.cornerRadius = targetRadius
@@ -1714,7 +1895,26 @@ final class PromptTableOfContentsView: NSView {
     }
 
     @objc private func handleDrag(_ gesture: NSPanGestureRecognizer) {
+        guard !presentationState.isPinned else { return }
         onDragGesture?(gesture)
+    }
+
+    @objc private func handlePinnedResize(_ gesture: NSPanGestureRecognizer) {
+        onPinnedResizeGesture?(gesture)
+    }
+
+    @objc private func handlePinToggle() {
+        onPinToggle?()
+    }
+
+    private func updatePinButton() {
+        let title = presentationState.isPinned
+            ? String(localized: .CommonStrings.commonUnpin)
+            : String(localized: .CommonStrings.commonPin)
+        let symbolName = presentationState.isPinned ? "pin.slash" : "pin"
+        pinButton.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: title)
+        pinButton.toolTip = title
+        pinButton.isHidden = !presentationState.showsPinButton
     }
 
     @objc private func handleResizeTopLeft(_ gesture: NSPanGestureRecognizer) {
@@ -1789,7 +1989,9 @@ final class PromptTableOfContentsView: NSView {
             headerBackgroundView.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.14).cgColor
 
             headerIcon.contentTintColor = NSColor(resource: .textSecondary)
+            pinButton.contentTintColor = NSColor(resource: .textSecondary)
             resizeHandleIconView?.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.8)
+            pinnedDivider.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.8).cgColor
             countBadgeView.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.1).cgColor
             countLabel.textColor = NSColor(resource: .textPrimary)
         }

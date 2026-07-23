@@ -168,6 +168,9 @@ If no repositories are configured after onboarding, the sidebar shows a centered
 - TOC entry ordering follows actual submission order for that session.
 - If the TOC is already scrolled to the bottom, appending a newly confirmed prompt must keep the list pinned to the bottom.
 - TOC panel must be draggable and resizable by the user.
+- The expanded floating TOC must offer a top-right pin control. Pinning places it in a full-height trailing split that reduces the available content width, keeps the TOC expanded, and exposes an always-visible unpin control.
+- The pinned split divider must be draggable to resize the TOC, and the pin state and selected width must persist across launches.
+- The compact floating capsule omits the pin control; it appears when hover expands the floating TOC.
 - The minimum TOC expanded size is 320×250pt.
 - TOC rests as a compact floating capsule (185×36pt) showing "Table of Contents" and a prompt count badge; hovering expands it to the full panel with animation, then collapses back when the cursor leaves.
 - The toolbar toggle button and in-panel × close button are removed; the TOC is always-on. Users can disable it entirely in Settings.

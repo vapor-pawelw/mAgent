@@ -34,7 +34,7 @@
 #### Features
 
 - Unified new and forked thread creation with a context-aware visual source picker for starting from the main worktree, another thread, or any branch.
-
+- Pin the prompt Table of Contents beside terminal and chat content, then drag its divider to resize the split without covering the conversation.
 #### Improvements
 
 - Show a truncated initial prompt as a new thread's description immediately, use `Thread #N` when no prompt is provided, and still allow AI naming to replace either provisional title later.

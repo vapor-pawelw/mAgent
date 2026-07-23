@@ -14,6 +14,8 @@ This document covers Prompt TOC parsing and jump behavior.
 
 - The TOC rests as a compact 185×36pt floating capsule showing a "Table of Contents" title and a badge with the prompt count.
 - Hovering expands the capsule to the full panel (default 320×250pt, user-resizable) with animation; mouse exit collapses it back.
+- The pin button appears in the top-right only while the floating TOC is expanded. Pinning moves the TOC into a full-height trailing split and reserves its width so terminal and chat content cannot render underneath it.
+- The pinned TOC stays expanded and always shows its unpin button. Drag its leading divider to resize it; the chosen width and pin state persist across launches.
 - The toolbar toggle button and in-panel × close button are removed — TOC is always-on; users disable it in Settings.
 - No agent name appears in the header; only the title and count badge.
 
@@ -43,6 +45,8 @@ The collapse completion handler is guarded by `!isExpanded`. If the user re-hove
 ### Position normalization
 
 Position is always normalized relative to `promptTOCExpandedSize` (not the current frame). Dragging the collapsed capsule saves position relative to the expanded dimensions so restoring later yields the correct panel position.
+
+Pinned mode does not update the floating position. Its leading-edge resize updates the same persisted expanded width used by floating mode, while its height follows the terminal content area.
 
 ## Implementation details
 

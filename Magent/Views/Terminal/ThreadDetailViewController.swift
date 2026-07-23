@@ -124,6 +124,7 @@ final class ThreadDetailViewController: NSViewController {
     static let promptTOCPositionDefaultsPrefix = "MagentPromptTOCPosition"
     static let promptTOCSizeDefaultsPrefix = "MagentPromptTOCSize"
     static let promptTOCVisibilityDefaultsKey = "MagentPromptTOCVisibilityHidden"
+    static let promptTOCPinnedDefaultsKey = "MagentPromptTOCPinned"
     static let promptTOCMinimumWidth: CGFloat = 320
     static let promptTOCMinimumHeight: CGFloat = 250
     static let promptTOCCollapsedWidth: CGFloat = 185
@@ -250,6 +251,13 @@ final class ThreadDetailViewController: NSViewController {
     var promptTOCTrailingConstraint: NSLayoutConstraint?
     var promptTOCWidthConstraint: NSLayoutConstraint?
     var promptTOCHeightConstraint: NSLayoutConstraint?
+    var promptTOCFloatingConstraints: [NSLayoutConstraint] = []
+    var promptTOCPinnedConstraints: [NSLayoutConstraint] = []
+    var terminalTrailingToViewConstraint: NSLayoutConstraint?
+    var terminalTrailingToPromptTOCConstraint: NSLayoutConstraint?
+    var promptTOCPinnedWidthConstraint: NSLayoutConstraint?
+    var promptTOCPinnedResizeStartWidth: CGFloat = 0
+    var isPromptTOCPinned = false
     var promptTOCRefreshTask: Task<Void, Never>?
     var promptTOCEntries: [PromptTOCEntry] = []
     var promptTOCSessionName: String?
@@ -759,6 +767,7 @@ final class ThreadDetailViewController: NSViewController {
         setupPromptTOCOverlay()
 
         terminalBottomToView = terminalContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        terminalTrailingToViewConstraint = terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor)
 
         if usesMainWindowToolbarThreadBar {
             NSLayoutConstraint.activate([
@@ -769,7 +778,7 @@ final class ThreadDetailViewController: NSViewController {
 
                 terminalContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4),
                 terminalContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                terminalTrailingToViewConstraint!,
                 terminalBottomToView!,
             ])
         } else if showsHeaderInfoStrip {
@@ -786,7 +795,7 @@ final class ThreadDetailViewController: NSViewController {
 
                 terminalContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4),
                 terminalContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                terminalTrailingToViewConstraint!,
                 terminalBottomToView!,
             ])
         } else {
@@ -798,7 +807,7 @@ final class ThreadDetailViewController: NSViewController {
 
                 terminalContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4),
                 terminalContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                terminalTrailingToViewConstraint!,
                 terminalBottomToView!,
             ])
         }
@@ -809,6 +818,7 @@ final class ThreadDetailViewController: NSViewController {
         refreshOverlayVisibilitySettings()
         refreshTerminalChromeAppearance()
         refreshHeaderInfoStrip()
+        restorePromptTOCPinnedState()
     }
 
     func mainWindowThreadBarToolbarActions() -> [NSView] {

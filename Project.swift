@@ -162,6 +162,7 @@ let project = Project(
                 "Magent/Views/ThreadList/ThreadRowContentOpacity.swift",
                 "Magent/Views/Terminal/ThreadTopBarLayout.swift",
                 "Magent/Views/Terminal/ThreadCreationSourceSelection.swift",
+                "Magent/Views/Terminal/PromptTOCPresentationState.swift",
                 "Magent/Views/BusyCapsuleBorderAnimator.swift",
                 "Magent/Views/BadgeForegroundStyle.swift",
                 "Magent/Views/RightClickMenuView.swift",
