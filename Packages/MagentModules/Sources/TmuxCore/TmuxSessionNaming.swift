@@ -148,6 +148,18 @@ public enum TmuxSessionNaming {
         return inner.unicodeScalars.allSatisfy { validChars.contains($0) }
     }
 
+    public static func looksLikeAllocatorSuffixedDefaultTabName(
+        _ name: String,
+        for agentType: AgentType?
+    ) -> Bool {
+        if let separator = name.lastIndex(of: "-"),
+           separator < name.index(before: name.endIndex),
+           name[name.index(after: separator)...].allSatisfy(\.isNumber) {
+            return looksLikeDefaultTabName(String(name[..<separator]), for: agentType)
+        }
+        return false
+    }
+
     public static func isPromptBasedTabRenameEligible(
         currentName: String?,
         agentType: AgentType?,

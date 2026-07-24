@@ -73,7 +73,11 @@ extension ThreadManager {
 
     @discardableResult
     func remapTransientSessionState(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
-        sessionLifecycleService.remapTransientSessionState(threadIndex: index, sessionRenameMap: sessionRenameMap)
+        renameService.remapAutoTabRenameState(sessionRenameMap: sessionRenameMap)
+        return sessionLifecycleService.remapTransientSessionState(
+            threadIndex: index,
+            sessionRenameMap: sessionRenameMap
+        )
     }
 
     @discardableResult

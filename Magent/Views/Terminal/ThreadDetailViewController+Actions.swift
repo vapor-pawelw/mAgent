@@ -1300,6 +1300,8 @@ extension ThreadDetailViewController {
                 tabSlots[displayIdx] = .terminal(sessionName: newName)
                 if displayIdx < tabItems.count {
                     tabItems[displayIdx].titleLabel.stringValue = thread.displayName(for: newName, at: displayIdx)
+                    tabItems[displayIdx].isAutoRenaming =
+                        threadManager.autoTabRenameInProgress.contains(newName)
                 }
             }
         }

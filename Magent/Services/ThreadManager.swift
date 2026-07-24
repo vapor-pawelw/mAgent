@@ -359,6 +359,18 @@ final class ThreadManager {
                 excludingSessionName: sessionName
             ) ?? requestedName
         }
+        svc.onTabAutoRenameStateChanged = { sessionName, isInProgress in
+            Task { @MainActor in
+                NotificationCenter.default.post(
+                    name: .magentTabAutoRenameStateChanged,
+                    object: nil,
+                    userInfo: [
+                        "sessionName": sessionName,
+                        "isInProgress": isInProgress,
+                    ]
+                )
+            }
+        }
         return svc
     }()
 
@@ -745,6 +757,9 @@ final class ThreadManager {
     var autoRenameInProgress: Set<UUID> {
         get { renameService.autoRenameInProgress }
         set { renameService.autoRenameInProgress = newValue }
+    }
+    var autoTabRenameInProgress: Set<String> {
+        renameService.autoTabRenameInProgress
     }
     var autoRenameFailedBannerShownThreadIds: Set<UUID> {
         get { renameService.autoRenameFailedBannerShownThreadIds }

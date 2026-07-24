@@ -55,6 +55,9 @@ extension Notification.Name {
     /// use-after-free when the tmux session (and its process) was killed via
     /// the IPC path, which doesn't call removeFromSuperview() directly.
     static let magentTabWillClose = Notification.Name("magentTabWillClose")
+    /// Posted when prompt-based naming starts or finishes for a terminal tab.
+    /// Carries "sessionName" (String) and "isInProgress" (Bool).
+    static let magentTabAutoRenameStateChanged = Notification.Name("magentTabAutoRenameStateChanged")
     /// Posted when a pending prompt recovery is added or removed for a thread.
     /// Carries "threadId" (UUID).
     static let magentPendingPromptRecovery = Notification.Name("magentPendingPromptRecovery")

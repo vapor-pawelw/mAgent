@@ -30,6 +30,8 @@ final class RenameService {
     /// Allocates a unique display name for a tab within a thread, avoiding collisions.
     /// Wired to ThreadManager.allocateUniqueTabDisplayName so deduplication logic stays canonical.
     var allocateUniqueTabDisplayNameCallback: ((String, Int, String?) -> String)?
+    /// Publishes transient prompt-based tab naming state for tab-bar feedback.
+    var onTabAutoRenameStateChanged: ((String, Bool) -> Void)?
 
     // MARK: - Owned State
 
@@ -45,7 +47,10 @@ final class RenameService {
     /// Tracks which threads have already shown a banner about a failed auto-rename,
     /// so only one error banner fires per thread regardless of retry count.
     var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
-    private var autoTabRenameInProgress: Set<String> = []
+    private var autoTabRenameOperations = TabAutoRenameOperationState()
+    var autoTabRenameInProgress: Set<String> {
+        autoTabRenameOperations.sessions
+    }
 
     // MARK: - Init
 
@@ -1063,8 +1068,13 @@ final class RenameService {
               TabNameAllocator.shouldAttemptAutoRename(thread: initialThread, sessionName: sessionName),
               !autoTabRenameInProgress.contains(sessionName) else { return }
 
-        autoTabRenameInProgress.insert(sessionName)
-        defer { autoTabRenameInProgress.remove(sessionName) }
+        guard let operationId = autoTabRenameOperations.start(sessionName: sessionName) else { return }
+        onTabAutoRenameStateChanged?(sessionName, true)
+        defer {
+            if let currentSessionName = autoTabRenameOperations.finish(operationId: operationId) {
+                onTabAutoRenameStateChanged?(currentSessionName, false)
+            }
+        }
 
         let truncatedPrompt = String(prompt.prefix(500))
         let aiPrompt = """
@@ -1093,20 +1103,36 @@ final class RenameService {
                 timeoutNanos: 60_000_000_000
             ), let generatedName = TabNameAllocator.sanitizedGeneratedName(raw) else { continue }
 
-            guard let index = store.threads.firstIndex(where: { $0.id == threadId }),
+            guard let currentSessionName = autoTabRenameOperations.sessionName(operationId: operationId),
+                  let index = store.threads.firstIndex(where: { $0.id == threadId }),
                   persistence.loadSettings().autoRenameTabs,
                   TabNameAllocator.shouldAttemptAutoRename(
                       thread: store.threads[index],
-                      sessionName: sessionName
+                      sessionName: currentSessionName
                   ) else { return }
-            let uniqueName = allocateUniqueTabDisplayNameCallback?(generatedName, index, sessionName) ?? generatedName
-            store.threads[index].customTabNames[sessionName] = uniqueName
+            let uniqueName = allocateUniqueTabDisplayNameCallback?(
+                generatedName,
+                index,
+                currentSessionName
+            ) ?? generatedName
+            store.threads[index].customTabNames[currentSessionName] = uniqueName
             // This shared protection set prevents every automatic naming pass from
             // overwriting a prompt-derived label; a later manual rename keeps the flag.
-            store.threads[index].manuallyRenamedTabs.insert(sessionName)
+            store.threads[index].manuallyRenamedTabs.insert(currentSessionName)
             try? persistence.saveActiveThreads(store.threads)
             onThreadsChanged?()
             return
+        }
+    }
+
+    func remapAutoTabRenameState(sessionRenameMap: [String: String]) {
+        guard !sessionRenameMap.isEmpty else { return }
+
+        for (oldSessionName, newSessionName) in autoTabRenameOperations.remap(
+            sessionRenameMap: sessionRenameMap
+        ) where newSessionName != oldSessionName {
+            onTabAutoRenameStateChanged?(oldSessionName, false)
+            onTabAutoRenameStateChanged?(newSessionName, true)
         }
     }
 
