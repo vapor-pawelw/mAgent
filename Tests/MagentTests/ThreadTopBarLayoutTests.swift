@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 
 @Suite("Thread top bar layout")
@@ -88,5 +89,65 @@ struct ThreadTopBarLayoutTests {
         #expect(withoutArrows.afterRightArrow == 16)
         #expect(withArrows.afterScrollView == 4)
         #expect(withArrows.afterRightArrow == 16)
+    }
+
+    @Test("Toolbar action titles stay on one line and resist compression")
+    func toolbarActionTitleLayout() {
+        let button = NSButton(title: "Create PR", target: nil, action: nil)
+
+        ThreadToolbarCapsuleLayout.configureActionButton(button)
+
+        #expect(button.lineBreakMode == .byTruncatingTail)
+        #expect(button.cell?.lineBreakMode == .byTruncatingTail)
+        #expect(button.contentHuggingPriority(for: .horizontal) == .required)
+        #expect(button.contentCompressionResistancePriority(for: .horizontal) == .required)
+    }
+
+    @Test("Thread summary preferred width yields before toolbar actions")
+    func threadSummaryWidthPriority() {
+        let summaryView = NSView()
+        let preferredWidth = summaryView.widthAnchor.constraint(
+            greaterThanOrEqualToConstant: ThreadToolbarCapsuleLayout.preferredThreadSummaryWidth
+        )
+
+        ThreadToolbarCapsuleLayout.configurePreferredThreadSummaryWidth(preferredWidth)
+
+        #expect(preferredWidth.priority == .defaultHigh)
+    }
+
+    @Test("Constrained toolbar shrinks thread summary before action title")
+    @MainActor
+    func constrainedToolbarLayout() {
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 40))
+        let stack = NSStackView(frame: container.bounds)
+        let summaryView = NSView()
+        let actionButton = NSButton(title: "Create Pull Request", target: nil, action: nil)
+
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        summaryView.translatesAutoresizingMaskIntoConstraints = false
+        summaryView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        actionButton.translatesAutoresizingMaskIntoConstraints = false
+        ThreadToolbarCapsuleLayout.configureActionButton(actionButton)
+
+        stack.addArrangedSubview(summaryView)
+        stack.addArrangedSubview(actionButton)
+        container.addSubview(stack)
+
+        let preferredSummaryWidth = summaryView.widthAnchor.constraint(
+            greaterThanOrEqualToConstant: ThreadToolbarCapsuleLayout.preferredThreadSummaryWidth
+        )
+        ThreadToolbarCapsuleLayout.configurePreferredThreadSummaryWidth(preferredSummaryWidth)
+        NSLayoutConstraint.activate([
+            preferredSummaryWidth,
+            summaryView.heightAnchor.constraint(equalToConstant: 28),
+        ])
+
+        let actionIntrinsicWidth = actionButton.intrinsicContentSize.width
+        stack.layoutSubtreeIfNeeded()
+
+        #expect(summaryView.frame.width < ThreadToolbarCapsuleLayout.preferredThreadSummaryWidth)
+        #expect(actionButton.frame.width >= actionIntrinsicWidth)
     }
 }

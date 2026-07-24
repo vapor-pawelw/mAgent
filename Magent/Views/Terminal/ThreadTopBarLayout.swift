@@ -1,4 +1,22 @@
-import CoreGraphics
+import AppKit
+
+enum ThreadToolbarCapsuleLayout {
+    static let preferredThreadSummaryWidth: CGFloat = 260
+    static let maximumThreadSummaryWidth: CGFloat = 1400
+    static let minimumToolbarContentWidth: CGFloat = 260
+    static let maximumToolbarContentWidth: CGFloat = 1600
+
+    static func configureActionButton(_ button: NSButton) {
+        button.lineBreakMode = .byTruncatingTail
+        button.cell?.lineBreakMode = .byTruncatingTail
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    static func configurePreferredThreadSummaryWidth(_ constraint: NSLayoutConstraint) {
+        constraint.priority = .defaultHigh
+    }
+}
 
 enum ThreadTabIdentity: Hashable {
     case permanentTerminal(sessionName: String)
