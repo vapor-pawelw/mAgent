@@ -1513,7 +1513,11 @@ extension SplitViewController: NSToolbarDelegate {
             item.label = title
             item.toolTip = title
             let button = NSButton()
-            button.image = NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: title)
+            let imageConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+            button.image = NSImage(
+                systemSymbolName: "folder.badge.plus",
+                accessibilityDescription: title
+            )?.withSymbolConfiguration(imageConfiguration)
             button.bezelStyle = .texturedRounded
             button.target = threadListVC
             button.action = #selector(ThreadListViewController.addRepoButtonTapped(_:))

@@ -79,7 +79,7 @@
 
 #### Improvements
 
-- Moved Add Repository to the trailing edge of the sidebar titlebar, with the remaining area supporting native window dragging and double-click maximize/restore.
+- Moved a more compact Add Repository control to the trailing edge of the sidebar titlebar, with the remaining area supporting native window dragging and double-click maximize/restore.
 - Extended the sidebar beneath the standard macOS controls, showing one seamless titlebar-to-header blur only while a sticky header is active, without moving the tab bar, and aligned the top current-thread strip to the content area.
 - Reduced the sidebar's minimum width so it takes less space on small screens.
 - Ordered stale, stopped-session, favorite, and pinned thread indicators consistently, with a clearer red stopped-session icon.
