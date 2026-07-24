@@ -550,6 +550,7 @@ final class ThreadListViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
+        updateSidebarScrollContentInsets()
         refitOutlineColumnIfNeeded()
     }
 
@@ -633,14 +634,14 @@ final class ThreadListViewController: NSViewController {
     /// after its row clears the top activation offset and stays visible until
     /// another project header clears that same offset.
     func updateStickyHeaders() {
-        guard let outlineView, let scrollView else { return }
+        guard let outlineView, scrollView != nil else { return }
 
-        let clipBounds = scrollView.contentView.bounds
-        let visibleTop = clipBounds.origin.y
+        let visibleRect = sidebarUnobscuredViewport()
+        let visibleTop = visibleRect.origin.y
 
         // Walk visible rows from the top to find the first thread row.
         // From that thread, determine its parent project and section.
-        let visibleRange = outlineView.rows(in: clipBounds)
+        let visibleRange = outlineView.rows(in: visibleRect)
         guard visibleRange.length > 0 else {
             stickyHeaderOverlay.update(state: .hidden)
             stickyHeaderHeightConstraint.constant = 0
@@ -782,7 +783,10 @@ final class ThreadListViewController: NSViewController {
     /// top of the visible clip area (plus an optional offset), with a smooth animation.
     private func scrollOutlineRowToTop(_ row: Int, topOffset: CGFloat = 0) {
         let rowRect = outlineView.rect(ofRow: row)
-        let targetY = max(0, rowRect.origin.y - topOffset)
+        let targetY = SidebarScrollUnderlayLayout.clipOriginY(
+            documentYAtUnobscuredTop: rowRect.origin.y - topOffset,
+            topInset: scrollView.contentInsets.top
+        )
         let targetOrigin = NSPoint(x: scrollView.contentView.bounds.origin.x, y: targetY)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.3
@@ -929,12 +933,15 @@ final class ThreadListViewController: NSViewController {
 
         scrollView = NonFlashingScrollView()
         scrollView.documentView = outlineView
+        scrollView.automaticallyAdjustsContentInsets = false
         scrollView.hasVerticalScroller = false
         scrollView.autohidesScrollers = false
         scrollView.scrollerStyle = .overlay
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.drawsBackground = false
-        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)
+        scrollView.contentInsets = SidebarScrollUnderlayLayout.contentInsets(
+            safeAreaInsets: view.safeAreaInsets
+        )
         scrollView.scrollerInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 
         view.addSubview(scrollView)
@@ -994,7 +1001,7 @@ final class ThreadListViewController: NSViewController {
 
         setupSelectedThreadJumpCapsule()
 
-        scrollViewTopConstraint = SidebarContentLayout.topConstraint(for: scrollView, in: view)
+        scrollViewTopConstraint = scrollView.topAnchor.constraint(equalTo: view.topAnchor)
 
         NSLayoutConstraint.activate([
             sidebarChromeBlurView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -1455,17 +1462,18 @@ final class ThreadListViewController: NSViewController {
         let row = outlineView.row(forItem: selectedThread)
         guard row >= 0 else { return false }
 
-        let visibleRect = scrollView.contentView.bounds
+        let visibleRect = sidebarUnobscuredViewport()
         let rowRect = outlineView.rect(ofRow: row)
         return rowRect.intersects(visibleRect)
     }
 
     private func captureSidebarScrollSnapshot() -> SidebarScrollSnapshot {
         let clipView = scrollView.contentView
-        let visibleRect = clipView.bounds
+        let clipBounds = clipView.bounds
+        let visibleRect = sidebarUnobscuredViewport()
         let visibleRows = outlineView.rows(in: visibleRect)
         guard visibleRows.length > 0 else {
-            return SidebarScrollSnapshot(origin: visibleRect.origin, anchor: nil, anchorOffsetY: 0)
+            return SidebarScrollSnapshot(origin: clipBounds.origin, anchor: nil, anchorOffsetY: 0)
         }
 
         let firstVisibleRow = visibleRows.location
@@ -1484,7 +1492,7 @@ final class ThreadListViewController: NSViewController {
         }
 
         return SidebarScrollSnapshot(
-            origin: visibleRect.origin,
+            origin: clipBounds.origin,
             anchor: anchor,
             anchorOffsetY: anchorOffsetY
         )
@@ -1501,7 +1509,10 @@ final class ThreadListViewController: NSViewController {
         if let anchor = snapshot.anchor,
            let anchorRow = rowIndex(for: anchor) {
             let rowRect = outlineView.rect(ofRow: anchorRow)
-            targetY = rowRect.minY + snapshot.anchorOffsetY
+            targetY = SidebarScrollUnderlayLayout.clipOriginY(
+                documentYAtUnobscuredTop: rowRect.minY + snapshot.anchorOffsetY,
+                topInset: scrollView.contentInsets.top
+            )
         }
 
         targetY = min(max(targetY, minY), maxY)
@@ -1864,7 +1875,8 @@ final class ThreadListViewController: NSViewController {
         scrollRestoreCoordinator.cancelPendingRestore()
 
         let clipView = scrollView.contentView
-        let visibleHeight = clipView.bounds.height
+        let visibleRect = sidebarUnobscuredViewport()
+        let visibleHeight = visibleRect.height
         guard visibleHeight > 0 else {
             outlineView.scrollRowToVisible(row)
             completion?()
@@ -1872,9 +1884,13 @@ final class ThreadListViewController: NSViewController {
         }
 
         let rowMidY = rowRect.midY
-        let targetY = rowMidY - (visibleHeight / 2)
-        let maxOffsetY = max(0, outlineView.bounds.height - visibleHeight)
-        let clampedY = min(max(targetY, 0), maxOffsetY)
+        let targetY = SidebarScrollUnderlayLayout.clipOriginY(
+            documentYAtUnobscuredTop: rowMidY - (visibleHeight / 2),
+            topInset: scrollView.contentInsets.top
+        )
+        let minOffsetY = -scrollView.contentInsets.top
+        let maxOffsetY = max(minOffsetY, outlineView.bounds.height - visibleHeight - scrollView.contentInsets.top)
+        let clampedY = min(max(targetY, minOffsetY), maxOffsetY)
         let targetOrigin = NSPoint(x: clipView.bounds.origin.x, y: clampedY)
 
         NSAnimationContext.runAnimationGroup({ context in
@@ -1912,7 +1928,7 @@ final class ThreadListViewController: NSViewController {
             directionSymbolName = "arrow.up.and.down"
         } else {
             let rowRect = outlineView.rect(ofRow: row)
-            let visibleRect = scrollView.contentView.bounds
+            let visibleRect = sidebarUnobscuredViewport()
             shouldShow = !rowRect.intersects(visibleRect)
             if rowRect.maxY < visibleRect.minY {
                 directionSymbolName = "arrow.up"
@@ -1928,6 +1944,40 @@ final class ThreadListViewController: NSViewController {
         )
 
         setSelectedThreadJumpCapsuleVisible(shouldShow)
+    }
+
+    private func sidebarUnobscuredViewport() -> NSRect {
+        SidebarScrollUnderlayLayout.unobscuredRect(
+            clipBounds: scrollView.contentView.bounds,
+            contentInsets: scrollView.contentInsets
+        )
+    }
+
+    private func updateSidebarScrollContentInsets() {
+        guard let scrollView else { return }
+        let oldInsets = scrollView.contentInsets
+        let newInsets = SidebarScrollUnderlayLayout.contentInsets(
+            safeAreaInsets: view.safeAreaInsets
+        )
+        guard oldInsets.top != newInsets.top
+            || oldInsets.left != newInsets.left
+            || oldInsets.bottom != newInsets.bottom
+            || oldInsets.right != newInsets.right
+        else { return }
+
+        let clipView = scrollView.contentView
+        let unobscuredTop = clipView.bounds.minY + oldInsets.top
+        scrollView.contentInsets = newInsets
+        clipView.scroll(
+            to: NSPoint(
+                x: clipView.bounds.origin.x,
+                y: SidebarScrollUnderlayLayout.clipOriginY(
+                    documentYAtUnobscuredTop: unobscuredTop,
+                    topInset: newInsets.top
+                )
+            )
+        )
+        scrollView.reflectScrolledClipView(clipView)
     }
 
     private func setSelectedThreadJumpCapsuleVisible(_ visible: Bool) {

@@ -97,6 +97,29 @@ struct SplitViewControllerTests {
         #expect(blurView.hitTest(NSPoint(x: 20, y: 20)) == nil)
     }
 
+    @Test("Sidebar scroll content rests below chrome but can move underneath it")
+    func sidebarScrollViewportAccountsForChromeInsets() {
+        let insets = SidebarScrollUnderlayLayout.contentInsets(
+            safeAreaInsets: NSEdgeInsets(top: 48, left: 3, bottom: 2, right: 3)
+        )
+        let visibleRect = SidebarScrollUnderlayLayout.unobscuredRect(
+            clipBounds: NSRect(x: 0, y: 120, width: 280, height: 600),
+            contentInsets: insets
+        )
+
+        #expect(insets.top == 48)
+        #expect(insets.left == 0)
+        #expect(insets.bottom == 4)
+        #expect(insets.right == 0)
+        #expect(visibleRect == NSRect(x: 0, y: 168, width: 280, height: 548))
+        #expect(
+            SidebarScrollUnderlayLayout.clipOriginY(
+                documentYAtUnobscuredTop: 200,
+                topInset: insets.top
+            ) == 152
+        )
+    }
+
     @Test("Sidebar width range supports a compact minimum on small screens")
     func sidebarSupportsCompactWidth() {
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: NSViewController())

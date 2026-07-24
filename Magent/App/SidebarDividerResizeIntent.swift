@@ -67,6 +67,39 @@ struct SidebarContentLayout {
     }
 }
 
+enum SidebarScrollUnderlayLayout {
+    static let bottomInset: CGFloat = 4
+
+    static func contentInsets(safeAreaInsets: NSEdgeInsets) -> NSEdgeInsets {
+        NSEdgeInsets(
+            top: safeAreaInsets.top,
+            left: 0,
+            bottom: bottomInset,
+            right: 0
+        )
+    }
+
+    static func unobscuredRect(
+        clipBounds: NSRect,
+        contentInsets: NSEdgeInsets
+    ) -> NSRect {
+        let obscuredHeight = contentInsets.top + contentInsets.bottom
+        return NSRect(
+            x: clipBounds.origin.x,
+            y: clipBounds.origin.y + contentInsets.top,
+            width: clipBounds.width,
+            height: max(0, clipBounds.height - obscuredHeight)
+        )
+    }
+
+    static func clipOriginY(
+        documentYAtUnobscuredTop: CGFloat,
+        topInset: CGFloat
+    ) -> CGFloat {
+        documentYAtUnobscuredTop - topInset
+    }
+}
+
 struct MainDetailContentLayout {
     static func topConstraint(for content: NSView, in container: NSView) -> NSLayoutConstraint {
         content.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor)
