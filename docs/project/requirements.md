@@ -165,9 +165,10 @@ If no repositories are configured after onboarding, the sidebar shows a centered
 - Placeholder/draft composer text should be filtered using pane styling when available (for example dim/grey prompt text), not only string heuristics.
 - Prompt extraction must preserve wrapped continuation lines that belong to the same submitted input block.
 - Ignore pinned bottom chrome/status rows (for example model/usage/path lines) when deciding whether a prompt was actually submitted.
-- Switching threads/tabs must not surface stale non-submitted prompt text in TOC.
-- TOC entry ordering follows actual submission order for that session.
-- If the TOC is already scrolled to the bottom, appending a newly confirmed prompt must keep the list pinned to the bottom.
+- Switching threads/tabs must not surface stale non-submitted prompt text in TOC. Returning to an agent tab retries transient empty pane captures instead of clearing known prompt history.
+- TOC entries are stored in submission order but displayed newest-first. Initial loads stay at the newest edge.
+- A newly confirmed prompt becomes the selected TOC row without navigating the terminal. If the user is reading older entries, inserting it must preserve that reading position.
+- Visible agent tabs rescan periodically and shortly after Escape steering so ToC updates do not depend on submitting another prompt.
 - TOC panel must be draggable and resizable by the user.
 - The expanded floating TOC must offer a top-right pin control. Pinning places it in a full-height trailing split that reduces the available content width, keeps the TOC expanded, and exposes an always-visible unpin control.
 - The pinned split divider must be draggable to resize the TOC, and the pin state and selected width must persist across launches.
@@ -178,8 +179,8 @@ If no repositories are configured after onboarding, the sidebar shows a centered
 - The prompt count badge is a pill-shaped 20pt-tall view with a 13pt bold number. No agent name is shown in the TOC header.
 - Position is normalized relative to the expanded size so dragging the capsule does not corrupt the restored expanded-panel position.
 - TOC visibility is a single app-wide preference: toggling show/hide in Settings must immediately apply to other open thread panels and persist across app relaunches.
-- Selecting a TOC row must jump to that prompt and anchor it at the top of the terminal scroll viewport when possible.
-- Prompt rows support up to 3 lines and use subtle alternating background stripes for readability.
+- Selecting a TOC row must resolve that prompt against a fresh pane capture, then anchor it at the top of the terminal scroll viewport when possible. The fresh lookup must account for line-index shifts after tmux history-limit eviction.
+- Prompt rows use a distinct high-contrast ordinal badge. Floating previews support up to 3 lines; pinned previews use slightly larger text and support up to 5 lines.
 - TOC context-menu actions that operate on prompt text (for example `Copy prompt`) must use the full submitted prompt payload, not the 3-line row preview.
 - When the TOC is visible, it must remain directly clickable; the terminal surface must not intercept pointer events over the panel.
 

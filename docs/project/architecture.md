@@ -177,6 +177,7 @@ Use `tmux capture-pane -e` for TOC parsing so placeholder/draft composer text ca
 Do not assume dim text always means placeholder content across agents: current Claude Code can render real submitted prompt text as dim white and gives those submitted rows a distinct non-default background, so Claude prompt filtering should treat that background as a positive signal and must not rely on dimness alone.
 Treat a submitted prompt as a block, not only the marker line: include directly wrapped continuation lines that belong to the same user input, then require later non-composer pane output after that full block before the prompt becomes TOC-eligible.
 When session names are renamed/migrated, re-key this confirmed prompt history together with other session-scoped maps; when sessions are removed, prune it.
+Treat an empty pane capture as transient when confirmed prompt history already exists: retry after tab return or Escape steering, preserve known history if retries are exhausted, and let the visible-tab periodic scan recover once pane content becomes available.
 
 ### 4.4 Prompt TOC Layout + Interaction Persistence
 
@@ -191,15 +192,17 @@ Prompt TOC visibility is shared app-scoped UI state:
 
 Prompt row interaction/visual rules:
 - Row hit target is the full row (not only text), so clicking anywhere in the row triggers navigation.
-- Row labels can wrap up to 3 lines and then truncate.
+- Display entries newest-first while retaining chronological source indexes. Select the newest prompt initially and when a newly confirmed prompt is appended, without triggering terminal navigation.
+- Row labels can wrap up to 3 lines when floating and 5 lines when pinned, then truncate. Keep ordinals visually separate from prompt text.
 - Keep a distinction between row preview text and the submitted prompt payload: UI rows may show a wrapped/truncated preview, but prompt actions like `Copy prompt` and rename-from-prompt must operate on the full submitted prompt text.
 - Apply subtle alternating row backgrounds to improve scanability without dominating the terminal UI.
 - Keep the TOC drag header visually distinct from the body; a slightly darker top band helps communicate that the header is the draggable region without making the whole panel heavier.
-- If the TOC was pinned to the bottom before a same-session append refresh, restore it to the bottom after repopulating rows; do not force-scroll when the user was reading older entries.
+- If the TOC was at the newest edge before a same-session append refresh, keep it there after repopulating rows; otherwise preserve the user's older reading position.
 - Keep the TOC overlay frontmost in the AppKit subview order whenever terminal surfaces are attached/switched/refreshed; layer `zPosition` alone is not sufficient for mouse hit-testing against embedded Ghostty views.
 
 Navigation behavior:
-- TOC selection uses tmux copy-mode positioning (`scrollHistoryLineToTop`) so the selected prompt line is anchored at the top of the viewport whenever enough lines exist below it.
+- TOC selection first resolves the chosen prompt against a fresh full-pane capture, distinguishing repeated prompt text by occurrence from the newest edge. It then uses tmux copy-mode positioning (`scrollHistoryLineToTop`) so the current prompt line is anchored at the top whenever enough lines exist below it.
+- Serialize prompt navigation tasks so rapid clicks are latest-selection-wins even when an earlier tmux command has already crossed the asynchronous shell boundary.
 - Terminal scrollback fallback controls in the terminal panel must route through tmux copy-mode commands (`page-up`, `page-down-and-cancel`, cancel-to-bottom) instead of relying on Ghostty wheel events, because in-agent wheel handling can be captured by the running tool.
 - Mouse-wheel scrolling in embedded terminals uses a two-layer approach: (1) Ghostty config sets `mouse-reporting = true` for both `magentDefaultScroll` and `allowAppsToCapture` so scroll events reach tmux as xterm mouse sequences; (2) `TmuxService.applyMouseWheelScrollSettings` enables `set -g mouse on` and configures `WheelUpPane`/`WheelDownPane` tmux key bindings — `magentDefaultScroll` forces every scroll-up into copy-mode (history-only, apps never receive the event), `allowAppsToCapture` removes those overrides to restore tmux default behavior. `inheritGhosttyGlobal` touches neither. Settings are applied at startup and on every settings change via `AppDelegate.applyAppAppearanceAndTerminalPreferences`. When the setting changes for already-open tabs, `TerminalSurfaceView` instances are recreated so the updated ghostty config takes effect immediately.
 - App appearance is a single shared setting: it must drive both `NSApp.appearance` for AppKit chrome and Ghostty's light/dark color scheme so the sidebar/top bars/terminal never drift apart. In `System` mode, refresh Ghostty on app activation and when macOS broadcasts `AppleInterfaceThemeChangedNotification`.
