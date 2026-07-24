@@ -51,10 +51,11 @@ struct MainWindowChromeLayout {
         settings: NSToolbarItem.Identifier
     ) -> [NSToolbarItem.Identifier] {
         [
+            .flexibleSpace,
+            addRepository,
             .sidebarTrackingSeparator,
             currentThread,
             .flexibleSpace,
-            addRepository,
             recentlyArchived,
             settings,
         ]

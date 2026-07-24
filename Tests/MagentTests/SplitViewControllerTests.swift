@@ -36,6 +36,24 @@ struct SplitViewControllerTests {
         #expect(currentThreadIndex == separatorIndex + 1)
     }
 
+    @Test("Add repository sits at the trailing edge of the sidebar toolbar")
+    func addRepositoryPrecedesSidebarDividerAfterFlexibleSpace() throws {
+        let addRepository = NSToolbarItem.Identifier("addRepository")
+        let identifiers = MainWindowChromeLayout.defaultToolbarItemIdentifiers(
+            currentThread: NSToolbarItem.Identifier("currentThread"),
+            addRepository: addRepository,
+            recentlyArchived: NSToolbarItem.Identifier("recentlyArchived"),
+            settings: NSToolbarItem.Identifier("settings")
+        )
+        let addRepositoryIndex = try #require(identifiers.firstIndex(of: addRepository))
+        let separatorIndex = try #require(
+            identifiers.firstIndex(of: NSToolbarItem.Identifier.sidebarTrackingSeparator)
+        )
+
+        #expect(addRepositoryIndex == separatorIndex - 1)
+        #expect(identifiers[addRepositoryIndex - 1] == .flexibleSpace)
+    }
+
     @Test("Sidebar toolbar separator tracks the split-view divider")
     func toolbarSeparatorTracksSidebarDivider() {
         let splitView = NSSplitView()
