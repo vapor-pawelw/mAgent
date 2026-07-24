@@ -1007,7 +1007,7 @@ final class ThreadListViewController: NSViewController {
             sidebarChromeBlurView.topAnchor.constraint(equalTo: view.topAnchor),
             sidebarChromeBlurView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             sidebarChromeBlurView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            sidebarChromeBlurView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            sidebarChromeBlurView.bottomAnchor.constraint(equalTo: stickyHeaderOverlay.bottomAnchor),
 
             SidebarContentLayout.topConstraint(for: stickyHeaderOverlay, in: view),
             stickyHeaderOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),

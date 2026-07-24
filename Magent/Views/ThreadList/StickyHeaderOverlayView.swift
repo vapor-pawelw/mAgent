@@ -24,8 +24,6 @@ final class StickyHeaderOverlayView: NSView {
 
     // MARK: - Subviews
 
-    private let headerBlurView = NSVisualEffectView()
-
     private let projectContainer = NSView()
     private let projectNameLabel = NSTextField(labelWithString: "")
     private let projectPinIcon = NSImageView()
@@ -71,10 +69,6 @@ final class StickyHeaderOverlayView: NSView {
 
     private func setup() {
         wantsLayer = true
-
-        headerBlurView.translatesAutoresizingMaskIntoConstraints = false
-        SidebarChromeBlurStyle.apply(to: headerBlurView)
-        addSubview(headerBlurView)
 
         // Project header row
         projectContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -127,11 +121,6 @@ final class StickyHeaderOverlayView: NSView {
         )
 
         NSLayoutConstraint.activate([
-            headerBlurView.topAnchor.constraint(equalTo: topAnchor),
-            headerBlurView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            headerBlurView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            headerBlurView.bottomAnchor.constraint(equalTo: bottomAnchor),
-
             projectContainer.topAnchor.constraint(equalTo: topAnchor, constant: Self.topInset),
             projectContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
             projectContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
