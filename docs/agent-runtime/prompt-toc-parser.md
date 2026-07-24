@@ -16,7 +16,7 @@ This document covers Prompt TOC parsing and jump behavior.
 - Hovering expands the capsule to the full panel (default 320×250pt, user-resizable) with animation; mouse exit collapses it back.
 - The pin button appears in the top-right only while the floating TOC is expanded. Pinning moves the TOC into a full-height trailing split and reserves its width so terminal and chat content cannot render underneath it.
 - The pinned TOC stays expanded and always shows its unpin button. Its divider sits flush on the TOC's leading edge, matches the subtle top-bar separators, and shows the standard horizontal resize cursor across a forgiving 8pt hit target; drag it to resize the split. The chosen width and pin state persist across launches.
-- Each prompt row shows its ordinal in a separate circular badge instead of prefixing the prompt text. Floating rows keep compact 11pt, three-line previews; pinned rows use 12pt text and allow up to five lines.
+- Each prompt row shows its ordinal in a small borderless, high-contrast badge instead of prefixing the prompt text. The newest row carries a persistent green `Latest` capsule that remains distinct from the primary-colored selected-row treatment. Floating rows keep compact 11pt, three-line previews; pinned rows use 12pt text and allow up to five lines.
 - The toolbar toggle button and in-panel × close button are removed — TOC is always-on; users disable it in Settings.
 - No agent name appears in the header; only the title and count badge.
 

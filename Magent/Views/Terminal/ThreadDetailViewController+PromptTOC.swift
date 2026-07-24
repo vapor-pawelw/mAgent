@@ -1253,7 +1253,7 @@ private final class PromptTOCLabel: NSTextField {
     }
 }
 
-private final class PromptTOCOrdinalBadgeView: NSView {
+private final class PromptTOCNonInteractiveView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         nil
     }
@@ -1261,8 +1261,14 @@ private final class PromptTOCOrdinalBadgeView: NSView {
 
 private final class PromptTOCEntryRowView: NSView {
     let entryIndex: Int
-    private let ordinalBadgeView = PromptTOCOrdinalBadgeView()
+    private let isLatest: Bool
+    private let ordinalBadgeView = PromptTOCNonInteractiveView()
     private let ordinalLabel: PromptTOCLabel
+    private let latestBadgeView = PromptTOCNonInteractiveView()
+    private let latestLabel = PromptTOCLabel(
+        labelWithString: String(localized: .ThreadStrings.promptTOCLatest)
+    )
+    private let contentStack = NSStackView()
     private let label: PromptTOCLabel
     private var ordinalBadgeWidthConstraint: NSLayoutConstraint!
     private var showsAlternateBackground = false
@@ -1274,8 +1280,9 @@ private final class PromptTOCEntryRowView: NSView {
 
     var onRightClick: ((Int, NSEvent) -> Void)?
 
-    init(entryIndex: Int, promptText: String, isPinned: Bool) {
+    init(entryIndex: Int, promptText: String, isPinned: Bool, isLatest: Bool) {
         self.entryIndex = entryIndex
+        self.isLatest = isLatest
         self.ordinalLabel = PromptTOCLabel(labelWithString: "\(entryIndex + 1)")
         self.label = PromptTOCLabel(wrappingLabelWithString: promptText)
         super.init(frame: .zero)
@@ -1310,7 +1317,8 @@ private final class PromptTOCEntryRowView: NSView {
         applyPresentation(PromptTOCRowPresentation(
             entryIndex: entryIndex,
             promptText: label.stringValue,
-            isPinned: isPinned
+            isPinned: isPinned,
+            isLatest: isLatest
         ))
     }
 
@@ -1321,17 +1329,32 @@ private final class PromptTOCEntryRowView: NSView {
 
         ordinalBadgeView.translatesAutoresizingMaskIntoConstraints = false
         ordinalBadgeView.wantsLayer = true
-        ordinalBadgeView.layer?.cornerRadius = 10
-        ordinalBadgeView.layer?.borderWidth = 1
+        ordinalBadgeView.layer?.cornerRadius = PromptTOCOrdinalBadgeStyle.height / 2
+        ordinalBadgeView.layer?.borderWidth = 0
 
         ordinalLabel.translatesAutoresizingMaskIntoConstraints = false
-        ordinalLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        ordinalLabel.font = .systemFont(
+            ofSize: PromptTOCOrdinalBadgeStyle.fontSize,
+            weight: .semibold
+        )
         ordinalLabel.alignment = .center
         ordinalLabel.isSelectable = false
         ordinalLabel.isEditable = false
         ordinalLabel.focusRingType = .none
         ordinalLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         ordinalBadgeView.addSubview(ordinalLabel)
+
+        latestBadgeView.translatesAutoresizingMaskIntoConstraints = false
+        latestBadgeView.wantsLayer = true
+        latestBadgeView.layer?.cornerRadius = 8
+        latestBadgeView.isHidden = true
+
+        latestLabel.translatesAutoresizingMaskIntoConstraints = false
+        latestLabel.font = .systemFont(ofSize: 9, weight: .semibold)
+        latestLabel.isSelectable = false
+        latestLabel.isEditable = false
+        latestLabel.focusRingType = .none
+        latestBadgeView.addSubview(latestLabel)
 
         label.translatesAutoresizingMaskIntoConstraints = false
         label.textColor = NSColor(resource: .textPrimary)
@@ -1346,14 +1369,24 @@ private final class PromptTOCEntryRowView: NSView {
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
+        contentStack.orientation = .vertical
+        contentStack.alignment = .leading
+        contentStack.spacing = 4
+        contentStack.detachesHiddenViews = true
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.addArrangedSubview(latestBadgeView)
+        contentStack.addArrangedSubview(label)
+
         addSubview(ordinalBadgeView)
-        addSubview(label)
-        ordinalBadgeWidthConstraint = ordinalBadgeView.widthAnchor.constraint(equalToConstant: 20)
+        addSubview(contentStack)
+        ordinalBadgeWidthConstraint = ordinalBadgeView.widthAnchor.constraint(
+            equalToConstant: PromptTOCOrdinalBadgeStyle.height
+        )
         NSLayoutConstraint.activate([
             ordinalBadgeView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             ordinalBadgeView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             ordinalBadgeWidthConstraint,
-            ordinalBadgeView.heightAnchor.constraint(equalToConstant: 20),
+            ordinalBadgeView.heightAnchor.constraint(equalToConstant: PromptTOCOrdinalBadgeStyle.height),
             ordinalBadgeView.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -6),
 
             ordinalLabel.centerXAnchor.constraint(equalTo: ordinalBadgeView.centerXAnchor),
@@ -1361,10 +1394,17 @@ private final class PromptTOCEntryRowView: NSView {
             ordinalLabel.leadingAnchor.constraint(greaterThanOrEqualTo: ordinalBadgeView.leadingAnchor, constant: 2),
             ordinalLabel.trailingAnchor.constraint(lessThanOrEqualTo: ordinalBadgeView.trailingAnchor, constant: -2),
 
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            label.leadingAnchor.constraint(equalTo: ordinalBadgeView.trailingAnchor, constant: 7),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            latestBadgeView.heightAnchor.constraint(equalToConstant: 16),
+            latestLabel.topAnchor.constraint(equalTo: latestBadgeView.topAnchor, constant: 2),
+            latestLabel.leadingAnchor.constraint(equalTo: latestBadgeView.leadingAnchor, constant: 6),
+            latestLabel.trailingAnchor.constraint(equalTo: latestBadgeView.trailingAnchor, constant: -6),
+            latestLabel.bottomAnchor.constraint(equalTo: latestBadgeView.bottomAnchor, constant: -2),
+
+            contentStack.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            contentStack.leadingAnchor.constraint(equalTo: ordinalBadgeView.trailingAnchor, constant: 6),
+            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            label.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
         ])
 
         updateAppearance()
@@ -1376,6 +1416,7 @@ private final class PromptTOCEntryRowView: NSView {
         label.font = .monospacedSystemFont(ofSize: presentation.promptFontSize, weight: .regular)
         label.maximumNumberOfLines = presentation.maximumPromptLines
         ordinalBadgeWidthConstraint.constant = presentation.ordinalBadgeWidth
+        latestBadgeView.isHidden = !presentation.showsLatestMarker
         label.invalidateIntrinsicContentSize()
         invalidateIntrinsicContentSize()
         superview?.invalidateIntrinsicContentSize()
@@ -1391,16 +1432,19 @@ private final class PromptTOCEntryRowView: NSView {
             ordinalBadgeView.layer?.backgroundColor = (
                 isSelected
                     ? NSColor.appPrimary.withAlphaComponent(0.22)
-                    : NSColor.labelColor.withAlphaComponent(0.10)
+                    : NSColor.labelColor.withAlphaComponent(0.14)
             ).cgColor
-            ordinalBadgeView.layer?.borderColor = (
-                isSelected
-                    ? NSColor.appPrimary.withAlphaComponent(0.55)
-                    : NSColor.separatorColor.withAlphaComponent(0.55)
-            ).cgColor
-            ordinalLabel.textColor = isSelected
-                ? NSColor.appPrimary
-                : NSColor(resource: .textSecondary)
+            ordinalBadgeView.layer?.borderWidth = 0
+            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ordinalLabel.textColor = PromptTOCOrdinalBadgeStyle.numberColor(
+                isDarkAppearance: isDark
+            )
+            latestBadgeView.layer?.backgroundColor = PromptTOCLatestBadgeStyle
+                .backgroundColor(isDarkAppearance: isDark)
+                .cgColor
+            latestLabel.textColor = PromptTOCLatestBadgeStyle.textColor(
+                isDarkAppearance: isDark
+            )
 
             if isSelected {
                 layer.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.18).cgColor
@@ -1409,7 +1453,6 @@ private final class PromptTOCEntryRowView: NSView {
             }
 
             layer.borderColor = NSColor.clear.cgColor
-            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             layer.backgroundColor = showsAlternateBackground
                 ? NSColor.separatorColor.withAlphaComponent(isDark ? 0.08 : 0.14).cgColor
                 : NSColor.clear.cgColor
@@ -1520,7 +1563,8 @@ final class PromptTableOfContentsView: NSView {
             let row = PromptTOCEntryRowView(
                 entryIndex: index,
                 promptText: entry.displayText,
-                isPinned: presentationState.isPinned
+                isPinned: presentationState.isPinned,
+                isLatest: index == entries.count - 1
             )
             row.setAlternateBackgroundVisible(!index.isMultiple(of: 2))
 

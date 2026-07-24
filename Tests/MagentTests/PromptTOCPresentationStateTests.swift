@@ -88,16 +88,23 @@ struct PromptTOCPresentationStateTests {
         #expect(floating.promptText == "Explain this change")
         #expect(floating.promptFontSize == 11)
         #expect(floating.maximumPromptLines == 3)
-        #expect(floating.ordinalBadgeWidth == 20)
+        #expect(floating.ordinalBadgeWidth == 16)
+        #expect(!floating.showsLatestMarker)
         #expect(pinned.promptFontSize == 12)
         #expect(pinned.maximumPromptLines == 5)
 
         let threeDigitOrdinal = PromptTOCRowPresentation(
             entryIndex: 99,
             promptText: "One hundredth prompt",
-            isPinned: true
+            isPinned: true,
+            isLatest: true
         )
         #expect(threeDigitOrdinal.ordinalText == "100")
-        #expect(threeDigitOrdinal.ordinalBadgeWidth > 20)
+        #expect(threeDigitOrdinal.ordinalBadgeWidth > 16)
+        #expect(threeDigitOrdinal.showsLatestMarker)
+        #expect(PromptTOCOrdinalBadgeStyle.numberColor(isDarkAppearance: true) == .white)
+        #expect(PromptTOCOrdinalBadgeStyle.numberColor(isDarkAppearance: false) == .labelColor)
+        #expect(PromptTOCLatestBadgeStyle.textColor(isDarkAppearance: true) == .black)
+        #expect(PromptTOCLatestBadgeStyle.textColor(isDarkAppearance: false) == .white)
     }
 }
