@@ -1041,7 +1041,7 @@ extension ThreadDetailViewController {
 
                     if pinAfterCreation,
                        let restoredIndex = self.tabSlots.firstIndex(of: .terminal(sessionName: tab.tmuxSessionName)),
-                       restoredIndex >= self.pinnedCount {
+                       !self.currentTabGroups().pinned.contains(restoredIndex) {
                         self.togglePin(at: restoredIndex)
                     }
 
@@ -1250,20 +1250,22 @@ extension ThreadDetailViewController {
     }
 
     func handleRename(_ updated: MagentThread) {
-        // Capture old terminal session names (in slot order) before updating thread state.
-        var oldTerminalNames: [String] = []
-        for slot in tabSlots {
-            if case .terminal(let name) = slot { oldTerminalNames.append(name) }
-        }
+        let oldCanonicalNames = thread.tmuxSessionNames
 
         thread = updated
 
-        // Build old→new rename map from positional correspondence.
+        // ThreadManager preserves canonical tmux-session order across a rename.
+        // Build the map from that model order, not visual tab order: permanent
+        // tabs live in a separate trailing stack and need not be visually first.
         var renameMap: [String: String] = [:]
         for (seqIdx, newName) in thread.tmuxSessionNames.enumerated() {
-            if seqIdx < oldTerminalNames.count, oldTerminalNames[seqIdx] != newName {
-                renameMap[oldTerminalNames[seqIdx]] = newName
+            if seqIdx < oldCanonicalNames.count, oldCanonicalNames[seqIdx] != newName {
+                renameMap[oldCanonicalNames[seqIdx]] = newName
             }
+        }
+        if let permanentTerminalSessionName,
+           let renamedPermanentSession = renameMap[permanentTerminalSessionName] {
+            self.permanentTerminalSessionName = renamedPermanentSession
         }
 
         // Re-key all session-keyed VC state in one place so no cache is missed.
@@ -1290,15 +1292,11 @@ extension ThreadDetailViewController {
             }
         }
 
-        // Rebuild tabSlots terminal entries from the current thread.tmuxSessionNames
-        // preserving the display order. Match by position in the terminal-only subsequence.
-        var terminalSlotPositions: [Int] = []
-        for (i, slot) in tabSlots.enumerated() {
-            if case .terminal = slot { terminalSlotPositions.append(i) }
-        }
-        for (seqIdx, displayIdx) in terminalSlotPositions.enumerated() {
-            if seqIdx < thread.tmuxSessionNames.count {
-                let newName = thread.tmuxSessionNames[seqIdx]
+        // Re-key each visual slot by identity so moving permanent tabs outside
+        // the user-tab strip cannot swap their backing sessions during rename.
+        for (displayIdx, slot) in tabSlots.enumerated() {
+            if case .terminal(let oldName) = slot,
+               let newName = renameMap[oldName] {
                 tabSlots[displayIdx] = .terminal(sessionName: newName)
                 if displayIdx < tabItems.count {
                     tabItems[displayIdx].titleLabel.stringValue = thread.displayName(for: newName, at: displayIdx)

@@ -3,6 +3,28 @@ import MagentCore
 
 extension ThreadDetailViewController {
 
+    func tabIdentity(at index: Int) -> ThreadTabIdentity? {
+        guard tabSlots.indices.contains(index) else { return nil }
+        return tabSlots[index].identity(permanentTerminalSessionName: permanentTerminalSessionName)
+    }
+
+    func isPermanentTab(at index: Int) -> Bool {
+        tabIdentity(at: index)?.isPermanent == true
+    }
+
+    var pinnedMovableTabCount: Int {
+        max(0, pinnedCount - Self.permanentTabCount)
+    }
+
+    func currentTabGroups() -> ThreadTopBarLayout.TabGroups {
+        ThreadTopBarLayout.tabGroups(
+            identities: tabSlots.map {
+                $0.identity(permanentTerminalSessionName: permanentTerminalSessionName)
+            },
+            pinnedMovableCount: pinnedMovableTabCount
+        )
+    }
+
     func configureTopBarLayout(prJiraHostedInInfoStrip: Bool) {
         for item in ThreadTopBarLayout.items(prJiraHostedInInfoStrip: prJiraHostedInInfoStrip) {
             let view: NSView = switch item {
@@ -145,7 +167,9 @@ extension ThreadDetailViewController {
 
     private func tabScrollStep() -> CGFloat {
         // Prefer one tab width when available, otherwise a sensible default.
-        let width = tabItems.dropFirst(Self.fixedTabCount).first?.frame.width ?? 120
+        let width = tabItems.indices
+            .first(where: { !isPermanentTab(at: $0) })
+            .map { tabItems[$0].frame.width } ?? 120
         return max(80, width + tabBarStack.spacing)
     }
 
@@ -176,11 +200,7 @@ extension ThreadDetailViewController {
             sv.removeFromSuperview()
         }
 
-        let groups = ThreadTopBarLayout.tabGroups(
-            tabCount: tabItems.count,
-            fixedCount: Self.fixedTabCount,
-            pinnedBoundary: pinnedCount
-        )
+        let groups = currentTabGroups()
 
         // Fixed tabs stay at the trailing edge, outside the user-tab scroll region.
         for i in groups.fixed {
@@ -196,9 +216,9 @@ extension ThreadDetailViewController {
             tabBarStack.addArrangedSubview(tabItems[i])
         }
 
-        if !groups.pinned.isEmpty && groups.unpinned.lowerBound < tabItems.count {
+        if let lastPinnedIndex = groups.pinned.last, !groups.unpinned.isEmpty {
             // Extra 4 pt padding on each side of the separator (stack spacing = 4, so total gap = 8)
-            let anchor = tabItems[groups.pinned.upperBound - 1]
+            let anchor = tabItems[lastPinnedIndex]
             guard tabBarStack.arrangedSubviews.contains(anchor) else {
                 DispatchQueue.main.async { [weak self] in
                     self?.refreshTabScrollArrowsVisibility()
@@ -593,26 +613,25 @@ extension ThreadDetailViewController {
         let settings = PersistenceService.shared.loadSettings()
         let isTabDetachEnabled = settings.isTabDetachFeatureEnabled
         let canRestoreLastClosedTab = threadManager.hasClosedTabSnapshot(for: thread.id)
-        let count = tabItems.count
-        let movableTabCount = max(0, count - Self.fixedTabCount)
+        let movableTabCount = tabSlots.indices.filter { !isPermanentTab(at: $0) }.count
+        let pinnedIndices = Set(currentTabGroups().pinned)
+        var movableDisplayIndex = 0
 
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
             let item = tabItems[i]
+            let identity = slot.identity(permanentTerminalSessionName: permanentTerminalSessionName)
+            let isPermanent = identity.isPermanent
             item.onSelect = { [weak self] in self?.selectTab(at: i) }
             item.onClose = { [weak self] in self?.closeTab(at: i) }
             item.onForceClose = { [weak self] in self?.forceCloseTab(at: i) }
             item.onPin = { [weak self] in self?.togglePin(at: i) }
             item.onCloseTabsToTheRight = { [weak self] in self?.closeTabsToTheRight(of: i) }
             item.onCloseTabsToTheLeft = { [weak self] in self?.closeTabsToTheLeft(of: i) }
-            item.tabIndex = max(0, i - Self.fixedTabCount)
+            item.tabIndex = movableDisplayIndex
             item.totalTabCount = movableTabCount
-            item.showCloseButton = i >= Self.fixedTabCount
-            item.showPinIcon = TabPinningState.isPinnedMovableIndex(
-                i,
-                pinnedBoundary: pinnedCount,
-                fixedCount: Self.fixedTabCount
-            )
-            item.isUtilityTab = i < Self.fixedTabCount
+            item.showCloseButton = !isPermanent
+            item.showPinIcon = pinnedIndices.contains(i)
+            item.isUtilityTab = isPermanent
             item.suppressContextMenu = false
             item.suppressBulkCloseActions = false
             item.suppressCloseThisAction = false
@@ -622,7 +641,12 @@ extension ThreadDetailViewController {
 
             switch slot {
             case .terminal(let sessionName):
-                let isPrimaryTerminal = i == 0
+                let isPrimaryTerminal: Bool
+                if case .permanentTerminal = identity {
+                    isPrimaryTerminal = true
+                } else {
+                    isPrimaryTerminal = false
+                }
                 item.typeIcon.image = isPrimaryTerminal
                     ? NSImage(systemSymbolName: "terminal.fill", accessibilityDescription: "Terminal")
                     : nil
@@ -797,6 +821,9 @@ extension ThreadDetailViewController {
                 item.showKeepAliveIcon = false
                 item.hasUnreadDiff = isDiffUnread()
             }
+            if !isPermanent {
+                movableDisplayIndex += 1
+            }
         }
 
         refreshTabTooltips()
@@ -812,15 +839,13 @@ extension ThreadDetailViewController {
     }
 
     private func tooltipText(for slot: TabSlot, displayIndex: Int) -> String {
-        let pinned = TabPinningState.isPinnedMovableIndex(
-            displayIndex,
-            pinnedBoundary: pinnedCount,
-            fixedCount: Self.fixedTabCount
-        ) ? "Yes" : "No"
+        let pinned = currentTabGroups().pinned.contains(displayIndex) ? "Yes" : "No"
 
         switch slot {
         case .terminal(let sessionName):
-            if displayIndex == 0 {
+            if case .permanentTerminal = slot.identity(
+                permanentTerminalSessionName: permanentTerminalSessionName
+            ) {
                 let keepAlive = thread.isKeepAlive
                     ? "Thread-level"
                     : (thread.protectedTmuxSessions.contains(sessionName) ? "Tab-level" : "No")

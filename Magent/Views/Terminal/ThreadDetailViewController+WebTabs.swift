@@ -307,7 +307,7 @@ extension ThreadDetailViewController {
             pinnedCount += 1
             pinnedCount = TabPinningState.clampedPinnedBoundary(
                 pinnedCount,
-                fixedCount: Self.fixedTabCount,
+                fixedCount: Self.permanentTabCount,
                 totalCount: tabSlots.count
             )
         } else {
@@ -331,6 +331,7 @@ extension ThreadDetailViewController {
     func closeWebTab(identifier: String) {
         guard let webIndex = webTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
         guard let displayIndex = tabSlots.firstIndex(of: .web(identifier: identifier)) else { return }
+        let wasPinned = currentTabGroups().pinned.contains(displayIndex)
 
         let persistedSnapshot = thread.persistedWebTabs.first(where: { $0.identifier == identifier })
             ?? PersistedWebTab(
@@ -338,11 +339,7 @@ extension ThreadDetailViewController {
                 url: webTabs[webIndex].url,
                 title: tabItems[displayIndex].titleLabel.stringValue,
                 iconType: webTabs[webIndex].iconType,
-                isPinned: TabPinningState.isPinnedMovableIndex(
-                    displayIndex,
-                    pinnedBoundary: pinnedCount,
-                    fixedCount: Self.fixedTabCount
-                ),
+                isPinned: wasPinned,
                 customTitle: nil
             )
         threadManager.pushClosedTabSnapshot(.web(persistedSnapshot), for: thread.id)
@@ -353,15 +350,11 @@ extension ThreadDetailViewController {
         tabItems.remove(at: displayIndex)
         tabSlots.remove(at: displayIndex)
 
-        if TabPinningState.isPinnedMovableIndex(
-            displayIndex,
-            pinnedBoundary: pinnedCount,
-            fixedCount: Self.fixedTabCount
-        ) {
+        if wasPinned {
             pinnedCount -= 1
             pinnedCount = TabPinningState.clampedPinnedBoundary(
                 pinnedCount,
-                fixedCount: Self.fixedTabCount,
+                fixedCount: Self.permanentTabCount,
                 totalCount: tabSlots.count
             )
         }

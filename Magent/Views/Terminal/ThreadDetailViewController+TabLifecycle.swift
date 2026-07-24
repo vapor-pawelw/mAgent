@@ -12,7 +12,7 @@ extension ThreadDetailViewController {
 
     func closeTab(at index: Int) {
         guard index < tabSlots.count else { return }
-        guard index >= Self.fixedTabCount else { return }
+        guard !isPermanentTab(at: index) else { return }
 
         switch tabSlots[index] {
         case .terminal(let sessionName):
@@ -76,7 +76,7 @@ extension ThreadDetailViewController {
     /// Close a tab without showing a confirmation alert (Option+middle-click).
     func forceCloseTab(at index: Int) {
         guard index < tabSlots.count else { return }
-        guard index >= Self.fixedTabCount else { return }
+        guard !isPermanentTab(at: index) else { return }
 
         switch tabSlots[index] {
         case .terminal(let sessionName):
@@ -121,7 +121,9 @@ extension ThreadDetailViewController {
     func closeTabsToTheRight(of index: Int) {
         let count = tabSlots.count
         guard index < count - 1 else { return }
-        let tabCount = count - index - 1
+        let indicesToClose = tabSlots.indices.filter { $0 > index && !isPermanentTab(at: $0) }
+        guard !indicesToClose.isEmpty else { return }
+        let tabCount = indicesToClose.count
 
         let alert = NSAlert()
         alert.messageText = String(localized: .ThreadStrings.tabsCloseRightTitle)
@@ -133,24 +135,27 @@ extension ThreadDetailViewController {
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        let slotsToClose = Array(tabSlots[(index + 1)...])
+        let slotsToClose = indicesToClose.map { tabSlots[$0] }
         batchCloseSlots(slotsToClose)
     }
 
     func closeTabsToTheLeft(of index: Int) {
         guard index > 0 else { return }
+        let indicesToClose = tabSlots.indices.filter { $0 < index && !isPermanentTab(at: $0) }
+        guard !indicesToClose.isEmpty else { return }
+        let tabCount = indicesToClose.count
 
         let alert = NSAlert()
         alert.messageText = String(localized: .ThreadStrings.tabsCloseLeftTitle)
-        alert.informativeText = index == 1
-            ? String(localized: .ThreadStrings.tabsCloseLeftMessageOne(index))
-            : String(localized: .ThreadStrings.tabsCloseLeftMessageMany(index))
+        alert.informativeText = tabCount == 1
+            ? String(localized: .ThreadStrings.tabsCloseLeftMessageOne(tabCount))
+            : String(localized: .ThreadStrings.tabsCloseLeftMessageMany(tabCount))
         alert.alertStyle = .warning
         alert.addButton(withTitle: String(localized: .CommonStrings.commonClose))
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        let slotsToClose = Array(tabSlots[..<index])
+        let slotsToClose = indicesToClose.map { tabSlots[$0] }
         batchCloseSlots(slotsToClose)
     }
 
@@ -558,8 +563,8 @@ extension ThreadDetailViewController {
     // MARK: - Pin/Unpin
 
     func togglePin(at index: Int) {
-        guard index >= Self.fixedTabCount else { return }
-        if TabPinningState.isPinnedMovableIndex(index, pinnedBoundary: pinnedCount, fixedCount: Self.fixedTabCount) {
+        guard !isPermanentTab(at: index) else { return }
+        if currentTabGroups().pinned.contains(index) {
             unpinTab(at: index)
         } else {
             pinTab(at: index)
@@ -567,13 +572,15 @@ extension ThreadDetailViewController {
     }
 
     private func pinTab(at index: Int) {
-        guard index >= Self.fixedTabCount else { return }
-        guard index >= pinnedCount else { return }
-        moveTab(from: index, to: pinnedCount)
+        guard !isPermanentTab(at: index) else { return }
+        let groups = currentTabGroups()
+        guard groups.unpinned.contains(index) else { return }
+        let targetIndex = groups.unpinned.first ?? index
+        moveTab(from: index, to: targetIndex)
         pinnedCount += 1
         pinnedCount = TabPinningState.clampedPinnedBoundary(
             pinnedCount,
-            fixedCount: Self.fixedTabCount,
+            fixedCount: Self.permanentTabCount,
             totalCount: tabSlots.count
         )
         rebindAllTabActions()
@@ -582,15 +589,16 @@ extension ThreadDetailViewController {
     }
 
     private func unpinTab(at index: Int) {
-        guard index >= Self.fixedTabCount else { return }
-        guard index < pinnedCount else { return }
+        guard !isPermanentTab(at: index) else { return }
+        guard currentTabGroups().pinned.contains(index) else { return }
         pinnedCount -= 1
         pinnedCount = TabPinningState.clampedPinnedBoundary(
             pinnedCount,
-            fixedCount: Self.fixedTabCount,
+            fixedCount: Self.permanentTabCount,
             totalCount: tabSlots.count
         )
-        moveTab(from: index, to: pinnedCount)
+        let targetIndex = currentTabGroups().unpinned.first ?? index
+        moveTab(from: index, to: targetIndex)
         rebindAllTabActions()
         rebuildTabBar()
         persistTabOrder()

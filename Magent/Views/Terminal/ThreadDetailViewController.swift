@@ -180,6 +180,24 @@ final class ThreadDetailViewController: NSViewController {
             }
             return ThreadTabFocusResolver.focusTarget(for: contentKind)
         }
+
+        func identity(permanentTerminalSessionName: String?) -> ThreadTabIdentity {
+            switch self {
+            case .terminal(let sessionName):
+                return .terminal(
+                    sessionName: sessionName,
+                    permanentTerminalSessionName: permanentTerminalSessionName
+                )
+            case .diff:
+                return .permanentDiff
+            case .web(let identifier):
+                return .web(identifier)
+            case .draft(let identifier):
+                return .draft(identifier)
+            case .chat(let identifier):
+                return .chat(identifier)
+            }
+        }
     }
     var tabItems: [TabItemView] = []
     var tabSlots: [TabSlot] = []
@@ -203,8 +221,8 @@ final class ThreadDetailViewController: NSViewController {
     var activeChatTabId: String?
     var currentTabIndex = 0
     /// Number of leading fixed tabs that cannot be closed/reordered.
-    static let fixedTabCount = 2
-    var primaryTabIndex = 0
+    static let permanentTabCount = 2
+    var permanentTerminalSessionName: String?
     var pinnedCount = 0
     /// Placeholder views shown for detached tabs, keyed by sessionName.
     var detachedTabPlaceholders: [String: DetachedTabPlaceholderView] = [:]
@@ -311,7 +329,6 @@ final class ThreadDetailViewController: NSViewController {
         self.isPopoutContext = isPopoutContext
         self.showsHeaderInfoStrip = showsHeaderInfoStrip
         self.thread = thread
-        self.primaryTabIndex = 0
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -898,6 +915,7 @@ final class ThreadDetailViewController: NSViewController {
             canonicalPrimarySession: preferredPrimarySession
         )
         let primarySessionName = display.primary
+        permanentTerminalSessionName = primarySessionName
         let orderedMovableSessions = TabPinningState.orderedMovableSessions(
             movableSessions: display.movable,
             pinnedSessions: pinnedSet
@@ -905,9 +923,9 @@ final class ThreadDetailViewController: NSViewController {
         let pinnedMovableCount = orderedMovableSessions.prefix { pinnedSet.contains($0) }.count
         let sessionDisplayOrder = [primarySessionName] + orderedMovableSessions
         pinnedCount = TabPinningState.pinnedBoundary(
-            fixedCount: Self.fixedTabCount,
+            fixedCount: Self.permanentTabCount,
             pinnedMovableCount: pinnedMovableCount,
-            totalCount: orderedMovableSessions.count + Self.fixedTabCount
+            totalCount: orderedMovableSessions.count + Self.permanentTabCount
         )
 
         await MainActor.run {
@@ -947,7 +965,7 @@ final class ThreadDetailViewController: NSViewController {
                 let isPinnedAtDisplayIndex = TabPinningState.isPinnedMovableIndex(
                     displayIndex,
                     pinnedBoundary: pinnedCount,
-                    fixedCount: Self.fixedTabCount
+                    fixedCount: Self.permanentTabCount
                 )
                 createTabItem(title: title, closable: true, pinned: isPinnedAtDisplayIndex)
                 tabSlots.append(.terminal(sessionName: sessionName))
@@ -1499,6 +1517,7 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         GhosttyAppManager.log("handleTabWillClose: threadId=\(threadId) session=\(sessionName) displayIndex=\(displayIndex)")
+        let wasPinned = currentTabGroups().pinned.contains(displayIndex)
 
         // Remove the surface view.  This triggers viewDidMoveToWindow(nil) → destroySurface()
         // → ghostty_surface_free, preventing the zombie-surface crash.
@@ -1512,23 +1531,17 @@ final class ThreadDetailViewController: NSViewController {
             tabSlots.remove(at: displayIndex)
         }
 
-        // Keep pinnedCount / primaryTabIndex in sync.
-        if TabPinningState.isPinnedMovableIndex(
-            displayIndex,
-            pinnedBoundary: pinnedCount,
-            fixedCount: Self.fixedTabCount
-        ) {
+        // Keep the movable pinned boundary in sync.
+        if wasPinned {
             pinnedCount -= 1
             pinnedCount = TabPinningState.clampedPinnedBoundary(
                 pinnedCount,
-                fixedCount: Self.fixedTabCount,
+                fixedCount: Self.permanentTabCount,
                 totalCount: tabSlots.count
             )
         }
-        if displayIndex == primaryTabIndex {
-            primaryTabIndex = 0
-        } else if primaryTabIndex > displayIndex {
-            primaryTabIndex -= 1
+        if sessionName == permanentTerminalSessionName {
+            permanentTerminalSessionName = nil
         }
 
         // Prune our local thread copy so subsequent index lookups stay correct.

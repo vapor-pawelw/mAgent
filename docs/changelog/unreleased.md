@@ -50,6 +50,7 @@
 #### Bug Fixes
 
 - Prevented simultaneous thread archives from racing on the main worktree, Local Sync files, or git metadata, with queued agent workflows now reporting the active thread and their live queue position.
+- Kept the permanent Terminal and Diff tabs in their trailing positions even when restored agent or content tabs appear first in persisted session order.
 - Fixed automatic AI naming for new agent terminal tabs that show a default model and effort label.
 - Fixed renaming a terminal tab unnecessarily reloading its terminal view.
 - Fixed recent thread switches flashing a loading overlay even when the selected terminal session was already cached and healthy.

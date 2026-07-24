@@ -1,5 +1,33 @@
 import CoreGraphics
 
+enum ThreadTabIdentity: Hashable {
+    case permanentTerminal(sessionName: String)
+    case permanentDiff
+    case terminalSession(String)
+    case web(String)
+    case draft(String)
+    case chat(String)
+
+    static func terminal(
+        sessionName: String,
+        permanentTerminalSessionName: String?
+    ) -> ThreadTabIdentity {
+        if sessionName == permanentTerminalSessionName {
+            return .permanentTerminal(sessionName: sessionName)
+        }
+        return .terminalSession(sessionName)
+    }
+
+    var isPermanent: Bool {
+        switch self {
+        case .permanentTerminal, .permanentDiff:
+            true
+        case .terminalSession, .web, .draft, .chat:
+            false
+        }
+    }
+}
+
 struct ThreadTopBarLayout {
     enum Item: Equatable {
         case addTab
@@ -23,9 +51,9 @@ struct ThreadTopBarLayout {
     }
 
     struct TabGroups: Equatable {
-        let fixed: Range<Int>
-        let pinned: Range<Int>
-        let unpinned: Range<Int>
+        let fixed: [Int]
+        let pinned: [Int]
+        let unpinned: [Int]
     }
 
     struct UserToFixedSpacing: Equatable {
@@ -61,16 +89,17 @@ struct ThreadTopBarLayout {
         return items
     }
 
-    static func tabGroups(tabCount: Int, fixedCount: Int, pinnedBoundary: Int) -> TabGroups {
-        let count = max(0, tabCount)
-        let fixedUpperBound = min(max(fixedCount, 0), count)
-        let pinnedUpperBound = min(max(pinnedBoundary, 0), count)
-        let pinnedStart = min(fixedUpperBound, pinnedUpperBound)
-        let unpinnedStart = min(max(pinnedUpperBound, fixedUpperBound), count)
+    static func tabGroups(
+        identities: [ThreadTabIdentity],
+        pinnedMovableCount: Int
+    ) -> TabGroups {
+        let fixed = identities.indices.filter { identities[$0].isPermanent }
+        let movable = identities.indices.filter { !identities[$0].isPermanent }
+        let pinnedCount = min(max(0, pinnedMovableCount), movable.count)
         return TabGroups(
-            fixed: 0..<fixedUpperBound,
-            pinned: pinnedStart..<pinnedUpperBound,
-            unpinned: unpinnedStart..<count
+            fixed: fixed,
+            pinned: Array(movable.prefix(pinnedCount)),
+            unpinned: Array(movable.dropFirst(pinnedCount))
         )
     }
 
