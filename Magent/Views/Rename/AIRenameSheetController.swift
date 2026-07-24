@@ -14,11 +14,18 @@ struct AIRenameSheetConfig {
     let recentPrompts: [String]
     /// Pre-filled prompt text (e.g. from TOC right-click). Empty string = show placeholder.
     let prefillPrompt: String
+    let allowsIconRename: Bool
 
-    init(thread: MagentThread, recentPrompts: [String], prefillPrompt: String = "") {
+    init(
+        thread: MagentThread,
+        recentPrompts: [String],
+        prefillPrompt: String = "",
+        allowsIconRename: Bool
+    ) {
         self.thread = thread
         self.recentPrompts = recentPrompts
         self.prefillPrompt = prefillPrompt
+        self.allowsIconRename = allowsIconRename
     }
 }
 
@@ -164,7 +171,13 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
         whatToChangeLabel.font = .systemFont(ofSize: 12, weight: .medium)
         checkboxRow.addArrangedSubview(whatToChangeLabel)
 
-        for checkbox in [iconCheckbox, descriptionCheckbox, branchCheckbox] {
+        let checkboxesByTarget: [AIRenameTarget: NSButton] = [
+            .icon: iconCheckbox,
+            .description: descriptionCheckbox,
+            .branch: branchCheckbox,
+        ]
+        for target in AIRenameTarget.availableTargets(allowsIconRename: config.allowsIconRename) {
+            guard let checkbox = checkboxesByTarget[target] else { continue }
             checkbox.font = .systemFont(ofSize: 12)
             checkbox.contentTintColor = .appPrimary
             checkbox.target = self
@@ -313,14 +326,16 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
 
     private func loadCheckboxState() {
         let settings = PersistenceService.shared.loadSettings()
-        iconCheckbox.state = settings.aiRenameIcon ? .on : .off
+        iconCheckbox.state = config.allowsIconRename && settings.aiRenameIcon ? .on : .off
         descriptionCheckbox.state = settings.aiRenameDescription ? .on : .off
         branchCheckbox.state = settings.aiRenameBranch ? .on : .off
     }
 
     private func saveCheckboxState() {
         var settings = PersistenceService.shared.loadSettings()
-        settings.aiRenameIcon = iconCheckbox.state == .on
+        if config.allowsIconRename {
+            settings.aiRenameIcon = iconCheckbox.state == .on
+        }
         settings.aiRenameDescription = descriptionCheckbox.state == .on
         settings.aiRenameBranch = branchCheckbox.state == .on
         try? PersistenceService.shared.saveSettings(settings)
@@ -360,7 +375,10 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
 
         let result = AIRenameSheetResult(
             prompt: prompt,
-            renameIcon: iconCheckbox.state == .on,
+            renameIcon: AIRenameTarget.shouldRenameIcon(
+                allowsIconRename: config.allowsIconRename,
+                isSelected: iconCheckbox.state == .on
+            ),
             renameDescription: descriptionCheckbox.state == .on,
             renameBranch: branchCheckbox.state == .on
         )

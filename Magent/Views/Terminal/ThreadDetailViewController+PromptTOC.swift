@@ -794,7 +794,8 @@ extension ThreadDetailViewController {
         let config = AIRenameSheetConfig(
             thread: thread,
             recentPrompts: recentPrompts,
-            prefillPrompt: entry.fullText
+            prefillPrompt: entry.fullText,
+            allowsIconRename: PersistenceService.shared.loadSettings().autoSetThreadIconFromWorkType
         )
 
         let sheet = AIRenameSheetController(config: config)

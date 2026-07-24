@@ -1475,7 +1475,8 @@ extension ThreadListViewController {
         let config = AIRenameSheetConfig(
             thread: thread,
             recentPrompts: recentPrompts,
-            prefillPrompt: prefillPrompt
+            prefillPrompt: prefillPrompt,
+            allowsIconRename: PersistenceService.shared.loadSettings().autoSetThreadIconFromWorkType
         )
 
         let sheet = AIRenameSheetController(config: config)

@@ -73,7 +73,7 @@ Draft tabs let users save a prompt idea for later without executing it immediate
 - Draft threads remain non-terminal until "Start Agent" is used; creating a draft thread must not also create a tmux/terminal tab behind the draft
 - Terminal overlays (scroll controls, scroll-to-bottom FAB, prompt TOC) are hidden while a draft tab is active
 - **Auto-rename with DRAFT prefix**: When a thread has active draft tabs and auto-rename/description generation triggers, the generated task description is prefixed with "DRAFT: ". The prefix is derived from live draft-tab state (`hasDraftTabs`), so it disappears naturally once the draft is consumed via "Start Agent"
-- **"AI Rename" sheet**: The "AI Rename…" sheet (⌘⇧R) provides multi-line prompt input, a picker with recent prompts, and checkboxes to selectively rename icon, description, and/or branch name. It is accessible from the top-level thread context menu, TOC right-click, and the main Thread menu
+- **"AI Rename" sheet**: The "AI Rename…" sheet (⌘⇧R) provides multi-line prompt input, a picker with recent prompts, and checkboxes to selectively rename icon, description, and/or branch name. When automatic work-type icons are disabled, the Icon checkbox is omitted. The sheet is accessible from the top-level thread context menu, TOC right-click, and the main Thread menu
 - Display order is decoupled from content arrays via a `TabSlot` indirection layer, allowing free mixing of terminal and web tabs without breaking terminal view indexing
 
 ## Configuration (First Run / Settings)
@@ -214,8 +214,9 @@ For the main thread, the sidebar uses these rules:
 - `Rename...` is prompt-based: user enters a natural-language task prompt, and Magent generates:
   - branch slug candidate(s)
   - short task description
-  - suggested thread icon/work type
+  - suggested thread icon/work type only when automatic work-type icons are enabled
 - Prompt-based rename uses the same AI behavior as first-prompt auto-rename and is allowed even if the thread was already renamed before.
+- Rename and task-description prompts omit work-type classification when automatic work-type icons are disabled.
 - Exact branch rename remains available via `Rename branch...` and uses user-provided branch text directly.
 
 ### Line 1 / Line 2 Layout

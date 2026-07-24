@@ -274,7 +274,8 @@ final class RenameService {
     private func generateFirstPromptRenamePayloadViaAgent(
         from prompt: String,
         agentType: AgentType?,
-        projectId: UUID?
+        projectId: UUID?,
+        includeIcon: Bool
     ) async -> FirstPromptRenameAttemptResult {
         let truncated = String(prompt.prefix(500))
         let settings = persistence.loadSettings()
@@ -285,23 +286,11 @@ final class RenameService {
         let customInstruction = (projectSlug?.isEmpty == false ? projectSlug : nil)
             ?? (globalSlug.isEmpty ? nil : globalSlug)
         let instruction = customInstruction ?? AppSettings.defaultSlugPrompt
-        let commonPayloadInstructions = """
-            Also generate a short task description (2-8 words) with first letter uppercase. \
-            The description should read like a clear branch/sidebar label for the work to do, and should describe the same task as the slug. \
-            Prefer concrete phrases such as "Fix ...", "Add ...", "Improve ...", or a specific feature/bug name. Avoid vague abstract wording like "readiness", "handling", "management", or "support" unless that exact concept is the task. \
-            Icon types: feature (new functionality), fix (bug/regression), improvement (non-breaking polish/performance/quality), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
-            Evaluate all icon types and use other when no icon type is above 70% confidence. \
-            Output exactly three lines and nothing else:
-            """
-        let aiPrompt: String
-        aiPrompt = """
-            \(instruction) \
-            \(commonPayloadInstructions) \
-            SLUG: <slug> \
-            DESC: <description> \
-            TYPE: <feature|fix|improvement|refactor|test|other> \
-            Task: \(truncated)
-            """
+        let aiPrompt = RenameGenerationPromptBuilder.combinedRename(
+            task: truncated,
+            slugInstruction: instruction,
+            includeIcon: includeIcon
+        )
 
         let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
         let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
@@ -445,7 +434,8 @@ final class RenameService {
 
         let resolvedPreferred = preferredAgent ?? effectiveAgentType?(currentThread.projectId)
         let agentOrder = slugGenerationAgentOrder(preferred: resolvedPreferred, projectId: currentThread.projectId)
-        let cKey = promptCacheKey(for: trimmedPrompt)
+        let includeIcon = persistence.loadSettings().autoSetThreadIconFromWorkType && renameIcon
+        let cKey = RenameGenerationPromptBuilder.cacheKey(for: trimmedPrompt, includeIcon: includeIcon)
         var payloadResult: FirstPromptRenameAttemptResult = .failed(reason: "no agents available")
         if let cached = promptRenameResultCache[currentThread.id]?[cKey] {
             payloadResult = .generated(slug: cached.slug, taskDescription: cached.taskDescription)
@@ -454,7 +444,8 @@ final class RenameService {
                 let result = await generateFirstPromptRenamePayloadViaAgent(
                     from: trimmedPrompt,
                     agentType: candidateAgent,
-                    projectId: currentThread.projectId
+                    projectId: currentThread.projectId,
+                    includeIcon: includeIcon
                 )
                 cacheRenameResult(result, threadId: currentThread.id, cacheKey: cKey)
                 switch result {
@@ -685,7 +676,8 @@ final class RenameService {
 
         var slug: String?
         var generatedTaskDescription: GeneratedTaskDescription?
-        let cKey = promptCacheKey(for: prompt)
+        let includeIcon = persistence.loadSettings().autoSetThreadIconFromWorkType
+        let cKey = RenameGenerationPromptBuilder.cacheKey(for: prompt, includeIcon: includeIcon)
         if let cached = promptRenameResultCache[refreshedThread.id]?[cKey] {
             // Cache hit — reuse previous AI result without another agent call.
             slug = cached.slug
@@ -695,7 +687,8 @@ final class RenameService {
                 let result = await generateFirstPromptRenamePayloadViaAgent(
                     from: prompt,
                     agentType: candidateAgent,
-                    projectId: refreshedThread.projectId
+                    projectId: refreshedThread.projectId,
+                    includeIcon: includeIcon
                 )
                 cacheRenameResult(result, threadId: refreshedThread.id, cacheKey: cKey)
                 switch result {
@@ -770,14 +763,6 @@ final class RenameService {
     }
 
     // MARK: - Rename payload cache
-
-    /// Stable cache key: whitespace-collapsed, trimmed, lowercased prompt.
-    private func promptCacheKey(for prompt: String) -> String {
-        prompt
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-    }
 
     /// Stores a non-failed AI result so future rename requests with the same prompt skip the agent call.
     private func cacheRenameResult(_ result: FirstPromptRenameAttemptResult, threadId: UUID, cacheKey: String) {
@@ -879,19 +864,17 @@ final class RenameService {
         return GeneratedTaskDescription(description: capitalizedDescription, suggestedIcon: suggestedIcon)
     }
 
-    private func generateTaskDescription(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> GeneratedTaskDescription? {
+    private func generateTaskDescription(
+        from prompt: String,
+        agentType: AgentType?,
+        projectId: UUID?,
+        includeIcon: Bool
+    ) async -> GeneratedTaskDescription? {
         let truncated = String(prompt.prefix(500))
-        let aiPrompt = """
-            Generate a short task description (2-8 words) in natural casing, with the first letter uppercase. \
-            The description should read like a clear branch/sidebar label for the work to do. \
-            Prefer concrete phrases such as "Fix ...", "Add ...", "Improve ...", or a specific feature/bug name. Avoid vague abstract wording like "readiness", "handling", "management", or "support" unless that exact concept is the task. \
-            Icon types: feature (new functionality), fix (bug/regression), improvement (non-breaking polish/performance/quality), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
-            Evaluate all icon types, pick the highest-confidence one, and use other when no icon type is above 70% confidence. \
-            Output exactly: \
-            DESC: <description> \
-            TYPE: <feature|fix|improvement|refactor|test|other> \
-            Task: \(truncated)
-            """
+        let aiPrompt = RenameGenerationPromptBuilder.taskDescription(
+            task: truncated,
+            includeIcon: includeIcon
+        )
 
         let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
         let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
@@ -927,7 +910,12 @@ final class RenameService {
         guard !agentOrder.allTrackable.isEmpty, !agentOrder.available.isEmpty else { return nil }
 
         for candidateAgent in agentOrder.available {
-            if let generated = await generateTaskDescription(from: prompt, agentType: candidateAgent, projectId: thread.projectId) {
+            if let generated = await generateTaskDescription(
+                from: prompt,
+                agentType: candidateAgent,
+                projectId: thread.projectId,
+                includeIcon: shouldAutoSetIcon
+            ) {
                 // Re-check index — thread array may have changed during async work
                 guard let currentIndex = store.threads.firstIndex(where: { $0.id == threadId }) else { return nil }
                 let description = store.threads[currentIndex].hasDraftTabs

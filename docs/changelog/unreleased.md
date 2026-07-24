@@ -33,6 +33,7 @@
 
 #### Improvements
 
+- Hide icon controls and skip work-type classification during AI rename when automatic thread icons are disabled.
 - Kept Terminal and Diff tabs visible beside thread actions while user-created tabs use the flexible, scrollable space to their left.
 - Matched busy and completed tabs to their sidebar thread capsules with animated busy borders and green completion backgrounds.
 - Codex chat tabs now show the selected model and reasoning effort in their names, with a clear Chat suffix; unfinished Claude chat entry points are hidden for now.
