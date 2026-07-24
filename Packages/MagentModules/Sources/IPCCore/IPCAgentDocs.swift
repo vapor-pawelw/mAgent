@@ -5,7 +5,7 @@ public enum IPCAgentDocs {
 
     /// CLI commands available through magent-cli.
     nonisolated private static let cliCommands = """
-    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--priority 1-5] [--select] [--no-submit]
+    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning <level>] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--priority 1-5] [--select] [--no-submit]
     /tmp/magent-cli batch-create --project <name> --file <specs.json> [--from-thread <name|main|none>] [--no-submit]
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
@@ -15,7 +15,7 @@ public enum IPCAgentDocs {
     /tmp/magent-cli delete-thread --thread <name>
     /tmp/magent-cli list-tabs --thread <name>
     /tmp/magent-cli read-tab --thread <name> (--session <name> | --index <n>) [--limit <n>] [--json]
-    /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--name <text>|--title <text>] [--fresh|--no-resume] [--prompt <text>]
+    /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning <level>] [--name <text>|--title <text>] [--fresh|--no-resume] [--prompt <text>]
     /tmp/magent-cli create-web-tab --thread <name> --url <http(s)-url> [--name <text>|--title <text>]
     /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
     /tmp/magent-cli rename-tab --thread <name> (--index <n> | --session <name>) --name <text>
@@ -55,6 +55,7 @@ public enum IPCAgentDocs {
     When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
     When called from inside a Magent session, create-thread and batch-create automatically inherit the current thread's branch and section (and position the new thread directly below it in the sidebar). This means you do NOT need to manually pass --base-branch or --section in the common case. Use --base-thread or --base-branch only when the user explicitly wants a different base. Use --section only when the user explicitly wants a different section. Use --from-thread none to suppress auto-detection. Use --from-thread main to inherit from the project's main worktree thread instead.
     When the user explicitly names an agent, pass that exact agent in --agent. Do not silently substitute Claude for Codex or vice versa.
+    Reasoning levels depend on the selected model. GPT 5.6 Sol and Terra support Ultra; GPT 5.6 Luna stops at Max.
     Use create-tab --name (or --title) when the user asks you to name the tab. Use create-tab --fresh (or --no-resume) when the user wants an isolated review tab that must not adopt an older Claude/Codex conversation from the same worktree path.
     Use create-web-tab to open an in-app web tab at a specific URL (docs pages, Jira links, PR URLs, etc.) in a thread. The URL must be http/https and should be wrapped in single quotes so the shell does not expand `&`, `?`, `#`, or `$` (for example: --url 'https://example.com/a?b=1&c=2'). Spaces and other non-RFC characters must be percent-encoded. Pass --name (or --title) to override the default tab label (host name). This opens the tab in Magent even if the user's external-link preference is set to "browser".
     list-tabs returns all tab types in GUI order (`terminal`, `web`, `draft`, `chat`) with `tabType` and `isPinned` fields. For non-terminal tabs, use `sessionName` as the tab identifier in close-tab / rename-tab. Draft tabs cannot be renamed. Use pin-tab / unpin-tab to pin or unpin any movable tab by index or session name; the fixed Terminal and Diff tabs cannot be pinned.
