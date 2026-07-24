@@ -2044,6 +2044,7 @@ final class AgentSetupService {
         envExports: String,
         workingDirectory: String,
         resumeSessionID: String? = nil,
+        requiresSuccessfulResume: Bool = false,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
         codexFastMode: Bool = false
@@ -2070,6 +2071,7 @@ final class AgentSetupService {
             settings: settings,
             agentType: agentType,
             resumeSessionID: resumeSessionID,
+            requiresSuccessfulResume: requiresSuccessfulResume,
             modelId: modelId,
             reasoningLevel: reasoningLevel,
             codexFastMode: codexFastMode
@@ -2077,7 +2079,11 @@ final class AgentSetupService {
         // Use an interactive login shell so zsh loads both login files and `.zshrc`
         // before resolving the agent binary. Many PATH/custom command setups live in `.zshrc`.
         parts.append(command)
-        let innerCmd = parts.joined(separator: " && ") + "; exec \(shell) -l"
+        let innerCmd = if requiresSuccessfulResume {
+            parts.joined(separator: " && ")
+        } else {
+            parts.joined(separator: " && ") + "; exec \(shell) -l"
+        }
         return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -il -c \(ShellExecutor.shellQuote(innerCmd))"
     }
 
@@ -2085,6 +2091,7 @@ final class AgentSetupService {
         settings: AppSettings,
         agentType: AgentType,
         resumeSessionID: String?,
+        requiresSuccessfulResume: Bool = false,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
         codexFastMode: Bool = false
@@ -2096,7 +2103,10 @@ final class AgentSetupService {
                 agentType: agentType,
                 sessionID: resumeSessionID
               ) else {
-            return fresh
+            return requiresSuccessfulResume ? "false" : fresh
+        }
+        if requiresSuccessfulResume {
+            return resume
         }
         // Always attempt deterministic resume first; fall back to a fresh session.
         return "{ \(resume) || \(fresh) ; }"

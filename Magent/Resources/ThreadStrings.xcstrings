@@ -89,6 +89,94 @@
         }
       }
     },
+    "tabMoveAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Tab"
+          }
+        }
+      }
+    },
+    "tabMoveMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magent will create a new worktree from the current branch, resume this exact agent conversation there, and remove this tab from its current thread. Staged, unstaged, and non-ignored untracked changes move with it. Other tabs stay in this thread and will see those changes removed. Existing commits remain on the current branch and become the new branch’s starting history."
+          }
+        }
+      }
+    },
+    "tabMoveRequiresIdleAgent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wait for the agent to finish and submit or clear any pending input before moving this tab."
+          }
+        }
+      }
+    },
+    "tabMoveRequiresResumableAgent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This tab does not have a resumable Claude or Codex conversation yet."
+          }
+        }
+      }
+    },
+    "tabMoveResumeFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The conversation could not be resumed in the new worktree. The original tab and worktree changes were restored."
+          }
+        }
+      }
+    },
+    "tabMoveSucceeded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab moved to a new thread."
+          }
+        }
+      }
+    },
+    "tabMoveTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Tab to New Thread?"
+          }
+        }
+      }
+    },
+    "tabMoveToNewThreadMenu": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to New Thread…"
+          }
+        }
+      }
+    },
     "tabStartingAgent": {
       "extractionState": "manual",
       "localizations": {

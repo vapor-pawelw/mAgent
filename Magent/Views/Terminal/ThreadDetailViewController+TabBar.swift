@@ -636,6 +636,7 @@ extension ThreadDetailViewController {
             item.suppressContextMenu = false
             item.suppressBulkCloseActions = false
             item.suppressCloseThisAction = false
+            item.onMoveToNewThread = nil
             item.onRestoreLastClosedTab = canRestoreLastClosedTab ? { [weak self] in
                 self?.reopenLastClosedTab()
             } : nil
@@ -669,6 +670,7 @@ extension ThreadDetailViewController {
                     item.onRename = nil
                     item.allowsDoubleClickRename = false
                     item.onResumeAgentInNewTab = nil
+                    item.onMoveToNewThread = nil
                     item.onContinueIn = nil
                     item.onExportContext = nil
                     item.onRepairTerminal = nil
@@ -703,6 +705,9 @@ extension ThreadDetailViewController {
                     item.allowsDoubleClickRename = true
                     item.onResumeAgentInNewTab = canResumeInNewTab
                         ? { [weak self] in self?.resumeAgentSessionInNewTab(at: i) }
+                        : nil
+                    item.onMoveToNewThread = canResumeInNewTab
+                        ? { [weak self] in self?.moveTerminalTabToNewThread(at: i) }
                         : nil
                     item.onContinueIn = { [weak self] in self?.presentContinueTabSheet(for: i) }
                     item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }

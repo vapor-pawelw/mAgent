@@ -149,6 +149,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onPin: (() -> Void)?
     var onKeepAlive: (() -> Void)?
     var onResumeAgentInNewTab: (() -> Void)?
+    var onMoveToNewThread: (() -> Void)?
     var onRestoreLastClosedTab: (() -> Void)?
     var onContinueIn: (() -> Void)?
     var onExportContext: (() -> Void)?
@@ -424,6 +425,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         onResumeAgentInNewTab?()
     }
 
+    @objc private func moveToNewThreadTapped() {
+        onMoveToNewThread?()
+    }
+
     @objc private func restoreLastClosedTabTapped() {
         onRestoreLastClosedTab?()
     }
@@ -573,6 +578,17 @@ final class TabItemView: NSView, NSMenuDelegate {
             let renameItem = NSMenuItem(title: "Rename Tab...", action: #selector(renameTapped), keyEquivalent: "")
             renameItem.target = self
             menu.addItem(renameItem)
+        }
+
+        if onMoveToNewThread != nil {
+            let moveItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.tabMoveToNewThreadMenu),
+                action: #selector(moveToNewThreadTapped),
+                keyEquivalent: ""
+            )
+            moveItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
+            moveItem.target = self
+            menu.addItem(moveItem)
         }
 
         let hasSessionIdentity = (tmuxSessionNameForMenu?.isEmpty == false) || onCopyTmuxSessionName != nil

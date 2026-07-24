@@ -10,6 +10,29 @@
 - Pending threads are never persisted; only save after phase 2 succeeds.
 - New tmux sessions must seed `sessionLastVisitedAt` immediately when registered, or idle eviction treats them as ancient after the user switches away.
 
+## Moving an Agent Tab to a New Thread
+
+`Move to New Thread…` is a destructive ownership transfer for an idle Claude or Codex terminal tab with a persisted conversation ID. It is not a context export and must never silently fall back to a fresh conversation.
+
+The operation:
+
+1. Refreshes runtime busy state and refuses tabs that are busy, waiting for input, Magent-busy, or contain unsubmitted input.
+2. Snapshots the tab's conversation ID, agent type, display name/manual-rename marker, forwarded marker, pin, Keep Alive, unread markers, and submitted-prompt history.
+3. Creates a new branch/worktree from the source thread's actual branch and inherits its section, sidebar placement, and Local Sync snapshot.
+4. Creates a uniquely identified recovery stash for staged, unstaged, and non-ignored untracked changes, runs Local Sync into the clean destination, then applies the stash with index state as the final layer. Ignored files remain in the source worktree and arrive through Local Sync when configured.
+5. Starts the destination with strict Claude/Codex resume and waits up to 30 seconds for the real idle agent prompt. A failed resume must not start a fresh agent.
+6. Persists removal from the source thread before killing its old tmux session, then navigates to the destination. The source tab is not added to closed-tab restore history.
+
+All tabs in a thread share one worktree, so moving dirty state affects the whole source thread: remaining tabs see those working-tree changes disappear. Existing commits are shared branch history; the destination starts from the current commit, but Magent does not rewrite/reset the source branch to guess which commits belong to one tab. For a detached source worktree, resolve that worktree's exact HEAD hash instead of passing the ambiguous `HEAD` ref through the main repository.
+
+Rollback is mandatory until source-tab removal succeeds. The recovery stash stays alive across destination worktree/session creation. If worktree setup, strict resume readiness, or source persistence fails, delete the destination session/worktree/branch first, reapply the stash with `--index` to the source, and leave the original tab running. A stash-drop failure after success is non-destructive and may leave only a redundant recovery stash.
+
+Verify both that `git stash push` created the uniquely marked stash and that the source is clean afterward. A dirty submodule or nested repository may produce no stash or only a partial stash when mixed with ordinary edits; restore the transferable subset immediately and abort rather than reporting a partial move.
+
+The stash marker durably records source/destination thread IDs, the source session, and the generated destination name. During startup, scan every project for these markers. If the source still owns the tab, remove any partial destination and restore the stash; if source persistence already removed the tab, the move committed and only the redundant stash should be dropped. This makes recovery independent of the in-memory transfer dictionary.
+
+The destination session gets a new tmux identity, creation timestamp, worktree environment, and Ghostty surface. Never re-parent the live source tmux session: its process cwd and Magent environment still identify the old worktree/thread. If the source tab was detached, return its surface before the structural `TmuxService.killSession` barrier runs.
+
 ## Worktree Recovery
 
 Automatic — when a user selects a thread whose worktree directory is missing, `SplitViewController` triggers recovery via `ThreadManager.recoverWorktree()`, showing progress via banners.

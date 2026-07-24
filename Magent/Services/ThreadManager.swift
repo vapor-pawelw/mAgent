@@ -58,6 +58,7 @@ final class ThreadManager {
 
     let store = ThreadStore()
     let sessionTracker = SessionTracker()
+    let tabMigrationOperationGate = SerialAsyncOperationGate()
 
     // MARK: - Extracted service containers (Phase 2)
 
@@ -384,13 +385,15 @@ final class ThreadManager {
         svc.resolveAgentType = { [weak self] projectId, requested, settings in
             self?.resolveAgentType(for: projectId, requestedAgentType: requested, settings: settings)
         }
-        svc.agentStartCommand = { [weak self] settings, projectId, agentType, envExports, workingDir, modelId, reasoningLevel, codexFastMode in
+        svc.agentStartCommand = { [weak self] settings, projectId, agentType, envExports, workingDir, resumeSessionID, requiresSuccessfulResume, modelId, reasoningLevel, codexFastMode in
             self?.agentStartCommand(
                 settings: settings,
                 projectId: projectId,
                 agentType: agentType,
                 envExports: envExports,
                 workingDirectory: workingDir,
+                resumeSessionID: resumeSessionID,
+                requiresSuccessfulResume: requiresSuccessfulResume,
                 modelId: modelId,
                 reasoningLevel: reasoningLevel,
                 codexFastMode: codexFastMode
@@ -828,6 +831,7 @@ final class ThreadManager {
         // Migrate old threads that have no agentTmuxSessions recorded.
         // Heuristic: the first session was always created as the agent tab.
         let settings = persistence.loadSettings()
+        await threadLifecycleService.recoverInterruptedTabMoves(projects: settings.projects)
         var didMigrate = false
         let migrationThreadIds = threads.map(\.id)
         for threadId in migrationThreadIds {
