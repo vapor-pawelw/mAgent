@@ -82,7 +82,7 @@ Useful options:
 ```
 
 The script intentionally does not perform changelog/docs decisions; handle those in the agent workflow before running the script.
-It acquires a repository-wide lock in the common git directory before checking the base worktree, merging, pushing, and calling `archive-thread`. Concurrent helpers targeting the same repository wait instead of racing on the base worktree or git index. The helper selects an already-merged no-op, `--ff-only`, or `--no-ff` merge from commit ancestry, so an unrelated git failure is never mistaken for branch divergence.
+It registers each workflow in a FIFO queue under the repository's common git directory, then acquires the repository-wide lock before checking the base worktree, merging, pushing, and calling `archive-thread`. Concurrent helpers targeting the same repository periodically report which thread/branch is active, their current queue position, how many requests are ahead, and elapsed wait time. Dead queue entries are pruned by PID/process validation, while the advisory lock still releases automatically if a process exits. The helper selects an already-merged no-op, `--ff-only`, or `--no-ff` merge from commit ancestry, so an unrelated git failure is never mistaken for branch divergence.
 
 ## Build Notes
 

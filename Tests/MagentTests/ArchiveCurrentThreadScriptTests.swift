@@ -13,18 +13,23 @@ struct ArchiveCurrentThreadScriptTests {
         let first = fixture.makeArchiveProcess(threadName: "one")
         let second = fixture.makeArchiveProcess(threadName: "two")
 
-        try first.run()
-        try second.run()
-        first.waitUntilExit()
-        second.waitUntilExit()
+        try first.process.run()
+        try second.process.run()
+        first.process.waitUntilExit()
+        second.process.waitUntilExit()
 
-        #expect(first.terminationStatus == 0)
-        #expect(second.terminationStatus == 0)
+        #expect(first.process.terminationStatus == 0)
+        #expect(second.process.terminationStatus == 0)
         #expect(!FileManager.default.fileExists(atPath: fixture.overlapFile.path))
         #expect(try fixture.gitOutput(["status", "--porcelain"], in: fixture.mainWorktree).isEmpty)
 
         try fixture.runGit(["merge-base", "--is-ancestor", "branch-one", "main"], in: fixture.mainWorktree)
         try fixture.runGit(["merge-base", "--is-ancestor", "branch-two", "main"], in: fixture.mainWorktree)
+
+        let combinedOutput = first.output + second.output
+        #expect(combinedOutput.contains("currently archiving '"))
+        #expect(combinedOutput.contains("is position 2 of 2"))
+        #expect(combinedOutput.contains("1 ahead"))
 
         let events = try String(contentsOf: fixture.eventLog, encoding: .utf8)
             .split(separator: "\n")
@@ -44,6 +49,26 @@ struct ArchiveCurrentThreadScriptTests {
         #expect(!archiveIsActive)
         #expect(events.filter { $0.hasPrefix("merge-start ") }.count == 2)
         #expect(events.filter { $0.hasPrefix("archive-start ") }.count == 2)
+
+        let queueContents = try FileManager.default.contentsOfDirectory(
+            at: fixture.queueDirectory,
+            includingPropertiesForKeys: nil
+        )
+        #expect(!queueContents.contains { $0.lastPathComponent.hasPrefix("request-") })
+        #expect(!queueContents.contains { $0.lastPathComponent == "active.json" })
+    }
+}
+
+@MainActor
+private struct CapturedArchiveProcess {
+    let process: Process
+    let outputPipe: Pipe
+
+    var output: String {
+        String(
+            data: outputPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
     }
 }
 
@@ -53,6 +78,10 @@ private final class ArchiveScriptFixture {
     let mainWorktree: URL
     let eventLog: URL
     let overlapFile: URL
+
+    var queueDirectory: URL {
+        mainWorktree.appendingPathComponent(".git/magent-archive-queue", isDirectory: true)
+    }
 
     private let fakeBin: URL
     private let mergeProbe: URL
@@ -83,8 +112,9 @@ private final class ArchiveScriptFixture {
         try? FileManager.default.removeItem(at: root)
     }
 
-    func makeArchiveProcess(threadName: String) -> Process {
+    func makeArchiveProcess(threadName: String) -> CapturedArchiveProcess {
         let process = Process()
+        let outputPipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = [
             scriptURL.path,
@@ -93,9 +123,9 @@ private final class ArchiveScriptFixture {
             "--skip-local-sync",
         ]
         process.environment = fixtureEnvironment
-        process.standardOutput = FileHandle.nullDevice
+        process.standardOutput = outputPipe
         process.standardError = FileHandle.nullDevice
-        return process
+        return CapturedArchiveProcess(process: process, outputPipe: outputPipe)
     }
 
     func runGit(_ arguments: [String], in directory: URL) throws {
@@ -117,6 +147,8 @@ private final class ArchiveScriptFixture {
         environment["ARCHIVE_TEST_OVERLAP_FILE"] = overlapFile.path
         environment["GIT_EDITOR"] = "true"
         environment["GIT_MERGE_AUTOEDIT"] = "no"
+        environment["MAGENT_ARCHIVE_HEARTBEAT_SECONDS"] = "1"
+        environment["MAGENT_ARCHIVE_POLL_SECONDS"] = "1"
         return environment
     }
 
@@ -194,7 +226,7 @@ private final class ArchiveScriptFixture {
           archive-thread)
             thread_name="${3:-}"
             printf 'archive-start %s\\n' "$thread_name" >> "$ARCHIVE_TEST_EVENT_LOG"
-            sleep 0.25
+            sleep 1.25
             printf 'archive-end %s\\n' "$thread_name" >> "$ARCHIVE_TEST_EVENT_LOG"
             printf '{"ok":true}\\n'
             ;;
