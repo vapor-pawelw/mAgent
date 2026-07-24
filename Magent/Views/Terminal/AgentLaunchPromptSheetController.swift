@@ -1587,12 +1587,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         updateSourcePresentation()
     }
 
-    private func updateSourceSelectionFromBaseBranch() {
+    private func updateSourceSelectionFromBaseBranch(_ input: String? = nil) {
         guard var sourceSelection else { return }
         let projectId = selectedProjectIdForSourceOptions()
         let options = config.sourceOptionsByProjectId[projectId] ?? []
         sourceSelection.updateBaseBranch(
-            baseBranchField.stringValue,
+            input ?? baseBranchField.stringValue,
             defaultBranch: resolvedDefaultBranchName(),
             availableSources: options.map(\.descriptor)
         )
@@ -1814,7 +1814,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     func comboBoxSelectionDidChange(_ notification: Notification) {
         clearBaseBranchError()
         if (notification.object as? NSComboBox) === baseBranchField {
-            updateSourceSelectionFromBaseBranch()
+            let input = ThreadCreationBaseBranchInput.resolve(
+                fieldValue: baseBranchField.stringValue,
+                selectedItem: baseBranchField.objectValueOfSelectedItem as? String
+            )
+            updateSourceSelectionFromBaseBranch(input)
         }
     }
 

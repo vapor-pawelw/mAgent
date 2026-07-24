@@ -7,6 +7,12 @@ struct ThreadCreationSourceDescriptor: Equatable {
     let isMainWorktree: Bool
 }
 
+enum ThreadCreationBaseBranchInput {
+    static func resolve(fieldValue: String, selectedItem: String?) -> String {
+        selectedItem ?? fieldValue
+    }
+}
+
 enum ThreadCreationSourceSelection: Equatable {
     case thread(ThreadCreationSourceDescriptor)
     case branch(String)

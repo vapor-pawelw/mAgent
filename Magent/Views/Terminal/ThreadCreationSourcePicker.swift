@@ -176,9 +176,13 @@ private final class ThreadCreationSourceCapsuleView: NSView {
 
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = mode.isSelected
-                ? NSColor.appPrimary.withAlphaComponent(0.12).cgColor
-                : NSColor.controlBackgroundColor.cgColor
+            let backgroundColor = ThreadCreationSourceCapsuleBackgroundStyle.fill(
+                showsExpandedDetails: mode.showsExpandedDetails,
+                isSelected: mode.isSelected,
+                appearance: effectiveAppearance,
+                accentColor: .appPrimary
+            )
+            layer?.backgroundColor = backgroundColor.cgColor
             outlineLayer.strokeColor = mode.isSelected
                 ? NSColor.appPrimary.withAlphaComponent(0.7).cgColor
                 : NSColor.separatorColor.withAlphaComponent(0.5).cgColor

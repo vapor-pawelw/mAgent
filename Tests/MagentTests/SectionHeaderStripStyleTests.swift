@@ -34,6 +34,79 @@ struct SectionHeaderStripStyleTests {
 
 @Suite("Thread row capsule style")
 struct ThreadRowCapsuleStyleTests {
+    @Test("Standard thread backgrounds adapt consistently across consumers")
+    func standardBackgroundStyle() throws {
+        let lightAppearance = try #require(NSAppearance(named: .aqua))
+        let darkAppearance = try #require(NSAppearance(named: .darkAqua))
+
+        #expect(abs(
+            StandardThreadCapsuleBackgroundStyle.fill(
+                isSelected: false,
+                appearance: lightAppearance,
+                accentColor: .systemBlue
+            ).alphaComponent - 0.03
+        ) < 0.001)
+        #expect(abs(
+            StandardThreadCapsuleBackgroundStyle.fill(
+                isSelected: false,
+                appearance: darkAppearance,
+                accentColor: .systemBlue
+            ).alphaComponent - 0.035
+        ) < 0.001)
+        #expect(abs(
+            StandardThreadCapsuleBackgroundStyle.fill(
+                isSelected: true,
+                appearance: lightAppearance,
+                accentColor: .systemBlue
+            ).alphaComponent - 0.2
+        ) < 0.001)
+        #expect(abs(
+            StandardThreadCapsuleBackgroundStyle.fill(
+                isSelected: true,
+                appearance: darkAppearance,
+                accentColor: .systemBlue
+            ).alphaComponent - 0.1
+        ) < 0.001)
+    }
+
+    @Test("Source picker expands with sidebar fills while its collapsed control stays standard")
+    func sourcePickerBackgroundStyle() throws {
+        let lightAppearance = try #require(NSAppearance(named: .aqua))
+        let accentColor = NSColor.systemBlue
+        let expandedFill = ThreadCreationSourceCapsuleBackgroundStyle.fill(
+            showsExpandedDetails: true,
+            isSelected: false,
+            appearance: lightAppearance,
+            accentColor: accentColor
+        )
+        let expectedSidebarFill = StandardThreadCapsuleBackgroundStyle.fill(
+            isSelected: false,
+            appearance: lightAppearance,
+            accentColor: accentColor
+        )
+        let expandedSelectedFill = ThreadCreationSourceCapsuleBackgroundStyle.fill(
+            showsExpandedDetails: true,
+            isSelected: true,
+            appearance: lightAppearance,
+            accentColor: accentColor
+        )
+        let expectedSelectedSidebarFill = StandardThreadCapsuleBackgroundStyle.fill(
+            isSelected: true,
+            appearance: lightAppearance,
+            accentColor: accentColor
+        )
+        let collapsedFill = ThreadCreationSourceCapsuleBackgroundStyle.fill(
+            showsExpandedDetails: false,
+            isSelected: true,
+            appearance: lightAppearance,
+            accentColor: accentColor
+        )
+
+        #expect(expandedFill.isEqual(expectedSidebarFill))
+        #expect(expandedSelectedFill.isEqual(expectedSelectedSidebarFill))
+        #expect(collapsedFill.isEqual(NSColor.controlBackgroundColor))
+    }
+
     @Test("Section markers use forty-percent section color")
     func sectionMarkerStyle() {
         let sectionColor = NSColor(srgbRed: 0.2, green: 0.4, blue: 0.8, alpha: 1)

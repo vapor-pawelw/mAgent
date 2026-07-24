@@ -155,12 +155,12 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     private var currentCapsuleStyle: CapsuleStyle {
         switch currentCapsuleVisualState {
         case .selected:
-            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            let fillColor = isDark
-                ? NSColor.appPrimary.withAlphaComponent(0.1)
-                : NSColor.appPrimary.withAlphaComponent(0.2)
             return CapsuleStyle(
-                fill: fillColor,
+                fill: StandardThreadCapsuleBackgroundStyle.fill(
+                    isSelected: true,
+                    appearance: effectiveAppearance,
+                    accentColor: .appPrimary
+                ),
                 border: .appPrimary
             )
         case .rateLimited:
@@ -184,10 +184,14 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 border: NSColor.systemPurple.withAlphaComponent(0.7)
             )
         case .idle:
-            let fillColor = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                ? NSColor.white.withAlphaComponent(0.035)
-                : NSColor.black.withAlphaComponent(0.03)
-            return CapsuleStyle(fill: fillColor, border: .clear)
+            return CapsuleStyle(
+                fill: StandardThreadCapsuleBackgroundStyle.fill(
+                    isSelected: false,
+                    appearance: effectiveAppearance,
+                    accentColor: .appPrimary
+                ),
+                border: .clear
+            )
         }
     }
 

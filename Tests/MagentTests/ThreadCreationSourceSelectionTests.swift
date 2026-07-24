@@ -10,6 +10,21 @@ struct ThreadCreationSourceSelectionTests {
         isMainWorktree: false
     )
 
+    @Test("Base branch picker selection wins over a stale field value")
+    func comboBoxSelectionUsesSelectedItem() {
+        let input = ThreadCreationBaseBranchInput.resolve(
+            fieldValue: "stale/branch",
+            selectedItem: "feature/source"
+        )
+        let typedInput = ThreadCreationBaseBranchInput.resolve(
+            fieldValue: "typed/branch",
+            selectedItem: nil
+        )
+
+        #expect(input == "feature/source")
+        #expect(typedInput == "typed/branch")
+    }
+
     @Test("Selecting a thread links its base branch and source identity")
     func selectingThreadLinksSource() {
         let selection = ThreadCreationSourceSelection.thread(source)

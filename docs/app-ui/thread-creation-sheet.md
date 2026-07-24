@@ -9,13 +9,14 @@ The New Thread sheet is the single UI for creating from the main worktree, anoth
 - The title follows the selection: `New thread from <description>`, falling back to the branch name. The source name is accent-colored.
 - `Start from` sits immediately below the Type/Model/Reasoning controls.
 - The collapsed picker is a standard-height, single-line control showing only the selected thread description, or `Branch` for a manually entered base. Base branch details remain in the dedicated field.
-- Picker options use subtly outlined compact thread capsules: home/thread icon, sign plus description, branch, and the section-color corner marker. They intentionally omit the sidebar status row and all live status treatments.
+- Picker options use subtly outlined compact thread capsules with the same appearance-aware background as standard sidebar threads: home/thread icon, sign plus description, branch, and the section-color corner marker. They intentionally omit the sidebar status row and all live status treatments.
 - The selected expanded option uses an accent-tinted background and outline so the current source remains obvious while browsing.
 - Leading icons follow the sidebar's `Show thread icons` setting and use the same normal-row tint: section color for sectioned threads, the app accent otherwise, and label color for Main worktree. When leading icons are hidden, Main worktree keeps its compact inline home glyph.
 - Main worktree is always first and the invoking window's current thread is second. A 24 pt gap separates these contextual choices from the remaining threads, with no extra leading gap. Pop-out windows supply their own thread as the current context.
 - Opening the picker scrolls the selected source to the vertical center where the available scroll range permits, clamping naturally at the beginning and end of the list.
 - Selecting a non-main source thread sets Base branch to that thread's current branch. Until Section is manually changed, it also follows the selected source thread's section.
 - Typing a Base branch that unambiguously matches an available thread branch immediately restores that thread as the selected source, including its title, picker highlight, section following, placement, and local-file-sync inheritance. Whitespace and an optional `origin/` prefix are ignored; exact spelling wins when normalized names collide.
+- Choosing a Base branch from the combo-box suggestions uses the selected item immediately, even before AppKit synchronizes the field editor text, so it follows the same source-linking behavior as typing.
 - Manually changing Base branch breaks the source-thread relationship and replaces the selected capsule with a synthetic Branch capsule. The new thread no longer inherits source placement or its local-file-sync snapshot.
 - Selecting a thread again restores the linked source behavior.
 - Changing Project resets the source to that project's main worktree and resets Section to the project's default.
