@@ -15,8 +15,8 @@ extension ThreadManager {
         var changed = false
         var changedThreadIds: Set<UUID> = []
 
-        for i in threads.indices {
-            let thread = threads[i]
+        let threadSnapshot = threads.filter { !$0.isArchived }
+        for thread in threadSnapshot {
             for session in thread.agentTmuxSessions {
                 let agentType = thread.sessionAgentTypes[session]
                 guard agentType == .claude || agentType == .codex else { continue }
@@ -25,8 +25,6 @@ extension ThreadManager {
                 // after this feature shipped, or populated by the startup migration for tabs
                 // that carried a non-default name before this feature existed.
                 guard !thread.manuallyRenamedTabs.contains(session) else { continue }
-
-                let currentName = thread.customTabNames[session] ?? ""
 
                 guard let paneContent = await tmux.cachedCapturePane(sessionName: session, lastLines: 300) else { continue }
 
@@ -58,9 +56,16 @@ extension ThreadManager {
                     modelLabel: modelLabel,
                     reasoningLevel: effortLevel
                 )
-                guard newName != currentName else { continue }
-
-                threads[i].customTabNames[session] = newName
+                guard let currentThread = store.thread(byId: thread.id),
+                      currentThread.agentTmuxSessions.contains(session),
+                      currentThread.sessionAgentTypes[session] == agentType,
+                      !currentThread.manuallyRenamedTabs.contains(session),
+                      currentThread.customTabNames[session] != newName else {
+                    continue
+                }
+                store.update(id: thread.id) {
+                    $0.customTabNames[session] = newName
+                }
                 changed = true
                 changedThreadIds.insert(thread.id)
             }

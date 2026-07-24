@@ -217,17 +217,14 @@ final class WorktreeService {
         let fm = FileManager.default
 
         // Collect active (non-archived, non-main) threads for this project
-        let affectedIndices = store.threads.indices.filter { i in
-            store.threads[i].projectId == project.id && !store.threads[i].isArchived && !store.threads[i].isMain
-        }
-
         // Build list of worktree directory names to move
-        let worktreeNames: [(index: Int, dirName: String)] = affectedIndices.compactMap { i in
-            let dirName = URL(fileURLWithPath: store.threads[i].worktreePath).lastPathComponent
+        let worktreeNames: [(threadId: UUID, dirName: String)] = store.threads.compactMap { thread in
+            guard thread.projectId == project.id, !thread.isArchived, !thread.isMain else { return nil }
+            let dirName = URL(fileURLWithPath: thread.worktreePath).lastPathComponent
             // Only include if the worktree actually lives under oldBase
             let expectedPath = (oldBase as NSString).appendingPathComponent(dirName)
-            guard store.threads[i].worktreePath == expectedPath else { return nil }
-            return (i, dirName)
+            guard thread.worktreePath == expectedPath else { return nil }
+            return (thread.id, dirName)
         }
 
         // Check for conflicts in destination
@@ -253,7 +250,7 @@ final class WorktreeService {
         try fm.createDirectory(atPath: newBase, withIntermediateDirectories: true)
 
         // Move each worktree using `git worktree move`
-        for (index, dirName) in worktreeNames {
+        for (threadId, dirName) in worktreeNames {
             let oldPath = (oldBase as NSString).appendingPathComponent(dirName)
             let newPath = (newBase as NSString).appendingPathComponent(dirName)
 
@@ -271,10 +268,12 @@ final class WorktreeService {
                 }
             }
 
-            store.threads[index].worktreePath = newPath
+            guard let currentThread = store.thread(byId: threadId) else { continue }
+            let sessionNames = currentThread.tmuxSessionNames
+            store.update(id: threadId) { $0.worktreePath = newPath }
 
             // Update MAGENT_WORKTREE_PATH on live tmux sessions
-            for sessionName in store.threads[index].tmuxSessionNames {
+            for sessionName in sessionNames {
                 try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH", value: newPath)
             }
         }

@@ -534,7 +534,7 @@ final class RenameService {
         to newName: String,
         markFirstPromptRenameHandled: Bool = true
     ) async throws {
-        guard let index = store.threads.firstIndex(where: { $0.id == thread.id }) else {
+        guard let currentThread = store.thread(byId: thread.id) else {
             throw ThreadManagerError.threadNotFound
         }
 
@@ -542,7 +542,6 @@ final class RenameService {
         guard !trimmed.isEmpty else {
             throw ThreadManagerError.invalidName
         }
-        let currentThread = store.threads[index]
         let newBranchName = trimmed
 
         // Look up project for repo path
@@ -568,16 +567,20 @@ final class RenameService {
         }
 
         // Update branch fields only — thread name, tmux sessions, and worktree path are unchanged.
-        store.threads[index].branchName = newBranchName
-        store.threads[index].actualBranch = newBranchName
+        guard store.update(id: thread.id, {
+            $0.branchName = newBranchName
+            $0.actualBranch = newBranchName
+            if markFirstPromptRenameHandled {
+                $0.didAutoRenameFromFirstPrompt = true
+            }
+        }) else {
+            throw ThreadManagerError.threadNotFound
+        }
         ensureBranchSymlink?(
             newBranchName,
             currentThread.worktreePath,
             project.resolvedWorktreesBasePath()
         )
-        if markFirstPromptRenameHandled {
-            store.threads[index].didAutoRenameFromFirstPrompt = true
-        }
 
         // Retarget other threads in the same project whose baseBranch pointed at the old branch.
         if !branchAlreadyOwned {
@@ -1138,11 +1141,11 @@ final class RenameService {
         reKeyKnownGoodSessionContext: (String, String) -> Void,
         forceSetupBellPipe: (String) async -> Void
     ) async throws {
-        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else {
+        guard let initialIndex = store.threadIndex(byId: threadId) else {
             throw ThreadManagerError.threadNotFound
         }
-        let currentThread = store.threads[index]
-        guard let sessionIndex = currentThread.tmuxSessionNames.firstIndex(of: sessionName) else {
+        let initialThread = store.threads[initialIndex]
+        guard initialThread.tmuxSessionNames.contains(sessionName) else {
             throw ThreadManagerError.invalidTabIndex
         }
 
@@ -1150,26 +1153,28 @@ final class RenameService {
         guard !trimmed.isEmpty else {
             throw ThreadManagerError.invalidName
         }
-        let resolvedDisplayName = allocateUniqueTabDisplayNameCallback?(trimmed, index, sessionName) ?? trimmed
+        let resolvedDisplayName = allocateUniqueTabDisplayNameCallback?(trimmed, initialIndex, sessionName) ?? trimmed
 
         // Compute new tmux session name
         let sanitizedTabName = ThreadManager.sanitizeForTmux(resolvedDisplayName)
         let settings = persistence.loadSettings()
         let slug = ThreadManager.repoSlug(from:
-            settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
+            settings.projects.first(where: { $0.id == initialThread.projectId })?.name ?? "project"
         )
         let newSessionName: String
-        if currentThread.isMain {
+        if initialThread.isMain {
             newSessionName = ThreadManager.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: sanitizedTabName)
         } else {
-            newSessionName = ThreadManager.buildSessionName(repoSlug: slug, threadName: currentThread.name, tabSlug: sanitizedTabName)
+            newSessionName = ThreadManager.buildSessionName(repoSlug: slug, threadName: initialThread.name, tabSlug: sanitizedTabName)
         }
 
         // Check uniqueness
         guard newSessionName != sessionName else {
             // Display name changed but session name is the same — just update the display name
-            store.threads[index].customTabNames[sessionName] = resolvedDisplayName
-            store.threads[index].manuallyRenamedTabs.insert(sessionName)
+            store.update(id: threadId) {
+                $0.customTabNames[sessionName] = resolvedDisplayName
+                $0.manuallyRenamedTabs.insert(sessionName)
+            }
             try persistence.saveActiveThreads(store.threads)
             onThreadsChanged?()
             return
@@ -1179,7 +1184,7 @@ final class RenameService {
         let resolvedSessionName = await resolveUniqueTabSessionName(
             baseName: newSessionName,
             replacing: sessionName,
-            in: currentThread
+            in: initialThread
         )
         guard let resolvedSessionName else {
             throw ThreadManagerError.duplicateName
@@ -1187,6 +1192,12 @@ final class RenameService {
 
         // Rename tmux session
         try await renameTmuxSessions(from: [sessionName], to: [resolvedSessionName])
+
+        guard let index = store.threadIndex(byId: threadId),
+              let sessionIndex = store.threads[index].tmuxSessionNames.firstIndex(of: sessionName) else {
+            throw ThreadManagerError.threadNotFound
+        }
+        let currentThread = store.threads[index]
 
         // Update all references
         store.threads[index].tmuxSessionNames[sessionIndex] = resolvedSessionName

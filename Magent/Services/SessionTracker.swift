@@ -1,6 +1,33 @@
 import Foundation
 import MagentCore  // AgentType for lastRuntimeDetectedAgentBySession
 
+struct SessionTerminationDrain {
+    private var attemptedSessionNames = Set<String>()
+
+    mutating func takePending(from sessionNames: [String]) -> [String] {
+        sessionNames.filter { attemptedSessionNames.insert($0).inserted }
+    }
+}
+
+enum AsyncSessionStateReconciler {
+    static func applyingRenameMap(_ renameMap: [String: String], to currentSessionNames: [String]) -> [String] {
+        currentSessionNames.map { renameMap[$0] ?? $0 }
+    }
+
+    static func mergingDetectedAgentTypes(
+        _ detectedTypes: [String: AgentType],
+        into currentTypes: [String: AgentType],
+        validSessions: Set<String>
+    ) -> [String: AgentType] {
+        var merged = currentTypes.filter { validSessions.contains($0.key) }
+        for (sessionName, agentType) in detectedTypes
+            where validSessions.contains(sessionName) && merged[sessionName] == nil {
+            merged[sessionName] = agentType
+        }
+        return merged
+    }
+}
+
 /// Metadata cached after verifying a session belongs to its expected thread/path context.
 /// Avoids re-querying tmux on every `ensureSessionPrepared` call when nothing has changed.
 struct KnownGoodSessionContext {

@@ -829,58 +829,61 @@ final class ThreadManager {
         // Heuristic: the first session was always created as the agent tab.
         let settings = persistence.loadSettings()
         var didMigrate = false
-        for i in threads.indices {
+        let migrationThreadIds = threads.map(\.id)
+        for threadId in migrationThreadIds {
+            guard let initialIndex = store.threadIndex(byId: threadId) else { continue }
             let codexReconciledChatTabs = CodexChatTranscriptReconciler.reconciledChatTabsForRestore(
-                threads[i].persistedChatTabs
+                threads[initialIndex].persistedChatTabs
             )
             if codexReconciledChatTabs.didMutate {
-                threads[i].persistedChatTabs = codexReconciledChatTabs.chatTabs
+                threads[initialIndex].persistedChatTabs = codexReconciledChatTabs.chatTabs
                 didMigrate = true
             }
             let claudeReconciledChatTabs = ClaudeChatTranscriptReconciler.reconciledChatTabsForRestore(
-                threads[i].persistedChatTabs
+                threads[initialIndex].persistedChatTabs
             )
             if claudeReconciledChatTabs.didMutate {
-                threads[i].persistedChatTabs = claudeReconciledChatTabs.chatTabs
+                threads[initialIndex].persistedChatTabs = claudeReconciledChatTabs.chatTabs
                 didMigrate = true
             }
             let normalizedChatTabs = ChatBusyStateRecovery.normalizedChatTabsForAppRelaunch(
-                threads[i].persistedChatTabs
+                threads[initialIndex].persistedChatTabs
             )
             if normalizedChatTabs.didMutate {
-                threads[i].persistedChatTabs = normalizedChatTabs.chatTabs
+                threads[initialIndex].persistedChatTabs = normalizedChatTabs.chatTabs
                 didMigrate = true
             }
-            if threads[i].agentTmuxSessions.isEmpty && !threads[i].tmuxSessionNames.isEmpty {
-                threads[i].agentTmuxSessions = [threads[i].tmuxSessionNames[0]]
+            if threads[initialIndex].agentTmuxSessions.isEmpty && !threads[initialIndex].tmuxSessionNames.isEmpty {
+                threads[initialIndex].agentTmuxSessions = [threads[initialIndex].tmuxSessionNames[0]]
                 didMigrate = true
             }
             // Migrate: existing threads with agent sessions must have had the agent run.
-            if !threads[i].agentHasRun && !threads[i].agentTmuxSessions.isEmpty {
-                threads[i].agentHasRun = true
+            if !threads[initialIndex].agentHasRun && !threads[initialIndex].agentTmuxSessions.isEmpty {
+                threads[initialIndex].agentHasRun = true
                 didMigrate = true
             }
             // Keep persisted conversation IDs only for known agent sessions.
-            let validAgentSessions = Set(threads[i].agentTmuxSessions)
-            let filteredConversationIDs = threads[i].sessionConversationIDs.filter { validAgentSessions.contains($0.key) }
-            if filteredConversationIDs.count != threads[i].sessionConversationIDs.count {
-                threads[i].sessionConversationIDs = filteredConversationIDs
+            let validAgentSessions = Set(threads[initialIndex].agentTmuxSessions)
+            let filteredConversationIDs = threads[initialIndex].sessionConversationIDs.filter { validAgentSessions.contains($0.key) }
+            if filteredConversationIDs.count != threads[initialIndex].sessionConversationIDs.count {
+                threads[initialIndex].sessionConversationIDs = filteredConversationIDs
                 didMigrate = true
             }
-            let validSessions = Set(threads[i].tmuxSessionNames)
-            let filteredSessionCreatedAts = threads[i].sessionCreatedAts.filter { validSessions.contains($0.key) }
-            if filteredSessionCreatedAts.count != threads[i].sessionCreatedAts.count {
-                threads[i].sessionCreatedAts = filteredSessionCreatedAts
+            let validSessions = Set(threads[initialIndex].tmuxSessionNames)
+            let filteredSessionCreatedAts = threads[initialIndex].sessionCreatedAts.filter { validSessions.contains($0.key) }
+            if filteredSessionCreatedAts.count != threads[initialIndex].sessionCreatedAts.count {
+                threads[initialIndex].sessionCreatedAts = filteredSessionCreatedAts
                 didMigrate = true
             }
-            let filteredFreshSessions = Set(threads[i].freshAgentSessions.filter { validAgentSessions.contains($0) })
-            if filteredFreshSessions.count != threads[i].freshAgentSessions.count {
-                threads[i].freshAgentSessions = filteredFreshSessions
+            let filteredFreshSessions = Set(threads[initialIndex].freshAgentSessions.filter { validAgentSessions.contains($0) })
+            if filteredFreshSessions.count != threads[initialIndex].freshAgentSessions.count {
+                threads[initialIndex].freshAgentSessions = filteredFreshSessions
                 didMigrate = true
             }
-            if await migrateSessionAgentTypes(threadIndex: i) {
+            if await migrateSessionAgentTypes(threadId: threadId) {
                 didMigrate = true
             }
+            guard let i = store.threadIndex(byId: threadId) else { continue }
             if pruneSessionAgentTypesToKnownSessions(threadIndex: i) {
                 didMigrate = true
             }

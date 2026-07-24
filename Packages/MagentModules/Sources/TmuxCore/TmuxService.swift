@@ -20,7 +20,13 @@ public final class TmuxService: Sendable {
     /// an alternate kill path that bypasses this hook.
     public typealias PreKillHook = @Sendable (String) async -> Void
 
+    /// Closure invoked before terminating the entire tmux server. It must free
+    /// every surface backed by any session because `kill-server` closes all PTYs
+    /// at once and therefore cannot use the per-session hook safely.
+    public typealias PreKillServerHook = @Sendable () async -> Void
+
     private let preKillHookLock = OSAllocatedUnfairLock<PreKillHook?>(initialState: nil)
+    private let preKillServerHookLock = OSAllocatedUnfairLock<PreKillServerHook?>(initialState: nil)
     private static let requiredTerminalFeatureEntries = [
         "alacritty*:RGB",
         "foot*:RGB",
@@ -559,6 +565,12 @@ public final class TmuxService: Sendable {
         preKillHookLock.withLock { $0 = hook }
     }
 
+    /// Registers the closure invoked before `killServer()`.
+    /// Passing `nil` removes the current hook.
+    public func setPreKillServerHook(_ hook: PreKillServerHook?) {
+        preKillServerHookLock.withLock { $0 = hook }
+    }
+
     public func killSession(name: String) async throws {
         // Drain the pre-kill hook before issuing `tmux kill-session`. This is
         // the only point where every kill path funnels through, so it is the
@@ -574,6 +586,10 @@ public final class TmuxService: Sendable {
     }
 
     public func killServer() async {
+        let hook = preKillServerHookLock.withLock { $0 }
+        if let hook {
+            await hook()
+        }
         _ = await ShellExecutor.execute("tmux kill-server")
         // Also kill any zombie-heavy tmux processes that kill-server may not reach
         await killZombieHeavyTmuxProcesses()
@@ -581,7 +597,7 @@ public final class TmuxService: Sendable {
 
     /// Finds tmux processes that are parents of zombie children and kills them.
     /// After killing, waits briefly for the OS to reap the zombies.
-    public func killZombieHeavyTmuxProcesses() async {
+    private func killZombieHeavyTmuxProcesses() async {
         let summaries = await zombieParentSummaries()
         for summary in summaries where summary.zombieCount >= 10 {
             _ = await ShellExecutor.execute("kill -9 \(summary.parentPid)")

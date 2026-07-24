@@ -357,7 +357,7 @@ This pattern works for both paths:
 
 The same invariant ("free every `ghostty_surface_t` before any backing tmux session is killed") applies to **every** kill path: individual tab close, thread archive, thread delete, session recreation, startup cleanup, etc. Historically this was enforced at each call site with a manual three-hierarchy teardown sequence — which is exactly why the crash kept regressing: every new removal path (bulk archive, section delete, startup recovery collapse, etc.) had to reimplement it.
 
-**The fix lives in `TmuxService.killSession(name:)`.** Every kill-session call funnels through that method. Before issuing `tmux kill-session`, it awaits a registered pre-kill hook:
+**The fix lives in `TmuxService.killSession(name:)` and `killServer()`.** Every single-session kill funnels through `killSession(name:)`, which awaits a registered pre-kill hook before issuing `tmux kill-session`:
 
 ```swift
 // TmuxService.swift
@@ -380,9 +380,16 @@ TmuxService.shared.setPreKillHook { sessionName in
         GhosttyAppManager.shared.freeSurfaces(forTmuxSession: sessionName)
     }
 }
+TmuxService.shared.setPreKillServerHook {
+    await MainActor.run {
+        GhosttyAppManager.shared.freeAllTmuxSurfacesForShutdown()
+    }
+}
 ```
 
 `GhosttyAppManager` keeps a weak `NSHashTable<TerminalSurfaceView>` of every live surface view, indexed implicitly by the public `TerminalSurfaceView.tmuxSessionName` property. `freeSurfaces(forTmuxSession:)` looks up every view tagged with the killed session and calls `freeSurfaceForShutdown()` (a public wrapper over the existing idempotent `destroySurface()`) on each — synchronously, on the main actor, **before** the tmux kill runs. This guarantees that no live `ghostty_surface_t` can outlive its PTY, regardless of which of the three hierarchies (cache, main detail VC, pop-out windows) holds the view.
+
+`tmux kill-server` closes every session PTY at once, so it cannot safely rely on the per-session hook. `TmuxService.killServer()` awaits a separate server-wide hook that snapshots the weak registry and frees every tmux-backed surface before terminating the server. The restart recovery flow then recreates surfaces for views that remained attached to a window once their tmux sessions are live again. If one session fails to recover, its attached view remains queued and every later successful `recreateSessionIfNeeded` retries the surface restoration; detached cached views recreate themselves when reattached. Zombie-heavy tmux process termination remains private behind `killServer()` so it cannot bypass this barrier.
 
 **Rules that protect the barrier:**
 
@@ -390,6 +397,7 @@ TmuxService.shared.setPreKillHook { sessionName in
 2. **Rename must re-tag the view.** `ThreadDetailViewController.handleRename(_:)` updates `view.tmuxSessionName` for each view whose session was renamed. Without this, a post-rename kill cannot find the surface and libghostty `_exit()`s the app.
 3. **Never call `tmux kill-session` directly via `ShellExecutor.run`** — that bypasses the hook. Always go through `TmuxService.shared.killSession(name:)` (or a higher-level helper that ultimately calls it).
 4. **The hook is `async`** specifically so the main-actor hop is awaitable. Do not make the hook fire-and-forget; the `await` is what makes the barrier synchronous from the kill path's perspective.
+5. **Never terminate the tmux server or its parent processes outside `TmuxService.killServer()`.** The server-wide hook is the only structural barrier for bulk PTY closure.
 
 **Historical context — legacy manual teardown still works, but is redundant**:
 

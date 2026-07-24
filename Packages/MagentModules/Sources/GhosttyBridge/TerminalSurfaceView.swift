@@ -17,6 +17,23 @@ public enum TerminalSurfaceSizing {
     }
 }
 
+public enum TmuxSurfaceRestartResolution: Equatable {
+    case restore
+    case keepPending
+    case discard
+}
+
+public enum TmuxSurfaceRestartPolicy {
+    public static func resolution(
+        sessionName: String?,
+        isAttachedToWindow: Bool,
+        liveTmuxSessions: Set<String>
+    ) -> TmuxSurfaceRestartResolution {
+        guard isAttachedToWindow, let sessionName else { return .discard }
+        return liveTmuxSessions.contains(sessionName) ? .restore : .keepPending
+    }
+}
+
 /// NSView subclass that hosts a ghostty terminal surface with Metal rendering.
 public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClient {
 
