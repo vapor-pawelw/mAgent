@@ -1,4 +1,9 @@
-import CoreGraphics
+import AppKit
+
+enum PromptTOCPinnedResizeStyle {
+    static var dividerColor: NSColor { .tertiaryLabelColor }
+    static var cursor: NSCursor { .resizeLeftRight }
+}
 
 struct PromptTOCPresentationState: Equatable {
     var isPinned: Bool

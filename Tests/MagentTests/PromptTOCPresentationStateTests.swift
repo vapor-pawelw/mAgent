@@ -1,3 +1,4 @@
+import Cocoa
 import Testing
 
 @Suite("Prompt TOC presentation")
@@ -52,5 +53,11 @@ struct PromptTOCPresentationStateTests {
                 minimumContentWidth: 320
             ) == 320
         )
+    }
+
+    @Test("Pinned divider matches toolbar separators and uses the horizontal resize cursor")
+    func pinnedDividerAppearanceAndCursor() {
+        #expect(PromptTOCPinnedResizeStyle.dividerColor == NSColor.tertiaryLabelColor)
+        #expect(PromptTOCPinnedResizeStyle.cursor === NSCursor.resizeLeftRight)
     }
 }

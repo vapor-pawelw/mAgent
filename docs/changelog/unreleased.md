@@ -34,7 +34,7 @@
 #### Features
 
 - Unified new and forked thread creation with a context-aware visual source picker for starting from the main worktree, another thread, or any branch.
-- Pin the prompt Table of Contents beside terminal and chat content, then drag its divider to resize the split without covering the conversation.
+- Pin the prompt Table of Contents beside terminal and chat content, then resize the split from its subtle divider with a clear resize cursor without covering the conversation.
 
 #### Improvements
 

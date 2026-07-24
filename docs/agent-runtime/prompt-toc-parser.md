@@ -15,7 +15,7 @@ This document covers Prompt TOC parsing and jump behavior.
 - The TOC rests as a compact 185×36pt floating capsule showing a "Table of Contents" title and a badge with the prompt count.
 - Hovering expands the capsule to the full panel (default 320×250pt, user-resizable) with animation; mouse exit collapses it back.
 - The pin button appears in the top-right only while the floating TOC is expanded. Pinning moves the TOC into a full-height trailing split and reserves its width so terminal and chat content cannot render underneath it.
-- The pinned TOC stays expanded and always shows its unpin button. Drag its leading divider to resize it; the chosen width and pin state persist across launches.
+- The pinned TOC stays expanded and always shows its unpin button. Its leading divider matches the subtle top-bar separators and shows the standard horizontal resize cursor; drag it to resize the split. The chosen width and pin state persist across launches.
 - The toolbar toggle button and in-panel × close button are removed — TOC is always-on; users disable it in Settings.
 - No agent name appears in the header; only the title and count badge.
 

@@ -1349,6 +1349,23 @@ enum TOCResizeCorner {
     case topLeft, topRight, bottomLeft, bottomRight
 }
 
+final class PromptTOCPinnedResizeHandleView: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        PromptTOCPinnedResizeStyle.dividerColor.setFill()
+        NSRect(x: floor(bounds.midX), y: bounds.minY, width: 1, height: bounds.height).fill()
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: PromptTOCPinnedResizeStyle.cursor)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
 final class PromptTableOfContentsView: NSView {
     var onSelectEntry: ((Int) -> Void)?
     var onRenameFromEntry: ((Int) -> Void)?
@@ -1369,8 +1386,7 @@ final class PromptTableOfContentsView: NSView {
     private let headerBackgroundView = NSView()
     private let headerIcon = NSImageView()
     private let pinButton = NSButton()
-    private let pinnedResizeHandle = NSView()
-    private let pinnedDivider = NSView()
+    private let pinnedResizeHandle = PromptTOCPinnedResizeHandleView()
     private var resizeHandleIconView: NSImageView?
     private var cornerHandleViews: [NSView] = []
     private var scrollBottomConstraint: NSLayoutConstraint!
@@ -1491,7 +1507,6 @@ final class PromptTableOfContentsView: NSView {
         isExpanded = presentationState.isExpanded
         updatePinButton()
         pinnedResizeHandle.isHidden = !pinned
-        pinnedDivider.isHidden = !pinned
 
         if pinned {
             alphaValue = Self.hoverAlpha
@@ -1650,17 +1665,12 @@ final class PromptTableOfContentsView: NSView {
         let pinnedResizePan = NSPanGestureRecognizer(target: self, action: #selector(handlePinnedResize(_:)))
         pinnedResizeHandle.addGestureRecognizer(pinnedResizePan)
 
-        pinnedDivider.translatesAutoresizingMaskIntoConstraints = false
-        pinnedDivider.wantsLayer = true
-        pinnedDivider.isHidden = true
-
         addSubview(headerBackgroundView)
         addSubview(headerStack)
         addSubview(scrollView)
         addSubview(emptyLabel)
         for handle in cornerHandles { addSubview(handle) }
         addSubview(pinnedResizeHandle)
-        pinnedResizeHandle.addSubview(pinnedDivider)
 
         scrollBottomConstraint = scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8)
         scrollViewCollapseConstraint = scrollView.heightAnchor.constraint(equalToConstant: 0)
@@ -1709,11 +1719,6 @@ final class PromptTableOfContentsView: NSView {
             pinnedResizeHandle.leadingAnchor.constraint(equalTo: leadingAnchor),
             pinnedResizeHandle.bottomAnchor.constraint(equalTo: bottomAnchor),
             pinnedResizeHandle.widthAnchor.constraint(equalToConstant: 8),
-
-            pinnedDivider.topAnchor.constraint(equalTo: pinnedResizeHandle.topAnchor),
-            pinnedDivider.centerXAnchor.constraint(equalTo: pinnedResizeHandle.centerXAnchor),
-            pinnedDivider.bottomAnchor.constraint(equalTo: pinnedResizeHandle.bottomAnchor),
-            pinnedDivider.widthAnchor.constraint(equalToConstant: 1),
         ])
 
         updateAppearance()
@@ -1991,7 +1996,6 @@ final class PromptTableOfContentsView: NSView {
             headerIcon.contentTintColor = NSColor(resource: .textSecondary)
             pinButton.contentTintColor = NSColor(resource: .textSecondary)
             resizeHandleIconView?.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.8)
-            pinnedDivider.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.8).cgColor
             countBadgeView.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.1).cgColor
             countLabel.textColor = NSColor(resource: .textPrimary)
         }
