@@ -1437,8 +1437,15 @@ final class SessionLifecycleService {
                 switch detectedAgent {
                 case .codex?:
                     // Codex: busy while active "Working"/interrupt/background status
-                    // markers are visible in the latest scope.
-                    let isBusy = await paneShowsEscToInterrupt(sessionName: session)
+                    // markers are visible in the latest scope. A Stop hook's idle state
+                    // wins over stale off-screen markers until the next submitted prompt
+                    // changes the pane option back to active.
+                    let paneActivity = await codexPaneActivity(sessionName: session)
+                    let isBusy = CodexHookBusyState.resolve(
+                        hookState: paneState.codexHookState,
+                        paneShowsBusy: paneActivity.showsBusy,
+                        paneShowsIdlePrompt: paneActivity.showsIdlePrompt
+                    )
                     guard let currentThread = store.thread(byId: threadId) else { continue }
                     let wasBusy = currentThread.busySessions.contains(session)
                     if isBusy {
@@ -1803,7 +1810,9 @@ final class SessionLifecycleService {
         )
     }()
 
-    private func paneShowsEscToInterrupt(sessionName: String) async -> Bool {
+    private func codexPaneActivity(
+        sessionName: String
+    ) async -> (showsBusy: Bool, showsIdlePrompt: Bool) {
 #if DEBUG
         Self.codexBusyHeuristicSelfCheck
 #endif
@@ -1816,10 +1825,13 @@ final class SessionLifecycleService {
         } else if let cachedContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 200) {
             paneContent = cachedContent
         } else {
-            return false
+            return (false, false)
         }
 
-        return paneContentShowsCodexBusyStatus(paneContent)
+        return (
+            paneContentShowsCodexBusyStatus(paneContent),
+            paneContentShowsCodexIdlePrompt(paneContent)
+        )
     }
 
     private func paneContentSupportsAgentHint(sessionName: String, hintedAgent: AgentType) async -> Bool {
@@ -1842,6 +1854,12 @@ final class SessionLifecycleService {
 
     private func paneContentShowsCodexBusyStatus(_ paneContent: String) -> Bool {
         recentNonEmptyLines(from: paneContent, maxLines: 25).contains(where: Self.isCodexBusyStatusLine)
+    }
+
+    private func paneContentShowsCodexIdlePrompt(_ paneContent: String) -> Bool {
+        recentNonEmptyLines(from: paneContent, maxLines: 25).contains {
+            $0.hasPrefix("\u{203A}")
+        }
     }
 
     private static func isCodexBusyStatusLine(_ line: String) -> Bool {

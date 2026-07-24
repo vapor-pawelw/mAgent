@@ -83,4 +83,64 @@ struct CodexConfigMigrationTests {
         #expect(migrated.contains("codex_hooks_enabled = true"))
         #expect(migrated.contains("hooks = true"))
     }
+
+    @Test("Managed config preserves user hooks and adds Magent lifecycle hooks")
+    func addsMagentLifecycleHooks() {
+        let input = """
+        model = "gpt-5.6"
+
+        [[hooks.Stop]]
+        [[hooks.Stop.hooks]]
+        type = "command"
+        command = "user-stop-hook"
+        """
+
+        let managed = CodexConfigMigration.preparingManagedConfig(from: input)
+
+        #expect(managed.contains("command = \"user-stop-hook\""))
+        #expect(managed.contains("[[hooks.UserPromptSubmit]]"))
+        #expect(managed.contains("@magent_codex_turn_state active"))
+        #expect(managed.contains("[[hooks.Stop]]"))
+        #expect(managed.contains("@magent_codex_turn_state idle"))
+        #expect(managed.contains("/tmp/magent-agent-completion-events.log"))
+    }
+
+    @Test("Managed lifecycle hooks remain single when config is prepared again")
+    func managedHooksAreIdempotent() {
+        let once = CodexConfigMigration.preparingManagedConfig(from: "")
+        let twice = CodexConfigMigration.preparingManagedConfig(from: once)
+
+        #expect(twice.components(separatedBy: "# magent-managed-codex-hooks-start").count == 2)
+        #expect(twice.components(separatedBy: "[[hooks.UserPromptSubmit]]").count == 2)
+        #expect(twice.components(separatedBy: "[[hooks.Stop]]").count == 2)
+    }
+
+    @Test("Codex Stop hook idle state overrides stale pane busy text")
+    func stopHookIdleStateOverridesPaneText() {
+        #expect(!CodexHookBusyState.resolve(
+            hookState: "idle",
+            paneShowsBusy: true,
+            paneShowsIdlePrompt: true
+        ))
+        #expect(CodexHookBusyState.resolve(
+            hookState: "idle",
+            paneShowsBusy: true,
+            paneShowsIdlePrompt: false
+        ))
+        #expect(CodexHookBusyState.resolve(
+            hookState: "active",
+            paneShowsBusy: true,
+            paneShowsIdlePrompt: true
+        ))
+        #expect(CodexHookBusyState.resolve(
+            hookState: nil,
+            paneShowsBusy: true,
+            paneShowsIdlePrompt: true
+        ))
+        #expect(!CodexHookBusyState.resolve(
+            hookState: nil,
+            paneShowsBusy: false,
+            paneShowsIdlePrompt: false
+        ))
+    }
 }

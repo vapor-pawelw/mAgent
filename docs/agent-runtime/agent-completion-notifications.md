@@ -15,7 +15,7 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 ## Implementation details
 
 - Completion detection still enters through `ThreadManager.checkForAgentCompletions()`.
-- The shared completion-processing path is also used by synthetic Codex completions generated from the session monitor's busy→idle transition, so unread dots, notifications, auto-reorder, and auto-rename stay aligned across completion sources.
+- The shared completion-processing path is also used by Codex Stop-hook events and synthetic Codex completions generated from the session monitor's busy→idle fallback, so unread dots, notifications, auto-reorder, and auto-rename stay aligned across completion sources.
 - After processing completion events, the shared completion path also triggers auto-rename for threads that haven't been renamed yet (`!didAutoRenameFromFirstPrompt`). This covers threads not currently displayed (no `ThreadDetailViewController`). See `prompt-toc-parser.md` § "Three auto-rename trigger paths" for details.
 - Completion processing also force-refreshes Jira ticket details for the completed thread, bypassing the normal ticket cache so status badges and synced Jira descriptions can catch up as soon as the agent finishes.
 - A Dock bounce is requested only when a thread transitions from `hasUnreadAgentCompletion == false` to `true`, which avoids repeated bounces for additional unread tabs in the same thread.
@@ -28,12 +28,13 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 ## Completion sources
 
 - **Claude**: completion events are appended to `/tmp/magent-agent-completion-events.log` by the Magent-injected Claude Stop hook. The app consumes them via `TmuxService.consumeAgentCompletionSessions()`.
-- **Codex**: completion is synthesized when the session monitor sees a Codex session transition from busy to an idle prompt, as long as the session is not waiting for input and is not rate-limited.
+- **Codex**: Magent adds `UserPromptSubmit` and `Stop` hooks to its private managed `CODEX_HOME/config.toml`. The prompt hook stores `active` in the pane-local `@magent_codex_turn_state` tmux option. The Stop hook changes it to `idle` and appends the session name to the same completion log used by Claude. User-configured hooks remain present because Magent appends its hook tables to the copied config rather than replacing them.
 
 - **Atomic consume**: The consume path uses `mv` (atomic on same filesystem) to move the log to a `.consuming` temp path, then reads and deletes it. This avoids the race condition where `cat file; : > file` could lose events appended between read and truncation.
 - **No startup truncation**: the completion log is never truncated pre-emptively. Claude events accumulated while the app was closed are consumed by `ThreadManager` at launch via `consumeAgentCompletionSessions()` → `applyStartupCompletionSessions()`.
 - **1-second per-session cooldown**: `recentBellBySession` deduplicates rapid completion signals on the same session (within 1 second). This protects against duplicate Claude hook events and against synthetic Codex completion colliding with any future fallback source.
 - **Codex busy→idle fallback**: If a Codex session was previously marked busy and later becomes idle at the Codex prompt without entering waiting-for-input, Magent treats that transition as completion even if no BEL was emitted. This covers Codex turns that finish silently.
+- **Codex idle override**: `TmuxService.activePaneStates` reads the pane-local hook state alongside process metadata. A confirmed `idle` state overrides stale `esc to interrupt` or background-terminal text only while the Codex `›` prompt is also visible. This paired evidence prevents stale pane text from winning without permanently suppressing a new turn if `UserPromptSubmit` is unavailable or fails. The submit hook normally changes the option back to `active`; when hooks are absent entirely, normal pane polling remains authoritative.
 - **Legacy rollback switch**: `TmuxService.legacyAgentBellPipeEnabled` re-enables the old tmux `pipe-pane` watcher path if completion regressions appear. Leave it `false` by default; `ensureBellPipes()` will detach any old Magent agent pipes from upgraded sessions while the legacy flag is off.
 
 ## Gotchas
@@ -42,6 +43,7 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 - Do not gate the Dock badge/bounce toggle on macOS notification permission. Dock behavior should remain available even when system notification banners are disabled or denied.
 - Keep Dock-side effects routed through the existing completion state. Adding a second unread-tracking path will drift from the sidebar and tab indicators.
 - Keep the Codex fallback transition-based, not unconditional idle detection. Re-firing completion on every idle poll would recreate dots and notifications after the user already read the thread.
+- Keep Codex hooks scoped to the managed config. Never mutate the user's global `~/.codex/config.toml`, and preserve their hook tables when rebuilding the private copy.
 - The `paneContentShowsEscToInterrupt` regex for the `· esc to interrupt` pattern must **not** use a `$` end-of-line anchor. Claude's status bar now appends additional context after the phrase (e.g. `· esc to interrupt                  7% until auto-compact`), so anchoring to end-of-line causes the busy check to silently miss those lines.
 - If you need to roll back quickly, flip `TmuxService.legacyAgentBellPipeEnabled` to `true`. That is the intended one-line revert path for this change.
 
@@ -50,6 +52,7 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 - Claude completion continues to use the injected Stop hook, but tmux `pipe-pane` bell watchers are now disabled by default.
 - Codex completion attention is now synthesized from the session monitor's busy→idle transition instead of a tmux bell pipe.
 - The legacy tmux bell-pipe path remains behind `TmuxService.legacyAgentBellPipeEnabled` as a one-line rollback switch.
+- Magent-launched Codex sessions now emit completion through a managed Stop hook, while prompt/Stop pane state prevents stale background output from keeping completed sessions busy. The session monitor remains the compatibility fallback.
 
 ## Per-Session Tracking
 

@@ -1955,17 +1955,13 @@ final class AgentSetupService {
         let sourcePath = (userCodexHome as NSString).appendingPathComponent("config.toml")
         let managedPath = (managedCodexHome as NSString).appendingPathComponent("config.toml")
 
-        guard let source = try? String(contentsOfFile: sourcePath, encoding: .utf8) else {
-            try? fm.removeItem(atPath: managedPath)
-            return
-        }
-
-        let migrated = CodexConfigMigration.migratingDeprecatedHooksFeatureKey(in: source)
+        let source = (try? String(contentsOfFile: sourcePath, encoding: .utf8)) ?? ""
+        let managedConfig = CodexConfigMigration.preparingManagedConfig(from: source)
         if (try? fm.destinationOfSymbolicLink(atPath: managedPath)) != nil {
             try? fm.removeItem(atPath: managedPath)
         }
-        if (try? String(contentsOfFile: managedPath, encoding: .utf8)) != migrated {
-            try? migrated.write(toFile: managedPath, atomically: true, encoding: .utf8)
+        if (try? String(contentsOfFile: managedPath, encoding: .utf8)) != managedConfig {
+            try? managedConfig.write(toFile: managedPath, atomically: true, encoding: .utf8)
         }
         try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: managedPath)
     }
