@@ -87,6 +87,16 @@ struct SplitViewControllerTests {
         #expect(constraint.secondAttribute == .top)
     }
 
+    @Test("Sidebar titlebar blur stays visually consistent and non-interactive")
+    func sidebarTitlebarBlurUsesStickyHeaderStyleWithoutCapturingClicks() {
+        let blurView = SidebarChromeBlurView(frame: NSRect(x: 0, y: 0, width: 280, height: 48))
+
+        #expect(blurView.blendingMode == .withinWindow)
+        #expect(blurView.material == .popover)
+        #expect(blurView.state == .active)
+        #expect(blurView.hitTest(NSPoint(x: 20, y: 20)) == nil)
+    }
+
     @Test("Sidebar width range supports a compact minimum on small screens")
     func sidebarSupportsCompactWidth() {
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: NSViewController())

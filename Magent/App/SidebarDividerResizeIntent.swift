@@ -1,5 +1,30 @@
 import AppKit
 
+enum SidebarChromeBlurStyle {
+    static func apply(to view: NSVisualEffectView) {
+        view.blendingMode = .withinWindow
+        view.material = .popover
+        view.state = .active
+    }
+}
+
+final class SidebarChromeBlurView: NSVisualEffectView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        SidebarChromeBlurStyle.apply(to: self)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        SidebarChromeBlurStyle.apply(to: self)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Keep traffic-light controls and titlebar dragging available above this visual-only layer.
+        nil
+    }
+}
+
 struct MainWindowChromeLayout {
     static func configure(_ window: NSWindow) {
         window.styleMask.insert(.fullSizeContentView)

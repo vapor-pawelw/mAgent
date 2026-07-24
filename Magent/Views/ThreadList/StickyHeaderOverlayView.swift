@@ -73,9 +73,7 @@ final class StickyHeaderOverlayView: NSView {
         wantsLayer = true
 
         headerBlurView.translatesAutoresizingMaskIntoConstraints = false
-        headerBlurView.blendingMode = .withinWindow
-        headerBlurView.material = .popover
-        headerBlurView.state = .active
+        SidebarChromeBlurStyle.apply(to: headerBlurView)
         addSubview(headerBlurView)
 
         // Project header row

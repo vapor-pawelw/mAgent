@@ -315,6 +315,7 @@ final class ThreadListViewController: NSViewController {
 
     var outlineView: NSOutlineView!
     private var scrollView: NSScrollView!
+    private let sidebarChromeBlurView = SidebarChromeBlurView()
     private var stickyHeaderOverlay: StickyHeaderOverlayView!
     private var stickyHeaderHeightConstraint: NSLayoutConstraint!
     private let noRepositoriesView = SidebarNoRepositoriesView()
@@ -976,6 +977,9 @@ final class ThreadListViewController: NSViewController {
         branchMismatchView = BranchMismatchView()
         view.addSubview(branchMismatchView)
 
+        sidebarChromeBlurView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(sidebarChromeBlurView)
+
         // Sticky project/section header overlay — added last to sit above scroll view
         stickyHeaderOverlay = StickyHeaderOverlayView()
         stickyHeaderOverlay.translatesAutoresizingMaskIntoConstraints = false
@@ -993,6 +997,11 @@ final class ThreadListViewController: NSViewController {
         scrollViewTopConstraint = SidebarContentLayout.topConstraint(for: scrollView, in: view)
 
         NSLayoutConstraint.activate([
+            sidebarChromeBlurView.topAnchor.constraint(equalTo: view.topAnchor),
+            sidebarChromeBlurView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            sidebarChromeBlurView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            sidebarChromeBlurView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+
             SidebarContentLayout.topConstraint(for: stickyHeaderOverlay, in: view),
             stickyHeaderOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             stickyHeaderOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
