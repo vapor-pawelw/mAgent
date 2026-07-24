@@ -11,6 +11,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var ipcServer: IPCSocketServer?
     private var systemAppearanceObserver: NSObjectProtocol?
     private var launchSmokeTestWindow: NSWindow?
+    private var terminalCacheMemoryPressureSource: (any DispatchSourceMemoryPressure)?
 
     private var knownWorktreePaths: [String] {
         ThreadManager.shared.threads.map(\.worktreePath)
@@ -149,6 +150,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         CrashReportingService.initialize()
         setupMainMenu()
         GhosttyAppManager.shared.initialize()
+        startTerminalCacheMemoryPressureMonitoring()
         // Install the structural barrier that frees any live Ghostty surface
         // backed by a tmux session BEFORE that session is killed. This is
         // what keeps libghostty from calling `_exit()` on the app when a
@@ -158,11 +160,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // `docs/agent-runtime/libghostty-integration.md`.
         TmuxService.shared.setPreKillHook { sessionName in
             await MainActor.run {
+                ReusableTerminalViewCache.shared.remove(sessionName: sessionName)
                 GhosttyAppManager.shared.freeSurfaces(forTmuxSession: sessionName)
             }
         }
         TmuxService.shared.setPreKillServerHook {
             await MainActor.run {
+                ReusableTerminalViewCache.shared.removeAll()
                 GhosttyAppManager.shared.freeAllTmuxSurfacesForShutdown()
             }
         }
@@ -216,6 +220,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        terminalCacheMemoryPressureSource?.cancel()
+        terminalCacheMemoryPressureSource = nil
         coordinator?.persistMainWindowFrame()
         UpdateService.shared.stopPeriodicUpdateChecks()
         NotificationCenter.default.removeObserver(self, name: .magentSettingsDidChange, object: nil)
@@ -285,6 +291,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             return
         }
         ThreadManager.shared.setTerminalRendererHealth(sessionName: sessionName, isHealthy: isHealthy)
+    }
+
+    private func startTerminalCacheMemoryPressureMonitoring() {
+        let source = DispatchSource.makeMemoryPressureSource(
+            eventMask: [.warning, .critical],
+            queue: .main
+        )
+        source.setEventHandler { [weak source] in
+            guard let event = source?.data else { return }
+            MainActor.assumeIsolated {
+                if event.contains(.critical) {
+                    ReusableTerminalViewCache.shared.handleMemoryPressure(.critical)
+                } else if event.contains(.warning) {
+                    ReusableTerminalViewCache.shared.handleMemoryPressure(.warning)
+                }
+            }
+        }
+        terminalCacheMemoryPressureSource = source
+        source.activate()
     }
 
     private func setupMainMenu() {

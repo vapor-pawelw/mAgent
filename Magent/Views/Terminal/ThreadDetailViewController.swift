@@ -31,7 +31,7 @@ final class ReusableTerminalViewCache {
     private struct Entry {
         let sessionName: String
         let view: TerminalSurfaceView
-        let reuseKey: String
+        var reuseKey: String
         let cachedAt: Date
         var lastAccessedAt: Date
     }
@@ -44,6 +44,7 @@ final class ReusableTerminalViewCache {
         guard var entry = entriesBySession.removeValue(forKey: sessionName) else { return nil }
         guard entry.reuseKey == reuseKey else {
             fifoSessionNames.removeAll { $0 == sessionName }
+            entry.view.freeSurfaceForShutdown()
             return nil
         }
         fifoSessionNames.removeAll { $0 == sessionName }
@@ -53,6 +54,15 @@ final class ReusableTerminalViewCache {
 
     func store(_ view: TerminalSurfaceView, sessionName: String, reuseKey: String) {
         pruneExpiredEntries()
+        if var existing = entriesBySession[sessionName], existing.view === view {
+            existing.reuseKey = reuseKey
+            existing.lastAccessedAt = Date()
+            entriesBySession[sessionName] = existing
+            fifoSessionNames.removeAll { $0 == sessionName }
+            fifoSessionNames.append(sessionName)
+            view.preserveSurfaceOnDetach = true
+            return
+        }
         remove(sessionName: sessionName)
 
         view.preserveSurfaceOnDetach = true
@@ -72,18 +82,31 @@ final class ReusableTerminalViewCache {
     }
 
     func remove(sessionName: String) {
-        entriesBySession.removeValue(forKey: sessionName)
+        let entry = entriesBySession.removeValue(forKey: sessionName)
         fifoSessionNames.removeAll { $0 == sessionName }
+        entry?.view.freeSurfaceForShutdown()
     }
 
     func removeAll() {
+        let views = entriesBySession.values.map(\.view)
         entriesBySession.removeAll()
         fifoSessionNames.removeAll()
+        for view in views {
+            view.freeSurfaceForShutdown()
+        }
     }
 
     func pruneToConfiguredLimit() {
         pruneExpiredEntries()
         evictOverflowIfNeeded()
+    }
+
+    func handleMemoryPressure(_ pressure: TerminalSurfaceCachePressure) {
+        pruneExpiredEntries()
+        trim(to: TerminalSurfaceCachePolicy.retainedCount(
+            currentCount: entriesBySession.count,
+            pressure: pressure
+        ))
     }
 
     /// Evict cached views whose sessions are about to be killed (archive/delete).
@@ -107,10 +130,13 @@ final class ReusableTerminalViewCache {
 
     private func evictOverflowIfNeeded() {
         guard let maxCachedViews = PersistenceService.shared.loadSettings().terminalSurfaceCacheLimit else { return }
-        while entriesBySession.count > maxCachedViews {
+        trim(to: maxCachedViews)
+    }
+
+    private func trim(to retainedCount: Int) {
+        while entriesBySession.count > retainedCount {
             guard let oldestSessionName = fifoSessionNames.first else { return }
-            fifoSessionNames.removeFirst()
-            entriesBySession.removeValue(forKey: oldestSessionName)
+            remove(sessionName: oldestSessionName)
         }
     }
 }
@@ -949,6 +975,19 @@ final class ThreadDetailViewController: NSViewController {
             pinnedMovableCount: pinnedMovableCount,
             totalCount: orderedMovableSessions.count + Self.permanentTabCount
         )
+        let defaults = UserDefaults.standard
+        let defaultsThreadId = defaults
+            .string(forKey: Self.lastOpenedThreadDefaultsKey)
+            .flatMap(UUID.init(uuidString:))
+        let defaultsSession = defaults.string(forKey: Self.lastOpenedTabDefaultsKey)
+        let initialIndex = hasNonTerminalTabsOnly ? nil : TabRestoreSelectionResolver.resolveInitialTerminalIndex(
+            orderedSessions: sessionDisplayOrder,
+            threadId: thread.id,
+            defaultsThreadId: defaultsThreadId,
+            defaultsIdentifier: defaultsSession,
+            lastSelectedIdentifier: thread.lastSelectedTabIdentifier,
+            magentBusySessions: thread.magentBusySessions
+        )
 
         await MainActor.run {
             preparedSessions.removeAll()
@@ -993,10 +1032,30 @@ final class ThreadDetailViewController: NSViewController {
                 tabSlots.append(.terminal(sessionName: sessionName))
             }
 
-            // Build terminalViews outside the display-order loop because this array
-            // must be parallel to thread.tmuxSessionNames (canonical order), not
-            // orderedSessions (display order with pinned tabs first).
-            terminalViews = thread.tmuxSessionNames.map(makeTerminalView(for:))
+            // Restore the selected surface first. A cache hit can cancel the
+            // debounced overlay before secondary tabs and non-terminal views are
+            // reconstructed.
+            var selectedTerminalView: TerminalSurfaceView?
+            var selectedSessionName: String?
+            if let initialIndex, sessionDisplayOrder.indices.contains(initialIndex) {
+                let sessionName = sessionDisplayOrder[initialIndex]
+                if thread.tmuxSessionNames.contains(sessionName) {
+                    selectedSessionName = sessionName
+                    selectedTerminalView = makeTerminalView(for: sessionName)
+                    if reusableSurfacePreparedSessions.contains(sessionName),
+                       !requireStartupOverlayForInitialSession {
+                        cancelLoadingOverlayReveal()
+                    }
+                }
+            }
+
+            // terminalViews stays parallel to canonical tmuxSessionNames order.
+            terminalViews = thread.tmuxSessionNames.map { sessionName in
+                if sessionName == selectedSessionName, let selectedTerminalView {
+                    return selectedTerminalView
+                }
+                return makeTerminalView(for: sessionName)
+            }
 
             // Restore persisted web tabs (pages load lazily on selection).
             // Pinned web tabs are inserted into the pinned section; unpinned appended at end.
@@ -1062,19 +1121,10 @@ final class ThreadDetailViewController: NSViewController {
             }
         }
 
-        let defaults = UserDefaults.standard
-        let defaultsThreadId = defaults
-            .string(forKey: Self.lastOpenedThreadDefaultsKey)
-            .flatMap(UUID.init(uuidString:))
-        let defaultsSession = defaults.string(forKey: Self.lastOpenedTabDefaultsKey)
-        let initialIndex = TabRestoreSelectionResolver.resolveInitialTerminalIndex(
-            orderedSessions: sessionDisplayOrder,
-            threadId: thread.id,
-            defaultsThreadId: defaultsThreadId,
-            defaultsIdentifier: defaultsSession,
-            lastSelectedIdentifier: thread.lastSelectedTabIdentifier,
-            magentBusySessions: thread.magentBusySessions
-        )
+        guard let initialIndex else {
+            await MainActor.run { dismissLoadingOverlay() }
+            return
+        }
 
         let initialSessionName = sessionDisplayOrder[initialIndex]
         let canFastPathInitialSession = await MainActor.run {
@@ -1424,7 +1474,15 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     static func terminalReuseKey(for thread: MagentThread, sessionName: String) -> String {
-        "\(thread.worktreePath)\n\(buildTmuxCommand(for: sessionName, in: thread))"
+        let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
+        return TerminalSurfaceReuseIdentity(
+            threadID: thread.id,
+            sessionName: sessionName,
+            worktreePath: thread.worktreePath,
+            isAgentSession: isAgentSession,
+            agentType: isAgentSession ? thread.sessionAgentTypes[sessionName] : nil,
+            sessionCreatedAt: thread.sessionCreatedAts[sessionName]
+        ).cacheKey
     }
 
     private func buildTmuxCommand(for sessionName: String) -> String {

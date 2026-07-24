@@ -358,6 +358,12 @@ extension ThreadDetailViewController {
     }
 
     @MainActor
+    func cancelLoadingOverlayReveal() {
+        loadingOverlayRevealTimer?.invalidate()
+        loadingOverlayRevealTimer = nil
+    }
+
+    @MainActor
     func startLoadingOverlayTracking(sessionName: String, agentType: AgentType?) {
         loadingPollTimer?.invalidate()
         loadingPollTimer = nil
