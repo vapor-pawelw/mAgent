@@ -132,6 +132,7 @@ final class SplitViewController: NSSplitViewController {
 
         threadListVC.delegate = self
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: threadListVC)
+        MainWindowChromeLayout.configure(sidebarItem)
         SidebarWidthRange.configure(sidebarItem)
         // `sidebarWithViewController:` already configures `canCollapse = true`
         // as part of the sidebar behavior — no explicit assignment needed.
@@ -1459,6 +1460,9 @@ extension SplitViewController: ThreadListDelegate {
 
 extension SplitViewController: NSToolbarDelegate {
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        if itemIdentifier == .sidebarTrackingSeparator {
+            return MainWindowChromeLayout.sidebarTrackingSeparator(for: splitView)
+        }
         if itemIdentifier == Self.currentThreadToolbarItemId {
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = String(localized: .ThreadStrings.threadInfoMainWorktree)
@@ -1544,11 +1548,17 @@ extension SplitViewController: NSToolbarDelegate {
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.currentThreadToolbarItemId, .flexibleSpace, Self.addRepositoryToolbarItemId, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
+        MainWindowChromeLayout.defaultToolbarItemIdentifiers(
+            currentThread: Self.currentThreadToolbarItemId,
+            addRepository: Self.addRepositoryToolbarItemId,
+            recentlyArchived: Self.recentlyArchivedToolbarItemId,
+            settings: Self.settingsToolbarItemId
+        )
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [
+            .sidebarTrackingSeparator,
             Self.currentThreadToolbarItemId,
             .flexibleSpace,
             Self.addRepositoryToolbarItemId,

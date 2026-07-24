@@ -227,6 +227,7 @@ Projects can define repo-relative local sync entries (files or directories) with
 
 The main window's sidebar/detail `NSSplitView` structure should remain stable while switching threads.
 
+- The main window uses `.fullSizeContentView` with a unified toolbar, and the sidebar split item opts into `allowsFullHeightLayout`. Keep `.sidebarTrackingSeparator` immediately before the current-thread toolbar item so the sidebar background reaches the window's top edge behind the traffic-light controls while thread context stays on the detail side of the divider.
 - Create the sidebar split item and the detail/content split item once at startup.
 - Install the custom vertical `SidebarTrackingSplitView` and both split items from `SplitViewController`'s designated initializer. Do not replace the split view from `loadView`; `NSSplitViewController` can already be constructing its managed view hierarchy at that point, which makes startup ordering unreliable.
 - The debug app-launch smoke test sets `MAGENT_APP_LAUNCH_SMOKE_TEST=1`. In that mode `AppDelegate` builds a window around `SplitViewController` but returns before persistence recovery, tmux management, update checks, IPC, or other launch side effects; keep the bypass debug-only so the test can exercise split-view construction beside a running Magent instance without touching live user state.

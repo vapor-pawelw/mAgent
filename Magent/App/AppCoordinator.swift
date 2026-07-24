@@ -96,8 +96,7 @@ final class AppCoordinator {
             defer: false
         )
         window.minSize = NSSize(width: 800, height: 500)
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
+        MainWindowChromeLayout.configure(window)
 
         // Wrap the split VC in a container that adds the status bar at the bottom
         let containerVC = MainContainerViewController(splitViewController: splitVC)

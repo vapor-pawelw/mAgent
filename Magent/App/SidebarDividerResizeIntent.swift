@@ -1,5 +1,42 @@
 import AppKit
 
+struct MainWindowChromeLayout {
+    static func configure(_ window: NSWindow) {
+        window.styleMask.insert(.fullSizeContentView)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.toolbarStyle = .unified
+    }
+
+    static func configure(_ sidebarItem: NSSplitViewItem) {
+        sidebarItem.allowsFullHeightLayout = true
+    }
+
+    static func sidebarTrackingSeparator(for splitView: NSSplitView) -> NSTrackingSeparatorToolbarItem {
+        NSTrackingSeparatorToolbarItem(
+            identifier: .sidebarTrackingSeparator,
+            splitView: splitView,
+            dividerIndex: 0
+        )
+    }
+
+    static func defaultToolbarItemIdentifiers(
+        currentThread: NSToolbarItem.Identifier,
+        addRepository: NSToolbarItem.Identifier,
+        recentlyArchived: NSToolbarItem.Identifier,
+        settings: NSToolbarItem.Identifier
+    ) -> [NSToolbarItem.Identifier] {
+        [
+            .sidebarTrackingSeparator,
+            currentThread,
+            .flexibleSpace,
+            addRepository,
+            recentlyArchived,
+            settings,
+        ]
+    }
+}
+
 struct SidebarWidthRange {
     static let minimum: CGFloat = 200
     static let maximum: CGFloat = 420

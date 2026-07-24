@@ -8,6 +8,60 @@ struct SplitViewControllerTests {
         #expect(SidebarTrackingSplitView().isVertical)
     }
 
+    @Test("Sidebar extends through the window titlebar")
+    func sidebarUsesFullHeightLayout() {
+        let sidebarItem = NSSplitViewItem(sidebarWithViewController: NSViewController())
+
+        MainWindowChromeLayout.configure(sidebarItem)
+
+        #expect(sidebarItem.allowsFullHeightLayout)
+    }
+
+    @Test("Current thread strip starts on the content side of the sidebar")
+    func toolbarTracksSidebarBeforeCurrentThread() throws {
+        let currentThread = NSToolbarItem.Identifier("currentThread")
+        let identifiers = MainWindowChromeLayout.defaultToolbarItemIdentifiers(
+            currentThread: currentThread,
+            addRepository: NSToolbarItem.Identifier("addRepository"),
+            recentlyArchived: NSToolbarItem.Identifier("recentlyArchived"),
+            settings: NSToolbarItem.Identifier("settings")
+        )
+        let separatorIndex = try #require(
+            identifiers.firstIndex(of: NSToolbarItem.Identifier.sidebarTrackingSeparator)
+        )
+        let currentThreadIndex = try #require(
+            identifiers.firstIndex(of: currentThread)
+        )
+
+        #expect(currentThreadIndex == separatorIndex + 1)
+    }
+
+    @Test("Sidebar toolbar separator tracks the split-view divider")
+    func toolbarSeparatorTracksSidebarDivider() {
+        let splitView = NSSplitView()
+        let separator = MainWindowChromeLayout.sidebarTrackingSeparator(for: splitView)
+
+        #expect(separator.splitView === splitView)
+        #expect(separator.dividerIndex == 0)
+    }
+
+    @Test("Main window content occupies the titlebar behind standard controls")
+    func mainWindowUsesUnifiedFullSizeChrome() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 500),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+
+        MainWindowChromeLayout.configure(window)
+
+        #expect(window.styleMask.contains(.fullSizeContentView))
+        #expect(window.titlebarAppearsTransparent)
+        #expect(window.titleVisibility == .hidden)
+        #expect(window.toolbarStyle == .unified)
+    }
+
     @Test("Sidebar width range supports a compact minimum on small screens")
     func sidebarSupportsCompactWidth() {
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: NSViewController())
