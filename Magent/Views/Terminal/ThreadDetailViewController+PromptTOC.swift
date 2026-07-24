@@ -1253,9 +1253,18 @@ private final class PromptTOCLabel: NSTextField {
     }
 }
 
+private final class PromptTOCOrdinalBadgeView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+}
+
 private final class PromptTOCEntryRowView: NSView {
     let entryIndex: Int
+    private let ordinalBadgeView = PromptTOCOrdinalBadgeView()
+    private let ordinalLabel: PromptTOCLabel
     private let label: PromptTOCLabel
+    private var ordinalBadgeWidthConstraint: NSLayoutConstraint!
     private var showsAlternateBackground = false
     var isSelected = false {
         didSet {
@@ -1265,11 +1274,13 @@ private final class PromptTOCEntryRowView: NSView {
 
     var onRightClick: ((Int, NSEvent) -> Void)?
 
-    init(entryIndex: Int, text: String) {
+    init(entryIndex: Int, promptText: String, isPinned: Bool) {
         self.entryIndex = entryIndex
-        self.label = PromptTOCLabel(wrappingLabelWithString: text)
+        self.ordinalLabel = PromptTOCLabel(labelWithString: "\(entryIndex + 1)")
+        self.label = PromptTOCLabel(wrappingLabelWithString: promptText)
         super.init(frame: .zero)
         setupUI()
+        setPinnedPresentation(isPinned)
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -1295,19 +1306,39 @@ private final class PromptTOCEntryRowView: NSView {
         updateAppearance()
     }
 
+    func setPinnedPresentation(_ isPinned: Bool) {
+        applyPresentation(PromptTOCRowPresentation(
+            entryIndex: entryIndex,
+            promptText: label.stringValue,
+            isPinned: isPinned
+        ))
+    }
+
     private func setupUI() {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.cornerRadius = 6
 
+        ordinalBadgeView.translatesAutoresizingMaskIntoConstraints = false
+        ordinalBadgeView.wantsLayer = true
+        ordinalBadgeView.layer?.cornerRadius = 10
+        ordinalBadgeView.layer?.borderWidth = 1
+
+        ordinalLabel.translatesAutoresizingMaskIntoConstraints = false
+        ordinalLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        ordinalLabel.alignment = .center
+        ordinalLabel.isSelectable = false
+        ordinalLabel.isEditable = false
+        ordinalLabel.focusRingType = .none
+        ordinalLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        ordinalBadgeView.addSubview(ordinalLabel)
+
         label.translatesAutoresizingMaskIntoConstraints = false
-        label.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         label.textColor = NSColor(resource: .textPrimary)
         label.isSelectable = false
         label.isEditable = false
         label.allowsEditingTextAttributes = false
         label.focusRingType = .none
-        label.maximumNumberOfLines = 3
         label.lineBreakMode = .byWordWrapping
         label.cell?.wraps = true
         label.cell?.usesSingleLineMode = false
@@ -1315,10 +1346,23 @@ private final class PromptTOCEntryRowView: NSView {
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
+        addSubview(ordinalBadgeView)
         addSubview(label)
+        ordinalBadgeWidthConstraint = ordinalBadgeView.widthAnchor.constraint(equalToConstant: 20)
         NSLayoutConstraint.activate([
+            ordinalBadgeView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            ordinalBadgeView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            ordinalBadgeWidthConstraint,
+            ordinalBadgeView.heightAnchor.constraint(equalToConstant: 20),
+            ordinalBadgeView.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -6),
+
+            ordinalLabel.centerXAnchor.constraint(equalTo: ordinalBadgeView.centerXAnchor),
+            ordinalLabel.centerYAnchor.constraint(equalTo: ordinalBadgeView.centerYAnchor),
+            ordinalLabel.leadingAnchor.constraint(greaterThanOrEqualTo: ordinalBadgeView.leadingAnchor, constant: 2),
+            ordinalLabel.trailingAnchor.constraint(lessThanOrEqualTo: ordinalBadgeView.trailingAnchor, constant: -2),
+
             label.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            label.leadingAnchor.constraint(equalTo: ordinalBadgeView.trailingAnchor, constant: 7),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
         ])
@@ -1326,22 +1370,50 @@ private final class PromptTOCEntryRowView: NSView {
         updateAppearance()
     }
 
+    private func applyPresentation(_ presentation: PromptTOCRowPresentation) {
+        ordinalLabel.stringValue = presentation.ordinalText
+        label.stringValue = presentation.promptText
+        label.font = .monospacedSystemFont(ofSize: presentation.promptFontSize, weight: .regular)
+        label.maximumNumberOfLines = presentation.maximumPromptLines
+        ordinalBadgeWidthConstraint.constant = presentation.ordinalBadgeWidth
+        label.invalidateIntrinsicContentSize()
+        invalidateIntrinsicContentSize()
+        superview?.invalidateIntrinsicContentSize()
+        superview?.needsLayout = true
+        needsLayout = true
+    }
+
     private func updateAppearance() {
         guard let layer else { return }
 
-        layer.borderWidth = 1
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer.borderWidth = 1
+            ordinalBadgeView.layer?.backgroundColor = (
+                isSelected
+                    ? NSColor.appPrimary.withAlphaComponent(0.22)
+                    : NSColor.labelColor.withAlphaComponent(0.10)
+            ).cgColor
+            ordinalBadgeView.layer?.borderColor = (
+                isSelected
+                    ? NSColor.appPrimary.withAlphaComponent(0.55)
+                    : NSColor.separatorColor.withAlphaComponent(0.55)
+            ).cgColor
+            ordinalLabel.textColor = isSelected
+                ? NSColor.appPrimary
+                : NSColor(resource: .textSecondary)
 
-        if isSelected {
-            layer.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.18).cgColor
-            layer.borderColor = NSColor.appPrimary.withAlphaComponent(0.55).cgColor
-            return
+            if isSelected {
+                layer.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.18).cgColor
+                layer.borderColor = NSColor.appPrimary.withAlphaComponent(0.55).cgColor
+                return
+            }
+
+            layer.borderColor = NSColor.clear.cgColor
+            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            layer.backgroundColor = showsAlternateBackground
+                ? NSColor.separatorColor.withAlphaComponent(isDark ? 0.08 : 0.14).cgColor
+                : NSColor.clear.cgColor
         }
-
-        layer.borderColor = NSColor.clear.cgColor
-        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        layer.backgroundColor = showsAlternateBackground
-            ? NSColor.separatorColor.withAlphaComponent(isDark ? 0.08 : 0.14).cgColor
-            : NSColor.clear.cgColor
     }
 }
 
@@ -1352,7 +1424,7 @@ enum TOCResizeCorner {
 final class PromptTOCPinnedResizeHandleView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         PromptTOCPinnedResizeStyle.dividerColor.setFill()
-        NSRect(x: floor(bounds.midX), y: bounds.minY, width: 1, height: bounds.height).fill()
+        PromptTOCPinnedResizeStyle.dividerRect(in: bounds).fill()
     }
 
     override func resetCursorRects() {
@@ -1447,7 +1519,8 @@ final class PromptTableOfContentsView: NSView {
         for (index, entry) in entries.enumerated() {
             let row = PromptTOCEntryRowView(
                 entryIndex: index,
-                text: "\(index + 1). \(entry.displayText)"
+                promptText: entry.displayText,
+                isPinned: presentationState.isPinned
             )
             row.setAlternateBackgroundVisible(!index.isMultiple(of: 2))
 
@@ -1507,6 +1580,11 @@ final class PromptTableOfContentsView: NSView {
         isExpanded = presentationState.isExpanded
         updatePinButton()
         pinnedResizeHandle.isHidden = !pinned
+        rowViews.forEach { $0.setPinnedPresentation(pinned) }
+        rowsStack.invalidateIntrinsicContentSize()
+        rowsStack.needsLayout = true
+        scrollView.documentView?.needsLayout = true
+        layoutSubtreeIfNeeded()
 
         if pinned {
             alphaValue = Self.hoverAlpha

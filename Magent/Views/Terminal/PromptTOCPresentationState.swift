@@ -3,6 +3,27 @@ import AppKit
 enum PromptTOCPinnedResizeStyle {
     static var dividerColor: NSColor { .tertiaryLabelColor }
     static var cursor: NSCursor { .resizeLeftRight }
+
+    static func dividerRect(in bounds: CGRect) -> CGRect {
+        CGRect(x: bounds.minX, y: bounds.minY, width: 1, height: bounds.height)
+    }
+}
+
+struct PromptTOCRowPresentation: Equatable {
+    let ordinalText: String
+    let promptText: String
+    let promptFontSize: CGFloat
+    let maximumPromptLines: Int
+    let ordinalBadgeWidth: CGFloat
+
+    init(entryIndex: Int, promptText: String, isPinned: Bool) {
+        let ordinalText = "\(entryIndex + 1)"
+        self.ordinalText = ordinalText
+        self.promptText = promptText
+        self.promptFontSize = isPinned ? 12 : 11
+        self.maximumPromptLines = isPinned ? 5 : 3
+        self.ordinalBadgeWidth = max(20, CGFloat(ordinalText.count * 6 + 8))
+    }
 }
 
 struct PromptTOCPresentationState: Equatable {
