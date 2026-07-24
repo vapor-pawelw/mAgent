@@ -1,6 +1,19 @@
 import AppKit
 import Testing
 
+private final class RecordingTitlebarWindow: NSWindow {
+    private(set) var didPerformDrag = false
+    private(set) var didPerformZoom = false
+
+    override func performDrag(with event: NSEvent) {
+        didPerformDrag = true
+    }
+
+    override func performZoom(_ sender: Any?) {
+        didPerformZoom = true
+    }
+}
+
 @Suite("Split view sidebar sizing")
 struct SplitViewControllerTests {
     @Test("Sidebar split view lays out sidebar beside content")
@@ -115,14 +128,44 @@ struct SplitViewControllerTests {
         #expect(blurView.hitTest(NSPoint(x: 20, y: 20)) == nil)
     }
 
-    @Test("Empty sidebar titlebar area delegates window dragging and double-click behavior to AppKit")
-    func sidebarTitlebarUsesNativeWindowInteraction() {
+    @Test("Empty sidebar titlebar area explicitly starts native window dragging")
+    func sidebarTitlebarStartsNativeWindowDrag() throws {
+        let window = RecordingTitlebarWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 500),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
         let interactionView = SidebarTitlebarInteractionView(
             frame: NSRect(x: 0, y: 0, width: 280, height: 48)
         )
+        window.contentView = interactionView
+        let event = try #require(titlebarMouseDownEvent(clickCount: 1))
 
-        #expect(interactionView.mouseDownCanMoveWindow)
-        #expect(interactionView.hitTest(NSPoint(x: 140, y: 24)) === interactionView)
+        interactionView.mouseDown(with: event)
+
+        #expect(window.didPerformDrag)
+        #expect(!window.didPerformZoom)
+    }
+
+    @Test("Double-clicking the empty sidebar titlebar toggles window zoom")
+    func sidebarTitlebarDoubleClickPerformsZoom() throws {
+        let window = RecordingTitlebarWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 500),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let interactionView = SidebarTitlebarInteractionView(
+            frame: NSRect(x: 0, y: 0, width: 280, height: 48)
+        )
+        window.contentView = interactionView
+        let event = try #require(titlebarMouseDownEvent(clickCount: 2))
+
+        interactionView.mouseDown(with: event)
+
+        #expect(window.didPerformZoom)
+        #expect(!window.didPerformDrag)
     }
 
     @Test("Sidebar scroll content rests below chrome but can move underneath it")
@@ -145,6 +188,20 @@ struct SplitViewControllerTests {
                 documentYAtUnobscuredTop: 200,
                 topInset: insets.top
             ) == 152
+        )
+    }
+
+    private func titlebarMouseDownEvent(clickCount: Int) -> NSEvent? {
+        NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: NSPoint(x: 140, y: 24),
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 0,
+            clickCount: clickCount,
+            pressure: 1
         )
     }
 

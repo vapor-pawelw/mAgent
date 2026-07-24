@@ -26,7 +26,20 @@ final class SidebarChromeBlurView: NSVisualEffectView {
 }
 
 final class SidebarTitlebarInteractionView: NSView {
-    override var mouseDownCanMoveWindow: Bool { true }
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let window else {
+            super.mouseDown(with: event)
+            return
+        }
+
+        if event.clickCount == 2 {
+            window.performZoom(nil)
+        } else {
+            window.performDrag(with: event)
+        }
+    }
 }
 
 struct MainWindowChromeLayout {
