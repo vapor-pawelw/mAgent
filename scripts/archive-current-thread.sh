@@ -6,6 +6,8 @@ SCRIPT_NAME="$(basename "$0")"
 MAGENT_CLI="${MAGENT_CLI_PATH:-/tmp/magent-cli}"
 
 THREAD_NAME=""
+THREAD_ID=""
+CURRENT_SELECTOR=0
 BASE_BRANCH_OVERRIDE=""
 SKIP_LOCAL_SYNC=0
 FORCE_ARCHIVE=0
@@ -24,13 +26,15 @@ archive_queue_enqueued_at=0
 
 usage() {
   cat <<USAGE
-Usage: ./$SCRIPT_NAME [options]
+Usage: magent-cli finish-thread [options]
 
 Merges the current Magent thread branch into its base branch from the base worktree,
 then archives the thread through magent-cli.
 
 Options:
-  --thread <name>           Archive this thread name instead of current-thread
+  --current                 Finish the thread associated with this terminal (default)
+  --thread <name>           Finish a thread by its permanent name
+  --thread-id <id>          Finish a thread by its stable UUID
   --base-branch <name>      Override base branch (default: thread-info status.baseBranch or main)
   --skip-local-sync         Archive with --skip-local-sync
   --force-archive           Archive with --force
@@ -40,6 +44,8 @@ Options:
 
 Notes:
 - This script does not perform changelog/docs checks.
+- This script does not run agents or repository-specific preflight commands.
+- Run repository-specific preparation before invoking finish-thread.
 - Source thread worktree and base worktree must both be clean.
 - Concurrent archive workflows for the same repository queue in submission order.
 - Waiting workflows periodically report the active thread and their queue position.
@@ -76,15 +82,14 @@ find_worktree_for_branch() {
 
   git -C "$repo_path" worktree list --porcelain | awk -v target="$target_ref" '
     BEGIN {
-      found = 0
+      found_path = ""
     }
     $1 == "worktree" {
-      if (path != "" && branch == target) {
-        found = 1
-        print path
-        exit
+      if (found_path == "" && path != "" && branch == target) {
+        found_path = path
       }
-      path = $2
+      sub(/^worktree /, "")
+      path = $0
       branch = ""
       next
     }
@@ -93,18 +98,19 @@ find_worktree_for_branch() {
       next
     }
     /^$/ {
-      if (path != "" && branch == target) {
-        found = 1
-        print path
-        exit
+      if (found_path == "" && path != "" && branch == target) {
+        found_path = path
       }
       path = ""
       branch = ""
       next
     }
     END {
-      if (!found && path != "" && branch == target) {
-        print path
+      if (found_path == "" && path != "" && branch == target) {
+        found_path = path
+      }
+      if (found_path != "") {
+        print found_path
       }
     }
   '
@@ -366,6 +372,9 @@ perform_archive_workflow() {
   fi
 
   archive_cmd=("$MAGENT_CLI" archive-thread --thread "$THREAD_NAME")
+  if [[ -n "$THREAD_ID" ]]; then
+    archive_cmd=("$MAGENT_CLI" archive-thread --thread-id "$THREAD_ID")
+  fi
   if [[ "$FORCE_ARCHIVE" -eq 1 ]]; then
     archive_cmd+=(--force)
   fi
@@ -384,6 +393,15 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || die "--thread requires a value"
       THREAD_NAME="$2"
       shift 2
+      ;;
+    --thread-id)
+      [[ $# -ge 2 ]] || die "--thread-id requires a value"
+      THREAD_ID="$2"
+      shift 2
+      ;;
+    --current)
+      CURRENT_SELECTOR=1
+      shift
       ;;
     --base-branch)
       [[ $# -ge 2 ]] || die "--base-branch requires a value"
@@ -416,6 +434,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+[[ -z "$THREAD_NAME" || -z "$THREAD_ID" ]] || die "Use only one of --current, --thread, or --thread-id"
+if [[ "$CURRENT_SELECTOR" -eq 1 && ( -n "$THREAD_NAME" || -n "$THREAD_ID" ) ]]; then
+  die "Use only one of --current, --thread, or --thread-id"
+fi
+
 require_cmd git
 require_cmd jq
 require_cmd awk
@@ -429,16 +452,25 @@ if [[ ! -x "$MAGENT_CLI" ]]; then
   fi
 fi
 
-if [[ -z "$THREAD_NAME" ]]; then
+if [[ -z "$THREAD_NAME" && -z "$THREAD_ID" ]]; then
   current_json="$($MAGENT_CLI current-thread 2>/dev/null || true)"
   json_ok "$current_json" || die "Failed to resolve current thread via magent-cli"
   THREAD_NAME="$(printf '%s' "$current_json" | jq -r '.thread.name // empty')"
+  THREAD_ID="$(printf '%s' "$current_json" | jq -r '.thread.id // empty')"
 fi
 
-[[ -n "$THREAD_NAME" ]] || die "Could not determine thread name"
+if [[ -n "$THREAD_ID" ]]; then
+  info_json="$($MAGENT_CLI thread-info --thread-id "$THREAD_ID" 2>/dev/null || true)"
+  json_ok "$info_json" || die "Failed to load thread-info for id '$THREAD_ID'"
+else
+  [[ -n "$THREAD_NAME" ]] || die "Could not determine thread"
+  info_json="$($MAGENT_CLI thread-info --thread "$THREAD_NAME" 2>/dev/null || true)"
+  json_ok "$info_json" || die "Failed to load thread-info for '$THREAD_NAME'"
+fi
 
-info_json="$($MAGENT_CLI thread-info --thread "$THREAD_NAME" 2>/dev/null || true)"
-json_ok "$info_json" || die "Failed to load thread-info for '$THREAD_NAME'"
+THREAD_NAME="$(printf '%s' "$info_json" | jq -r '.thread.name // empty')"
+THREAD_ID="$(printf '%s' "$info_json" | jq -r '.thread.id // empty')"
+[[ -n "$THREAD_NAME" ]] || die "Resolved thread is missing its name"
 
 is_main="$(printf '%s' "$info_json" | jq -r '.thread.isMain // false')"
 [[ "$is_main" != "true" ]] || die "Cannot archive the main thread with this script"

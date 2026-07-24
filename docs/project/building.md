@@ -60,29 +60,46 @@ It only triggers a build if no binary exists in DerivedData.
 
 Accepts the same `MAGENT_SCHEME`, `MAGENT_CONFIGURATION`, and `MAGENT_APP_NAME` env overrides as `rebuild-and-relaunch.sh`.
 
-## Archive Thread Workflow Helper
+## Finish Thread Workflow
 
-Use the helper script when you want to merge the current thread branch into its base branch and then archive the thread in one flow:
+Use the installed CLI when you want to merge a thread into its base branch, optionally push, and then archive it:
 
 ```bash
-./scripts/archive-current-thread.sh
+magent-cli finish-thread --current
+```
+
+The command can finish a Magent-managed thread in any registered repository without changing to that worktree:
+
+```bash
+magent-cli finish-thread --thread-id <uuid>
 ```
 
 Useful options:
 
 ```bash
-# Keep main worktree clean from Local Sync copy-back
-./scripts/archive-current-thread.sh --skip-local-sync
+# Keep the base worktree clean from Local Sync copy-back
+magent-cli finish-thread --current --skip-local-sync
 
 # Skip pushing base branch (local-only flow)
-./scripts/archive-current-thread.sh --no-push
+magent-cli finish-thread --current --no-push
 
 # Preview actions without modifying git/thread state
-./scripts/archive-current-thread.sh --dry-run
+magent-cli finish-thread --current --dry-run
 ```
 
-The script intentionally does not perform changelog/docs decisions; handle those in the agent workflow before running the script.
-It registers each workflow in a FIFO queue under the repository's common git directory, then acquires the repository-wide lock before checking the base worktree, merging, pushing, and calling `archive-thread`. Concurrent helpers targeting the same repository periodically report which thread/branch is active, their current queue position, how many requests are ahead, and elapsed wait time. Dead queue entries are pruned by PID/process validation, while the advisory lock still releases automatically if a process exits. The helper selects an already-merged no-op, `--ff-only`, or `--no-ff` merge from commit ancestry, so an unrelated git failure is never mistaken for branch divergence.
+`finish-thread` is deliberately mechanical. It does not start Claude/Codex, run tests, interpret repository instructions, or make changelog/documentation decisions. Standard Git merge hooks still apply. Repository-specific preparation belongs in that repository's agent instructions or a wrapper script:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+./scripts/verify-for-finish.sh
+magent-cli finish-thread --current --skip-local-sync
+```
+
+Keeping custom work outside the destructive command makes failures stop before merge/archive and avoids granting Magent arbitrary agent or hook execution. The bundled helper remains available in this source repository as `scripts/archive-current-thread.sh` for compatibility and testing.
+
+The workflow registers each request in a FIFO queue under the repository's common git directory, then acquires the repository-wide lock before checking the base worktree, merging, pushing, and calling `archive-thread`. Different repositories can finish concurrently. Concurrent workflows targeting the same repository periodically report which thread/branch is active, their current queue position, how many requests are ahead, and elapsed wait time. Dead queue entries are pruned by PID/process validation, while the advisory lock still releases automatically if a process exits. The helper selects an already-merged no-op, `--ff-only`, or `--no-ff` merge from commit ancestry, so an unrelated git failure is never mistaken for branch divergence.
 
 ## Build Notes
 

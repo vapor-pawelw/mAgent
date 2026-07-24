@@ -79,6 +79,7 @@ let project = Project(
                 "Magent/Resources/**/*.xcstrings",
                 "Magent/Resources/DiffRenderer/dist/**",
                 "config/agent-models.json",
+                "scripts/archive-current-thread.sh",
             ],
             entitlements: .file(path: "Magent/Magent.entitlements"),
             scripts: [

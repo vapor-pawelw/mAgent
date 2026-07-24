@@ -4,6 +4,7 @@ import Testing
 @Suite
 @MainActor
 struct ArchiveCurrentThreadScriptTests {
+    private static let firstThreadID = "11111111-1111-1111-1111-111111111111"
 
     @Test
     func concurrentWorkflowsSerializeMergeAndArchiveInOneRepository() throws {
@@ -57,6 +58,65 @@ struct ArchiveCurrentThreadScriptTests {
         #expect(!queueContents.contains { $0.lastPathComponent.hasPrefix("request-") })
         #expect(!queueContents.contains { $0.lastPathComponent == "active.json" })
     }
+
+    @Test
+    func stableThreadIDFinishesAnotherRepositoryWithoutRunningAgents() throws {
+        let fixture = try ArchiveScriptFixture()
+        defer { fixture.remove() }
+
+        let operation = fixture.makeArchiveProcess(arguments: [
+            "--thread-id", Self.firstThreadID,
+            "--no-push",
+            "--skip-local-sync",
+        ])
+
+        try operation.process.run()
+        operation.process.waitUntilExit()
+
+        #expect(operation.process.terminationStatus == 0)
+        try fixture.runGit(["merge-base", "--is-ancestor", "branch-one", "main"], in: fixture.mainWorktree)
+        #expect(!FileManager.default.fileExists(atPath: fixture.agentInvocationMarker.path))
+    }
+
+    @Test
+    func currentSelectorResolvesStableIDAndFinishesFromAnotherRepository() throws {
+        let fixture = try ArchiveScriptFixture()
+        defer { fixture.remove() }
+
+        let operation = fixture.makeArchiveProcess(arguments: [
+            "--current",
+            "--no-push",
+            "--skip-local-sync",
+        ])
+
+        try operation.process.run()
+        operation.process.waitUntilExit()
+
+        #expect(operation.process.terminationStatus == 0)
+        try fixture.runGit(["merge-base", "--is-ancestor", "branch-one", "main"], in: fixture.mainWorktree)
+    }
+
+    @Test
+    func rejectsCurrentCombinedWithAnotherThreadSelectorBeforeMerging() throws {
+        let fixture = try ArchiveScriptFixture()
+        defer { fixture.remove() }
+
+        let operation = fixture.makeArchiveProcess(arguments: [
+            "--current",
+            "--thread", "one",
+            "--no-push",
+        ])
+
+        try operation.process.run()
+        operation.process.waitUntilExit()
+
+        #expect(operation.process.terminationStatus != 0)
+        let isMerged = fixture.gitCommandSucceeds(
+            ["merge-base", "--is-ancestor", "branch-one", "main"],
+            in: fixture.mainWorktree
+        )
+        #expect(!isMerged)
+    }
 }
 
 @MainActor
@@ -76,8 +136,10 @@ private struct CapturedArchiveProcess {
 private final class ArchiveScriptFixture {
     let root: URL
     let mainWorktree: URL
+    let unrelatedRepository: URL
     let eventLog: URL
     let overlapFile: URL
+    let agentInvocationMarker: URL
 
     var queueDirectory: URL {
         mainWorktree.appendingPathComponent(".git/magent-archive-queue", isDirectory: true)
@@ -91,9 +153,11 @@ private final class ArchiveScriptFixture {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("magent-archive-script-\(UUID().uuidString)", isDirectory: true)
         mainWorktree = root.appendingPathComponent("main", isDirectory: true)
+        unrelatedRepository = root.appendingPathComponent("unrelated", isDirectory: true)
         fakeBin = root.appendingPathComponent("bin", isDirectory: true)
         eventLog = root.appendingPathComponent("events.log")
         overlapFile = root.appendingPathComponent("merge-overlap")
+        agentInvocationMarker = root.appendingPathComponent("agent-invoked")
         mergeProbe = root.appendingPathComponent("merge-probe", isDirectory: true)
         scriptURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -104,8 +168,10 @@ private final class ArchiveScriptFixture {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: fakeBin, withIntermediateDirectories: true)
         try setupRepository()
+        try setupUnrelatedRepository()
         try writeFakeGit()
         try writeFakeMagentCLI()
+        try writeAgentTraps()
     }
 
     func remove() {
@@ -113,16 +179,20 @@ private final class ArchiveScriptFixture {
     }
 
     func makeArchiveProcess(threadName: String) -> CapturedArchiveProcess {
-        let process = Process()
-        let outputPipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [
-            scriptURL.path,
+        makeArchiveProcess(arguments: [
             "--thread", threadName,
             "--no-push",
             "--skip-local-sync",
-        ]
+        ])
+    }
+
+    func makeArchiveProcess(arguments: [String]) -> CapturedArchiveProcess {
+        let process = Process()
+        let outputPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [scriptURL.path] + arguments
         process.environment = fixtureEnvironment
+        process.currentDirectoryURL = unrelatedRepository
         process.standardOutput = outputPipe
         process.standardError = FileHandle.nullDevice
         return CapturedArchiveProcess(process: process, outputPipe: outputPipe)
@@ -137,6 +207,10 @@ private final class ArchiveScriptFixture {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    func gitCommandSucceeds(_ arguments: [String], in directory: URL) -> Bool {
+        (try? runProcess("/usr/bin/git", arguments: arguments, in: directory)) != nil
+    }
+
     private var fixtureEnvironment: [String: String] {
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = "\(fakeBin.path):/usr/bin:/bin:/usr/sbin:/sbin"
@@ -145,6 +219,7 @@ private final class ArchiveScriptFixture {
         environment["ARCHIVE_TEST_EVENT_LOG"] = eventLog.path
         environment["ARCHIVE_TEST_MERGE_PROBE"] = mergeProbe.path
         environment["ARCHIVE_TEST_OVERLAP_FILE"] = overlapFile.path
+        environment["ARCHIVE_TEST_AGENT_MARKER"] = agentInvocationMarker.path
         environment["GIT_EDITOR"] = "true"
         environment["GIT_MERGE_AUTOEDIT"] = "no"
         environment["MAGENT_ARCHIVE_HEARTBEAT_SECONDS"] = "1"
@@ -178,6 +253,10 @@ private final class ArchiveScriptFixture {
             try runGit(["add", "\(threadName).txt"], in: worktree)
             try runGit(["commit", "-m", "Add \(threadName)"], in: worktree)
         }
+    }
+
+    private func setupUnrelatedRepository() throws {
+        try runGit(["init", "--initial-branch=main", unrelatedRepository.path], in: root)
     }
 
     private func writeFakeGit() throws {
@@ -218,13 +297,43 @@ private final class ArchiveScriptFixture {
         #!/usr/bin/env bash
         set -euo pipefail
 
+        resolve_thread_name() {
+          case "${1:-}" in
+            --thread)
+              printf '%s\\n' "${2:-}"
+              ;;
+            --thread-id)
+              case "${2:-}" in
+                11111111-1111-1111-1111-111111111111) printf 'one\\n' ;;
+                22222222-2222-2222-2222-222222222222) printf 'two\\n' ;;
+                *) exit 2 ;;
+              esac
+              ;;
+            *)
+              exit 2
+              ;;
+          esac
+        }
+
+        thread_id() {
+          case "$1" in
+            one) printf '11111111-1111-1111-1111-111111111111\\n' ;;
+            two) printf '22222222-2222-2222-2222-222222222222\\n' ;;
+            *) exit 2 ;;
+          esac
+        }
+
         case "${1:-}" in
+          current-thread)
+            printf '{"ok":true,"thread":{"id":"11111111-1111-1111-1111-111111111111","name":"one"}}\\n'
+            ;;
           thread-info)
-            thread_name="${3:-}"
-            printf '{"ok":true,"thread":{"projectName":"fixture","name":"%s","worktreePath":"%s/%s","isMain":false,"status":{"branchName":"branch-%s","baseBranch":"main"}}}\\n' "$thread_name" "$ARCHIVE_TEST_ROOT" "$thread_name" "$thread_name"
+            thread_name="$(resolve_thread_name "${2:-}" "${3:-}")"
+            resolved_id="$(thread_id "$thread_name")"
+            printf '{"ok":true,"thread":{"id":"%s","projectName":"fixture","name":"%s","worktreePath":"%s/%s","isMain":false,"status":{"branchName":"branch-%s","baseBranch":"main"}}}\\n' "$resolved_id" "$thread_name" "$ARCHIVE_TEST_ROOT" "$thread_name" "$thread_name"
             ;;
           archive-thread)
-            thread_name="${3:-}"
+            thread_name="$(resolve_thread_name "${2:-}" "${3:-}")"
             printf 'archive-start %s\\n' "$thread_name" >> "$ARCHIVE_TEST_EVENT_LOG"
             sleep 1.25
             printf 'archive-end %s\\n' "$thread_name" >> "$ARCHIVE_TEST_EVENT_LOG"
@@ -237,6 +346,16 @@ private final class ArchiveScriptFixture {
         esac
         """
         try writeExecutable(script, to: fakeBin.appendingPathComponent("magent-cli"))
+    }
+
+    private func writeAgentTraps() throws {
+        let script = """
+        #!/usr/bin/env bash
+        touch "$ARCHIVE_TEST_AGENT_MARKER"
+        exit 99
+        """
+        try writeExecutable(script, to: fakeBin.appendingPathComponent("claude"))
+        try writeExecutable(script, to: fakeBin.appendingPathComponent("codex"))
     }
 
     private func writeExecutable(_ contents: String, to url: URL) throws {

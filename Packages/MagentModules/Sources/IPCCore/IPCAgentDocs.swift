@@ -11,7 +11,8 @@ public enum IPCAgentDocs {
     /tmp/magent-cli list-threads [--project <name>]
     /tmp/magent-cli list-archived [--project <name>] [--limit <n>]
     /tmp/magent-cli send-prompt --thread <name> [--session <name> | --index <n>] (--prompt <text> | --prompt-file <path>)
-    /tmp/magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]
+    /tmp/magent-cli archive-thread (--thread <name> | --thread-id <id>) [--force] [--skip-local-sync]
+    /tmp/magent-cli finish-thread [--current | --thread <name> | --thread-id <id>] [--base-branch <branch>] [--skip-local-sync] [--force-archive] [--no-push] [--dry-run]
     /tmp/magent-cli delete-thread --thread <name>
     /tmp/magent-cli list-tabs --thread <name>
     /tmp/magent-cli read-tab --thread <name> (--session <name> | --index <n>) [--limit <n>] [--json]
@@ -71,7 +72,8 @@ public enum IPCAgentDocs {
     Thread priority is a 1–5 scale shown as cumulative dots in the sidebar (1 blue = lowest, 5 red = highest). Pass --priority 1-5 to create-thread/batch-create (or set it later with set-priority --priority 1-5) ONLY when the user has given you real signal about urgency/importance for that specific thread — e.g. a Jira priority, an explicit instruction ("this is urgent", "low priority chore"), or a blocker vs. nice-to-have framing. Do NOT guess a priority from the task description alone, do NOT default every thread to 3, and do NOT set priority on exploratory/research threads where the user has not expressed urgency. Use set-priority --clear to remove a priority.
     Use hide-thread / unhide-thread to deprioritize a thread in the sidebar without archiving it.
     Use favorite-thread / unfavorite-thread to manage Favorites (max 10).
-    Use archive-thread --skip-local-sync to avoid writing local sync path changes into the main worktree during archive. archive-thread is refused when the worktree is dirty (uncommitted/untracked changes) and that refusal still applies with --force. Clean the worktree first (commit/stash/discard), then archive.
+    Use finish-thread to merge a clean thread branch into its checked-out base branch, optionally push it, and then archive it. It can target any Magent-managed repository by stable thread ID, regardless of the current directory. finish-thread is intentionally mechanical: it does not run agents, tests, changelog checks, documentation updates, or repository-specific hooks. Run those through the repository's own instructions or wrapper script before finish-thread.
+    Use archive-thread when you intentionally want to archive without merging. Pass --skip-local-sync to avoid writing local sync path changes into the base worktree. archive-thread is refused when the worktree is dirty (uncommitted/untracked changes) and that refusal still applies with --force. Clean the worktree first (commit/stash/discard), then archive.
     Use list-archived to see recently archived threads (sorted most-recent first). Each item includes branchName and archivedAt (ISO-8601) so you can identify past work by branch name or when it was shelved.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
 
@@ -85,12 +87,13 @@ public enum IPCAgentDocs {
     4. Try each enabled agent in activeAgents until one is not rate-limited, or inform the user if all agents are rate-limited.
 
     "archive thread" / "archive this thread" / "archive magent thread":
-    The user wants to archive the current thread (same as the Archive button in the GUI). This removes the worktree and hides the thread from the sidebar while keeping the git branch. Before archiving:
-    1. Ensure all work is committed and pushed if needed.
-    2. Run: `/tmp/magent-cli archive-thread --thread <name> --skip-local-sync`
-    Use --skip-local-sync by default to avoid modifying the main worktree.
+    The user wants to finish and archive the current thread. Before archiving:
+    1. Follow the current repository's own preparation instructions, including required tests, documentation, changelog, or review steps.
+    2. Ensure all work is committed.
+    3. Run: `/tmp/magent-cli finish-thread --current --skip-local-sync`
+    Use --skip-local-sync when the user wants to avoid modifying the base worktree.
 
-    Archive safety: archive-thread is REFUSED when the worktree is dirty (uncommitted/untracked changes), including when --force is passed. The refusal message names the worktree path and requires commit/stash/discard first.
+    Finish safety: finish-thread refuses dirty source/base worktrees and missing or mismatched base worktrees. It does not execute repository-specific preparation or agentic instructions. archive-thread remains available for archive-without-merge and also refuses dirty worktrees even when --force is passed.
     """
 
     /// On-demand CLI reference returned by `magent-cli docs`.

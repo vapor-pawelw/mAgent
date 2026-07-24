@@ -34,6 +34,7 @@
 #### Features
 
 - Unified new and forked thread creation with a context-aware visual source picker for starting from the main worktree, another thread, or any branch.
+- Added `magent-cli finish-thread` to safely merge, optionally push, and archive any managed thread across registered repositories while leaving repository-specific preparation to caller-owned workflows.
 - Pin the prompt Table of Contents beside terminal and chat content, browse newest-first high-contrast numbered rows with roomier pinned previews, then resize or detach the split while terminal content immediately reclaims the available width.
 
 #### Improvements

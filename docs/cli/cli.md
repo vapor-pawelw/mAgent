@@ -371,8 +371,32 @@ The refusal names the worktree path and returns a non-zero exit.
 The GUI enforces the same guard: archive first refuses and then prompts a critical confirmation alert. For dirty worktrees, "Commit & Archive" opens a commit-message prompt (pre-filled with `Uncommitted changes on <branch> (<worktree>)`) and archives only after creating that commit.
 
 ```bash
-magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]
+magent-cli archive-thread (--thread <name> | --thread-id <id>) [--force] [--skip-local-sync]
 ```
+
+### finish-thread
+
+Finish a clean Magent-managed thread by merging it into its checked-out base branch, pushing the base branch by default, and then archiving the source worktree:
+
+```bash
+magent-cli finish-thread --current
+magent-cli finish-thread --thread <name>
+magent-cli finish-thread --thread-id <uuid>
+```
+
+The stable `--thread-id` form can target a thread from any directory or repository. `--current` is the default when no selector is provided.
+
+Options:
+
+- `--base-branch <branch>` overrides stored base-branch metadata.
+- `--skip-local-sync` prevents archive-time Local Sync copy-back.
+- `--force-archive` allows archive to continue after non-conflict Local Sync failures; it never bypasses dirty-worktree safety.
+- `--no-push` leaves the merged base branch local.
+- `--dry-run` prints the plan without merging, pushing, or archiving.
+
+The source and base worktrees must both be clean, and the base branch must already have a checked-out worktree. Workflows are queued per Git repository, so different repositories can finish concurrently while operations against one base worktree remain serialized.
+
+`finish-thread` never invokes Claude/Codex, tests, custom Magent preflights, changelog generation, or documentation workflows. Standard Git merge hooks still apply. Put repository-specific preparation in repository instructions or a wrapper script that exits on failure before invoking `finish-thread`. Use `archive-thread` directly when the branch should be preserved without merging.
 
 ### delete-thread
 

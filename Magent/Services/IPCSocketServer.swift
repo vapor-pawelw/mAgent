@@ -6,7 +6,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v34"
+    private static let cliVersion = "magent-cli-v35"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -197,7 +197,12 @@ actor IPCSocketServer {
 
     nonisolated private static func installCLIScript() {
         let path = cliPath
-        let marker = cliVersion
+        let finishThreadHelperPath = Bundle.main.path(
+            forResource: "archive-current-thread",
+            ofType: "sh"
+        ) ?? ""
+        let marker = "\(cliVersion):\(finishThreadHelperPath)"
+        let finishThreadHelperLiteral = "'\(finishThreadHelperPath.replacingOccurrences(of: "'", with: "'\\''"))'"
 
         if let existing = try? String(contentsOfFile: path, encoding: .utf8),
            existing.contains(marker) {
@@ -212,6 +217,7 @@ actor IPCSocketServer {
         # Usage: magent-cli <command> [options]
 
         SOCKET="${MAGENT_SOCKET:-\#(socketPath)}"
+        FINISH_THREAD_HELPER=\#(finishThreadHelperLiteral)
         SEP="$(printf '\037')"
         INTERACTIVE_STATE_FILE="${MAGENT_CLI_STATE_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/magent/interactive-last.json}"
 
@@ -1029,26 +1035,38 @@ actor IPCSocketServer {
             send_request "$json"
             ;;
         archive-thread)
-            thread=""
+            thread=""; thread_id=""
             force=0
             skip_local_sync=0
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --thread) thread="$2"; shift 2 ;;
+                    --thread-id) thread_id="$2"; shift 2 ;;
                     --force) force=1; shift ;;
                     --skip-local-sync) skip_local_sync=1; shift ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] || die "Usage: magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]
+            [ -z "$thread" ] || [ -z "$thread_id" ] || die "Use either --thread or --thread-id, not both"
+            [ -n "$thread" ] || [ -n "$thread_id" ] || die "Usage: magent-cli archive-thread (--thread <name> | --thread-id <id>) [--force] [--skip-local-sync]
         Archive removes the worktree directory and keeps the git branch. Without --force, archive is refused when the worktree is dirty (uncommitted/untracked changes).
         Dirty worktrees must be committed/stashed/discarded before archive.
         --force does NOT bypass dirty-worktree refusal; it only continues when local sync fails for non-conflict reasons."
-            json="{$(json_kv command archive-thread),$(json_kv threadName "$thread")"
+            json="{$(json_kv command archive-thread)"
+            if [ -n "$thread_id" ]; then
+                json="$json,$(json_kv threadId "$thread_id")"
+            else
+                json="$json,$(json_kv threadName "$thread")"
+            fi
             [ "$force" = "1" ] && json="$json,\"force\":true"
             [ "$skip_local_sync" = "1" ] && json="$json,\"skipLocalSync\":true"
             json="$json}"
             send_checked_request "$json" >/dev/null
+            ;;
+        finish-thread)
+            [ -n "$FINISH_THREAD_HELPER" ] && [ -f "$FINISH_THREAD_HELPER" ] \
+                || die "finish-thread helper is missing from Magent.app. Reinstall or update Magent."
+            MAGENT_CLI_PATH="$0" exec /bin/bash "$FINISH_THREAD_HELPER" "$@"
             ;;
         delete-thread)
             thread=""
@@ -1619,7 +1637,8 @@ actor IPCSocketServer {
             echo "  list-threads         [--project <name>]"
             echo "  list-archived        [--project <name>] [--limit <n>]  (most recently archived first)"
             echo "  send-prompt          --thread <name> [--session <name> | --index <n>] (--prompt <text> | --prompt-file <path>)"
-            echo "  archive-thread       --thread <name> [--force] [--skip-local-sync]  (removes worktree, keeps branch; dirty worktrees are always refused; --force only continues after non-conflict local-sync failures)"
+            echo "  archive-thread       (--thread <name> | --thread-id <id>) [--force] [--skip-local-sync]  (removes worktree, keeps branch; dirty worktrees are always refused)"
+            echo "  finish-thread        [--current | --thread <name> | --thread-id <id>] [--base-branch <branch>] [--skip-local-sync] [--force-archive] [--no-push] [--dry-run]"
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
             echo "  list-tabs            (--thread <name> | --thread-id <id>)"
             echo "  read-tab             (--thread <name> | --thread-id <id>) (--index <n> | --session <name>) [--limit <n>] [--json]"
