@@ -101,6 +101,7 @@
 
 #### Bug Fixes
 
+- Fixed the sidebar sometimes failing to center the selected thread after launch.
 - Fixed sidebar drag-and-drop so threads can move into empty sections and can be placed immediately above collapsed hidden threads.
 - Fixed Magent crashing during startup while constructing the main sidebar and content split view.
 - Kept dirty-branch dots orange when their sidebar thread is selected.

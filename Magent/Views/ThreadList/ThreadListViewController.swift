@@ -1406,32 +1406,43 @@ final class ThreadListViewController: NSViewController {
         expandAncestorsIfNeeded(for: selectedThreadID)
 
         guard scrollView.contentView.bounds.height > 0, outlineView.numberOfRows > 0 else {
-            guard remainingAttempts > 0 else { return }
-            DispatchQueue.main.async { [weak self] in
-                self?.attemptInitialSelectedThreadCentering(remainingAttempts: remainingAttempts - 1)
-            }
+            scheduleInitialSelectedThreadCenteringRetry(remainingAttempts: remainingAttempts)
             return
         }
 
         for row in 0..<outlineView.numberOfRows {
             guard let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == selectedThreadID else { continue }
+            let rowRect = outlineView.rect(ofRow: row)
+            guard SidebarCenteringGeometry.targetOriginY(
+                rowMinY: rowRect.minY,
+                rowHeight: rowRect.height,
+                viewportHeight: scrollView.contentView.bounds.height,
+                documentHeight: outlineView.bounds.height
+            ) != nil else {
+                scheduleInitialSelectedThreadCenteringRetry(remainingAttempts: remainingAttempts)
+                return
+            }
             centerOutlineRowInViewport(row) { [weak self] in
                 guard let self else { return }
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
-                    if self.isSelectedThreadRowVisibleInViewport() {
+                    if self.isSelectedThreadRowAtCenteredTarget() {
                         self.initialCenteringCoordinator.markCompleted()
                         self.updateSelectedThreadJumpCapsuleVisibility()
-                    } else if remainingAttempts > 0 {
-                        self.attemptInitialSelectedThreadCentering(remainingAttempts: remainingAttempts - 1)
+                    } else {
+                        self.scheduleInitialSelectedThreadCenteringRetry(remainingAttempts: remainingAttempts)
                     }
                 }
             }
             return
         }
 
+        scheduleInitialSelectedThreadCenteringRetry(remainingAttempts: remainingAttempts)
+    }
+
+    private func scheduleInitialSelectedThreadCenteringRetry(remainingAttempts: Int) {
         guard remainingAttempts > 0 else { return }
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             self?.attemptInitialSelectedThreadCentering(remainingAttempts: remainingAttempts - 1)
         }
     }
@@ -1441,14 +1452,25 @@ final class ThreadListViewController: NSViewController {
         initialCenteringCoordinator.cancelForUserInteraction()
     }
 
-    private func isSelectedThreadRowVisibleInViewport() -> Bool {
-        guard let selectedThread = selectedThreadFromState() else { return false }
-        let row = outlineView.row(forItem: selectedThread)
-        guard row >= 0 else { return false }
+    private func isSelectedThreadRowAtCenteredTarget() -> Bool {
+        guard let selectedThreadID else { return false }
+        guard let row = (0..<outlineView.numberOfRows).first(where: {
+            (outlineView.item(atRow: $0) as? MagentThread)?.id == selectedThreadID
+        }) else { return false }
 
-        let visibleRect = scrollView.contentView.bounds
         let rowRect = outlineView.rect(ofRow: row)
-        return rowRect.intersects(visibleRect)
+        let clipView = scrollView.contentView
+        guard let targetY = SidebarCenteringGeometry.targetOriginY(
+            rowMinY: rowRect.minY,
+            rowHeight: rowRect.height,
+            viewportHeight: clipView.bounds.height,
+            documentHeight: outlineView.bounds.height
+        ) else { return false }
+
+        return SidebarCenteringGeometry.isAtTarget(
+            currentOriginY: clipView.bounds.origin.y,
+            targetOriginY: targetY
+        )
     }
 
     private func captureSidebarScrollSnapshot() -> SidebarScrollSnapshot {
@@ -1848,25 +1870,25 @@ final class ThreadListViewController: NSViewController {
     }
 
     private func centerOutlineRowInViewport(_ row: Int, completion: (() -> Void)? = nil) {
-        guard row >= 0 else { return }
+        guard row >= 0 else {
+            completion?()
+            return
+        }
         let rowRect = outlineView.rect(ofRow: row)
-        guard rowRect.height > 0 else { return }
-
-        scrollRestoreCoordinator.cancelPendingRestore()
-
         let clipView = scrollView.contentView
-        let visibleHeight = clipView.bounds.height
-        guard visibleHeight > 0 else {
-            outlineView.scrollRowToVisible(row)
+        guard let targetY = SidebarCenteringGeometry.targetOriginY(
+            rowMinY: rowRect.minY,
+            rowHeight: rowRect.height,
+            viewportHeight: clipView.bounds.height,
+            documentHeight: outlineView.bounds.height
+        ) else {
             completion?()
             return
         }
 
-        let rowMidY = rowRect.midY
-        let targetY = rowMidY - (visibleHeight / 2)
-        let maxOffsetY = max(0, outlineView.bounds.height - visibleHeight)
-        let clampedY = min(max(targetY, 0), maxOffsetY)
-        let targetOrigin = NSPoint(x: clipView.bounds.origin.x, y: clampedY)
+        scrollRestoreCoordinator.cancelPendingRestore()
+
+        let targetOrigin = NSPoint(x: clipView.bounds.origin.x, y: targetY)
 
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.22
