@@ -1569,9 +1569,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         selectSource(main)
     }
 
-    private func selectSource(_ option: ThreadCreationSourceOption) {
+    private func selectSource(
+        _ option: ThreadCreationSourceOption,
+        updateBaseBranchField: Bool = true
+    ) {
         sourceSelection = .thread(option.descriptor)
-        baseBranchField.stringValue = option.descriptor.branchName
+        if updateBaseBranchField {
+            baseBranchField.stringValue = option.descriptor.branchName
+        }
         clearBaseBranchError()
 
         if !sectionSelectionWasManuallyChanged,
@@ -1584,10 +1589,20 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     private func updateSourceSelectionFromBaseBranch() {
         guard var sourceSelection else { return }
+        let projectId = selectedProjectIdForSourceOptions()
+        let options = config.sourceOptionsByProjectId[projectId] ?? []
         sourceSelection.updateBaseBranch(
             baseBranchField.stringValue,
-            defaultBranch: resolvedDefaultBranchName()
+            defaultBranch: resolvedDefaultBranchName(),
+            availableSources: options.map(\.descriptor)
         )
+        if case .thread(let descriptor) = sourceSelection,
+           let option = options.first(where: {
+               $0.descriptor.threadID == descriptor.threadID
+           }) {
+            selectSource(option, updateBaseBranchField: false)
+            return
+        }
         self.sourceSelection = sourceSelection
         updateSourcePresentation()
     }
@@ -1806,6 +1821,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     func controlTextDidChange(_ notification: Notification) {
         if (notification.object as? NSComboBox) === baseBranchField {
             clearBaseBranchError()
+            updateSourceSelectionFromBaseBranch()
         }
     }
 

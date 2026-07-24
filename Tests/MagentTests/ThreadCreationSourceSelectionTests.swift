@@ -31,6 +31,97 @@ struct ThreadCreationSourceSelectionTests {
         #expect(selection.isCustomBranch)
     }
 
+    @Test("Typing a source thread branch restores the linked source")
+    func matchingBaseBranchRestoresSourceLink() {
+        let otherSource = ThreadCreationSourceDescriptor(
+            threadID: UUID(),
+            branchName: "feature/other",
+            displayName: "Other source",
+            isMainWorktree: false
+        )
+        var selection = ThreadCreationSourceSelection.branch("feature/custom")
+
+        selection.updateBaseBranch(
+            " feature/other ",
+            defaultBranch: "main",
+            availableSources: [source, otherSource]
+        )
+
+        #expect(selection == .thread(otherSource))
+        #expect(selection.sourceThreadID == otherSource.threadID)
+        #expect(selection.titleSourceName == "Other source")
+    }
+
+    @Test("Remote branch spelling matches a source while partial input stays custom")
+    func sourceMatchingRequiresCompleteNormalizedBranch() {
+        let remoteSource = ThreadCreationSourceDescriptor(
+            threadID: UUID(),
+            branchName: "origin/feature/source",
+            displayName: "Remote source",
+            isMainWorktree: false
+        )
+        var selection = ThreadCreationSourceSelection.branch("feature/custom")
+
+        selection.updateBaseBranch(
+            "feature/sour",
+            defaultBranch: "main",
+            availableSources: [remoteSource]
+        )
+        #expect(selection == .branch("feature/sour"))
+
+        selection.updateBaseBranch(
+            "feature/source",
+            defaultBranch: "main",
+            availableSources: [remoteSource]
+        )
+        #expect(selection == .thread(remoteSource))
+    }
+
+    @Test("Exact branch spelling disambiguates normalized source collisions")
+    func exactBranchSpellingWinsNormalizedCollision() {
+        let localSource = ThreadCreationSourceDescriptor(
+            threadID: UUID(),
+            branchName: "feature/source",
+            displayName: "Local source",
+            isMainWorktree: false
+        )
+        let remoteSource = ThreadCreationSourceDescriptor(
+            threadID: UUID(),
+            branchName: "origin/feature/source",
+            displayName: "Remote source",
+            isMainWorktree: false
+        )
+        var selection = ThreadCreationSourceSelection.thread(source)
+
+        selection.updateBaseBranch(
+            "origin/feature/source",
+            defaultBranch: "main",
+            availableSources: [localSource, remoteSource]
+        )
+
+        #expect(selection == .thread(remoteSource))
+    }
+
+    @Test("Ambiguous duplicate branch sources stay custom")
+    func ambiguousDuplicateBranchStaysCustom() {
+        let duplicate = ThreadCreationSourceDescriptor(
+            threadID: UUID(),
+            branchName: source.branchName,
+            displayName: "Duplicate source",
+            isMainWorktree: false
+        )
+        var selection = ThreadCreationSourceSelection.thread(source)
+
+        selection.updateBaseBranch(
+            source.branchName,
+            defaultBranch: "main",
+            availableSources: [source, duplicate]
+        )
+
+        #expect(selection == .branch(source.branchName))
+        #expect(selection.sourceThreadID == nil)
+    }
+
     @Test("Equivalent remote branch spelling keeps the source linked")
     func equivalentRemoteBranchKeepsSourceLink() {
         let remoteSource = ThreadCreationSourceDescriptor(

@@ -41,15 +41,48 @@ enum ThreadCreationSourceSelection: Equatable {
         return false
     }
 
-    mutating func updateBaseBranch(_ input: String, defaultBranch: String) {
+    mutating func updateBaseBranch(
+        _ input: String,
+        defaultBranch: String,
+        availableSources: [ThreadCreationSourceDescriptor] = []
+    ) {
         let trimmedInput = input.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedBranch = trimmedInput.isEmpty ? defaultBranch : trimmedInput
 
-        if case .thread(let source) = self,
+        if !trimmedInput.isEmpty,
+           let matchedSource = matchingSource(
+               branch: trimmedInput,
+               availableSources: availableSources
+           ) {
+            self = .thread(matchedSource)
+            return
+        }
+        if availableSources.isEmpty,
+           case .thread(let source) = self,
            normalizedBranch(source.branchName) == normalizedBranch(resolvedBranch) {
             return
         }
         self = .branch(resolvedBranch)
+    }
+
+    private func matchingSource(
+        branch: String,
+        availableSources: [ThreadCreationSourceDescriptor]
+    ) -> ThreadCreationSourceDescriptor? {
+        let exactMatches = availableSources.filter {
+            $0.branchName.trimmingCharacters(in: .whitespacesAndNewlines) == branch
+        }
+        if exactMatches.count == 1 {
+            return exactMatches[0]
+        }
+        guard exactMatches.isEmpty else { return nil }
+
+        let normalizedInput = normalizedBranch(branch)
+        let normalizedMatches = availableSources.filter {
+            normalizedBranch($0.branchName) == normalizedInput
+        }
+        guard normalizedMatches.count == 1 else { return nil }
+        return normalizedMatches[0]
     }
 
     private func normalizedBranch(_ branch: String) -> String {

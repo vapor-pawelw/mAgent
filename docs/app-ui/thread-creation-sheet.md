@@ -15,6 +15,7 @@ The New Thread sheet is the single UI for creating from the main worktree, anoth
 - Main worktree is always first and the invoking window's current thread is second. A 24 pt gap separates these contextual choices from the remaining threads, with no extra leading gap. Pop-out windows supply their own thread as the current context.
 - Opening the picker scrolls the selected source to the vertical center where the available scroll range permits, clamping naturally at the beginning and end of the list.
 - Selecting a non-main source thread sets Base branch to that thread's current branch. Until Section is manually changed, it also follows the selected source thread's section.
+- Typing a Base branch that unambiguously matches an available thread branch immediately restores that thread as the selected source, including its title, picker highlight, section following, placement, and local-file-sync inheritance. Whitespace and an optional `origin/` prefix are ignored; exact spelling wins when normalized names collide.
 - Manually changing Base branch breaks the source-thread relationship and replaces the selected capsule with a synthetic Branch capsule. The new thread no longer inherits source placement or its local-file-sync snapshot.
 - Selecting a thread again restores the linked source behavior.
 - Changing Project resets the source to that project's main worktree and resets Section to the project's default.
