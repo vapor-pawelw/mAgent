@@ -645,6 +645,7 @@ final class ThreadListViewController: NSViewController {
         guard visibleRange.length > 0 else {
             stickyHeaderOverlay.update(state: .hidden)
             stickyHeaderHeightConstraint.constant = 0
+            sidebarChromeBlurView.isHidden = true
             return
         }
 
@@ -723,6 +724,7 @@ final class ThreadListViewController: NSViewController {
             didChangeStickyHeader = stickyHeaderOverlay.update(state: state)
             let height = stickyHeaderOverlay.intrinsicContentSize.height
             stickyHeaderHeightConstraint.constant = height
+            sidebarChromeBlurView.isHidden = stickyHeaderOverlay.isHidden
             view.layoutSubtreeIfNeeded()
         }
         if didChangeStickyHeader {
@@ -985,6 +987,7 @@ final class ThreadListViewController: NSViewController {
         view.addSubview(branchMismatchView)
 
         sidebarChromeBlurView.translatesAutoresizingMaskIntoConstraints = false
+        sidebarChromeBlurView.isHidden = true
         view.addSubview(sidebarChromeBlurView)
 
         // Sticky project/section header overlay — added last to sit above scroll view
