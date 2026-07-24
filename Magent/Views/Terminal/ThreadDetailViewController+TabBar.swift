@@ -540,6 +540,7 @@ extension ThreadDetailViewController {
         threadManager.markSessionRateLimitSeen(threadId: thread.id, sessionName: sessionName)
         refreshTabTooltips()
 
+        preparePromptTOCRefreshForSessionReturn(sessionName)
         schedulePromptTOCRefresh()
         return true
     }

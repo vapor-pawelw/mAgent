@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import GhosttyBridge
 import Testing
@@ -20,6 +21,34 @@ struct TerminalSurfaceSizingTests {
         #expect(TerminalSurfaceSizing.pixelSize(for: CGSize(width: 0, height: 600), scale: 2.0) == nil)
         #expect(TerminalSurfaceSizing.pixelSize(for: CGSize(width: 800, height: 0), scale: 2.0) == nil)
         #expect(TerminalSurfaceSizing.pixelSize(for: CGSize(width: 800, height: 600), scale: 0) == nil)
+    }
+
+    @Test
+    @MainActor
+    func escapeKeyNotifiesHostAfterTerminalSteering() throws {
+        let view = TerminalSurfaceView(workingDirectory: "/tmp")
+        var notificationCount = 0
+        view.onEscapeKey = {
+            notificationCount += 1
+        }
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                characters: "\u{1B}",
+                charactersIgnoringModifiers: "\u{1B}",
+                isARepeat: false,
+                keyCode: 53
+            )
+        )
+
+        view.keyDown(with: event)
+
+        #expect(notificationCount == 1)
     }
 
     @Test

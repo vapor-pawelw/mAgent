@@ -1,5 +1,41 @@
 import AppKit
 
+struct PromptTOCEntry: Sendable {
+    let lineIndex: Int
+    let displayText: String
+    let fullText: String
+}
+
+struct PromptTOCNavigationTarget: Equatable {
+    let fullText: String
+    let matchingOccurrenceFromNewest: Int
+
+    init?(entryIndex: Int, entries: [PromptTOCEntry]) {
+        guard entries.indices.contains(entryIndex) else { return nil }
+        let selectedFullText = entries[entryIndex].fullText
+        fullText = selectedFullText
+        matchingOccurrenceFromNewest = entries[(entryIndex + 1)...]
+            .filter { $0.fullText == selectedFullText }
+            .count
+    }
+
+    func resolve(in entries: [PromptTOCEntry]) -> PromptTOCEntry? {
+        entries.reversed()
+            .filter { $0.fullText == fullText }
+            .dropFirst(matchingOccurrenceFromNewest)
+            .first
+    }
+}
+
+enum PromptTOCRefreshPolicy {
+    static let periodicInterval: TimeInterval = 3
+    static let emptyCaptureRetryDelays: [TimeInterval] = [0, 0.2, 0.5, 1]
+
+    static func shouldRetryEmptyEntries(knownPromptCount: Int) -> Bool {
+        knownPromptCount > 0
+    }
+}
+
 enum PromptTOCPinnedResizeStyle {
     static var dividerColor: NSColor { .tertiaryLabelColor }
     static var cursor: NSCursor { .resizeLeftRight }

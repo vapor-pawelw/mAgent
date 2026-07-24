@@ -1,10 +1,8 @@
 import Cocoa
 import MagentCore
 
-struct PromptTOCEntry: Sendable {
-    let lineIndex: Int
-    let displayText: String
-    let fullText: String
+private enum PromptTOCNavigationError: Error {
+    case promptUnavailable
 }
 
 private struct PromptPaneCandidate {
@@ -190,6 +188,38 @@ extension ThreadDetailViewController {
         }
     }
 
+    func startPeriodicPromptTOCRefresh() {
+        promptTOCPeriodicRefreshTask?.cancel()
+        promptTOCPeriodicRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(PromptTOCRefreshPolicy.periodicInterval * 1_000_000_000)
+                )
+                guard !Task.isCancelled else { return }
+                self?.performPeriodicPromptTOCRefresh()
+            }
+        }
+    }
+
+    func preparePromptTOCRefreshForSessionReturn(_ sessionName: String) {
+        promptTOCEmptyCaptureRetryAttemptedSessions.remove(sessionName)
+    }
+
+    func schedulePromptTOCRefreshAfterEscape() {
+        if let sessionName = currentSessionName() {
+            promptTOCEmptyCaptureRetryAttemptedSessions.remove(sessionName)
+        }
+        schedulePromptTOCRefresh(after: 0.35)
+    }
+
+    private func performPeriodicPromptTOCRefresh() {
+        guard view.window != nil,
+              showPromptTOCOverlay,
+              let sessionName = currentSessionName(),
+              thread.agentTmuxSessions.contains(sessionName) else { return }
+        schedulePromptTOCRefresh()
+    }
+
     @MainActor
     func refreshPromptTOC() async {
         guard let sessionName = currentSessionName() else {
@@ -210,23 +240,39 @@ extension ThreadDetailViewController {
         let agentType = threadManager.agentType(for: thread, sessionName: sessionName)
         let previousSessionName = promptTOCSessionName
         let previousEntryCount = promptTOCSessionName == sessionName ? promptTOCEntries.count : 0
+        let hasVisibleEntries = previousSessionName == sessionName && !promptTOCEntries.isEmpty
+        let persistedPromptCount = (
+            threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        ).submittedPromptsBySession[sessionName]?.count ?? 0
+        let knownPromptCount = max(previousEntryCount, persistedPromptCount)
+        let shouldRetryEmptyEntries = PromptTOCRefreshPolicy.shouldRetryEmptyEntries(
+            knownPromptCount: knownPromptCount
+        ) &&
+            !promptTOCEmptyCaptureRetryAttemptedSessions.contains(sessionName)
         promptTOCCanShowForCurrentTab = true
         applyPromptTOCVisibility()
-        promptTOCView?.setLoading(agentType: agentType)
+        if !hasVisibleEntries {
+            promptTOCView?.setLoading(agentType: agentType)
+        }
 
-        let paneContent = await TmuxService.shared.captureFullPane(
+        guard let entries = await capturePromptEntries(
             sessionName: sessionName,
-            includeAttributes: true
-        ) ?? ""
+            agentType: agentType,
+            retryEmptyEntries: shouldRetryEmptyEntries
+        ) else {
+            if !Task.isCancelled, currentSessionName() == sessionName, knownPromptCount > 0 {
+                promptTOCEmptyCaptureRetryAttemptedSessions.insert(sessionName)
+            }
+            return
+        }
         guard !Task.isCancelled else { return }
         guard currentSessionName() == sessionName else { return }
-
-        var entries = parsePromptEntries(from: paneContent, agentType: agentType)
-        // If the detected agent type found nothing, retry with both markers —
-        // guards against a wrong agent type assignment (e.g., migration mismatch).
-        if entries.isEmpty, agentType != nil {
-            entries = parsePromptEntries(from: paneContent, agentType: nil)
+        if entries.isEmpty, knownPromptCount > 0 {
+            promptTOCEmptyCaptureRetryAttemptedSessions.insert(sessionName)
+            return
         }
+        promptTOCEmptyCaptureRetryAttemptedSessions.remove(sessionName)
+
         threadManager.replaceSubmittedPromptHistory(
             threadId: thread.id,
             sessionName: sessionName,
@@ -275,6 +321,36 @@ extension ThreadDetailViewController {
         // Force layout so tocView.frame is up-to-date before clamping.
         terminalContainer.layoutSubtreeIfNeeded()
         clampPromptTOCPositionIfNeeded()
+    }
+
+    private func capturePromptEntries(
+        sessionName: String,
+        agentType: AgentType?,
+        retryEmptyEntries: Bool
+    ) async -> [PromptTOCEntry]? {
+        for delay in PromptTOCRefreshPolicy.emptyCaptureRetryDelays {
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled else { return nil }
+
+            guard let paneContent = await TmuxService.shared.captureFullPane(
+                sessionName: sessionName,
+                includeAttributes: true
+            ) else {
+                continue
+            }
+            guard !Task.isCancelled else { return nil }
+
+            var entries = parsePromptEntries(from: paneContent, agentType: agentType)
+            if entries.isEmpty, agentType != nil {
+                entries = parsePromptEntries(from: paneContent, agentType: nil)
+            }
+            if !entries.isEmpty || !retryEmptyEntries {
+                return entries
+            }
+        }
+        return nil
     }
 
     private func parsePromptEntries(
@@ -828,24 +904,43 @@ extension ThreadDetailViewController {
     }
 
     private func handlePromptTOCSelection(entryIndex: Int) {
-        guard entryIndex >= 0, entryIndex < promptTOCEntries.count else { return }
+        guard let target = PromptTOCNavigationTarget(
+            entryIndex: entryIndex,
+            entries: promptTOCEntries
+        ) else { return }
         guard let sessionName = currentSessionName() else { return }
         guard promptTOCSessionName == sessionName else { return }
 
-        let entry = promptTOCEntries[entryIndex]
-        Task {
+        let agentType = threadManager.agentType(for: thread, sessionName: sessionName)
+        let previousNavigationTask = promptTOCNavigationTask
+        previousNavigationTask?.cancel()
+        let navigationGeneration = UUID()
+        promptTOCNavigationGeneration = navigationGeneration
+        promptTOCNavigationTask = Task { @MainActor [weak self] in
+            if let previousNavigationTask {
+                await previousNavigationTask.value
+            }
+            guard let self else { return }
             do {
+                guard let refreshedEntries = await self.capturePromptEntries(
+                    sessionName: sessionName,
+                    agentType: agentType,
+                    retryEmptyEntries: true
+                ),
+                !Task.isCancelled,
+                self.promptTOCNavigationGeneration == navigationGeneration,
+                self.currentSessionName() == sessionName,
+                let entry = target.resolve(in: refreshedEntries) else {
+                    throw PromptTOCNavigationError.promptUnavailable
+                }
                 try await TmuxService.shared.scrollHistoryLineToTop(sessionName: sessionName, lineIndex: entry.lineIndex)
-                await MainActor.run {
-                    self.scheduleScrollFABVisibilityRefresh()
-                }
+                self.scheduleScrollFABVisibilityRefresh()
             } catch {
-                await MainActor.run {
-                    BannerManager.shared.show(
-                        message: "Could not jump to prompt in \(thread.displayName(for: sessionName, at: currentTabIndex)).",
-                        style: .error
-                    )
-                }
+                guard !Task.isCancelled else { return }
+                BannerManager.shared.show(
+                    message: "Could not jump to prompt in \(self.thread.displayName(for: sessionName, at: self.currentTabIndex)).",
+                    style: .error
+                )
             }
         }
     }

@@ -167,6 +167,48 @@ struct PromptTOCPresentationStateTests {
         )
     }
 
+    @Test("Navigation resolves the selected prompt against fresh line coordinates")
+    func navigationTargetUsesFreshCoordinates() {
+        let original = [
+            PromptTOCEntry(lineIndex: 120, displayText: "First", fullText: "First"),
+            PromptTOCEntry(lineIndex: 840, displayText: "Second", fullText: "Second"),
+        ]
+        let target = PromptTOCNavigationTarget(entryIndex: 1, entries: original)
+        let refreshed = [
+            PromptTOCEntry(lineIndex: 40, displayText: "First", fullText: "First"),
+            PromptTOCEntry(lineIndex: 760, displayText: "Second", fullText: "Second"),
+        ]
+
+        #expect(target?.resolve(in: refreshed)?.lineIndex == 760)
+    }
+
+    @Test("Navigation distinguishes repeated prompts from newest to oldest")
+    func navigationTargetDistinguishesDuplicatePrompts() {
+        let original = [
+            PromptTOCEntry(lineIndex: 100, displayText: "Continue", fullText: "Continue"),
+            PromptTOCEntry(lineIndex: 200, displayText: "Other", fullText: "Other"),
+            PromptTOCEntry(lineIndex: 300, displayText: "Continue", fullText: "Continue"),
+        ]
+        let olderTarget = PromptTOCNavigationTarget(entryIndex: 0, entries: original)
+        let newerTarget = PromptTOCNavigationTarget(entryIndex: 2, entries: original)
+        let refreshed = [
+            PromptTOCEntry(lineIndex: 25, displayText: "Continue", fullText: "Continue"),
+            PromptTOCEntry(lineIndex: 125, displayText: "Other", fullText: "Other"),
+            PromptTOCEntry(lineIndex: 225, displayText: "Continue", fullText: "Continue"),
+        ]
+
+        #expect(olderTarget?.resolve(in: refreshed)?.lineIndex == 25)
+        #expect(newerTarget?.resolve(in: refreshed)?.lineIndex == 225)
+    }
+
+    @Test("Known prompt history makes an empty pane capture transient")
+    func emptyCaptureRetryPolicy() {
+        #expect(PromptTOCRefreshPolicy.shouldRetryEmptyEntries(knownPromptCount: 1))
+        #expect(!PromptTOCRefreshPolicy.shouldRetryEmptyEntries(knownPromptCount: 0))
+        #expect(PromptTOCRefreshPolicy.periodicInterval == 3)
+        #expect(PromptTOCRefreshPolicy.emptyCaptureRetryDelays == [0, 0.2, 0.5, 1])
+    }
+
     @Test("Only a visible pinned TOC reserves terminal width")
     func contentWidthMode() {
         #expect(

@@ -54,6 +54,8 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     public var onCopy: (() -> Void)?
     /// Called when user submits a line with Return (best-effort local keystroke tracking).
     public var onSubmitLine: ((String) -> Void)?
+    /// Called when the user presses Escape, after which terminal content may change asynchronously.
+    public var onEscapeKey: (() -> Void)?
     /// Called after the user scrolls the terminal surface.
     public var onScroll: (() -> Void)?
     /// Called when the terminal surface becomes first responder.
@@ -402,6 +404,9 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func keyDown(with event: NSEvent) {
         onUserInteraction?()
+        if event.keyCode == 53 {
+            onEscapeKey?()
+        }
         captureSubmittedLineIfNeeded(from: event)
 
         // Send key event to ghostty first. If ghostty consumed it, we're done.

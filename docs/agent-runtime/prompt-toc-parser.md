@@ -8,6 +8,8 @@ This document covers Prompt TOC parsing and jump behavior.
 - Claude Code and Codex sessions can style submitted prompts differently; parser rules must accept both without pulling in placeholder composer content.
 - Selecting a TOC row should jump directly to the chosen prompt without visibly flashing to the very top of terminal history first.
 - When enough lines exist below the selected prompt, the selected prompt should land at the top edge of the terminal viewport.
+- Prompt coordinates must be resolved from a fresh pane capture when a row is selected because tmux history-limit eviction can shift every retained line upward.
+- The visible agent tab is rescanned every three seconds and shortly after Escape steering. Returning to a cached tab retries transient empty captures instead of clearing known prompt history.
 - TOC rows may show only a 3-line preview, but prompt actions like `Copy prompt` should use the full submitted prompt text.
 
 ## TOC capsule/hover UI
@@ -55,7 +57,7 @@ Pinned mode does not update the floating position. Its leading-edge resize updat
 - Prompt extraction lives in `Magent/Views/Terminal/ThreadDetailViewController+PromptTOC.swift`.
 - Prompt navigation lives in `Packages/MagentModules/Sources/TmuxCore/TmuxService.swift` in `scrollHistoryLineToTop(...)`.
 - Parser line indexes are derived from full `tmux capture-pane -S - -E -` output and are therefore top-relative.
-- TOC navigation uses `history-top` + `scroll-down lineIndex`. `scroll-down` moves the viewport 1 line toward newer content regardless of cursor position. After `history-top` (viewport top = 0) + `lineIndex` scroll-downs, viewport top = `lineIndex`. ✓ This is race-condition-free (depends only on `lineIndex`, which is stable — lines above it never shift) and doesn't require querying `history_size` or `pane_height`. All commands are chained with tmux's `\;` separator in a single IPC message so the server processes them atomically — preventing a visible intermediate flash to the top of history.
+- TOC navigation resolves the selected prompt against a fresh full-pane capture, then uses `history-top` + `scroll-down lineIndex`. `scroll-down` moves the viewport 1 line toward newer content regardless of cursor position. After `history-top` (viewport top = 0) + `lineIndex` scroll-downs, viewport top = `lineIndex`. The fresh lookup is required because line indexes stay stable only while tmux appends below them; once `history-limit` evicts oldest lines, every retained index shifts upward. All navigation commands are chained with tmux's `\;` separator in a single IPC message so the server processes them atomically and avoids a visible intermediate flash.
 - `captureFullPane` must return the **raw, untrimmed** stdout. Leading empty lines are part of the copy-mode coordinate space (history-top = line 0) and must not be stripped. Trailing newlines produce one harmless trailing empty element in the split that no prompt marker can match. Any trimming of leading content shifts all split array indexes and causes `scroll-down` to land at the wrong position.
 
 ## Multi-line prompt capture
@@ -186,7 +188,7 @@ This section documents every approach tried for `scrollHistoryLineToTop`, the fa
 
 **Why this works:**
 - `scroll-down` moves the viewport directly by 1 line toward newer content, completely independent of cursor_y. Starting from history-top (viewport_top = 0), N `scroll-down` operations → viewport_top = N. With N = lineIndex: viewport_top = lineIndex. The `›` line is at the viewport top. ✓
-- Race-condition-free: depends only on `lineIndex` (stable — lines above it never shift as the agent adds new lines at the bottom) and nothing else.
+- The line index is resolved again immediately before navigation. It remains stable as the agent appends at the bottom, while the fresh lookup also accounts for oldest-line eviction at the tmux history limit.
 - No `pane_height` needed.
 - All commands chained with `\;`: `tmux copy-mode \; send-keys -X history-top \; send-keys -X -N lineIndex scroll-down`. Single IPC → no intermediate flash. ✓
 

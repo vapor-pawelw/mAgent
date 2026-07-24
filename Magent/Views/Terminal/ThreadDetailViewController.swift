@@ -277,6 +277,10 @@ final class ThreadDetailViewController: NSViewController {
     var promptTOCPinnedResizeStartWidth: CGFloat = 0
     var isPromptTOCPinned = false
     var promptTOCRefreshTask: Task<Void, Never>?
+    var promptTOCPeriodicRefreshTask: Task<Void, Never>?
+    var promptTOCNavigationTask: Task<Void, Never>?
+    var promptTOCNavigationGeneration: UUID?
+    var promptTOCEmptyCaptureRetryAttemptedSessions: Set<String> = []
     var promptTOCEntries: [PromptTOCEntry] = []
     var promptTOCSessionName: String?
     var scrollOverlayTrailingConstraint: NSLayoutConstraint?
@@ -361,6 +365,7 @@ final class ThreadDetailViewController: NSViewController {
         GhosttyAppManager.shared.initialize()
 
         setupUI()
+        startPeriodicPromptTOCRefresh()
         refreshOpenPRButtonIcon()
         refreshJiraButton()
         refreshXcodeButton()
@@ -554,6 +559,11 @@ final class ThreadDetailViewController: NSViewController {
     /// before this controller is removed. Called from SplitContentContainerViewController.setContent
     /// since deinit can't access @MainActor properties.
     func cleanUpBeforeRemoval() {
+        promptTOCPeriodicRefreshTask?.cancel()
+        promptTOCPeriodicRefreshTask = nil
+        promptTOCNavigationTask?.cancel()
+        promptTOCNavigationTask = nil
+        promptTOCNavigationGeneration = nil
         notifyDiffTabDidDeactivate()
         hideDiffViewer()
         // DiffImageOverlayView lives on window.contentView, not on our view,
@@ -565,6 +575,8 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     deinit {
+        promptTOCPeriodicRefreshTask?.cancel()
+        promptTOCNavigationTask?.cancel()
         promptTOCRefreshTask?.cancel()
         scrollFABRefreshTask?.cancel()
         backgroundSessionPreparationTask?.cancel()
@@ -1360,6 +1372,9 @@ final class ThreadDetailViewController: NSViewController {
         }
         view.onUserInteraction = { [weak self] in
             self?.postFocusedThreadContextChangedIfKeyWindow()
+        }
+        view.onEscapeKey = { [weak self] in
+            self?.schedulePromptTOCRefreshAfterEscape()
         }
         view.onSubmitLine = { [weak self, sessionName = sessionName] line in
             Task { @MainActor [weak self] in

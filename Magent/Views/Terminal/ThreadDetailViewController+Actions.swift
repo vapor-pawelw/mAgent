@@ -1340,6 +1340,9 @@ extension ThreadDetailViewController {
             if startupOverlayRequiredSessions.remove(oldName) != nil {
                 startupOverlayRequiredSessions.insert(newName)
             }
+            if promptTOCEmptyCaptureRetryAttemptedSessions.remove(oldName) != nil {
+                promptTOCEmptyCaptureRetryAttemptedSessions.insert(newName)
+            }
         }
     }
 
