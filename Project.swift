@@ -40,6 +40,7 @@ let project = Project(
                 "Magent/Services/SessionRecreationService.swift",
                 "Magent/Services/AgentSetupService.swift",
                 "Magent/Services/BackgroundAICommandBuilder.swift",
+                "Magent/Services/RenameGenerationPromptBuilder.swift",
                 "Magent/Services/RenameService.swift",
                 "Magent/Services/ThreadLifecycleService.swift",
                 "Magent/Services/JiraIntegrationService.swift",
@@ -135,6 +136,7 @@ let project = Project(
             sources: [
                 "Magent/Services/SessionTracker.swift",
                 "Magent/Services/BackgroundAICommandBuilder.swift",
+                "Magent/Services/RenameGenerationPromptBuilder.swift",
                 "Magent/Services/ThreadStore.swift",
                 "Magent/Services/ThreadManager+Errors.swift",
                 "Magent/Services/SessionRecreationAction.swift",
