@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 
 @Suite("Thread cell layout")
@@ -28,9 +29,11 @@ struct ThreadCellLayoutTests {
         #expect(ThreadRowBadgeLayout.mainWorktreeIconPlacement(showThreadIcons: false) == .inlineAfterTitle)
     }
 
-    @Test("Inline Main worktree icon uses compact title-sized metrics")
+    @Test("Inline Main worktree icon matches the title font size")
     func mainWorktreeInlineIconMetrics() {
-        #expect(ThreadRowBadgeLayout.inlineMainWorktreeIconSize == 11)
+        let titleFont = NSFont.systemFont(ofSize: 15, weight: .semibold)
+
+        #expect(ThreadRowBadgeLayout.inlineMainWorktreeIconSize(titleFont: titleFont) == 15)
     }
 
     @Test("Thread signs prefix primary text with one space")

@@ -87,7 +87,7 @@
 - Keep last-known PR/MR, Jira, hidden-thread, and stopped-session sidebar state visible immediately after relaunch while fresh checks run.
 - Mark the priority matching a thread's Jira ticket in sidebar priority menus.
 - Simplified section headers to plain rows and moved their color cue to diagonal top-right bands on thread capsules.
-- Matched main-worktree capsules to the neutral thread background and kept a compact, optically aligned home icon inline when other thread icons are hidden.
+- Matched main-worktree capsules to the neutral thread background and kept a title-sized, optically aligned home icon inline when other thread icons are hidden.
 - Reordered thread status rows so priority, Jira, and PR workflow details lead while local state icons and activity trail; explicit Keep Alive shields now remain visible on pinned threads.
 - Anchored sidebar status rows closer to the bottom edge of thread capsules for clearer separation from branch and description text.
 - Improved compact activity, PR/MR, Jira, and section-count indicator readability with higher-contrast appearance-aware colors.

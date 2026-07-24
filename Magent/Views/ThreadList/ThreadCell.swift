@@ -270,6 +270,8 @@ final class ThreadCell: NSTableCellView {
     private var primaryDirtyDot: NSImageView?
     private var secondaryDirtyDot: NSImageView?
     private var inlineMainIconView: NSImageView?
+    private var inlineMainIconWidthConstraint: NSLayoutConstraint?
+    private var inlineMainIconHeightConstraint: NSLayoutConstraint?
     private var popoutImageView: NSImageView?
     private var pinImageView: NSImageView?
     private(set) var archiveButton: NSButton?
@@ -412,22 +414,26 @@ final class ThreadCell: NSTableCellView {
         inlineMainIcon.translatesAutoresizingMaskIntoConstraints = false
         inlineMainIcon.image = Self.cachedSymbolImage("house.fill")
         inlineMainIcon.imageScaling = .scaleProportionallyDown
-        inlineMainIcon.symbolConfiguration = NSImage.SymbolConfiguration(
-            pointSize: ThreadRowBadgeLayout.inlineMainWorktreeIconSize,
-            weight: .semibold
-        )
         inlineMainIcon.setContentHuggingPriority(.required, for: .horizontal)
         inlineMainIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
         inlineMainIcon.isHidden = true
         inlineMainIconView = inlineMainIcon
+        let inlineMainIconSize = ThreadRowBadgeLayout.inlineMainWorktreeIconSize(
+            titleFont: Self.descriptionFont()
+        )
+        let inlineMainIconWidthConstraint = inlineMainIcon.widthAnchor.constraint(
+            equalToConstant: inlineMainIconSize
+        )
+        let inlineMainIconHeightConstraint = inlineMainIcon.heightAnchor.constraint(
+            equalToConstant: inlineMainIconSize
+        )
+        self.inlineMainIconWidthConstraint = inlineMainIconWidthConstraint
+        self.inlineMainIconHeightConstraint = inlineMainIconHeightConstraint
         NSLayoutConstraint.activate([
-            inlineMainIcon.widthAnchor.constraint(
-                equalToConstant: ThreadRowBadgeLayout.inlineMainWorktreeIconSize
-            ),
-            inlineMainIcon.heightAnchor.constraint(
-                equalToConstant: ThreadRowBadgeLayout.inlineMainWorktreeIconSize
-            ),
+            inlineMainIconWidthConstraint,
+            inlineMainIconHeightConstraint,
         ])
+        updateInlineMainIconSize(titleFont: Self.descriptionFont())
 
         let subtitle = NSTextField(labelWithString: "")
         subtitle.translatesAutoresizingMaskIntoConstraints = false
@@ -969,6 +975,7 @@ final class ThreadCell: NSTableCellView {
             ofSize: NSFont.systemFontSize,
             weight: isUnreadCompletion ? .bold : .semibold
         )
+        updateInlineMainIconSize(titleFont: textField?.font)
         updateMainTextColorForSelection()
         configurePrimaryTextFieldLayout(maxLines: 1, wraps: false)
 
@@ -1046,6 +1053,17 @@ final class ThreadCell: NSTableCellView {
         updateTopBorderBadgeColors()
 
         syncRowVisibility()
+    }
+
+    private func updateInlineMainIconSize(titleFont: NSFont?) {
+        guard let titleFont else { return }
+        let size = ThreadRowBadgeLayout.inlineMainWorktreeIconSize(titleFont: titleFont)
+        inlineMainIconView?.symbolConfiguration = NSImage.SymbolConfiguration(
+            pointSize: size,
+            weight: .semibold
+        )
+        inlineMainIconWidthConstraint?.constant = size
+        inlineMainIconHeightConstraint?.constant = size
     }
 
     private func syncRowVisibility() {

@@ -18,8 +18,11 @@ enum ThreadRowBadgeLayout {
     static let statusRowHeight: CGFloat = 13
     static let standardStatusIconSize: CGFloat = 13
     static let compactLeadingStatusIconSize: CGFloat = 11
-    static let inlineMainWorktreeIconSize: CGFloat = 11
     static let trailingMarkerVerticalAnchor: TrailingMarkerVerticalAnchor = .textRows
+
+    static func inlineMainWorktreeIconSize(titleFont: NSFont) -> CGFloat {
+        titleFont.pointSize
+    }
 
     static func mainWorktreeIconPlacement(showThreadIcons: Bool) -> MainWorktreeIconPlacement {
         showThreadIcons ? .leading : .inlineAfterTitle
