@@ -167,7 +167,7 @@ struct WorktreeChangeTransferTests {
         )
 
         let interruptedMove = try #require(
-            await GitService.shared.interruptedTabMoves(repoPath: fixture.source.path).first
+            try await GitService.shared.interruptedTabMoves(repoPath: fixture.source.path).first
         )
         #expect(interruptedMove.stashCommit == transfer.stashCommit)
         #expect(interruptedMove.sourceThreadID == sourceThreadID)
@@ -176,7 +176,46 @@ struct WorktreeChangeTransferTests {
         #expect(interruptedMove.destinationThreadName == "pikachu")
 
         try await GitService.shared.rollbackWorktreeChangeTransfer(transfer)
-        #expect(await GitService.shared.interruptedTabMoves(repoPath: fixture.source.path).isEmpty)
+        #expect(try await GitService.shared.interruptedTabMoves(repoPath: fixture.source.path).isEmpty)
+    }
+
+    @Test
+    func restoringChangesKeepsRecoveryStashUntilCleanupIsExplicitlyConfirmed() async throws {
+        let fixture = try await makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        try "recover me\n".write(
+            to: fixture.source.appendingPathComponent("tracked.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let transfer = try #require(
+            try await GitService.shared.prepareWorktreeChangeTransfer(
+                sourceWorktreePath: fixture.source.path,
+                destinationWorktreePath: fixture.destination.path
+            )
+        )
+
+        try await GitService.shared.restoreWorktreeChangeTransfer(transfer)
+
+        let restoredStatus = await ShellExecutor.execute(
+            "git status --porcelain",
+            workingDirectory: fixture.source.path
+        )
+        let stashBeforeCleanup = await ShellExecutor.execute(
+            "git stash list --format=%H",
+            workingDirectory: fixture.source.path
+        )
+        #expect(restoredStatus.stdout.contains("tracked.txt"))
+        #expect(stashBeforeCleanup.stdout.contains(transfer.stashCommit))
+
+        try await GitService.shared.finishWorktreeChangeTransfer(transfer)
+
+        let stashAfterCleanup = await ShellExecutor.execute(
+            "git stash list --format=%H",
+            workingDirectory: fixture.source.path
+        )
+        #expect(!stashAfterCleanup.stdout.contains(transfer.stashCommit))
     }
 
     @Test

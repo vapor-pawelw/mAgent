@@ -125,4 +125,29 @@ struct TerminalTabMigrationTests {
         customAgent.sessionConversationIDs = [session: "custom-conversation"]
         #expect(customAgent.terminalTabMigration(for: session) == nil)
     }
+
+    @Test
+    func recoveryOnlyOffersRetryForRedundantStashCleanup() {
+        #expect(
+            TabMoveRecoveryFailureStage.redundantStashCleanup.retryScope
+                == .redundantStashCleanup
+        )
+        #expect(TabMoveRecoveryFailureStage.recoveryScan.retryScope == nil)
+        #expect(TabMoveRecoveryFailureStage.sourceThreadUnavailable.retryScope == nil)
+        #expect(TabMoveRecoveryFailureStage.sourceWorktreeInspection.retryScope == nil)
+        #expect(TabMoveRecoveryFailureStage.sourceWorktreeChanged.retryScope == nil)
+        #expect(TabMoveRecoveryFailureStage.destinationCleanup.retryScope == nil)
+        #expect(TabMoveRecoveryFailureStage.sourceRestore.retryScope == nil)
+
+        #expect(
+            TabMoveRecoveryBannerPolicy(
+                stages: [.redundantStashCleanup, .redundantStashCleanup]
+            ).retryScope == .redundantStashCleanup
+        )
+        #expect(
+            TabMoveRecoveryBannerPolicy(
+                stages: [.sourceWorktreeChanged, .redundantStashCleanup]
+            ).retryScope == nil
+        )
+    }
 }

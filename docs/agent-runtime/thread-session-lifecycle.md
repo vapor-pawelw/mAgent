@@ -31,6 +31,8 @@ Verify both that `git stash push` created the uniquely marked stash and that the
 
 The stash marker durably records source/destination thread IDs, the source session, and the generated destination name. During startup, scan every project for these markers. If the source still owns the tab, remove any partial destination and restore the stash; if source persistence already removed the tab, the move committed and only the redundant stash should be dropped. This makes recovery independent of the in-memory transfer dictionary.
 
+Startup recovery must classify failures by the stage that failed, not by matching Git error text. Missing source threads, newly dirty source worktrees, destination cleanup failures, and failed/partial stash applies require explicit user action: show a persistent error banner with recovery details and no Retry action. A failed stash drop after a successful restore or committed move is cleanup-only; show `Retry Cleanup`, which may only drop the exact recorded stash and must never repeat destination deletion or `stash apply`. If the source worktree is already dirty when recovery starts, leave both the worktree and recovery stash untouched because the changes may be new work or the result of an earlier partial restore.
+
 The destination session gets a new tmux identity, creation timestamp, worktree environment, and Ghostty surface. Never re-parent the live source tmux session: its process cwd and Magent environment still identify the old worktree/thread. If the source tab was detached, return its surface before the structural `TmuxService.killSession` barrier runs.
 
 ## Worktree Recovery

@@ -1,5 +1,45 @@
 import Foundation
 
+public nonisolated enum TabMoveRecoveryFailureStage: Sendable, Equatable {
+    case recoveryScan
+    case sourceThreadUnavailable
+    case sourceWorktreeInspection
+    case sourceWorktreeChanged
+    case destinationCleanup
+    case sourceRestore
+    case redundantStashCleanup
+
+    public var retryScope: TabMoveRecoveryRetryScope? {
+        switch self {
+        case .redundantStashCleanup:
+            return .redundantStashCleanup
+        case .recoveryScan, .sourceThreadUnavailable, .sourceWorktreeInspection,
+             .sourceWorktreeChanged, .destinationCleanup, .sourceRestore:
+            return nil
+        }
+    }
+}
+
+public nonisolated enum TabMoveRecoveryRetryScope: Sendable, Equatable {
+    case redundantStashCleanup
+}
+
+public nonisolated struct TabMoveRecoveryBannerPolicy: Sendable, Equatable {
+    public let stages: [TabMoveRecoveryFailureStage]
+
+    public init(stages: [TabMoveRecoveryFailureStage]) {
+        self.stages = stages
+    }
+
+    public var retryScope: TabMoveRecoveryRetryScope? {
+        guard !stages.isEmpty,
+              stages.allSatisfy({ $0.retryScope == .redundantStashCleanup }) else {
+            return nil
+        }
+        return .redundantStashCleanup
+    }
+}
+
 public nonisolated struct TerminalTabMigration: Sendable, Equatable {
     public let sourceThreadID: UUID
     public let sourceSessionName: String

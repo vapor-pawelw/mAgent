@@ -681,15 +681,49 @@ final class ThreadLifecycleService {
         pendingTabMoveChangeTransfers.removeValue(forKey: threadID)
     }
 
+    private struct TabMoveRecoveryIssue {
+        let stage: TabMoveRecoveryFailureStage
+        let transfer: WorktreeChangeTransfer?
+        let details: String
+    }
+
     func recoverInterruptedTabMoves(projects: [Project]) async {
+        var issues: [TabMoveRecoveryIssue] = []
+
         for project in projects {
-            for interruptedMove in await git.interruptedTabMoves(repoPath: project.repoPath) {
+            let interruptedMoves: [InterruptedTabMove]
+            do {
+                interruptedMoves = try await git.interruptedTabMoves(repoPath: project.repoPath)
+            } catch {
+                issues.append(TabMoveRecoveryIssue(
+                    stage: .recoveryScan,
+                    transfer: nil,
+                    details: String(
+                        localized: .ThreadStrings.tabMoveRecoveryScanDetails(
+                            project.name,
+                            error.localizedDescription
+                        )
+                    )
+                ))
+                continue
+            }
+
+            for interruptedMove in interruptedMoves {
                 guard let sourceThread = store.thread(byId: interruptedMove.sourceThreadID) else {
                     NSLog(
                         "[TabMoveRecovery] Keeping stash %@ because source thread %@ is unavailable",
                         interruptedMove.stashCommit,
                         interruptedMove.sourceThreadID.uuidString
                     )
+                    issues.append(TabMoveRecoveryIssue(
+                        stage: .sourceThreadUnavailable,
+                        transfer: nil,
+                        details: String(
+                            localized: .ThreadStrings.tabMoveRecoverySourceUnavailableDetails(
+                                interruptedMove.stashCommit
+                            )
+                        )
+                    ))
                     continue
                 }
 
@@ -703,7 +737,48 @@ final class ThreadLifecycleService {
                 )
 
                 guard sourceThread.tmuxSessionNames.contains(interruptedMove.sourceSessionName) else {
-                    try? await git.finishWorktreeChangeTransfer(transfer)
+                    do {
+                        try await git.finishWorktreeChangeTransfer(transfer)
+                    } catch {
+                        issues.append(tabMoveRecoveryCleanupIssue(
+                            transfer: transfer,
+                            threadName: sourceThread.name,
+                            error: error
+                        ))
+                    }
+                    continue
+                }
+
+                let sourceWorktreeIsDirty: Bool
+                do {
+                    sourceWorktreeIsDirty = try await git.worktreeHasChanges(
+                        worktreePath: sourceThread.worktreePath
+                    )
+                } catch {
+                    issues.append(TabMoveRecoveryIssue(
+                        stage: .sourceWorktreeInspection,
+                        transfer: nil,
+                        details: String(
+                            localized: .ThreadStrings.tabMoveRecoverySourceInspectionDetails(
+                                sourceThread.name,
+                                interruptedMove.stashCommit,
+                                error.localizedDescription
+                            )
+                        )
+                    ))
+                    continue
+                }
+                guard !sourceWorktreeIsDirty else {
+                    issues.append(TabMoveRecoveryIssue(
+                        stage: .sourceWorktreeChanged,
+                        transfer: nil,
+                        details: String(
+                            localized: .ThreadStrings.tabMoveRecoverySourceChangedDetails(
+                                sourceThread.name,
+                                interruptedMove.stashCommit
+                            )
+                        )
+                    ))
                     continue
                 }
 
@@ -733,15 +808,130 @@ final class ThreadLifecycleService {
                             )
                         }
                     }
-                    try await git.rollbackWorktreeChangeTransfer(transfer)
                 } catch {
-                    NSLog(
-                        "[TabMoveRecovery] Recovery stash %@ remains available: %@",
-                        interruptedMove.stashCommit,
-                        error.localizedDescription
-                    )
+                    issues.append(TabMoveRecoveryIssue(
+                        stage: .destinationCleanup,
+                        transfer: nil,
+                        details: String(
+                            localized: .ThreadStrings.tabMoveRecoveryDestinationCleanupDetails(
+                                sourceThread.name,
+                                interruptedMove.stashCommit,
+                                error.localizedDescription
+                            )
+                        )
+                    ))
+                    continue
+                }
+
+                do {
+                    try await git.restoreWorktreeChangeTransfer(transfer)
+                } catch {
+                    issues.append(TabMoveRecoveryIssue(
+                        stage: .sourceRestore,
+                        transfer: nil,
+                        details: String(
+                            localized: .ThreadStrings.tabMoveRecoverySourceRestoreDetails(
+                                sourceThread.name,
+                                interruptedMove.stashCommit,
+                                error.localizedDescription
+                            )
+                        )
+                    ))
+                    continue
+                }
+
+                do {
+                    try await git.finishWorktreeChangeTransfer(transfer)
+                } catch {
+                    issues.append(tabMoveRecoveryCleanupIssue(
+                        transfer: transfer,
+                        threadName: sourceThread.name,
+                        error: error
+                    ))
                 }
             }
+        }
+
+        if !issues.isEmpty {
+            showTabMoveRecoveryBanner(for: issues)
+        }
+    }
+
+    private func tabMoveRecoveryCleanupIssue(
+        transfer: WorktreeChangeTransfer,
+        threadName: String,
+        error: Error
+    ) -> TabMoveRecoveryIssue {
+        TabMoveRecoveryIssue(
+            stage: .redundantStashCleanup,
+            transfer: transfer,
+            details: String(
+                localized: .ThreadStrings.tabMoveRecoveryStashCleanupDetails(
+                    threadName,
+                    transfer.stashCommit,
+                    error.localizedDescription
+                )
+            )
+        )
+    }
+
+    private func showTabMoveRecoveryBanner(for issues: [TabMoveRecoveryIssue]) {
+        let actionRequiredIssues = issues.filter { $0.stage.retryScope == nil }
+        let bannerPolicy = TabMoveRecoveryBannerPolicy(stages: issues.map(\.stage))
+        let cleanupIssues = bannerPolicy.retryScope == .redundantStashCleanup
+            ? issues.filter { $0.transfer != nil }
+            : []
+        let message = actionRequiredIssues.isEmpty
+            ? String(localized: .ThreadStrings.tabMoveRecoveryCleanupFailed)
+            : String(localized: .ThreadStrings.tabMoveRecoveryActionRequired)
+        let actions: [BannerAction]
+        if cleanupIssues.isEmpty {
+            actions = []
+        } else {
+            actions = [
+                BannerAction(title: String(localized: .ThreadStrings.tabMoveRecoveryRetryCleanup)) {
+                    [weak self] in
+                    Task { [weak self] in
+                        await self?.retryTabMoveRecoveryCleanup(cleanupIssues)
+                    }
+                }
+            ]
+        }
+
+        BannerManager.shared.show(
+            message: message,
+            style: actionRequiredIssues.isEmpty ? .warning : .error,
+            duration: nil,
+            isDismissible: true,
+            actions: actions,
+            details: issues.map(\.details).joined(separator: "\n\n"),
+            detailsCollapsedTitle: String(localized: .ThreadStrings.tabMoveRecoveryShowDetails),
+            detailsExpandedTitle: String(localized: .ThreadStrings.tabMoveRecoveryHideDetails)
+        )
+    }
+
+    private func retryTabMoveRecoveryCleanup(_ cleanupIssues: [TabMoveRecoveryIssue]) async {
+        var remainingCleanupIssues: [TabMoveRecoveryIssue] = []
+        for issue in cleanupIssues {
+            guard let transfer = issue.transfer else { continue }
+            do {
+                try await git.finishWorktreeChangeTransfer(transfer)
+            } catch {
+                remainingCleanupIssues.append(tabMoveRecoveryCleanupIssue(
+                    transfer: transfer,
+                    threadName: (transfer.sourceWorktreePath as NSString).lastPathComponent,
+                    error: error
+                ))
+            }
+        }
+
+        if remainingCleanupIssues.isEmpty {
+            BannerManager.shared.show(
+                message: String(localized: .ThreadStrings.tabMoveRecoveryCleanupSucceeded),
+                style: .info
+            )
+        } else {
+            showTabMoveRecoveryBanner(for: remainingCleanupIssues)
         }
     }
 

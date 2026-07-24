@@ -353,11 +353,15 @@ public final class GitService: Sendable {
         )
     }
 
-    public func rollbackWorktreeChangeTransfer(_ transfer: WorktreeChangeTransfer) async throws {
+    public func restoreWorktreeChangeTransfer(_ transfer: WorktreeChangeTransfer) async throws {
         _ = try await ShellExecutor.run(
             "git stash apply --index \(shellQuote(transfer.stashCommit))",
             workingDirectory: transfer.sourceWorktreePath
         )
+    }
+
+    public func rollbackWorktreeChangeTransfer(_ transfer: WorktreeChangeTransfer) async throws {
+        try await restoreWorktreeChangeTransfer(transfer)
         try await dropStash(
             commit: transfer.stashCommit,
             workingDirectory: transfer.sourceWorktreePath
@@ -379,14 +383,13 @@ public final class GitService: Sendable {
         ].joined(separator: "|")
     }
 
-    public func interruptedTabMoves(repoPath: String) async -> [InterruptedTabMove] {
-        let result = await ShellExecutor.execute(
+    public func interruptedTabMoves(repoPath: String) async throws -> [InterruptedTabMove] {
+        let output = try await ShellExecutor.run(
             "git stash list --format=%H%x09%gs",
             workingDirectory: repoPath
         )
-        guard result.exitCode == 0 else { return [] }
 
-        return result.stdout.components(separatedBy: "\n").compactMap { line in
+        return output.components(separatedBy: "\n").compactMap { line in
             let columns = line.split(separator: "\t", maxSplits: 1).map(String.init)
             guard columns.count == 2,
                   let markerRange = columns[1].range(of: "magent-tab-move-v1|") else {
@@ -941,6 +944,14 @@ public final class GitService: Sendable {
         )
         return result.exitCode == 0
             && !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    public func worktreeHasChanges(worktreePath: String) async throws -> Bool {
+        let output = try await ShellExecutor.run(
+            "git status --porcelain",
+            workingDirectory: worktreePath
+        )
+        return !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Stages all tracked/untracked (non-ignored) changes and commits them with `message`.

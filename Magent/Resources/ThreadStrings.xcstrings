@@ -100,6 +100,149 @@
         }
       }
     },
+    "tabMoveRecoveryActionRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An interrupted tab move needs your attention. Your changes remain in the recovery stash. Automatic retry is disabled because Git requires an explicit action; open the details for guidance."
+          }
+        }
+      }
+    },
+    "tabMoveRecoveryCleanupFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The tab move or rollback completed safely, but Magent could not remove its redundant recovery stash."
+          }
+        }
+      }
+    },
+    "tabMoveRecoveryCleanupSucceeded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The redundant tab-move recovery stash was removed."
+          }
+        }
+      }
+    },
+    "tabMoveRecoveryDestinationCleanupDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thread \"%1$@\": Magent could not remove the partial destination before restoring recovery stash %2$@. Inspect the destination worktree, then recover the stash manually.\n\n%3$@"
+          }
+        }
+      }
+    },
+    "tabMoveRecoveryHideDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Recovery Details"
+          }
+        }
+      }
+    },
+    "tabMoveRecoveryRetryCleanup": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry Cleanup"
+          }
+        }
+      }
+    },
+    "tabMoveRecoveryScanDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project \"%1$@\": Magent could not inspect recovery stashes. Check that the repository is available and Git is not locked. Recovery was not retried automatically.\n\n%2$@"
+          }
+        }
+      }
+    },
+    "tabMoveRecoveryShowDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Recovery Details"
+          }
+        }
+      }
+    },
+    "tabMoveRecoverySourceChangedDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thread \"%1$@\" has new worktree changes, so Magent did not apply recovery stash %2$@ on top of them. Commit, stash, or discard the new changes, then recover the marked stash manually."
+          }
+        }
+      }
+    },
+    "tabMoveRecoverySourceInspectionDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thread \"%1$@\": Magent could not inspect the source worktree before applying recovery stash %2$@. Check that the worktree is available and Git is not locked; the stash was left untouched.\n\n%3$@"
+          }
+        }
+      }
+    },
+    "tabMoveRecoverySourceRestoreDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thread \"%1$@\": Git could not restore recovery stash %2$@ automatically. Resolve the reported Git state and recover the marked stash manually. Do not retry blindly because a partial apply may already exist.\n\n%3$@"
+          }
+        }
+      }
+    },
+    "tabMoveRecoverySourceUnavailableDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The source thread is unavailable. Reconnect or restore it before manually recovering marked stash %@."
+          }
+        }
+      }
+    },
+    "tabMoveRecoveryStashCleanupDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thread \"%1$@\": changes are safe; only redundant recovery stash %2$@ still needs removal.\n\n%3$@"
+          }
+        }
+      }
+    },
     "tabMoveMessage": {
       "extractionState": "manual",
       "localizations": {
