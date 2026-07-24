@@ -15,13 +15,15 @@ struct AgentModelsManifestTests {
         #expect(fableIndex < opusIndex)
     }
 
-    @Test("Bundled manifest lists GPT 5.6 Sol first with low reasoning")
-    func bundledManifestListsGPT56SolFirstWithLowReasoning() throws {
+    @Test("Bundled manifest exposes Ultra only for supported GPT 5.6 models")
+    func bundledManifestExposesUltraForSupportedGPT56Models() throws {
         let manifest = try loadRepositoryManifest()
         let codexConfig = try #require(manifest.config(for: .codex))
 
         #expect(codexConfig.models.first?.id == "gpt-5.6-sol")
-        #expect(codexConfig.effectiveReasoningLevels(for: "gpt-5.6-sol").contains("low"))
+        #expect(codexConfig.effectiveReasoningLevels(for: "gpt-5.6-sol").contains("ultra"))
+        #expect(codexConfig.effectiveReasoningLevels(for: "gpt-5.6-terra").contains("ultra"))
+        #expect(!codexConfig.effectiveReasoningLevels(for: "gpt-5.6-luna").contains("ultra"))
     }
 
     private func loadRepositoryManifest() throws -> AgentModelsManifest {
