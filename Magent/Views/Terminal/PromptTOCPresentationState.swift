@@ -46,12 +46,32 @@ enum PromptTOCListPresentation {
         Array((0..<max(0, entryCount)).reversed())
     }
 
-    static func selectedEntryIndex(previousSelection: Int?, entryCount: Int) -> Int? {
+    static func selectedEntryIndex(
+        previousSelection: Int?,
+        entryCount: Int,
+        didAppendNewestEntry: Bool = false
+    ) -> Int? {
         guard entryCount > 0 else { return nil }
+        if didAppendNewestEntry {
+            return entryCount - 1
+        }
         if let previousSelection, previousSelection >= 0, previousSelection < entryCount {
             return previousSelection
         }
         return entryCount - 1
+    }
+
+    static func didAppendNewestEntry(
+        previousEntryCount: Int,
+        currentEntryCount: Int,
+        previousNewestEntryIndex: Int?
+    ) -> Bool {
+        guard previousEntryCount > 0, currentEntryCount > 0 else { return false }
+        if currentEntryCount > previousEntryCount {
+            return true
+        }
+        guard let previousNewestEntryIndex else { return false }
+        return previousNewestEntryIndex < currentEntryCount - 1
     }
 
     static func isAtNewestEdge(offsetY: CGFloat, tolerance: CGFloat) -> Bool {
@@ -63,6 +83,15 @@ enum PromptTOCListPresentation {
         insertedContentHeight: CGFloat
     ) -> CGFloat {
         previousOffsetY + max(0, insertedContentHeight)
+    }
+}
+
+enum PromptTOCContentWidthMode: Equatable {
+    case fullWidth
+    case reservesTrailingTOC
+
+    static func resolve(isPinned: Bool, isTOCVisible: Bool) -> Self {
+        isPinned && isTOCVisible ? .reservesTrailingTOC : .fullWidth
     }
 }
 

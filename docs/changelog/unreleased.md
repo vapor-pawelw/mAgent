@@ -34,7 +34,7 @@
 #### Features
 
 - Unified new and forked thread creation with a context-aware visual source picker for starting from the main worktree, another thread, or any branch.
-- Pin the prompt Table of Contents beside terminal and chat content, browse newest-first high-contrast numbered rows with roomier pinned previews, then resize the split from its full-height subtle divider without covering the conversation.
+- Pin the prompt Table of Contents beside terminal and chat content, browse newest-first high-contrast numbered rows with roomier pinned previews, then resize or detach the split while terminal content immediately reclaims the available width.
 
 #### Improvements
 

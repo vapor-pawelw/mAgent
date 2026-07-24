@@ -120,9 +120,37 @@ struct PromptTOCPresentationStateTests {
         )
         #expect(
             PromptTOCListPresentation.selectedEntryIndex(
+                previousSelection: 1,
+                entryCount: 5,
+                didAppendNewestEntry: true
+            ) == 4
+        )
+        #expect(
+            PromptTOCListPresentation.selectedEntryIndex(
                 previousSelection: 4,
                 entryCount: 4
             ) == 3
+        )
+        #expect(
+            PromptTOCListPresentation.didAppendNewestEntry(
+                previousEntryCount: 4,
+                currentEntryCount: 5,
+                previousNewestEntryIndex: 3
+            )
+        )
+        #expect(
+            PromptTOCListPresentation.didAppendNewestEntry(
+                previousEntryCount: 4,
+                currentEntryCount: 4,
+                previousNewestEntryIndex: 2
+            )
+        )
+        #expect(
+            !PromptTOCListPresentation.didAppendNewestEntry(
+                previousEntryCount: 4,
+                currentEntryCount: 4,
+                previousNewestEntryIndex: nil
+            )
         )
     }
 
@@ -136,6 +164,22 @@ struct PromptTOCPresentationStateTests {
                 previousOffsetY: 120,
                 insertedContentHeight: 38
             ) == 158
+        )
+    }
+
+    @Test("Only a visible pinned TOC reserves terminal width")
+    func contentWidthMode() {
+        #expect(
+            PromptTOCContentWidthMode.resolve(isPinned: true, isTOCVisible: true)
+                == .reservesTrailingTOC
+        )
+        #expect(
+            PromptTOCContentWidthMode.resolve(isPinned: false, isTOCVisible: true)
+                == .fullWidth
+        )
+        #expect(
+            PromptTOCContentWidthMode.resolve(isPinned: true, isTOCVisible: false)
+                == .fullWidth
         )
     }
 }

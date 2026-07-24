@@ -253,6 +253,13 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         syncSurfaceGeometry()
     }
 
+    public func synchronizeSurfaceGeometry() {
+        syncSurfaceGeometry()
+        if let surface {
+            ghostty_surface_draw(surface)
+        }
+    }
+
     override public func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         guard let surface else { return }

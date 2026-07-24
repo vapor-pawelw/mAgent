@@ -140,7 +140,6 @@ extension ThreadDetailViewController {
         tocView.removeFromSuperview()
 
         if pinned {
-            terminalTrailingToViewConstraint?.isActive = false
             tocView.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(tocView, positioned: .above, relativeTo: terminalContainer)
 
@@ -164,12 +163,9 @@ extension ThreadDetailViewController {
 
             let contentTrailing = terminalContainer.trailingAnchor.constraint(equalTo: tocView.leadingAnchor)
             terminalTrailingToPromptTOCConstraint = contentTrailing
-            contentTrailing.isActive = !tocView.isHidden
-            terminalTrailingToViewConstraint?.isActive = tocView.isHidden
         } else {
             promptTOCPinnedWidthConstraint = nil
             terminalTrailingToPromptTOCConstraint = nil
-            terminalTrailingToViewConstraint?.isActive = true
             tocView.translatesAutoresizingMaskIntoConstraints = false
             terminalContainer.addSubview(tocView)
             installFloatingPromptTOCConstraints()
@@ -179,7 +175,6 @@ extension ThreadDetailViewController {
         }
 
         tocView.setPinned(pinned)
-        view.layoutSubtreeIfNeeded()
         applyPromptTOCVisibility(restoringPosition: !pinned)
     }
 
@@ -1108,12 +1103,7 @@ extension ThreadDetailViewController {
         }
 
         promptTOCView?.isHidden = !canShow
-
-        if isPromptTOCPinned {
-            terminalTrailingToPromptTOCConstraint?.isActive = canShow
-            terminalTrailingToViewConstraint?.isActive = !canShow
-            view.layoutSubtreeIfNeeded()
-        }
+        updatePromptTOCContentLayout(isTOCVisible: canShow)
 
         guard canShow else { return }
 
@@ -1122,6 +1112,18 @@ extension ThreadDetailViewController {
             restorePromptTOCPosition(for: sessionName)
         }
         clampPromptTOCPositionIfNeeded()
+    }
+
+    private func updatePromptTOCContentLayout(isTOCVisible: Bool) {
+        let mode = PromptTOCContentWidthMode.resolve(
+            isPinned: isPromptTOCPinned,
+            isTOCVisible: isTOCVisible
+        )
+        terminalTrailingToPromptTOCConstraint?.isActive = mode == .reservesTrailingTOC
+        terminalTrailingToViewConstraint?.isActive = mode == .fullWidth
+        view.layoutSubtreeIfNeeded()
+        terminalContainer.layoutSubtreeIfNeeded()
+        currentTerminalView()?.synchronizeSurfaceGeometry()
     }
 
     func togglePromptTOCVisibility() {
@@ -1503,6 +1505,18 @@ final class PromptTableOfContentsView: NSView {
         agentType: AgentType?
     ) {
         let previousSelection = selectedEntryIndex
+        let previousNewestEntry = tocEntries.last
+        let previousEntryCount = tocEntries.count
+        let previousNewestEntryIndex = previousNewestEntry.flatMap { previous in
+            entries.lastIndex {
+                $0.lineIndex == previous.lineIndex && $0.fullText == previous.fullText
+            }
+        }
+        let didAppendNewestEntry = PromptTOCListPresentation.didAppendNewestEntry(
+            previousEntryCount: previousEntryCount,
+            currentEntryCount: entries.count,
+            previousNewestEntryIndex: previousNewestEntryIndex
+        )
         let shouldScrollToTop = shouldRestoreScrollToTopAfterReload
         tocEntries = entries
         countLabel.stringValue = "\(entries.count)"
@@ -1547,7 +1561,8 @@ final class PromptTableOfContentsView: NSView {
 
         if let selection = PromptTOCListPresentation.selectedEntryIndex(
             previousSelection: previousSelection,
-            entryCount: entries.count
+            entryCount: entries.count,
+            didAppendNewestEntry: didAppendNewestEntry
         ) {
             updateSelection(for: selection)
         }
