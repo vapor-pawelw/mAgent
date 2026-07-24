@@ -41,7 +41,7 @@
 - Kept Terminal and Diff tabs visible beside thread actions while user-created tabs use the flexible, scrollable space to their left.
 - Matched busy and completed tabs to their sidebar thread capsules with animated busy borders and green completion backgrounds.
 - Codex chat tabs now show the selected model and reasoning effort in their names, with a clear Chat suffix; unfinished Claude chat entry points are hidden for now.
-- Reopen cached recent threads immediately more often and let users tune how many terminal views Magent keeps for fast switching.
+- Reopen cached recent threads immediately more often, automatically release detached terminal views when macOS reports memory pressure, and let users tune the normal cache limit.
 - Automatically give agent tabs a concise AI-generated name from their prompts, retrying after transient failures, ignoring unrelated Codex MCP startup failures, and preserving every manually renamed tab.
 - Added a toolbar reminder with a first-time hint to reopen dismissed lost-prompt recovery banners without discarding the saved prompt.
 - Rounded the initial prompt input in the new thread and new tab sheets.
@@ -51,7 +51,7 @@
 - Prevented simultaneous thread archives from racing on the main worktree, Local Sync files, or git metadata, with queued agent workflows now reporting the active thread and their live queue position.
 - Fixed automatic AI naming for new agent terminal tabs that show a default model and effort label.
 - Fixed renaming a terminal tab unnecessarily reloading its terminal view.
-- Fixed recent thread switches flashing a loading overlay even when the selected terminal session was already cached and healthy.
+- Fixed recent thread switches flashing or lingering on a loading overlay when mutable agent resume metadata changed even though the selected terminal session was still cached and healthy.
 - Fixed lost-prompt recovery controls showing a generic button label, kept recovery banners out of the toolbar area, added confirmation before discarding recovered prompts, and made `Esc` dismiss banners that show an `X`.
 
 ### Terminal
