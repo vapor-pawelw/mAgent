@@ -10,6 +10,7 @@ final class ThreadLifecycleService {
     let tmux: TmuxService
     let git: GitService
     private let archiveOperationGate = SerialAsyncOperationGate()
+    private let threadDisplayNumberAllocator = ThreadDisplayNumberAllocator()
 
     // MARK: - Delegate callbacks
 
@@ -124,6 +125,7 @@ final class ThreadLifecycleService {
         shouldSubmitInitialPrompt: Bool = true,
         initialDraftTab: PersistedDraftTab? = nil,
         initialChatTab: PersistedChatTab? = nil,
+        taskDescription: String? = nil,
         requestedName: String? = nil,
         requestedBranchName: String? = nil,
         requestedBaseBranch: String? = nil,
@@ -192,6 +194,25 @@ final class ThreadLifecycleService {
             throw ThreadManagerError.nameGenerationFailed(diagnostic: nil)
         }
 
+        let persistedNumbers = persistence.loadThreads().lazy
+            .filter { $0.projectId == project.id }
+            .compactMap(\.threadDisplayNumber)
+        let inMemoryNumbers = store.threads.lazy
+            .filter { $0.projectId == project.id }
+            .compactMap(\.threadDisplayNumber)
+        let threadDisplayNumber = threadDisplayNumberAllocator.allocate(
+            projectId: project.id,
+            existingNumbers: Array(persistedNumbers) + Array(inMemoryNumbers)
+        )
+        let fallbackDescription = String(
+            localized: .ThreadStrings.threadFallbackDescription(threadDisplayNumber)
+        )
+        let initialDescription = InitialThreadDescription.resolve(
+            explicitDescription: taskDescription,
+            prompt: initialPrompt ?? initialDraftTab?.prompt ?? initialChatTab?.draftInput,
+            fallback: fallbackDescription
+        )
+
         let branchName: String
         if let requested = requestedBranchName?.trimmingCharacters(in: .whitespacesAndNewlines), !requested.isEmpty {
             branchName = requested
@@ -223,7 +244,10 @@ final class ThreadLifecycleService {
             branchName: branchName,
             tmuxSessionNames: [],
             sectionId: requestedSectionId ?? settings.defaultSection(for: project.id)?.id,
-            baseBranch: pendingBaseBranch
+            baseBranch: pendingBaseBranch,
+            taskDescription: initialDescription.text,
+            taskDescriptionIsProvisional: initialDescription.isProvisional,
+            threadDisplayNumber: threadDisplayNumber
         )
         store.pendingThreadIds.insert(threadID)
         var pendingThreadWithBusy = pendingThread

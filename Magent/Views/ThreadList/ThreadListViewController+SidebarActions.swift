@@ -812,6 +812,7 @@ extension ThreadListViewController {
                         )
                     },
                     initialChatTab: initialChatTab,
+                    taskDescription: taskDescription,
                     requestedBranchName: requestedBranchName,
                     requestedBaseBranch: baseBranch,
                     pendingPromptFileURL: pendingPromptFileURL,
@@ -824,10 +825,6 @@ extension ThreadListViewController {
                     codexFastMode: codexFastMode,
                     localFileSyncEntriesOverride: localFileSyncEntriesOverride
                 )
-                if let desc = taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !desc.isEmpty {
-                    try? self.threadManager.setTaskDescription(threadId: created.id, description: desc)
-                }
                 // Unblock the + button as soon as the thread exists — the rename
                 // below is a background nicety that shouldn't gate new-thread creation.
                 await MainActor.run {

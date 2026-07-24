@@ -495,6 +495,7 @@ final class IPCCommandHandler {
                         reasoningLevel: request.reasoningLevel
                     )
                 }(),
+                taskDescription: request.description,
                 requestedBranchName: requestedName,
                 requestedBaseBranch: requestedBaseBranch,
                 requestedSectionId: requestedSectionId,
@@ -506,13 +507,6 @@ final class IPCCommandHandler {
             )
         } catch {
             return .failure("Failed to create thread: \(error.localizedDescription)", id: request.id)
-        }
-
-        // Set task description from --description (slug generation consumed it for the name,
-        // but the thread itself still needs the description persisted).
-        if let description = request.description?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !description.isEmpty {
-            try? threadManager.setTaskDescription(threadId: thread.id, description: description)
         }
 
         // Set priority from --priority if provided. `0` clears; out-of-range values
@@ -737,6 +731,7 @@ final class IPCCommandHandler {
                                     reasoningLevel: spec.reasoningLevel
                                 )
                             }(),
+                            taskDescription: spec.description,
                             requestedBranchName: spec.requestedName,
                             requestedBaseBranch: spec.requestedBaseBranch,
                             requestedSectionId: spec.requestedSectionId,
@@ -769,10 +764,6 @@ final class IPCCommandHandler {
                         threadManager.placeThreadAfterSibling(threadId: thread.id, afterThreadId: ft.id)
                     }
                     needsSave = true
-                }
-                if let desc = resolved[i].description?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !desc.isEmpty {
-                    try? threadManager.setTaskDescription(threadId: thread.id, description: desc)
                 }
                 if let p = resolved[i].priority {
                     let clamped: Int? = (p == 0) ? nil : p

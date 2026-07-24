@@ -628,6 +628,17 @@
         }
       }
     },
+    "threadFallbackDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thread #%lld"
+          }
+        }
+      }
+    },
     "threadDeleteFailed": {
       "extractionState": "manual",
       "localizations": {

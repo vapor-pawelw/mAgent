@@ -20,6 +20,9 @@ The New Thread sheet is the single UI for creating from the main worktree, anoth
 - Manually changing Base branch breaks the source-thread relationship and replaces the selected capsule with a synthetic Branch capsule. The new thread no longer inherits source placement or its local-file-sync snapshot.
 - Selecting a thread again restores the linked source behavior.
 - Changing Project resets the source to that project's main worktree and resets Section to the project's default.
+- A newly created thread uses its initial prompt as an immediate one-line description preview. Whitespace and line breaks are collapsed, and long prompts are truncated with an ellipsis.
+- When no initial prompt or explicit description is supplied, the thread starts with a stable project-local fallback such as `Thread #12` instead of exposing its generated worktree name as the primary title.
+- Prompt previews and numbered fallbacks are provisional. Automatic AI naming may replace them whether branch auto-rename is enabled or disabled, including on a later retry after an earlier generation failure. An explicit description remains authoritative.
 
 ## Creation semantics
 
@@ -31,6 +34,7 @@ The New Thread sheet is the single UI for creating from the main worktree, anoth
   - its local-file-sync snapshot.
 - A custom branch supplies only the requested base branch.
 - Editing completion and final submission both reconcile the Base branch field with the source state. This prevents submitting with stale source inheritance when Return activates Create Thread directly from the branch field.
+- The initial description is assigned before the pending thread enters the sidebar, avoiding a generated-name flash during background worktree and session setup.
 
 ## Implementation notes
 
@@ -38,3 +42,5 @@ The New Thread sheet is the single UI for creating from the main worktree, anoth
 - `ThreadCreationSourcePicker` is an AppKit popover control rather than an `NSPopUpButton`, because native popup rows cannot represent the two-line miniature capsules.
 - `ThreadCreationSourceOption` is presentation-only. Creation resolves the selected thread ID against the current active `ThreadManager` state before applying inheritance.
 - Main worktree returns no `sourceThreadID`; this preserves the distinction between an ordinary main-based thread and a fork from a non-main thread.
+- `MagentThread.taskDescriptionIsProvisional` distinguishes prompt/fallback text from explicit descriptions. Automatic generators may overwrite only absent or provisional descriptions; manual edits and Jira-owned descriptions clear provisional provenance.
+- Each thread persists its project-local display number. A lock-protected allocator seeds from the highest active or archived thread number and reserves each value before returning, so concurrent batch creation cannot produce duplicate `Thread #N` labels.
