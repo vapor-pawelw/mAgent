@@ -72,6 +72,7 @@ Draft tabs let users save a prompt idea for later without executing it immediate
 - Draft tabs can only be created through the launch sheet checkbox — there is no other way to create them
 - Draft threads remain non-terminal until "Start Agent" is used; creating a draft thread must not also create a tmux/terminal tab behind the draft
 - Terminal overlays (scroll controls, scroll-to-bottom FAB, prompt TOC) are hidden while a draft tab is active
+- Permanent Terminal and Diff tabs are identified by dedicated tab identities rather than array position; the permanent Terminal identity remains bound to its dedicated `...-terminal` tmux session even when agent-session persistence order differs from visual order.
 - **Auto-rename with DRAFT prefix**: When a thread has active draft tabs and auto-rename/description generation triggers, the generated task description is prefixed with "DRAFT: ". The prefix is derived from live draft-tab state (`hasDraftTabs`), so it disappears naturally once the draft is consumed via "Start Agent"
 - **"AI Rename" sheet**: The "AI Rename…" sheet (⌘⇧R) provides multi-line prompt input, a picker with recent prompts, and checkboxes to selectively rename icon, description, and/or branch name. When automatic work-type icons are disabled, the Icon checkbox is omitted. The sheet is accessible from the top-level thread context menu, TOC right-click, and the main Thread menu
 - Display order is decoupled from content arrays via a `TabSlot` indirection layer, allowing free mixing of terminal and web tabs without breaking terminal view indexing

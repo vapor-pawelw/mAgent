@@ -20,11 +20,57 @@ struct ThreadTopBarLayoutTests {
 
     @Test("Permanent tabs stay outside the scrollable user-tab stack")
     func fixedAndUserTabGrouping() {
-        let groups = ThreadTopBarLayout.tabGroups(tabCount: 6, fixedCount: 2, pinnedBoundary: 4)
+        let groups = ThreadTopBarLayout.tabGroups(
+            identities: [
+                .permanentTerminal(sessionName: "thread-terminal"),
+                .permanentDiff,
+                .terminalSession("agent-1"),
+                .web("docs"),
+                .terminalSession("agent-2"),
+                .chat("chat"),
+            ],
+            pinnedMovableCount: 2
+        )
 
-        #expect(groups.fixed == 0..<2)
-        #expect(groups.pinned == 2..<4)
-        #expect(groups.unpinned == 4..<6)
+        #expect(groups.fixed == [0, 1])
+        #expect(groups.pinned == [2, 3])
+        #expect(groups.unpinned == [4, 5])
+    }
+
+    @Test("Permanent identity wins when persisted tab order is interleaved")
+    func permanentIdentityDoesNotDependOnArrayPosition() {
+        let groups = ThreadTopBarLayout.tabGroups(
+            identities: [
+                .terminalSession("agent"),
+                .permanentTerminal(sessionName: "thread-terminal"),
+                .web("docs"),
+                .permanentDiff,
+            ],
+            pinnedMovableCount: 1
+        )
+
+        #expect(groups.fixed == [1, 3])
+        #expect(groups.pinned == [0])
+        #expect(groups.unpinned == [2])
+    }
+
+    @Test("Only the dedicated terminal session receives permanent identity")
+    func permanentTerminalIdentityUsesDedicatedSessionName() {
+        let dedicatedSession = "ma-magent-clefable-terminal"
+        let agentSession = "ma-magent-clefable-codex--5-6-sol--m-"
+
+        #expect(
+            ThreadTabIdentity.terminal(
+                sessionName: dedicatedSession,
+                permanentTerminalSessionName: dedicatedSession
+            ) == .permanentTerminal(sessionName: dedicatedSession)
+        )
+        #expect(
+            ThreadTabIdentity.terminal(
+                sessionName: agentSession,
+                permanentTerminalSessionName: dedicatedSession
+            ) == .terminalSession(agentSession)
+        )
     }
 
     @Test("Sixteen-point separation follows the visible scroll control")
