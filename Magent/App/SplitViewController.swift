@@ -27,7 +27,7 @@ private final class SplitContentContainerViewController: NSViewController {
         childView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(childView)
         currentChildConstraints = [
-            childView.topAnchor.constraint(equalTo: view.topAnchor),
+            MainDetailContentLayout.topConstraint(for: childView, in: view),
             childView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             childView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             childView.bottomAnchor.constraint(equalTo: view.bottomAnchor),

@@ -57,7 +57,7 @@ struct SplitViewControllerTests {
 
         MainWindowChromeLayout.configure(window)
 
-        #expect(!window.styleMask.contains(.fullSizeContentView))
+        #expect(window.styleMask.contains(.fullSizeContentView))
         #expect(window.titlebarAppearsTransparent)
         #expect(window.titleVisibility == .hidden)
         #expect(window.toolbarStyle == .expanded)
@@ -68,6 +68,18 @@ struct SplitViewControllerTests {
         let container = NSView()
         let content = NSView()
         let constraint = SidebarContentLayout.topConstraint(for: content, in: container)
+
+        #expect(constraint.firstItem === content)
+        #expect(constraint.firstAttribute == .top)
+        #expect(constraint.secondItem === container.safeAreaLayoutGuide)
+        #expect(constraint.secondAttribute == .top)
+    }
+
+    @Test("Main detail content keeps the tab bar below the window toolbar")
+    func mainDetailContentUsesSafeAreaTop() {
+        let container = NSView()
+        let content = NSView()
+        let constraint = MainDetailContentLayout.topConstraint(for: content, in: container)
 
         #expect(constraint.firstItem === content)
         #expect(constraint.firstAttribute == .top)

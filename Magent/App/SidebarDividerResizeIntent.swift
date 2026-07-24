@@ -2,6 +2,7 @@ import AppKit
 
 struct MainWindowChromeLayout {
     static func configure(_ window: NSWindow) {
+        window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
     }
@@ -36,6 +37,12 @@ struct MainWindowChromeLayout {
 }
 
 struct SidebarContentLayout {
+    static func topConstraint(for content: NSView, in container: NSView) -> NSLayoutConstraint {
+        content.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor)
+    }
+}
+
+struct MainDetailContentLayout {
     static func topConstraint(for content: NSView, in container: NSView) -> NSLayoutConstraint {
         content.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor)
     }
