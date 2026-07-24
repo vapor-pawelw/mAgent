@@ -50,6 +50,7 @@
 
 #### Bug Fixes
 
+- Prevented stale AI rename error banners after deleting, archiving, or otherwise removing a thread while its rename was still running.
 - Prevented simultaneous thread archives from racing on the main worktree, Local Sync files, or git metadata, with queued agent workflows now reporting the active thread and their live queue position.
 - Kept the prompt Table of Contents populated when returning to a cached agent tab, refreshed it periodically and after Escape steering, and made prompt jumps remain accurate after terminal history rolls over.
 - Kept the permanent Terminal and Diff tabs in their trailing positions even when restored agent or content tabs appear first in persisted session order.
