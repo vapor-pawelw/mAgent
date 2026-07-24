@@ -118,4 +118,17 @@ struct ThreadCreationSourceSelectionTests {
             visibleOptionCount: 7
         ))
     }
+
+    @Test("Collapsed picker is single-line while expanded options keep their details")
+    func pickerCapsuleModes() {
+        let collapsed = ThreadCreationSourceCapsuleMode.collapsed
+        let expanded = ThreadCreationSourceCapsuleMode.expanded(isSelected: true)
+
+        #expect(!collapsed.showsExpandedDetails)
+        #expect(!collapsed.isSelected)
+        #expect(collapsed.rowHeight == 30)
+        #expect(expanded.showsExpandedDetails)
+        #expect(expanded.isSelected)
+        #expect(expanded.rowHeight == ThreadCreationSourcePickerLayout.rowHeight)
+    }
 }

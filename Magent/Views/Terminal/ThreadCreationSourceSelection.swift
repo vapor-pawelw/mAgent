@@ -94,3 +94,26 @@ enum ThreadCreationSourcePickerLayout {
         return rowHeights + standardGaps + contextualSpacing + (verticalInset * 2)
     }
 }
+
+enum ThreadCreationSourceCapsuleMode: Equatable {
+    case collapsed
+    case expanded(isSelected: Bool)
+
+    var showsExpandedDetails: Bool {
+        if case .expanded = self {
+            return true
+        }
+        return false
+    }
+
+    var isSelected: Bool {
+        if case .expanded(let isSelected) = self {
+            return isSelected
+        }
+        return false
+    }
+
+    var rowHeight: CGFloat {
+        showsExpandedDetails ? ThreadCreationSourcePickerLayout.rowHeight : 30
+    }
+}
