@@ -1467,10 +1467,22 @@ extension SplitViewController: NSToolbarDelegate {
             currentThreadToolbarStrip.translatesAutoresizingMaskIntoConstraints = false
             if !didInstallCurrentThreadToolbarSizingConstraints {
                 didInstallCurrentThreadToolbarSizingConstraints = true
-                currentThreadToolbarStrip.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
-                currentThreadToolbarStrip.widthAnchor.constraint(lessThanOrEqualToConstant: 1400).isActive = true
-                currentThreadToolbarStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
-                currentThreadToolbarStack.widthAnchor.constraint(lessThanOrEqualToConstant: 1600).isActive = true
+                let preferredStripWidth = currentThreadToolbarStrip.widthAnchor.constraint(
+                    greaterThanOrEqualToConstant: ThreadToolbarCapsuleLayout.preferredThreadSummaryWidth
+                )
+                ThreadToolbarCapsuleLayout.configurePreferredThreadSummaryWidth(preferredStripWidth)
+                NSLayoutConstraint.activate([
+                    preferredStripWidth,
+                    currentThreadToolbarStrip.widthAnchor.constraint(
+                        lessThanOrEqualToConstant: ThreadToolbarCapsuleLayout.maximumThreadSummaryWidth
+                    ),
+                    currentThreadToolbarStack.widthAnchor.constraint(
+                        greaterThanOrEqualToConstant: ThreadToolbarCapsuleLayout.minimumToolbarContentWidth
+                    ),
+                    currentThreadToolbarStack.widthAnchor.constraint(
+                        lessThanOrEqualToConstant: ThreadToolbarCapsuleLayout.maximumToolbarContentWidth
+                    ),
+                ])
             }
             item.view = currentThreadToolbarStack
             refreshCurrentThreadToolbarStrip()

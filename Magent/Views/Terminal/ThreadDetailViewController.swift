@@ -608,6 +608,7 @@ final class ThreadDetailViewController: NSViewController {
         openPRButton.target = self
         openPRButton.action = #selector(openPRTapped(_:))
         openPRButton.toolTip = "Open Pull Request\n\(externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks()))"
+        ThreadToolbarCapsuleLayout.configureActionButton(openPRButton)
 
         openInJiraButton.bezelStyle = prJiraBezelStyle
         openInJiraButton.controlSize = prJiraControlSize
@@ -617,6 +618,7 @@ final class ThreadDetailViewController: NSViewController {
         openInJiraButton.action = #selector(openInJiraTapped)
         openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenInJira) + "\n" + externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks())
         openInJiraButton.isHidden = true
+        ThreadToolbarCapsuleLayout.configureActionButton(openInJiraButton)
 
         openInXcodeButton.bezelStyle = .texturedRounded
         openInXcodeButton.imageScaling = .scaleProportionallyDown

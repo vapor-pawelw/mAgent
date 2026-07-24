@@ -48,6 +48,7 @@
 
 #### Bug Fixes
 
+- Kept PR and Jira action titles readable on one line when the window toolbar is narrow.
 - Prevented simultaneous thread archives from racing on the main worktree, Local Sync files, or git metadata, with queued agent workflows now reporting the active thread and their live queue position.
 - Fixed automatic AI naming for new agent terminal tabs that show a default model and effort label.
 - Fixed renaming a terminal tab unnecessarily reloading its terminal view.
