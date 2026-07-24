@@ -11,10 +11,14 @@ struct ThreadCreationSourceOption {
     let isContextThread: Bool
 }
 
+private final class ThreadCreationSourceBaselineImageView: NSImageView {
+    override var baselineOffsetFromBottom: CGFloat { 0 }
+}
+
 private final class ThreadCreationSourceCapsuleView: NSView {
     private let iconView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
-    private let inlineMainIconView = NSImageView()
+    private let inlineMainIconView = ThreadCreationSourceBaselineImageView()
     private let subtitleLabel = NSTextField(labelWithString: "")
     private var sectionColor: NSColor?
     private let sectionMarkerLayer = CAShapeLayer()
@@ -139,12 +143,13 @@ private final class ThreadCreationSourceCapsuleView: NSView {
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
             sectionMarkerLayer.fillColor = ThreadCapsuleSectionMarkerStyle.color(
                 sectionColor: sectionColor,
                 isSelected: false
             ).cgColor
         }
-        layer?.borderWidth = 0
+        layer?.borderWidth = 0.5
         layer?.cornerRadius = ThreadCapsuleSectionMarkerStyle.capsuleCornerRadius
     }
 
@@ -263,25 +268,38 @@ final class ThreadCreationSourcePicker: NSView {
     @objc private func showOptions() {
         guard let options = representedOptions, !options.isEmpty else { return }
         let visibleRows = min(options.count, 7)
-        let viewportHeight = CGFloat(visibleRows * 48 + 20)
-        let centeringPadding = max((viewportHeight - 42) / 2, 10)
+        let firstRemainingOptionIndex = options.firstIndex {
+            !$0.descriptor.isMainWorktree && !$0.isContextThread
+        }
+        let hasVisibleContextualSeparator =
+            ThreadCreationSourcePickerLayout.hasVisibleContextualSeparator(
+                firstRemainingOptionIndex: firstRemainingOptionIndex,
+                visibleOptionCount: visibleRows
+            )
+        let viewportHeight = ThreadCreationSourcePickerLayout.contentHeight(
+            optionCount: visibleRows,
+            hasContextualSeparator: hasVisibleContextualSeparator
+        )
 
         let stack = NSStackView()
         stack.translatesAutoresizingMaskIntoConstraints = true
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 6
+        stack.spacing = ThreadCreationSourcePickerLayout.standardSpacing
         stack.edgeInsets = NSEdgeInsets(
-            top: centeringPadding,
+            top: ThreadCreationSourcePickerLayout.verticalInset,
             left: 10,
-            bottom: centeringPadding,
+            bottom: ThreadCreationSourcePickerLayout.verticalInset,
             right: 10
         )
         stack.frame = NSRect(
             x: 0,
             y: 0,
             width: 400,
-            height: CGFloat(options.count * 48) + (centeringPadding * 2)
+            height: ThreadCreationSourcePickerLayout.contentHeight(
+                optionCount: options.count,
+                hasContextualSeparator: false
+            )
         )
         stack.autoresizingMask = [.width]
 
@@ -292,7 +310,10 @@ final class ThreadCreationSourcePicker: NSView {
         for option in options {
             let isPreferred = option.descriptor.isMainWorktree || option.isContextThread
             if !isPreferred, !insertedGroupSpacing, let previousButton {
-                stack.setCustomSpacing(16, after: previousButton)
+                stack.setCustomSpacing(
+                    ThreadCreationSourcePickerLayout.contextualGroupSpacing,
+                    after: previousButton
+                )
                 insertedGroupSpacing = true
             }
 
@@ -311,10 +332,10 @@ final class ThreadCreationSourcePicker: NSView {
             }
             previousButton = optionButton
         }
-        let groupSpacing: CGFloat = insertedGroupSpacing ? 10 : 0
-        stack.frame.size.height = CGFloat(options.count * 48)
-            + (centeringPadding * 2)
-            + groupSpacing
+        stack.frame.size.height = ThreadCreationSourcePickerLayout.contentHeight(
+            optionCount: options.count,
+            hasContextualSeparator: insertedGroupSpacing
+        )
 
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false

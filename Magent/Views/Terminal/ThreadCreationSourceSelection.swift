@@ -68,3 +68,29 @@ enum ThreadCreationSourcePickerScrollGeometry {
         return min(max(itemMidY - (viewportHeight / 2), 0), maximumOrigin)
     }
 }
+
+enum ThreadCreationSourcePickerLayout {
+    static let rowHeight: CGFloat = 42
+    static let standardSpacing: CGFloat = 6
+    static let contextualGroupSpacing: CGFloat = 24
+    static let verticalInset: CGFloat = 10
+
+    static func hasVisibleContextualSeparator(
+        firstRemainingOptionIndex: Int?,
+        visibleOptionCount: Int
+    ) -> Bool {
+        guard let firstRemainingOptionIndex else { return false }
+        return firstRemainingOptionIndex > 0
+            && firstRemainingOptionIndex < visibleOptionCount
+    }
+
+    static func contentHeight(optionCount: Int, hasContextualSeparator: Bool) -> CGFloat {
+        guard optionCount > 0 else { return 0 }
+        let rowHeights = CGFloat(optionCount) * rowHeight
+        let standardGaps = CGFloat(max(optionCount - 1, 0)) * standardSpacing
+        let contextualSpacing = hasContextualSeparator
+            ? contextualGroupSpacing - standardSpacing
+            : 0
+        return rowHeights + standardGaps + contextualSpacing + (verticalInset * 2)
+    }
+}

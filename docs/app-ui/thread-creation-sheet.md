@@ -8,10 +8,10 @@ The New Thread sheet is the single UI for creating from the main worktree, anoth
 - `New Thread from This Thread…` opens the same sheet with the contextual thread selected.
 - The title follows the selection: `New thread from <description>`, falling back to the branch name. The source name is accent-colored.
 - `Start from` sits immediately below the Type/Model/Reasoning controls.
-- Picker options use borderless compact thread capsules: home/thread icon, sign plus description, branch, and the section-color corner marker. They intentionally omit the sidebar status row and all live status treatments.
+- Picker options use subtly outlined compact thread capsules: home/thread icon, sign plus description, branch, and the section-color corner marker. They intentionally omit the sidebar status row and all live status treatments.
 - Leading icons follow the sidebar's `Show thread icons` setting and use the same normal-row tint: section color for sectioned threads, the app accent otherwise, and label color for Main worktree. When leading icons are hidden, Main worktree keeps its compact inline home glyph.
-- Main worktree is always first and the invoking window's current thread is second. A larger gap separates these contextual choices from the remaining threads. Pop-out windows supply their own thread as the current context.
-- Opening the picker scrolls the selected source to the vertical center, including top/bottom document padding so Main worktree and the contextual second row can be centered.
+- Main worktree is always first and the invoking window's current thread is second. A 24 pt gap separates these contextual choices from the remaining threads, with no extra leading gap. Pop-out windows supply their own thread as the current context.
+- Opening the picker scrolls the selected source to the vertical center where the available scroll range permits, clamping naturally at the beginning and end of the list.
 - Selecting a non-main source thread sets Base branch to that thread's current branch. Until Section is manually changed, it also follows the selected source thread's section.
 - Manually changing Base branch breaks the source-thread relationship and replaces the selected capsule with a synthetic Branch capsule. The new thread no longer inherits source placement or its local-file-sync snapshot.
 - Selecting a thread again restores the linked source behavior.

@@ -89,4 +89,33 @@ struct ThreadCreationSourceSelectionTests {
             contentHeight: 600
         ) == 400)
     }
+
+    @Test("Picker reserves spacing only between contextual and remaining sources")
+    func pickerContextualGroupSpacing() {
+        let withoutSeparator = ThreadCreationSourcePickerLayout.contentHeight(
+            optionCount: 4,
+            hasContextualSeparator: false
+        )
+        let withSeparator = ThreadCreationSourcePickerLayout.contentHeight(
+            optionCount: 4,
+            hasContextualSeparator: true
+        )
+
+        #expect(ThreadCreationSourcePickerLayout.verticalInset == 10)
+        #expect(ThreadCreationSourcePickerLayout.contextualGroupSpacing == 24)
+        #expect(ThreadCreationSourcePickerLayout.contextualGroupSpacing <= 32)
+        #expect(
+            withSeparator - withoutSeparator
+                == ThreadCreationSourcePickerLayout.contextualGroupSpacing
+                    - ThreadCreationSourcePickerLayout.standardSpacing
+        )
+        #expect(ThreadCreationSourcePickerLayout.hasVisibleContextualSeparator(
+            firstRemainingOptionIndex: 2,
+            visibleOptionCount: 7
+        ))
+        #expect(!ThreadCreationSourcePickerLayout.hasVisibleContextualSeparator(
+            firstRemainingOptionIndex: 7,
+            visibleOptionCount: 7
+        ))
+    }
 }
