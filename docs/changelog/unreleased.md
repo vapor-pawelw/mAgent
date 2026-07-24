@@ -67,7 +67,7 @@
 
 #### Improvements
 
-- Extended the sidebar to the top of the window around the standard macOS controls, with the current-thread strip aligned to the content area.
+- Extended the sidebar background around the standard macOS controls without covering sidebar content or moving the tab bar, and aligned the top current-thread strip to the content area.
 - Reduced the sidebar's minimum width so it takes less space on small screens.
 - Ordered stale, stopped-session, favorite, and pinned thread indicators consistently, with a clearer red stopped-session icon.
 - Moved thread signs inline before descriptions for a cleaner, more compact sidebar presentation, with signs dimming together with inactive thread text and a matching status icon identifying threads whose tmux sessions are stopped.

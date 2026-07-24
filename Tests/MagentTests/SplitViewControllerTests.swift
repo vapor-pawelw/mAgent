@@ -45,21 +45,34 @@ struct SplitViewControllerTests {
         #expect(separator.dividerIndex == 0)
     }
 
-    @Test("Main window content occupies the titlebar behind standard controls")
-    func mainWindowUsesUnifiedFullSizeChrome() {
+    @Test("Main window keeps its existing vertical toolbar layout")
+    func mainWindowPreservesVerticalToolbarLayout() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 500),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
+        window.toolbarStyle = .expanded
 
         MainWindowChromeLayout.configure(window)
 
-        #expect(window.styleMask.contains(.fullSizeContentView))
+        #expect(!window.styleMask.contains(.fullSizeContentView))
         #expect(window.titlebarAppearsTransparent)
         #expect(window.titleVisibility == .hidden)
-        #expect(window.toolbarStyle == .unified)
+        #expect(window.toolbarStyle == .expanded)
+    }
+
+    @Test("Sidebar content starts below the window-control safe area")
+    func sidebarContentUsesSafeAreaTop() {
+        let container = NSView()
+        let content = NSView()
+        let constraint = SidebarContentLayout.topConstraint(for: content, in: container)
+
+        #expect(constraint.firstItem === content)
+        #expect(constraint.firstAttribute == .top)
+        #expect(constraint.secondItem === container.safeAreaLayoutGuide)
+        #expect(constraint.secondAttribute == .top)
     }
 
     @Test("Sidebar width range supports a compact minimum on small screens")

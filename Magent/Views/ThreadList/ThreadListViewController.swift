@@ -990,10 +990,10 @@ final class ThreadListViewController: NSViewController {
 
         setupSelectedThreadJumpCapsule()
 
-        scrollViewTopConstraint = scrollView.topAnchor.constraint(equalTo: view.topAnchor)
+        scrollViewTopConstraint = SidebarContentLayout.topConstraint(for: scrollView, in: view)
 
         NSLayoutConstraint.activate([
-            stickyHeaderOverlay.topAnchor.constraint(equalTo: view.topAnchor),
+            SidebarContentLayout.topConstraint(for: stickyHeaderOverlay, in: view),
             stickyHeaderOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             stickyHeaderOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             stickyHeaderHeightConstraint,
@@ -1003,7 +1003,7 @@ final class ThreadListViewController: NSViewController {
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: diffPanelView.topAnchor),
 
-            noRepositoriesView.topAnchor.constraint(equalTo: view.topAnchor),
+            SidebarContentLayout.topConstraint(for: noRepositoriesView, in: view),
             noRepositoriesView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             noRepositoriesView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             noRepositoriesView.bottomAnchor.constraint(equalTo: diffPanelView.topAnchor),
