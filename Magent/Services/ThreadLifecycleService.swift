@@ -9,7 +9,7 @@ final class ThreadLifecycleService {
     let persistence: PersistenceService
     let tmux: TmuxService
     let git: GitService
-    private let archiveOperationGate = SerialAsyncOperationGate()
+    private let threadMutationGate: SerialAsyncOperationGate
     private let threadDisplayNumberAllocator = ThreadDisplayNumberAllocator()
 
     // MARK: - Delegate callbacks
@@ -73,12 +73,20 @@ final class ThreadLifecycleService {
 
     // MARK: - Init
 
-    init(store: ThreadStore, sessionTracker: SessionTracker, persistence: PersistenceService, tmux: TmuxService, git: GitService) {
+    init(
+        store: ThreadStore,
+        sessionTracker: SessionTracker,
+        persistence: PersistenceService,
+        tmux: TmuxService,
+        git: GitService,
+        threadMutationGate: SerialAsyncOperationGate
+    ) {
         self.store = store
         self.sessionTracker = sessionTracker
         self.persistence = persistence
         self.tmux = tmux
         self.git = git
+        self.threadMutationGate = threadMutationGate
     }
 
     // MARK: - Ghostty Surface Teardown (shared archive/delete helper)
@@ -725,7 +733,7 @@ final class ThreadLifecycleService {
         syncLocalPathsBackToRepo: Bool? = nil,
         awaitLocalSync: Bool = false
     ) async throws -> String? {
-        try await archiveOperationGate.withExclusiveAccess {
+        try await threadMutationGate.withExclusiveAccess {
             try await archiveThreadSerially(
                 thread,
                 promptForLocalSyncConflicts: promptForLocalSyncConflicts,
@@ -1031,13 +1039,18 @@ final class ThreadLifecycleService {
 
     // MARK: - Delete Thread
 
-    func deleteThread(_ thread: MagentThread) async throws {
+    func deleteThread(_ requestedThread: MagentThread) async throws {
+        try await threadMutationGate.withExclusiveAccess {
+            try await deleteThreadSerially(requestedThread)
+        }
+    }
+
+    private func deleteThreadSerially(_ requestedThread: MagentThread) async throws {
+        guard let thread = store.thread(byId: requestedThread.id) else {
+            throw ThreadManagerError.threadNotFound
+        }
         guard !thread.isMain else {
             throw ThreadManagerError.cannotDeleteMainThread
-        }
-
-        guard store.threads.contains(where: { $0.id == thread.id }) else {
-            throw ThreadManagerError.threadNotFound
         }
 
         if let ticketKey = thread.jiraTicketKey {
@@ -1052,6 +1065,7 @@ final class ThreadLifecycleService {
         guard let capturedProject = capturedSettings.projects.first(where: { $0.id == thread.projectId }) else {
             throw ThreadManagerError.projectNotFound
         }
+        cleanupRenameStateForThread?(thread.id)
         let activeWorktreeNames = worktreeActiveNames?(thread.projectId) ?? []
         let referencedSessions = referencedMagentSessionNames?() ?? []
 
@@ -1087,7 +1101,6 @@ final class ThreadLifecycleService {
         notifiedWaitingSessionsRemove?(thread.tmuxSessionNames)
         rateLimitLiftPendingResumeSessionsRemove?(thread.tmuxSessionNames)
 
-        cleanupRenameStateForThread?(thread.id)
         cleanupAgentSetupForThread?(thread.id)
 
         store.threads.removeAll { $0.id == thread.id }

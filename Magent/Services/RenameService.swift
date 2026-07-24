@@ -15,6 +15,7 @@ final class RenameService {
     let persistence: PersistenceService
     let tmux: TmuxService
     let git: GitService
+    let threadMutationGate: SerialAsyncOperationGate
 
     // MARK: - Callbacks
 
@@ -44,9 +45,18 @@ final class RenameService {
     /// Prevents concurrent rename calls for the same thread.
     var autoRenameInProgress: Set<UUID> = []
 
-    /// Tracks which threads have already shown a banner about a failed auto-rename,
-    /// so only one error banner fires per thread regardless of retry count.
-    var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
+    private lazy var renameOperationLifecycle = RenameOperationLifecycle(
+        isThreadActive: { [weak self] threadId in
+            guard let self,
+                  let thread = self.store.thread(byId: threadId) else {
+                return false
+            }
+            return self.persistence.loadSettings().projects.contains { $0.id == thread.projectId }
+        },
+        present: { message in
+            BannerManager.shared.show(message: message, style: .error)
+        }
+    )
     private var autoTabRenameOperations = TabAutoRenameOperationState()
     var autoTabRenameInProgress: Set<String> {
         autoTabRenameOperations.sessions
@@ -54,19 +64,26 @@ final class RenameService {
 
     // MARK: - Init
 
-    init(store: ThreadStore, persistence: PersistenceService, tmux: TmuxService, git: GitService) {
+    init(
+        store: ThreadStore,
+        persistence: PersistenceService,
+        tmux: TmuxService,
+        git: GitService,
+        threadMutationGate: SerialAsyncOperationGate
+    ) {
         self.store = store
         self.persistence = persistence
         self.tmux = tmux
         self.git = git
+        self.threadMutationGate = threadMutationGate
     }
 
     // MARK: - Cleanup
 
     func cleanupForThread(id threadId: UUID) {
+        renameOperationLifecycle.cancel(threadId: threadId)
         promptRenameResultCache.removeValue(forKey: threadId)
         autoRenameInProgress.remove(threadId)
-        autoRenameFailedBannerShownThreadIds.remove(threadId)
     }
 
     // MARK: - Tmux Session Rename (two-phase to avoid collisions)
@@ -428,6 +445,7 @@ final class RenameService {
         guard !currentThread.isMain else {
             throw ThreadManagerError.cannotRenameMainThread
         }
+        let renameGeneration = renameOperationLifecycle.begin(threadId: currentThread.id)
 
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPrompt.isEmpty else {
@@ -437,7 +455,14 @@ final class RenameService {
         // Show the sidebar pulse animation while the AI call is in flight,
         // matching the visual feedback given by the auto-rename path.
         autoRenameInProgress.insert(currentThread.id)
-        defer { autoRenameInProgress.remove(currentThread.id) }
+        defer {
+            if renameOperationLifecycle.isCurrent(
+                generation: renameGeneration,
+                threadId: currentThread.id
+            ) {
+                autoRenameInProgress.remove(currentThread.id)
+            }
+        }
         onThreadsChanged?()
 
         let resolvedPreferred = preferredAgent ?? effectiveAgentType?(currentThread.projectId)
@@ -466,6 +491,11 @@ final class RenameService {
             }
         }
 
+        guard renameOperationLifecycle.isCurrentAndActive(
+            generation: renameGeneration,
+            threadId: currentThread.id
+        ) else { return false }
+
         let slug: String
         let generatedTaskDescription: GeneratedTaskDescription?
         switch payloadResult {
@@ -481,11 +511,22 @@ final class RenameService {
             var didRename = false
             for candidate in candidates {
                 do {
-                    try await renameThread(currentThread, to: candidate, markFirstPromptRenameHandled: false)
+                    try await renameThread(
+                        currentThread,
+                        to: candidate,
+                        markFirstPromptRenameHandled: false,
+                        expectedGeneration: renameGeneration
+                    )
                     didRename = true
                     break
                 } catch ThreadManagerError.duplicateName {
                     continue
+                } catch {
+                    guard renameOperationLifecycle.isCurrentAndActive(
+                        generation: renameGeneration,
+                        threadId: currentThread.id
+                    ) else { return false }
+                    throw error
                 }
             }
             if !didRename, renameDescription || renameIcon {
@@ -515,10 +556,35 @@ final class RenameService {
     func renameThread(
         _ thread: MagentThread,
         to newName: String,
-        markFirstPromptRenameHandled: Bool = true
+        markFirstPromptRenameHandled: Bool = true,
+        expectedGeneration: UUID? = nil
+    ) async throws {
+        try await threadMutationGate.withExclusiveAccess {
+            try await renameThreadSerially(
+                thread,
+                to: newName,
+                markFirstPromptRenameHandled: markFirstPromptRenameHandled,
+                expectedGeneration: expectedGeneration
+            )
+        }
+    }
+
+    private func renameThreadSerially(
+        _ thread: MagentThread,
+        to newName: String,
+        markFirstPromptRenameHandled: Bool,
+        expectedGeneration: UUID?
     ) async throws {
         guard let currentThread = store.thread(byId: thread.id) else {
             throw ThreadManagerError.threadNotFound
+        }
+        if let expectedGeneration {
+            guard renameOperationLifecycle.isCurrentAndActive(
+                generation: expectedGeneration,
+                threadId: currentThread.id
+            ) else {
+                throw ThreadManagerError.threadNotFound
+            }
         }
 
         let trimmed = newName.trimmingCharacters(in: .whitespaces)
@@ -641,6 +707,7 @@ final class RenameService {
         guard persistence.loadSettings().autoRenameBranches else { return false }
         guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return false }
         let thread = store.threads[index]
+        let renameGeneration = renameOperationLifecycle.begin(threadId: thread.id)
 
         guard !thread.isMain else { return false }
         guard !thread.didAutoRenameFromFirstPrompt else { return false }
@@ -656,7 +723,14 @@ final class RenameService {
         // Lock before the first await so concurrent TOC-refresh callbacks cannot
         // both slip through the guard above and start duplicate AI calls.
         autoRenameInProgress.insert(thread.id)
-        defer { autoRenameInProgress.remove(thread.id) }
+        defer {
+            if renameOperationLifecycle.isCurrent(
+                generation: renameGeneration,
+                threadId: thread.id
+            ) {
+                autoRenameInProgress.remove(thread.id)
+            }
+        }
 
         // If the current git branch was already renamed to a custom value
         // (for example outside Magent), skip first-prompt auto-rename and
@@ -710,19 +784,32 @@ final class RenameService {
             }
         }
 
+        guard renameOperationLifecycle.isCurrentAndActive(
+            generation: renameGeneration,
+            threadId: refreshedThread.id
+        ) else { return false }
+
         guard let resolvedSlug = slug else {
             // All agents failed; mark handled and let separate description path run as fallback.
             markFirstPromptAutoRenameHandled(threadId: refreshedThread.id)
-            // No diagnostic surfaced here — auto-rename failures show via the
-            // autoRenameFailedBannerShownThreadIds banner path below.
             return false
         }
+
+        guard renameOperationLifecycle.isCurrentAndActive(
+            generation: renameGeneration,
+            threadId: refreshedThread.id
+        ) else { return false }
 
         let candidates = renameCandidates(from: resolvedSlug)
 
         for candidate in candidates where candidate != refreshedThread.branchName {
             do {
-                try await renameThread(refreshedThread, to: candidate, markFirstPromptRenameHandled: true)
+                try await renameThread(
+                    refreshedThread,
+                    to: candidate,
+                    markFirstPromptRenameHandled: true,
+                    expectedGeneration: renameGeneration
+                )
                 _ = await applyGeneratedRenameMetadataIfNeeded(
                     threadId: refreshedThread.id,
                     generatedTaskDescription: generatedTaskDescription,
@@ -732,21 +819,32 @@ final class RenameService {
             } catch ThreadManagerError.duplicateName {
                 continue
             } catch {
-                if !autoRenameFailedBannerShownThreadIds.contains(refreshedThread.id) {
-                    autoRenameFailedBannerShownThreadIds.insert(refreshedThread.id)
-                    await MainActor.run {
-                        BannerManager.shared.show(
-                            message: "Auto-rename failed for \"\(refreshedThread.name)\": \(error.localizedDescription)",
-                            style: .error
-                        )
-                    }
-                }
+                await reportAutoRenameFailureIfNeeded(
+                    error,
+                    for: refreshedThread,
+                    generation: renameGeneration
+                )
                 return false
             }
         }
 
         // Rename was requested but no candidate was usable; allow fallback description path.
         return false
+    }
+
+    private func reportAutoRenameFailureIfNeeded(
+        _ error: Error,
+        for thread: MagentThread,
+        generation: UUID
+    ) async {
+        let message = "Auto-rename failed for \"\(thread.name)\": \(error.localizedDescription)"
+        await MainActor.run {
+            self.renameOperationLifecycle.presentIfNeeded(
+                message: message,
+                threadId: thread.id,
+                generation: generation
+            )
+        }
     }
 
     /// Strips the "DRAFT: " prefix from the thread's task description when draft tabs are consumed.

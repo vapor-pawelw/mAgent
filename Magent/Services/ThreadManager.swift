@@ -58,6 +58,7 @@ final class ThreadManager {
 
     let store = ThreadStore()
     let sessionTracker = SessionTracker()
+    private let threadMutationGate = SerialAsyncOperationGate()
 
     // MARK: - Extracted service containers (Phase 2)
 
@@ -331,7 +332,13 @@ final class ThreadManager {
     // MARK: - Extracted service containers (Phase 6)
 
     lazy var renameService: RenameService = {
-        let svc = RenameService(store: store, persistence: persistence, tmux: tmux, git: git)
+        let svc = RenameService(
+            store: store,
+            persistence: persistence,
+            tmux: tmux,
+            git: git,
+            threadMutationGate: threadMutationGate
+        )
         svc.onThreadsChanged = { [weak self] in
             guard let self else { return }
             self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
@@ -375,7 +382,14 @@ final class ThreadManager {
     }()
 
     lazy var threadLifecycleService: ThreadLifecycleService = {
-        let svc = ThreadLifecycleService(store: store, sessionTracker: sessionTracker, persistence: persistence, tmux: tmux, git: git)
+        let svc = ThreadLifecycleService(
+            store: store,
+            sessionTracker: sessionTracker,
+            persistence: persistence,
+            tmux: tmux,
+            git: git,
+            threadMutationGate: threadMutationGate
+        )
         svc.onThreadsChanged = { [weak self] in
             guard let self else { return }
             self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
@@ -760,10 +774,6 @@ final class ThreadManager {
     }
     var autoTabRenameInProgress: Set<String> {
         renameService.autoTabRenameInProgress
-    }
-    var autoRenameFailedBannerShownThreadIds: Set<UUID> {
-        get { renameService.autoRenameFailedBannerShownThreadIds }
-        set { renameService.autoRenameFailedBannerShownThreadIds = newValue }
     }
     var promptRenameResultCache: [UUID: [String: CachedRenameResult]] {
         get { renameService.promptRenameResultCache }
