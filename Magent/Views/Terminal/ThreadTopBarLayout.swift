@@ -28,6 +28,20 @@ enum ThreadTabIdentity: Hashable {
     }
 }
 
+enum TabAutoRenamePresentation {
+    static func usesPrimaryTitleColor(isAutoRenaming: Bool) -> Bool {
+        isAutoRenaming
+    }
+
+    static func shouldAnimate(
+        isAutoRenaming: Bool,
+        isAttachedToWindow: Bool,
+        reduceMotion: Bool
+    ) -> Bool {
+        isAutoRenaming && isAttachedToWindow && !reduceMotion
+    }
+}
+
 struct ThreadTopBarLayout {
     enum Item: Equatable {
         case addTab

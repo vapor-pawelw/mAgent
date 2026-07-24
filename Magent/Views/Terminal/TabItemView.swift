@@ -89,6 +89,13 @@ final class TabItemView: NSView, NSMenuDelegate {
     var isUtilityTab: Bool = false {
         didSet { updateAppearance() }
     }
+    var isAutoRenaming: Bool = false {
+        didSet {
+            guard oldValue != isAutoRenaming else { return }
+            updateAppearance()
+            updateRenamePulseAnimation()
+        }
+    }
     var suppressContextMenu: Bool = false
     var suppressBulkCloseActions: Bool = false
     var suppressCloseThisAction: Bool = false
@@ -134,6 +141,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         updateBusyBorderAnimation()
+        updateRenamePulseAnimation()
     }
 
     override func layout() {
@@ -253,6 +261,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         titleLabel.drawsBackground = false
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.wantsLayer = true
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close Tab")
@@ -324,6 +333,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         super.viewDidChangeEffectiveAppearance()
         updateAppearance()
         updateBusyBorderAnimation()
+        updateRenamePulseAnimation()
     }
 
     private func updateBusyBorderAnimation() {
@@ -355,6 +365,28 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     func refreshPrimaryColor() {
         updateAppearance()
+        updateRenamePulseAnimation()
+    }
+
+    private static let renamePulseAnimationKey = "tab-title-rename-pulse"
+
+    private func updateRenamePulseAnimation() {
+        titleLabel.layer?.removeAnimation(forKey: Self.renamePulseAnimationKey)
+        titleLabel.layer?.opacity = 1
+        guard TabAutoRenamePresentation.shouldAnimate(
+            isAutoRenaming: isAutoRenaming,
+            isAttachedToWindow: window != nil,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        ) else { return }
+
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = 1.0
+        animation.toValue = 0.3
+        animation.autoreverses = true
+        animation.duration = 1.2
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        titleLabel.layer?.add(animation, forKey: Self.renamePulseAnimationKey)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -480,7 +512,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         detachedIcon.isHidden = !isDetached
 
         let titleColor: NSColor
-        if hasUnreadRateLimit && !isSelected {
+        if TabAutoRenamePresentation.usesPrimaryTitleColor(isAutoRenaming: isAutoRenaming) {
+            titleColor = NSColor.appPrimary
+            titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        } else if hasUnreadRateLimit && !isSelected {
             titleColor = .systemRed
             titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         } else if hasUnreadDiff && !isSelected {

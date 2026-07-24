@@ -142,6 +142,60 @@ struct AutomaticTabNamingTests {
         #expect(!TabNameAllocator.shouldAttemptAutoRename(thread: thread, sessionName: sessionName))
     }
 
+    @Test("Suffixed default labels on additional tabs remain eligible")
+    func suffixedDefaultLabelIsEligible() {
+        let firstSession = "ma-project-codex"
+        let secondSession = "ma-project-codex-2"
+        let thread = MagentThread(
+            projectId: UUID(),
+            name: "main",
+            worktreePath: "/tmp/project",
+            branchName: "main",
+            tmuxSessionNames: [firstSession, secondSession],
+            agentTmuxSessions: [firstSession, secondSession],
+            sessionAgentTypes: [firstSession: .codex, secondSession: .codex],
+            customTabNames: [
+                firstSession: "Codex",
+                secondSession: "Codex-1",
+            ]
+        )
+
+        #expect(TabNameAllocator.shouldAttemptAutoRename(thread: thread, sessionName: secondSession))
+    }
+
+    @Test("Restored suffixed default remains eligible without a stored agent type")
+    func restoredSuffixedDefaultLabelIsEligible() {
+        let sessionName = "ma-project-codex-2"
+        let thread = MagentThread(
+            projectId: UUID(),
+            name: "main",
+            worktreePath: "/tmp/project",
+            branchName: "main",
+            tmuxSessionNames: [sessionName],
+            agentTmuxSessions: [sessionName],
+            customTabNames: [sessionName: "Codex-1"]
+        )
+
+        #expect(TabNameAllocator.shouldAttemptAutoRename(thread: thread, sessionName: sessionName))
+    }
+
+    @Test("Tab auto-rename operation follows a renamed tmux session")
+    func tabAutoRenameOperationSessionRemapping() throws {
+        var state = TabAutoRenameOperationState()
+        let startedOperationId = state.start(sessionName: "old-session")
+        let operationId = try #require(startedOperationId)
+
+        let changes = state.remap(sessionRenameMap: ["old-session": "new-session"])
+
+        #expect(changes.count == 1)
+        #expect(changes.first?.old == "old-session")
+        #expect(changes.first?.new == "new-session")
+        #expect(state.sessions == ["new-session"])
+        #expect(state.sessionName(operationId: operationId) == "new-session")
+        #expect(state.finish(operationId: operationId) == "new-session")
+        #expect(state.sessions.isEmpty)
+    }
+
     @Test("Defaults to enabled for existing settings")
     func missingPreferenceDefaultsToEnabled() throws {
         let settings = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"projects":[]}"#.utf8))
@@ -544,6 +598,20 @@ struct TmuxSessionNamingTests {
         #expect(TmuxSessionNaming.looksLikeDefaultTabName("Claude (Sonnet 4.6)", for: .claude))
         #expect(TmuxSessionNaming.looksLikeDefaultTabName("Claude (Sonnet 4.6, H)", for: .claude))
         #expect(TmuxSessionNaming.looksLikeDefaultTabName("Codex (5.3-codex)", for: .codex))
+    }
+
+    @Test("Allocator suffix matching stays separate from migration-safe defaults")
+    func allocatorSuffixMatcherIsExplicit() {
+        #expect(!TmuxSessionNaming.looksLikeDefaultTabName("Claude-1", for: .claude))
+        #expect(TmuxSessionNaming.looksLikeAllocatorSuffixedDefaultTabName("Claude-1", for: .claude))
+        #expect(TmuxSessionNaming.looksLikeAllocatorSuffixedDefaultTabName(
+            "Codex (5.6-sol, M)-2",
+            for: .codex
+        ))
+        #expect(!TmuxSessionNaming.looksLikeAllocatorSuffixedDefaultTabName(
+            "Codex notes-2",
+            for: .codex
+        ))
     }
 
     @Test("looksLikeDefaultTabName rejects human-meaningful names")

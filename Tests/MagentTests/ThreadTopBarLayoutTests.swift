@@ -73,6 +73,27 @@ struct ThreadTopBarLayoutTests {
         )
     }
 
+    @Test("Automatic tab naming uses primary color and respects Reduce Motion")
+    func autoRenameFeedbackPresentation() {
+        #expect(TabAutoRenamePresentation.usesPrimaryTitleColor(isAutoRenaming: true))
+        #expect(!TabAutoRenamePresentation.usesPrimaryTitleColor(isAutoRenaming: false))
+        #expect(TabAutoRenamePresentation.shouldAnimate(
+            isAutoRenaming: true,
+            isAttachedToWindow: true,
+            reduceMotion: false
+        ))
+        #expect(!TabAutoRenamePresentation.shouldAnimate(
+            isAutoRenaming: true,
+            isAttachedToWindow: true,
+            reduceMotion: true
+        ))
+        #expect(!TabAutoRenamePresentation.shouldAnimate(
+            isAutoRenaming: true,
+            isAttachedToWindow: false,
+            reduceMotion: false
+        ))
+    }
+
     @Test("Sixteen-point separation follows the visible scroll control")
     func minimumSpacing() {
         let withoutArrows = ThreadTopBarLayout.userToFixedSpacing(

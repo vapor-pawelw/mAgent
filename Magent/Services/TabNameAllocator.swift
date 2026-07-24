@@ -1,6 +1,39 @@
 import Foundation
 import MagentCore
 
+struct TabAutoRenameOperationState {
+    private var sessionByOperation: [UUID: String] = [:]
+
+    var sessions: Set<String> {
+        Set(sessionByOperation.values)
+    }
+
+    mutating func start(sessionName: String) -> UUID? {
+        guard !sessions.contains(sessionName) else { return nil }
+        let operationId = UUID()
+        sessionByOperation[operationId] = sessionName
+        return operationId
+    }
+
+    mutating func finish(operationId: UUID) -> String? {
+        sessionByOperation.removeValue(forKey: operationId)
+    }
+
+    func sessionName(operationId: UUID) -> String? {
+        sessionByOperation[operationId]
+    }
+
+    mutating func remap(sessionRenameMap: [String: String]) -> [(old: String, new: String)] {
+        let changes = sessionByOperation.compactMap { operationId, oldSessionName in
+            sessionRenameMap[oldSessionName].map { (operationId, oldSessionName, $0) }
+        }
+        for (operationId, _, newSessionName) in changes {
+            sessionByOperation[operationId] = newSessionName
+        }
+        return changes.map { (old: $0.1, new: $0.2) }
+    }
+}
+
 // MARK: - TabNameAllocator
 
 /// Pure logic for allocating a unique tab display name.
@@ -12,12 +45,26 @@ enum TabNameAllocator {
 
     static func shouldAttemptAutoRename(thread: MagentThread, sessionName: String) -> Bool {
         guard thread.tmuxSessionNames.contains(sessionName) else { return false }
-        return TmuxSessionNaming.isPromptBasedTabRenameEligible(
+        let agentType = thread.sessionAgentTypes[sessionName]
+        if TmuxSessionNaming.isPromptBasedTabRenameEligible(
             currentName: thread.customTabNames[sessionName],
-            agentType: thread.sessionAgentTypes[sessionName],
+            agentType: agentType,
             isManuallyRenamed: thread.manuallyRenamedTabs.contains(sessionName),
             isRenameInProgress: false
-        )
+        ) {
+            return true
+        }
+        guard !thread.manuallyRenamedTabs.contains(sessionName),
+              let currentName = thread.customTabNames[sessionName] else { return false }
+        if let agentType {
+            return TmuxSessionNaming.looksLikeAllocatorSuffixedDefaultTabName(
+                currentName,
+                for: agentType
+            )
+        }
+        return [AgentType.claude, .codex, .custom].contains {
+            TmuxSessionNaming.looksLikeAllocatorSuffixedDefaultTabName(currentName, for: $0)
+        }
     }
 
     static func sanitizedGeneratedName(_ raw: String) -> String? {

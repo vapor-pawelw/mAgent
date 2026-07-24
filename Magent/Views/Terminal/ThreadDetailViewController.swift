@@ -457,6 +457,12 @@ final class ThreadDetailViewController: NSViewController {
         )
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(handleTabAutoRenameStateChanged(_:)),
+            name: .magentTabAutoRenameStateChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(handleDiffFileCountChanged(_:)),
             name: .magentDiffFileCountChanged,
             object: nil
@@ -1844,6 +1850,14 @@ final class ThreadDetailViewController: NSViewController {
 
         popOutThreadButton.isHidden = !shouldShowTopBarPopOutButton()
         refreshHeaderInfoStrip()
+    }
+
+    @objc private func handleTabAutoRenameStateChanged(_ notification: Notification) {
+        guard let sessionName = notification.userInfo?["sessionName"] as? String,
+              let isInProgress = notification.userInfo?["isInProgress"] as? Bool,
+              let index = tabSlots.firstIndex(of: .terminal(sessionName: sessionName)),
+              tabItems.indices.contains(index) else { return }
+        tabItems[index].isAutoRenaming = isInProgress
     }
 
     @objc private func handleSettingsChanged(_ notification: Notification) {

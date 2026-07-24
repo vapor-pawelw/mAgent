@@ -621,6 +621,7 @@ extension ThreadDetailViewController {
             let item = tabItems[i]
             let identity = slot.identity(permanentTerminalSessionName: permanentTerminalSessionName)
             let isPermanent = identity.isPermanent
+            item.isAutoRenaming = false
             item.onSelect = { [weak self] in self?.selectTab(at: i) }
             item.onClose = { [weak self] in self?.closeTab(at: i) }
             item.onForceClose = { [weak self] in self?.forceCloseTab(at: i) }
@@ -641,6 +642,7 @@ extension ThreadDetailViewController {
 
             switch slot {
             case .terminal(let sessionName):
+                item.isAutoRenaming = threadManager.autoTabRenameInProgress.contains(sessionName)
                 let isPrimaryTerminal: Bool
                 if case .permanentTerminal = identity {
                     isPrimaryTerminal = true
