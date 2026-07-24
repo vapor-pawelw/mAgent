@@ -190,8 +190,11 @@ final class JiraIntegrationService {
                 // which is the documented contract for the toggle.
                 if store.threads[i].syncWithJira {
                     let trimmed = cached.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty, store.threads[i].taskDescription != trimmed {
+                    if !trimmed.isEmpty,
+                       store.threads[i].taskDescription != trimmed
+                        || store.threads[i].taskDescriptionIsProvisional {
                         store.threads[i].taskDescription = trimmed
+                        store.threads[i].taskDescriptionIsProvisional = false
                         persistentChanged = true
                     }
                     if let p = cached.priority, (1...5).contains(p), store.threads[i].priority != p {

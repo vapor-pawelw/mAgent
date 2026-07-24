@@ -539,6 +539,11 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var displayOrder: Int
     public var jiraTicketKey: String?
     public var taskDescription: String?
+    public var taskDescriptionIsProvisional: Bool
+    public var threadDisplayNumber: Int?
+    public var canReplaceTaskDescriptionAutomatically: Bool {
+        taskDescription == nil || taskDescriptionIsProvisional
+    }
     public var threadIcon: ThreadIcon
     public var isThreadIconManuallySet: Bool
     /// Persisted per-session history of TOC-confirmed prompts (newest at end).
@@ -907,6 +912,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case displayOrder
         case jiraTicketKey
         case taskDescription
+        case taskDescriptionIsProvisional
+        case threadDisplayNumber
         case threadIcon
         case isThreadIconManuallySet
         case submittedPromptsBySession
@@ -965,6 +972,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         displayOrder: Int = 0,
         jiraTicketKey: String? = nil,
         taskDescription: String? = nil,
+        taskDescriptionIsProvisional: Bool = false,
+        threadDisplayNumber: Int? = nil,
         threadIcon: ThreadIcon = .other,
         isThreadIconManuallySet: Bool = false,
         submittedPromptsBySession: [String: [String]] = [:],
@@ -1019,6 +1028,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.displayOrder = displayOrder
         self.jiraTicketKey = jiraTicketKey
         self.taskDescription = taskDescription
+        self.taskDescriptionIsProvisional = taskDescriptionIsProvisional
+        self.threadDisplayNumber = threadDisplayNumber
         self.threadIcon = threadIcon
         self.isThreadIconManuallySet = isThreadIconManuallySet
         self.submittedPromptsBySession = submittedPromptsBySession
@@ -1097,6 +1108,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             displayOrder: displayOrder,
             jiraTicketKey: jiraTicketKey,
             taskDescription: taskDescription,
+            taskDescriptionIsProvisional: taskDescriptionIsProvisional,
+            threadDisplayNumber: threadDisplayNumber,
             threadIcon: threadIcon,
             isThreadIconManuallySet: isThreadIconManuallySet,
             submittedPromptsBySession: submittedPromptsBySession,
@@ -1174,6 +1187,11 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         displayOrder = try container.decodeIfPresent(Int.self, forKey: .displayOrder) ?? 0
         jiraTicketKey = try container.decodeIfPresent(String.self, forKey: .jiraTicketKey)
         taskDescription = try container.decodeIfPresent(String.self, forKey: .taskDescription)
+        taskDescriptionIsProvisional = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .taskDescriptionIsProvisional
+        ) ?? false
+        threadDisplayNumber = try container.decodeIfPresent(Int.self, forKey: .threadDisplayNumber)
         threadIcon = try container.decodeIfPresent(ThreadIcon.self, forKey: .threadIcon) ?? .other
         isThreadIconManuallySet = try container.decodeIfPresent(Bool.self, forKey: .isThreadIconManuallySet)
             ?? (threadIcon != .other)
@@ -1279,6 +1297,10 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(displayOrder, forKey: .displayOrder)
         try container.encodeIfPresent(jiraTicketKey, forKey: .jiraTicketKey)
         try container.encodeIfPresent(taskDescription, forKey: .taskDescription)
+        if taskDescriptionIsProvisional {
+            try container.encode(taskDescriptionIsProvisional, forKey: .taskDescriptionIsProvisional)
+        }
+        try container.encodeIfPresent(threadDisplayNumber, forKey: .threadDisplayNumber)
         try container.encode(threadIcon, forKey: .threadIcon)
         try container.encode(isThreadIconManuallySet, forKey: .isThreadIconManuallySet)
         if !submittedPromptsBySession.isEmpty {

@@ -412,6 +412,12 @@ final class AppCoordinator {
         merged.displayOrder = min(canonical.displayOrder, duplicate.displayOrder)
         merged.jiraTicketKey = preferredOptional(primary: canonical.jiraTicketKey, secondary: duplicate.jiraTicketKey)
         merged.taskDescription = preferredOptional(primary: canonical.taskDescription, secondary: duplicate.taskDescription)
+        if canonical.taskDescription != nil {
+            merged.taskDescriptionIsProvisional = canonical.taskDescriptionIsProvisional
+        } else {
+            merged.taskDescriptionIsProvisional = duplicate.taskDescriptionIsProvisional
+        }
+        merged.threadDisplayNumber = canonical.threadDisplayNumber ?? duplicate.threadDisplayNumber
         merged.localFileSyncEntriesSnapshot = canonical.localFileSyncEntriesSnapshot ?? duplicate.localFileSyncEntriesSnapshot
         merged.hasEverDoneWork = canonical.hasEverDoneWork || duplicate.hasEverDoneWork
         merged.signEmoji = preferredOptional(primary: canonical.signEmoji, secondary: duplicate.signEmoji)

@@ -368,9 +368,11 @@ final class RenameService {
     ) async -> Bool {
         guard let generatedTaskDescription else { return false }
         guard let currentIndex = store.threads.firstIndex(where: { $0.id == threadId }) else { return false }
-        // Skip if description already exists — unless this is a manual rename that
-        // should always update the description to match the new branch name.
-        guard forceOverwrite || store.threads[currentIndex].taskDescription == nil else { return false }
+        // Prompt previews and numbered fallbacks are placeholders, so automatic
+        // naming may replace them just like an absent description.
+        guard forceOverwrite
+            || store.threads[currentIndex].canReplaceTaskDescriptionAutomatically
+        else { return false }
 
         var didApply = false
         if applyDescription {
@@ -379,6 +381,7 @@ final class RenameService {
                 ? Self.draftDescriptionPrefix + generatedTaskDescription.description
                 : generatedTaskDescription.description
             store.threads[currentIndex].taskDescription = description
+            store.threads[currentIndex].taskDescriptionIsProvisional = false
             didApply = true
         }
         if applyIcon {
@@ -902,7 +905,9 @@ final class RenameService {
         let thread = store.threads[index]
 
         guard !thread.isMain else { return nil }
-        if !overwriteExisting, thread.taskDescription != nil { return nil }
+        if !overwriteExisting, !thread.canReplaceTaskDescriptionAutomatically {
+            return nil
+        }
 
         let settings = persistence.loadSettings()
         let shouldAutoSetIcon = settings.autoSetThreadIconFromWorkType
@@ -922,6 +927,7 @@ final class RenameService {
                     ? Self.draftDescriptionPrefix + generated.description
                     : generated.description
                 store.threads[currentIndex].taskDescription = description
+                store.threads[currentIndex].taskDescriptionIsProvisional = false
                 if shouldAutoSetIcon, !store.threads[currentIndex].isThreadIconManuallySet {
                     store.threads[currentIndex].threadIcon = generated.suggestedIcon
                 }
@@ -968,6 +974,7 @@ final class RenameService {
         }
 
         store.threads[index].taskDescription = finalDescription
+        store.threads[index].taskDescriptionIsProvisional = false
         try persistence.saveActiveThreads(store.threads)
         onThreadsChanged?()
     }
@@ -1025,8 +1032,9 @@ final class RenameService {
 
         if enabled, let cached = store.threads[index].verifiedJiraTicket {
             let trimmed = cached.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty, store.threads[index].taskDescription != trimmed {
+            if !trimmed.isEmpty {
                 store.threads[index].taskDescription = trimmed
+                store.threads[index].taskDescriptionIsProvisional = false
             }
             if let p = cached.priority, (1...5).contains(p), store.threads[index].priority != p {
                 store.threads[index].priority = p
