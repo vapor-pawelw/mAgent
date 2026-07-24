@@ -92,11 +92,13 @@
 - Right-clicking a section header with one or more assigned threads shows **Archive All Threads...**.
 - Empty section headers do not show the bulk archive action.
 - Each thread still goes through the normal archive flow, including dirty-worktree protection and local-sync conflict handling.
+- Archive requests wait their turn, so bulk archive cannot run Local Sync, persistence writes, or git worktree cleanup concurrently.
 
 ### Implementation Notes
 
 - `SidebarSection.hasArchivableThreads` controls whether the context menu item is shown.
 - `archiveSectionThreads(_:)` in `ThreadListViewController+ContextMenu.swift` snapshots the section's `threads` array and calls the same `triggerArchive(for:)` path used by individual thread archive actions.
+- `ThreadLifecycleService.archiveThread` serializes those independently submitted tasks through `SerialAsyncOperationGate` and re-resolves each live thread after it reaches the front of the queue.
 
 ---
 

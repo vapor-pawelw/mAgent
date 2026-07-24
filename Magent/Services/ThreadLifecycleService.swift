@@ -9,6 +9,7 @@ final class ThreadLifecycleService {
     let persistence: PersistenceService
     let tmux: TmuxService
     let git: GitService
+    private let archiveOperationGate = SerialAsyncOperationGate()
 
     // MARK: - Delegate callbacks
 
@@ -689,10 +690,9 @@ final class ThreadLifecycleService {
     /// - Parameters:
     ///   - awaitLocalSync: When `true`, local-file sync runs eagerly (off the main actor
     ///     but awaited) so the result/warning can be returned to the caller. When `false`
-    ///     and `force` is `true`, the sync is deferred to a fire-and-forget background
-    ///     task and the method returns immediately after UI teardown. IPC callers pass
-    ///     `true` so the CLI can report sync warnings; UI callers leave it `false` for
-    ///     snappy interaction.
+    ///     and `force` is `true`, the sync is deferred until after UI teardown and runs
+    ///     during off-main-actor cleanup. IPC callers pass `true` so the CLI can report
+    ///     sync warnings; UI callers leave it `false` so the thread can disappear first.
     func archiveThread(
         _ thread: MagentThread,
         promptForLocalSyncConflicts: Bool = false,
@@ -701,6 +701,29 @@ final class ThreadLifecycleService {
         syncLocalPathsBackToRepo: Bool? = nil,
         awaitLocalSync: Bool = false
     ) async throws -> String? {
+        try await archiveOperationGate.withExclusiveAccess {
+            try await archiveThreadSerially(
+                thread,
+                promptForLocalSyncConflicts: promptForLocalSyncConflicts,
+                force: force,
+                forceCommitMessage: forceCommitMessage,
+                syncLocalPathsBackToRepo: syncLocalPathsBackToRepo,
+                awaitLocalSync: awaitLocalSync
+            )
+        }
+    }
+
+    private func archiveThreadSerially(
+        _ requestedThread: MagentThread,
+        promptForLocalSyncConflicts: Bool,
+        force: Bool,
+        forceCommitMessage: String?,
+        syncLocalPathsBackToRepo: Bool?,
+        awaitLocalSync: Bool
+    ) async throws -> String? {
+        guard let thread = store.threads.first(where: { $0.id == requestedThread.id && !$0.isArchived }) else {
+            throw ThreadManagerError.threadNotFound
+        }
         guard !thread.isMain else {
             throw ThreadManagerError.cannotDeleteMainThread
         }
@@ -815,7 +838,7 @@ final class ThreadLifecycleService {
         rateLimitLiftPendingResumeSessionsRemove?(thread.tmuxSessionNames)
 
         // Free every ghostty surface for this thread (cache, pop-out windows) BEFORE
-        // the cleanup task kills the tmux sessions. Ghostty calls _exit() when a PTY
+        // the cleanup phase kills the tmux sessions. Ghostty calls _exit() when a PTY
         // fd closes on a live surface, silently terminating the entire process.
         releaseLivingGhosttySurfaces(for: thread)
 
@@ -831,8 +854,8 @@ final class ThreadLifecycleService {
         let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "Unknown Project"
         showArchivedThreadBanner(for: thread, projectName: projectName, warning: archiveWarning)
 
-        // ── Fire-and-forget cleanup (local sync for deferred path, tmux     ──
-        // ── kills, worktree removal, symlink/stale-session sweeps).         ──
+        // Keep cleanup inside the archive gate. The work runs off the main actor,
+        // while later archive requests wait instead of racing on shared git state.
         let capturedProject = settings.projects.first(where: { $0.id == thread.projectId })
         let capturedTmux = tmux
         let capturedGit = git
@@ -842,21 +865,19 @@ final class ThreadLifecycleService {
         let capturedThreadName = thread.name
         let capturedTmuxSessionNames = thread.tmuxSessionNames
         let capturedWorktreePath = thread.worktreePath
-        Task {
-            await Self.performArchiveCleanup(
-                deferredSyncDestination: deferredSyncDestination,
-                deferredSyncPaths: deferredSyncPaths,
-                project: capturedProject,
-                worktreePath: capturedWorktreePath,
-                threadName: capturedThreadName,
-                tmuxSessionNames: capturedTmuxSessionNames,
-                tmux: capturedTmux,
-                git: capturedGit,
-                settings: capturedSettings,
-                activeWorktreeNames: capturedActiveWorktreeNames,
-                referencedSessions: capturedReferencedSessions
-            )
-        }
+        await Self.performArchiveCleanup(
+            deferredSyncDestination: deferredSyncDestination,
+            deferredSyncPaths: deferredSyncPaths,
+            project: capturedProject,
+            worktreePath: capturedWorktreePath,
+            threadName: capturedThreadName,
+            tmuxSessionNames: capturedTmuxSessionNames,
+            tmux: capturedTmux,
+            git: capturedGit,
+            settings: capturedSettings,
+            activeWorktreeNames: capturedActiveWorktreeNames,
+            referencedSessions: capturedReferencedSessions
+        )
 
         archiveCompleted = true
         return archiveWarning
@@ -1262,7 +1283,7 @@ final class ThreadLifecycleService {
         activeWorktreeNames: Set<String>,
         referencedSessions: Set<String>
     ) async {
-        // Deferred local sync for fire-and-forget path — best-effort, warning on failure.
+        // Deferred local sync after UI teardown — best-effort, warning on failure.
         if let syncPaths = deferredSyncPaths, !syncPaths.isEmpty,
            let deferredSyncDestination {
             do {
