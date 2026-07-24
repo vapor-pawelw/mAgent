@@ -24,33 +24,45 @@ enum PromptTOCOrdinalBadgeStyle {
     }
 }
 
-enum PromptTOCLatestBadgeStyle {
-    static func backgroundColor(isDarkAppearance: Bool) -> NSColor {
-        guard !isDarkAppearance else { return .systemGreen }
-        return NSColor.systemGreen.blended(withFraction: 0.30, of: .black) ?? .systemGreen
-    }
-
-    static func textColor(isDarkAppearance: Bool) -> NSColor {
-        isDarkAppearance ? .black : .white
-    }
-}
-
 struct PromptTOCRowPresentation: Equatable {
     let ordinalText: String
     let promptText: String
     let promptFontSize: CGFloat
     let maximumPromptLines: Int
     let ordinalBadgeWidth: CGFloat
-    let showsLatestMarker: Bool
 
-    init(entryIndex: Int, promptText: String, isPinned: Bool, isLatest: Bool = false) {
+    init(entryIndex: Int, promptText: String, isPinned: Bool) {
         let ordinalText = "\(entryIndex + 1)"
         self.ordinalText = ordinalText
         self.promptText = promptText
         self.promptFontSize = isPinned ? 12 : 11
         self.maximumPromptLines = isPinned ? 5 : 3
         self.ordinalBadgeWidth = PromptTOCOrdinalBadgeStyle.width(for: ordinalText)
-        self.showsLatestMarker = isLatest
+    }
+}
+
+enum PromptTOCListPresentation {
+    static func displayEntryIndexes(entryCount: Int) -> [Int] {
+        Array((0..<max(0, entryCount)).reversed())
+    }
+
+    static func selectedEntryIndex(previousSelection: Int?, entryCount: Int) -> Int? {
+        guard entryCount > 0 else { return nil }
+        if let previousSelection, previousSelection >= 0, previousSelection < entryCount {
+            return previousSelection
+        }
+        return entryCount - 1
+    }
+
+    static func isAtNewestEdge(offsetY: CGFloat, tolerance: CGFloat) -> Bool {
+        offsetY <= tolerance
+    }
+
+    static func preservedOlderOffset(
+        previousOffsetY: CGFloat,
+        insertedContentHeight: CGFloat
+    ) -> CGFloat {
+        previousOffsetY + max(0, insertedContentHeight)
     }
 }
 

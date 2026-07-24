@@ -89,22 +89,53 @@ struct PromptTOCPresentationStateTests {
         #expect(floating.promptFontSize == 11)
         #expect(floating.maximumPromptLines == 3)
         #expect(floating.ordinalBadgeWidth == 16)
-        #expect(!floating.showsLatestMarker)
         #expect(pinned.promptFontSize == 12)
         #expect(pinned.maximumPromptLines == 5)
 
         let threeDigitOrdinal = PromptTOCRowPresentation(
             entryIndex: 99,
             promptText: "One hundredth prompt",
-            isPinned: true,
-            isLatest: true
+            isPinned: true
         )
         #expect(threeDigitOrdinal.ordinalText == "100")
         #expect(threeDigitOrdinal.ordinalBadgeWidth > 16)
-        #expect(threeDigitOrdinal.showsLatestMarker)
         #expect(PromptTOCOrdinalBadgeStyle.numberColor(isDarkAppearance: true) == .white)
         #expect(PromptTOCOrdinalBadgeStyle.numberColor(isDarkAppearance: false) == .labelColor)
-        #expect(PromptTOCLatestBadgeStyle.textColor(isDarkAppearance: true) == .black)
-        #expect(PromptTOCLatestBadgeStyle.textColor(isDarkAppearance: false) == .white)
+    }
+
+    @Test("TOC displays newest prompts first and selects the newest prompt by default")
+    func newestPromptPresentation() {
+        #expect(PromptTOCListPresentation.displayEntryIndexes(entryCount: 4) == [3, 2, 1, 0])
+        #expect(
+            PromptTOCListPresentation.selectedEntryIndex(
+                previousSelection: nil,
+                entryCount: 4
+            ) == 3
+        )
+        #expect(
+            PromptTOCListPresentation.selectedEntryIndex(
+                previousSelection: 1,
+                entryCount: 4
+            ) == 1
+        )
+        #expect(
+            PromptTOCListPresentation.selectedEntryIndex(
+                previousSelection: 4,
+                entryCount: 4
+            ) == 3
+        )
+    }
+
+    @Test("TOC keeps the newest edge visible only while the user remains near it")
+    func newestEdgeScrollBehavior() {
+        #expect(PromptTOCListPresentation.isAtNewestEdge(offsetY: 0, tolerance: 24))
+        #expect(PromptTOCListPresentation.isAtNewestEdge(offsetY: 24, tolerance: 24))
+        #expect(!PromptTOCListPresentation.isAtNewestEdge(offsetY: 25, tolerance: 24))
+        #expect(
+            PromptTOCListPresentation.preservedOlderOffset(
+                previousOffsetY: 120,
+                insertedContentHeight: 38
+            ) == 158
+        )
     }
 }

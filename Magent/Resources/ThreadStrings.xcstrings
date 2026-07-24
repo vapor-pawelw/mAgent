@@ -1,17 +1,6 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "promptTOCLatest": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Latest"
-          }
-        }
-      }
-    },
     "threadActivityIndicatorCircle": {
       "extractionState": "manual",
       "localizations": {

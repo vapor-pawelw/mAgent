@@ -1261,14 +1261,8 @@ private final class PromptTOCNonInteractiveView: NSView {
 
 private final class PromptTOCEntryRowView: NSView {
     let entryIndex: Int
-    private let isLatest: Bool
     private let ordinalBadgeView = PromptTOCNonInteractiveView()
     private let ordinalLabel: PromptTOCLabel
-    private let latestBadgeView = PromptTOCNonInteractiveView()
-    private let latestLabel = PromptTOCLabel(
-        labelWithString: String(localized: .ThreadStrings.promptTOCLatest)
-    )
-    private let contentStack = NSStackView()
     private let label: PromptTOCLabel
     private var ordinalBadgeWidthConstraint: NSLayoutConstraint!
     private var showsAlternateBackground = false
@@ -1280,9 +1274,8 @@ private final class PromptTOCEntryRowView: NSView {
 
     var onRightClick: ((Int, NSEvent) -> Void)?
 
-    init(entryIndex: Int, promptText: String, isPinned: Bool, isLatest: Bool) {
+    init(entryIndex: Int, promptText: String, isPinned: Bool) {
         self.entryIndex = entryIndex
-        self.isLatest = isLatest
         self.ordinalLabel = PromptTOCLabel(labelWithString: "\(entryIndex + 1)")
         self.label = PromptTOCLabel(wrappingLabelWithString: promptText)
         super.init(frame: .zero)
@@ -1317,8 +1310,7 @@ private final class PromptTOCEntryRowView: NSView {
         applyPresentation(PromptTOCRowPresentation(
             entryIndex: entryIndex,
             promptText: label.stringValue,
-            isPinned: isPinned,
-            isLatest: isLatest
+            isPinned: isPinned
         ))
     }
 
@@ -1344,18 +1336,6 @@ private final class PromptTOCEntryRowView: NSView {
         ordinalLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         ordinalBadgeView.addSubview(ordinalLabel)
 
-        latestBadgeView.translatesAutoresizingMaskIntoConstraints = false
-        latestBadgeView.wantsLayer = true
-        latestBadgeView.layer?.cornerRadius = 8
-        latestBadgeView.isHidden = true
-
-        latestLabel.translatesAutoresizingMaskIntoConstraints = false
-        latestLabel.font = .systemFont(ofSize: 9, weight: .semibold)
-        latestLabel.isSelectable = false
-        latestLabel.isEditable = false
-        latestLabel.focusRingType = .none
-        latestBadgeView.addSubview(latestLabel)
-
         label.translatesAutoresizingMaskIntoConstraints = false
         label.textColor = NSColor(resource: .textPrimary)
         label.isSelectable = false
@@ -1369,16 +1349,8 @@ private final class PromptTOCEntryRowView: NSView {
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        contentStack.orientation = .vertical
-        contentStack.alignment = .leading
-        contentStack.spacing = 4
-        contentStack.detachesHiddenViews = true
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-        contentStack.addArrangedSubview(latestBadgeView)
-        contentStack.addArrangedSubview(label)
-
         addSubview(ordinalBadgeView)
-        addSubview(contentStack)
+        addSubview(label)
         ordinalBadgeWidthConstraint = ordinalBadgeView.widthAnchor.constraint(
             equalToConstant: PromptTOCOrdinalBadgeStyle.height
         )
@@ -1394,17 +1366,10 @@ private final class PromptTOCEntryRowView: NSView {
             ordinalLabel.leadingAnchor.constraint(greaterThanOrEqualTo: ordinalBadgeView.leadingAnchor, constant: 2),
             ordinalLabel.trailingAnchor.constraint(lessThanOrEqualTo: ordinalBadgeView.trailingAnchor, constant: -2),
 
-            latestBadgeView.heightAnchor.constraint(equalToConstant: 16),
-            latestLabel.topAnchor.constraint(equalTo: latestBadgeView.topAnchor, constant: 2),
-            latestLabel.leadingAnchor.constraint(equalTo: latestBadgeView.leadingAnchor, constant: 6),
-            latestLabel.trailingAnchor.constraint(equalTo: latestBadgeView.trailingAnchor, constant: -6),
-            latestLabel.bottomAnchor.constraint(equalTo: latestBadgeView.bottomAnchor, constant: -2),
-
-            contentStack.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            contentStack.leadingAnchor.constraint(equalTo: ordinalBadgeView.trailingAnchor, constant: 6),
-            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
-            label.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            label.leadingAnchor.constraint(equalTo: ordinalBadgeView.trailingAnchor, constant: 6),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
         ])
 
         updateAppearance()
@@ -1416,7 +1381,6 @@ private final class PromptTOCEntryRowView: NSView {
         label.font = .monospacedSystemFont(ofSize: presentation.promptFontSize, weight: .regular)
         label.maximumNumberOfLines = presentation.maximumPromptLines
         ordinalBadgeWidthConstraint.constant = presentation.ordinalBadgeWidth
-        latestBadgeView.isHidden = !presentation.showsLatestMarker
         label.invalidateIntrinsicContentSize()
         invalidateIntrinsicContentSize()
         superview?.invalidateIntrinsicContentSize()
@@ -1437,12 +1401,6 @@ private final class PromptTOCEntryRowView: NSView {
             ordinalBadgeView.layer?.borderWidth = 0
             let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             ordinalLabel.textColor = PromptTOCOrdinalBadgeStyle.numberColor(
-                isDarkAppearance: isDark
-            )
-            latestBadgeView.layer?.backgroundColor = PromptTOCLatestBadgeStyle
-                .backgroundColor(isDarkAppearance: isDark)
-                .cgColor
-            latestLabel.textColor = PromptTOCLatestBadgeStyle.textColor(
                 isDarkAppearance: isDark
             )
 
@@ -1511,12 +1469,13 @@ final class PromptTableOfContentsView: NSView {
     private var tocEntries: [PromptTOCEntry] = []
     private var presentationState = PromptTOCPresentationState(isPinned: false, isHovered: false)
     private(set) var isExpanded = false
-    private var shouldRestoreScrollToBottomAfterReload = true
+    private var shouldRestoreScrollToTopAfterReload = true
     private var preservedScrollOffsetY: CGFloat = 0
+    private var previouslyNewestEntry: PromptTOCEntry?
 
     private static let normalAlpha: CGFloat = 0.55
     private static let hoverAlpha: CGFloat = 0.95
-    private static let bottomAutoScrollTolerance: CGFloat = 24
+    private static let topAutoScrollTolerance: CGFloat = 24
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1530,7 +1489,8 @@ final class PromptTableOfContentsView: NSView {
 
     func setLoading(agentType: AgentType?) {
         preservedScrollOffsetY = currentScrollOffsetY()
-        shouldRestoreScrollToBottomAfterReload = isScrolledToBottomOrNearBottom()
+        shouldRestoreScrollToTopAfterReload = isScrolledToTopOrNearTop()
+        previouslyNewestEntry = tocEntries.last
         countLabel.stringValue = "…"
         spinner.isHidden = false
         spinner.startAnimation(nil)
@@ -1543,7 +1503,7 @@ final class PromptTableOfContentsView: NSView {
         agentType: AgentType?
     ) {
         let previousSelection = selectedEntryIndex
-        let shouldScrollToBottom = shouldRestoreScrollToBottomAfterReload
+        let shouldScrollToTop = shouldRestoreScrollToTopAfterReload
         tocEntries = entries
         countLabel.stringValue = "\(entries.count)"
         spinner.stopAnimation(nil)
@@ -1554,19 +1514,22 @@ final class PromptTableOfContentsView: NSView {
             selectedEntryIndex = nil
             emptyLabel.stringValue = "No prompts yet"
             emptyLabel.isHidden = false
-            shouldRestoreScrollToBottomAfterReload = false
+            shouldRestoreScrollToTopAfterReload = false
+            previouslyNewestEntry = nil
             return
         }
 
         emptyLabel.isHidden = true
-        for (index, entry) in entries.enumerated() {
+        for (displayIndex, entryIndex) in PromptTOCListPresentation
+            .displayEntryIndexes(entryCount: entries.count)
+            .enumerated() {
+            let entry = entries[entryIndex]
             let row = PromptTOCEntryRowView(
-                entryIndex: index,
+                entryIndex: entryIndex,
                 promptText: entry.displayText,
-                isPinned: presentationState.isPinned,
-                isLatest: index == entries.count - 1
+                isPinned: presentationState.isPinned
             )
-            row.setAlternateBackgroundVisible(!index.isMultiple(of: 2))
+            row.setAlternateBackgroundVisible(!displayIndex.isMultiple(of: 2))
 
             let tap = NSClickGestureRecognizer(target: self, action: #selector(handleEntryRowTap(_:)))
             row.addGestureRecognizer(tap)
@@ -1582,20 +1545,22 @@ final class PromptTableOfContentsView: NSView {
             ])
         }
 
-        if let previousSelection, previousSelection < rowViews.count {
-            updateSelection(for: previousSelection)
-        } else {
-            selectedEntryIndex = nil
+        if let selection = PromptTOCListPresentation.selectedEntryIndex(
+            previousSelection: previousSelection,
+            entryCount: entries.count
+        ) {
+            updateSelection(for: selection)
         }
 
         layoutSubtreeIfNeeded()
         scrollView.layoutSubtreeIfNeeded()
-        if shouldScrollToBottom {
-            scrollToBottom()
+        if shouldScrollToTop {
+            scrollToTop()
         } else {
-            restoreScrollOffset()
+            restoreScrollOffset(entries: entries)
         }
-        shouldRestoreScrollToBottomAfterReload = false
+        shouldRestoreScrollToTopAfterReload = false
+        previouslyNewestEntry = nil
     }
 
     override func updateTrackingAreas() {
@@ -1622,6 +1587,10 @@ final class PromptTableOfContentsView: NSView {
     func setPinned(_ pinned: Bool) {
         presentationState.isPinned = pinned
         isExpanded = presentationState.isExpanded
+        headerBackgroundView.layer?.cornerRadius = pinned ? 0 : 8
+        headerBackgroundView.layer?.maskedCorners = pinned
+            ? []
+            : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         updatePinButton()
         pinnedResizeHandle.isHidden = !pinned
         rowViews.forEach { $0.setPinnedPresentation(pinned) }
@@ -1853,7 +1822,7 @@ final class PromptTableOfContentsView: NSView {
     }
 
     private func setCollapsedState(_ collapsed: Bool, animated: Bool) {
-        let targetRadius: CGFloat = collapsed ? 18 : 8
+        let targetRadius: CGFloat = presentationState.isPinned ? 0 : (collapsed ? 18 : 8)
 
         if animated {
             // Animate corner radius via CABasicAnimation (not covered by NSAnimationContext).
@@ -1951,27 +1920,50 @@ final class PromptTableOfContentsView: NSView {
         scrollView.contentView.bounds.origin.y
     }
 
-    private func isScrolledToBottomOrNearBottom() -> Bool {
-        guard let documentView = scrollView.documentView else { return true }
-        let visibleRect = scrollView.contentView.bounds
-        return visibleRect.maxY >= documentView.frame.maxY - Self.bottomAutoScrollTolerance
+    private func isScrolledToTopOrNearTop() -> Bool {
+        PromptTOCListPresentation.isAtNewestEdge(
+            offsetY: currentScrollOffsetY(),
+            tolerance: Self.topAutoScrollTolerance
+        )
     }
 
-    private func scrollToBottom() {
-        guard let documentView = scrollView.documentView else { return }
+    private func scrollToTop() {
         let contentView = scrollView.contentView
-        let maxOffsetY = max(0, documentView.frame.height - contentView.bounds.height)
-        contentView.scroll(to: NSPoint(x: 0, y: maxOffsetY))
+        contentView.scroll(to: .zero)
         scrollView.reflectScrolledClipView(contentView)
     }
 
-    private func restoreScrollOffset() {
+    private func restoreScrollOffset(entries: [PromptTOCEntry]) {
         guard let documentView = scrollView.documentView else { return }
         let contentView = scrollView.contentView
         let maxOffsetY = max(0, documentView.frame.height - contentView.bounds.height)
-        let targetOffsetY = min(max(0, preservedScrollOffsetY), maxOffsetY)
+        let insertedContentHeight = previouslyNewestEntry
+            .flatMap { previousNewestEntryIndex($0, in: entries) }
+            .flatMap { entryIndex in
+                rowViews.first(where: { $0.entryIndex == entryIndex })
+            }
+            .map { row in
+                row.convert(row.bounds, to: documentView).minY
+            } ?? 0
+        let preservedOffset = PromptTOCListPresentation.preservedOlderOffset(
+            previousOffsetY: preservedScrollOffsetY,
+            insertedContentHeight: insertedContentHeight
+        )
+        let targetOffsetY = min(max(0, preservedOffset), maxOffsetY)
         contentView.scroll(to: NSPoint(x: 0, y: targetOffsetY))
         scrollView.reflectScrolledClipView(contentView)
+    }
+
+    private func previousNewestEntryIndex(
+        _ previousNewestEntry: PromptTOCEntry,
+        in entries: [PromptTOCEntry]
+    ) -> Int? {
+        entries.lastIndex {
+            $0.lineIndex == previousNewestEntry.lineIndex &&
+                $0.fullText == previousNewestEntry.fullText
+        } ?? entries.lastIndex {
+            $0.fullText == previousNewestEntry.fullText
+        }
     }
 
     @objc private func handleEntryRowTap(_ gesture: NSClickGestureRecognizer) {
