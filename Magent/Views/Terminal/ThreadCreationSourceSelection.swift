@@ -57,3 +57,14 @@ enum ThreadCreationSourceSelection: Equatable {
             .replacingOccurrences(of: "origin/", with: "")
     }
 }
+
+enum ThreadCreationSourcePickerScrollGeometry {
+    static func centeredOrigin(
+        itemMidY: CGFloat,
+        viewportHeight: CGFloat,
+        contentHeight: CGFloat
+    ) -> CGFloat {
+        let maximumOrigin = max(contentHeight - viewportHeight, 0)
+        return min(max(itemMidY - (viewportHeight / 2), 0), maximumOrigin)
+    }
+}

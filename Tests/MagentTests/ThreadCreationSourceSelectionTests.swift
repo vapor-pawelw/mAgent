@@ -70,4 +70,23 @@ struct ThreadCreationSourceSelectionTests {
         #expect(selection.baseBranch == "main")
         #expect(selection.titleSourceName == "Main worktree")
     }
+
+    @Test("Picker scroll centers a selected row and clamps at both ends")
+    func pickerScrollCentering() {
+        #expect(ThreadCreationSourcePickerScrollGeometry.centeredOrigin(
+            itemMidY: 240,
+            viewportHeight: 200,
+            contentHeight: 600
+        ) == 140)
+        #expect(ThreadCreationSourcePickerScrollGeometry.centeredOrigin(
+            itemMidY: 30,
+            viewportHeight: 200,
+            contentHeight: 600
+        ) == 0)
+        #expect(ThreadCreationSourcePickerScrollGeometry.centeredOrigin(
+            itemMidY: 580,
+            viewportHeight: 200,
+            contentHeight: 600
+        ) == 400)
+    }
 }

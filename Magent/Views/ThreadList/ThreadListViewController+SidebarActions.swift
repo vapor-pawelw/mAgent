@@ -408,6 +408,7 @@ extension ThreadListViewController {
         presentingWindow: NSWindow? = nil,
         baseBranch: String? = nil,
         sourceThread: MagentThread? = nil,
+        pickerContextThread: MagentThread? = nil,
         selectedSectionIdOverride: UUID? = nil,
         recoveryPrefill: AgentLaunchSheetPrefill? = nil
     ) {
@@ -449,9 +450,13 @@ extension ThreadListViewController {
         }
 
         let defaultBranchName = project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectivePickerContext = pickerContextThread
+            ?? sourceThread
+            ?? selectedThreadFromState().flatMap { $0.projectId == project.id ? $0 : nil }
         let sourceOptionsByProjectId = threadCreationSourceOptions(
             projects: settings.projects,
-            settings: settings
+            settings: settings,
+            contextThreadId: effectivePickerContext?.id
         )
 
         let config = AgentLaunchSheetConfig(
@@ -474,6 +479,7 @@ extension ThreadListViewController {
             defaultBranchName: defaultBranchName,
             sourceOptionsByProjectId: sourceOptionsByProjectId,
             initialSourceThreadId: sourceThread?.id,
+            showThreadIcons: settings.showThreadIcons,
             showDraftCheckbox: true
         )
         let controller = AgentLaunchPromptSheetController(config: config)
@@ -553,7 +559,8 @@ extension ThreadListViewController {
 
     private func threadCreationSourceOptions(
         projects: [Project],
-        settings: AppSettings
+        settings: AppSettings,
+        contextThreadId: UUID?
     ) -> [UUID: [ThreadCreationSourceOption]] {
         var result: [UUID: [ThreadCreationSourceOption]] = [:]
 
@@ -564,8 +571,10 @@ extension ThreadListViewController {
             let projectThreads = threadManager.threads
                 .filter { $0.projectId == project.id && !$0.isArchived }
                 .sorted { left, right in
-                    if left.isMain != right.isMain {
-                        return left.isMain
+                    let leftRank = left.isMain ? 0 : (left.id == contextThreadId ? 1 : 2)
+                    let rightRank = right.isMain ? 0 : (right.id == contextThreadId ? 1 : 2)
+                    if leftRank != rightRank {
+                        return leftRank < rightRank
                     }
                     if left.sidebarListState != right.sidebarListState {
                         return left.sidebarListState.rawValue < right.sidebarListState.rawValue
@@ -602,7 +611,8 @@ extension ThreadListViewController {
                     signEmoji: thread.signEmoji,
                     icon: thread.threadIcon,
                     sectionColor: sectionID.flatMap { sectionsById[$0]?.color },
-                    sectionID: sectionID
+                    sectionID: sectionID,
+                    isContextThread: thread.id == contextThreadId && !thread.isMain
                 )
             }
         }
@@ -753,7 +763,8 @@ extension ThreadListViewController {
             presentNewThreadSheet(
                 for: project,
                 anchorView: outlineView,
-                presentingWindow: presentingWindow
+                presentingWindow: presentingWindow,
+                pickerContextThread: sourceInSameProject
             )
         }
     }

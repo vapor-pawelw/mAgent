@@ -33,7 +33,7 @@
 
 #### Features
 
-- Unified new and forked thread creation with a visual source picker for starting from the main worktree, another thread, or any branch.
+- Unified new and forked thread creation with a context-aware visual source picker for starting from the main worktree, another thread, or any branch.
 
 #### Improvements
 

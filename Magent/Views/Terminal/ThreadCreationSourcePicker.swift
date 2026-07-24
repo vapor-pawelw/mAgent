@@ -8,11 +8,13 @@ struct ThreadCreationSourceOption {
     let icon: ThreadIcon
     let sectionColor: NSColor?
     let sectionID: UUID?
+    let isContextThread: Bool
 }
 
 private final class ThreadCreationSourceCapsuleView: NSView {
     private let iconView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
+    private let inlineMainIconView = NSImageView()
     private let subtitleLabel = NSTextField(labelWithString: "")
     private var sectionColor: NSColor?
     private let sectionMarkerLayer = CAShapeLayer()
@@ -27,7 +29,6 @@ private final class ThreadCreationSourceCapsuleView: NSView {
         layer?.addSublayer(sectionMarkerLayer)
 
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.contentTintColor = .secondaryLabelColor
         iconView.imageScaling = .scaleProportionallyDown
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -35,21 +36,40 @@ private final class ThreadCreationSourceCapsuleView: NSView {
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.maximumNumberOfLines = 1
 
+        inlineMainIconView.translatesAutoresizingMaskIntoConstraints = false
+        inlineMainIconView.image = NSImage(
+            systemSymbolName: "house.fill",
+            accessibilityDescription: nil
+        )?.withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
+        inlineMainIconView.imageScaling = .scaleProportionallyDown
+        inlineMainIconView.isHidden = true
+
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.font = .systemFont(ofSize: 10.5)
         subtitleLabel.textColor = .secondaryLabelColor
         subtitleLabel.lineBreakMode = .byTruncatingMiddle
         subtitleLabel.maximumNumberOfLines = 1
 
-        let textStack = NSStackView(views: [titleLabel, subtitleLabel])
+        let titleStack = NSStackView(views: [titleLabel, inlineMainIconView])
+        titleStack.orientation = .horizontal
+        titleStack.alignment = .firstBaseline
+        titleStack.spacing = 4
+        titleStack.detachesHiddenViews = true
+
+        let textStack = NSStackView(views: [titleStack, subtitleLabel])
         textStack.translatesAutoresizingMaskIntoConstraints = false
         textStack.orientation = .vertical
         textStack.alignment = .leading
         textStack.spacing = 2
         textStack.detachesHiddenViews = true
 
-        addSubview(iconView)
-        addSubview(textStack)
+        let contentStack = NSStackView(views: [iconView, textStack])
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.orientation = .horizontal
+        contentStack.alignment = .centerY
+        contentStack.spacing = 8
+        contentStack.detachesHiddenViews = true
+        addSubview(contentStack)
 
         let textTrailingConstraint = textStack.trailingAnchor.constraint(
             equalTo: trailingAnchor,
@@ -58,13 +78,13 @@ private final class ThreadCreationSourceCapsuleView: NSView {
         self.textTrailingConstraint = textTrailingConstraint
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 42),
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
             iconView.widthAnchor.constraint(equalToConstant: 16),
             iconView.heightAnchor.constraint(equalToConstant: 16),
-            textStack.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
+            inlineMainIconView.widthAnchor.constraint(equalToConstant: 11),
+            inlineMainIconView.heightAnchor.constraint(equalToConstant: 11),
+            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            contentStack.centerYAnchor.constraint(equalTo: centerYAnchor),
             textTrailingConstraint,
-            textStack.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
 
@@ -72,13 +92,15 @@ private final class ThreadCreationSourceCapsuleView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(option: ThreadCreationSourceOption) {
+    func configure(option: ThreadCreationSourceOption, showThreadIcons: Bool) {
         let descriptor = option.descriptor
         let symbolName = descriptor.isMainWorktree ? "house.fill" : option.icon.symbolName
         iconView.image = NSImage(
             systemSymbolName: symbolName,
             accessibilityDescription: descriptor.displayName
         )?.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+        iconView.isHidden = !showThreadIcons
+        inlineMainIconView.isHidden = showThreadIcons || !descriptor.isMainWorktree
 
         titleLabel.stringValue = ThreadRowBadgeLayout.primaryText(
             descriptor.displayName,
@@ -87,14 +109,22 @@ private final class ThreadCreationSourceCapsuleView: NSView {
         subtitleLabel.stringValue = option.subtitle ?? ""
         subtitleLabel.isHidden = option.subtitle == nil
         sectionColor = option.sectionColor
+        let iconTint = descriptor.isMainWorktree
+            ? NSColor.labelColor
+            : (option.sectionColor ?? NSColor.appPrimary)
+        iconView.contentTintColor = iconTint
+        inlineMainIconView.contentTintColor = .labelColor
         needsDisplay = true
     }
 
-    func configure(branchName: String) {
+    func configure(branchName: String, showThreadIcons: Bool) {
         iconView.image = NSImage(
             systemSymbolName: "arrow.triangle.branch",
             accessibilityDescription: branchName
         )?.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+        iconView.isHidden = !showThreadIcons
+        inlineMainIconView.isHidden = true
+        iconView.contentTintColor = NSColor.appPrimary
         titleLabel.stringValue = String(localized: .ThreadStrings.threadCreationBranchSource)
         subtitleLabel.stringValue = branchName
         subtitleLabel.isHidden = false
@@ -109,13 +139,12 @@ private final class ThreadCreationSourceCapsuleView: NSView {
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
             sectionMarkerLayer.fillColor = ThreadCapsuleSectionMarkerStyle.color(
                 sectionColor: sectionColor,
                 isSelected: false
             ).cgColor
         }
-        layer?.borderWidth = 1
+        layer?.borderWidth = 0
         layer?.cornerRadius = ThreadCapsuleSectionMarkerStyle.capsuleCornerRadius
     }
 
@@ -142,7 +171,7 @@ private final class ThreadCreationSourceOptionButton: NSButton {
     private let capsule = ThreadCreationSourceCapsuleView()
     var onSelect: (() -> Void)?
 
-    init(option: ThreadCreationSourceOption) {
+    init(option: ThreadCreationSourceOption, showThreadIcons: Bool) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         isBordered = false
@@ -150,7 +179,7 @@ private final class ThreadCreationSourceOptionButton: NSButton {
         target = self
         action = #selector(selected)
 
-        capsule.configure(option: option)
+        capsule.configure(option: option, showThreadIcons: showThreadIcons)
         addSubview(capsule)
         NSLayoutConstraint.activate([
             capsule.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -174,8 +203,10 @@ final class ThreadCreationSourcePicker: NSView {
     private let chevron = NSImageView()
     private let button = NSButton()
     private var popover: NSPopover?
+    private var selectedThreadID: UUID?
 
     var onSelect: ((ThreadCreationSourceOption) -> Void)?
+    var showThreadIcons = true
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -220,40 +251,70 @@ final class ThreadCreationSourcePicker: NSView {
     }
 
     func show(option: ThreadCreationSourceOption) {
-        selectedCapsule.configure(option: option)
+        selectedThreadID = option.descriptor.threadID
+        selectedCapsule.configure(option: option, showThreadIcons: showThreadIcons)
     }
 
     func showBranch(name: String) {
-        selectedCapsule.configure(branchName: name)
+        selectedThreadID = nil
+        selectedCapsule.configure(branchName: name, showThreadIcons: showThreadIcons)
     }
 
     @objc private func showOptions() {
         guard let options = representedOptions, !options.isEmpty else { return }
+        let visibleRows = min(options.count, 7)
+        let viewportHeight = CGFloat(visibleRows * 48 + 20)
+        let centeringPadding = max((viewportHeight - 42) / 2, 10)
 
         let stack = NSStackView()
         stack.translatesAutoresizingMaskIntoConstraints = true
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
-        stack.edgeInsets = NSEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
+        stack.edgeInsets = NSEdgeInsets(
+            top: centeringPadding,
+            left: 10,
+            bottom: centeringPadding,
+            right: 10
+        )
         stack.frame = NSRect(
             x: 0,
             y: 0,
             width: 400,
-            height: CGFloat(options.count * 48 + 20)
+            height: CGFloat(options.count * 48) + (centeringPadding * 2)
         )
         stack.autoresizingMask = [.width]
 
         let popover = NSPopover()
+        var selectedButton: NSButton?
+        var previousButton: NSButton?
+        var insertedGroupSpacing = false
         for option in options {
-            let optionButton = ThreadCreationSourceOptionButton(option: option)
+            let isPreferred = option.descriptor.isMainWorktree || option.isContextThread
+            if !isPreferred, !insertedGroupSpacing, let previousButton {
+                stack.setCustomSpacing(16, after: previousButton)
+                insertedGroupSpacing = true
+            }
+
+            let optionButton = ThreadCreationSourceOptionButton(
+                option: option,
+                showThreadIcons: showThreadIcons
+            )
             optionButton.onSelect = { [weak self, weak popover] in
                 popover?.performClose(nil)
                 self?.onSelect?(option)
             }
             stack.addArrangedSubview(optionButton)
             optionButton.widthAnchor.constraint(equalToConstant: 380).isActive = true
+            if option.descriptor.threadID == selectedThreadID {
+                selectedButton = optionButton
+            }
+            previousButton = optionButton
         }
+        let groupSpacing: CGFloat = insertedGroupSpacing ? 10 : 0
+        stack.frame.size.height = CGFloat(options.count * 48)
+            + (centeringPadding * 2)
+            + groupSpacing
 
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -264,12 +325,35 @@ final class ThreadCreationSourcePicker: NSView {
 
         let controller = NSViewController()
         controller.view = scrollView
-        let visibleRows = min(options.count, 7)
-        controller.preferredContentSize = NSSize(width: 400, height: CGFloat(visibleRows * 48 + 20))
+        controller.preferredContentSize = NSSize(
+            width: 400,
+            height: viewportHeight
+        )
         popover.contentViewController = controller
         popover.behavior = .transient
         self.popover = popover
         popover.show(relativeTo: bounds, of: self, preferredEdge: .maxY)
+        center(selectedButton: selectedButton, in: scrollView, contentView: stack)
+    }
+
+    private func center(
+        selectedButton: NSButton?,
+        in scrollView: NSScrollView,
+        contentView: NSView
+    ) {
+        guard let selectedButton else { return }
+        DispatchQueue.main.async {
+            contentView.layoutSubtreeIfNeeded()
+            scrollView.layoutSubtreeIfNeeded()
+            let buttonFrame = selectedButton.convert(selectedButton.bounds, to: contentView)
+            let originY = ThreadCreationSourcePickerScrollGeometry.centeredOrigin(
+                itemMidY: buttonFrame.midY,
+                viewportHeight: scrollView.contentView.bounds.height,
+                contentHeight: contentView.bounds.height
+            )
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: originY))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
     }
 
     private var representedOptions: [ThreadCreationSourceOption]?

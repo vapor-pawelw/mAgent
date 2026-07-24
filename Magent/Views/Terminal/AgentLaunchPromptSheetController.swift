@@ -374,6 +374,8 @@ struct AgentLaunchSheetConfig {
     let sourceOptionsByProjectId: [UUID: [ThreadCreationSourceOption]]
     /// Source thread selected when opening a contextual "New Thread from…" flow.
     let initialSourceThreadId: UUID?
+    /// Mirrors the sidebar preference for leading thread icons.
+    let showThreadIcons: Bool
     /// When false, hide the initial prompt label/input entirely.
     let showPromptInputArea: Bool
     /// When true, a "Draft" checkbox is shown (only enabled for agent mode).
@@ -403,6 +405,7 @@ struct AgentLaunchSheetConfig {
         defaultBranchName: String? = nil,
         sourceOptionsByProjectId: [UUID: [ThreadCreationSourceOption]] = [:],
         initialSourceThreadId: UUID? = nil,
+        showThreadIcons: Bool = true,
         showPromptInputArea: Bool = true,
         showDraftCheckbox: Bool = false,
         promptLabelOverride: String? = nil
@@ -428,6 +431,7 @@ struct AgentLaunchSheetConfig {
         self.defaultBranchName = defaultBranchName
         self.sourceOptionsByProjectId = sourceOptionsByProjectId
         self.initialSourceThreadId = initialSourceThreadId
+        self.showThreadIcons = showThreadIcons
         self.showPromptInputArea = showPromptInputArea
         self.showDraftCheckbox = showDraftCheckbox
         self.promptLabelOverride = promptLabelOverride
@@ -844,15 +848,6 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             populateSectionPicker(for: projectId)
         }
 
-        if case .newThread(let projectId) = config.draftScope,
-           !(config.sourceOptionsByProjectId[projectId] ?? []).isEmpty {
-            let row = makeSourcePickerRow(for: projectId)
-            stack.addArrangedSubview(row)
-            stack.setCustomSpacing(10, after: row)
-            sourcePickerRow = row
-            updateSourcePresentation()
-        }
-
         // Agent / Model / Reasoning picker row (single line)
         let agentRow = NSStackView()
         agentRow.orientation = .horizontal
@@ -906,9 +901,20 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         let promptFont = NSFont.systemFont(ofSize: 13)
         var lastFieldView: NSView = agentRow
+        if case .newThread(let projectId) = config.draftScope,
+           !(config.sourceOptionsByProjectId[projectId] ?? []).isEmpty {
+            sourcePicker.showThreadIcons = config.showThreadIcons
+            let row = makeSourcePickerRow(for: projectId)
+            stack.addArrangedSubview(row)
+            stack.setCustomSpacing(10, after: row)
+            sourcePickerRow = row
+            updateSourcePresentation()
+            lastFieldView = row
+        }
+
         var promptAreaLastView: NSView?
         if config.showPromptInputArea {
-            stack.setCustomSpacing(16, after: agentRow)
+            stack.setCustomSpacing(16, after: lastFieldView)
             promptLabel = makePromptHeadingLabel(promptLabelText)
             stack.addArrangedSubview(promptLabel)
             stack.setCustomSpacing(4, after: promptLabel)
