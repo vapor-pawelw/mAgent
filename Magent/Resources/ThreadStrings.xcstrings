@@ -546,7 +546,73 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fork Thread\u2026"
+            "value": "New Thread from This Thread\u2026"
+          }
+        }
+      }
+    },
+    "threadCreationBranchSource": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch"
+          }
+        }
+      }
+    },
+    "threadCreationChooseSource": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose where to start the new thread"
+          }
+        }
+      }
+    },
+    "threadCreationNewFromBranchTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New thread from branch %@"
+          }
+        }
+      }
+    },
+    "threadCreationNewFromCurrentThreadMenu": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Thread from Current Thread"
+          }
+        }
+      }
+    },
+    "threadCreationNewFromTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New thread from %@"
+          }
+        }
+      }
+    },
+    "threadCreationStartFrom": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start from"
           }
         }
       }

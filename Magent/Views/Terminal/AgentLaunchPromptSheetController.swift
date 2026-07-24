@@ -370,6 +370,12 @@ struct AgentLaunchSheetConfig {
     let baseBranchRepoPath: String?
     /// The project's default branch name (e.g. "main"). Used as placeholder and for validation fallback.
     let defaultBranchName: String?
+    /// Active source threads available for each project in the new-thread sheet.
+    let sourceOptionsByProjectId: [UUID: [ThreadCreationSourceOption]]
+    /// Source thread selected when opening a contextual "New Thread from…" flow.
+    let initialSourceThreadId: UUID?
+    /// Mirrors the sidebar preference for leading thread icons.
+    let showThreadIcons: Bool
     /// When false, hide the initial prompt label/input entirely.
     let showPromptInputArea: Bool
     /// When true, a "Draft" checkbox is shown (only enabled for agent mode).
@@ -397,6 +403,9 @@ struct AgentLaunchSheetConfig {
         baseBranchPrefill: String? = nil,
         baseBranchRepoPath: String? = nil,
         defaultBranchName: String? = nil,
+        sourceOptionsByProjectId: [UUID: [ThreadCreationSourceOption]] = [:],
+        initialSourceThreadId: UUID? = nil,
+        showThreadIcons: Bool = true,
         showPromptInputArea: Bool = true,
         showDraftCheckbox: Bool = false,
         promptLabelOverride: String? = nil
@@ -420,6 +429,9 @@ struct AgentLaunchSheetConfig {
         self.baseBranchPrefill = baseBranchPrefill
         self.baseBranchRepoPath = baseBranchRepoPath
         self.defaultBranchName = defaultBranchName
+        self.sourceOptionsByProjectId = sourceOptionsByProjectId
+        self.initialSourceThreadId = initialSourceThreadId
+        self.showThreadIcons = showThreadIcons
         self.showPromptInputArea = showPromptInputArea
         self.showDraftCheckbox = showDraftCheckbox
         self.promptLabelOverride = promptLabelOverride
@@ -438,6 +450,8 @@ struct AgentLaunchSheetResult {
     let baseBranch: String?
     /// Custom tab title entered by the user. Non-nil only when `showTitleField` was true and the user typed a value.
     let tabTitle: String?
+    /// Non-main source thread whose branch and contextual metadata should be inherited.
+    let sourceThreadId: UUID?
     /// Temp file holding the submitted prompt for crash recovery.
     /// Exists only when `prompt` is non-nil; deleted once injection is confirmed.
     let pendingPromptFileURL: URL?
@@ -541,6 +555,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private var sectionPickerRow: NSView?
     // When section is inlined into the project row, we track its label separately for show/hide.
     private var sectionPickerLabel: NSTextField?
+    private let sourcePicker = ThreadCreationSourcePicker()
+    private var sourcePickerRow: NSView?
+    private var sourceSelection: ThreadCreationSourceSelection?
+    private var sectionSelectionWasManuallyChanged = false
+    private var sheetTitleLabel: NSTextField?
     private let projectSwitchPreviewLimit = 120
 
     private enum PickerItem {
@@ -592,6 +611,16 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         self.acceptButton = NSButton(title: config.acceptButtonTitle, target: nil, action: nil)
         self.currentDraftScope = config.draftScope
         self.projectPickerItems = config.availableProjects
+        if case .newThread(let projectId) = config.draftScope {
+            let projectOptions = config.sourceOptionsByProjectId[projectId] ?? []
+            let initialOption = config.initialSourceThreadId
+                .flatMap { initialId in projectOptions.first { $0.descriptor.threadID == initialId } }
+                ?? projectOptions.first { $0.descriptor.isMainWorktree }
+                ?? projectOptions.first
+            if let initialOption {
+                self.sourceSelection = .thread(initialOption.descriptor)
+            }
+        }
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: Self.sheetContentWidth, height: 1),
@@ -782,6 +811,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let titleLabel = NSTextField(labelWithString: config.title)
         titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        sheetTitleLabel = titleLabel
         stack.addArrangedSubview(titleLabel)
         stack.setCustomSpacing(16, after: titleLabel)
 
@@ -871,9 +901,20 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         let promptFont = NSFont.systemFont(ofSize: 13)
         var lastFieldView: NSView = agentRow
+        if case .newThread(let projectId) = config.draftScope,
+           !(config.sourceOptionsByProjectId[projectId] ?? []).isEmpty {
+            sourcePicker.showThreadIcons = config.showThreadIcons
+            let row = makeSourcePickerRow(for: projectId)
+            stack.addArrangedSubview(row)
+            stack.setCustomSpacing(10, after: row)
+            sourcePickerRow = row
+            updateSourcePresentation()
+            lastFieldView = row
+        }
+
         var promptAreaLastView: NSView?
         if config.showPromptInputArea {
-            stack.setCustomSpacing(16, after: agentRow)
+            stack.setCustomSpacing(16, after: lastFieldView)
             promptLabel = makePromptHeadingLabel(promptLabelText)
             stack.addArrangedSubview(promptLabel)
             stack.setCustomSpacing(4, after: promptLabel)
@@ -1015,7 +1056,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
             if let prefill = config.baseBranchPrefill, !prefill.isEmpty {
                 baseBranchField.stringValue = prefill
+            } else if let sourceSelection {
+                baseBranchField.stringValue = sourceSelection.baseBranch
             }
+            updateSourceSelectionFromBaseBranch()
             loadBaseBranchItems()
 
             // Tab order: prompt → description → branch → base branch → (wraps back via window key loop)
@@ -1115,7 +1159,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ] + (contextChip.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
           + (projectPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
-          + (sectionPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
+          + (sectionPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
+          + (sourcePickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
 
         if let promptLabel, let promptScrollView {
             NSLayoutConstraint.activate([
@@ -1214,7 +1259,6 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     private func reloadBaseBranches(for project: Project) {
         guard config.showDescriptionAndBranchFields else { return }
-        baseBranchField.stringValue = ""
         let defaultBranch = resolvedDefaultBranchName()
         baseBranchField.placeholderString = defaultBranch
         clearBaseBranchError()
@@ -1403,6 +1447,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         applyPrefillIfNeeded()
         populateSectionPicker(for: newProject.id)
         reloadBaseBranches(for: newProject)
+        configureSourceOptions(for: newProject.id)
+        resetSourceSelection(for: newProject.id)
         resizeWindowToFitContent()
     }
 
@@ -1481,6 +1527,139 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         return row
     }
 
+    private func makeSourcePickerRow(for projectId: UUID) -> NSStackView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = makeFormLabel(String(localized: .ThreadStrings.threadCreationStartFrom))
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.widthAnchor.constraint(equalToConstant: Self.formLabelWidth).isActive = true
+        row.addArrangedSubview(label)
+
+        sourcePicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        sourcePicker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        sourcePicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 320).isActive = true
+        sourcePicker.onSelect = { [weak self] option in
+            self?.selectSource(option)
+        }
+        row.addArrangedSubview(sourcePicker)
+        configureSourceOptions(for: projectId)
+        return row
+    }
+
+    private func configureSourceOptions(for projectId: UUID) {
+        sourcePicker.setOptions(config.sourceOptionsByProjectId[projectId] ?? [])
+    }
+
+    private func resetSourceSelection(for projectId: UUID) {
+        let options = config.sourceOptionsByProjectId[projectId] ?? []
+        guard let main = options.first(where: { $0.descriptor.isMainWorktree }) ?? options.first else {
+            sourceSelection = nil
+            sourcePickerRow?.isHidden = true
+            baseBranchField.stringValue = ""
+            updateSourcePresentation()
+            return
+        }
+
+        sourcePickerRow?.isHidden = false
+        sectionSelectionWasManuallyChanged = false
+        selectSource(main)
+    }
+
+    private func selectSource(
+        _ option: ThreadCreationSourceOption,
+        updateBaseBranchField: Bool = true
+    ) {
+        sourceSelection = .thread(option.descriptor)
+        if updateBaseBranchField {
+            baseBranchField.stringValue = option.descriptor.branchName
+        }
+        clearBaseBranchError()
+
+        if !sectionSelectionWasManuallyChanged,
+           let sectionID = option.sectionID,
+           let index = sectionPickerItems.firstIndex(where: { $0.id == sectionID }) {
+            sectionPicker.selectItem(at: index)
+        }
+        updateSourcePresentation()
+    }
+
+    private func updateSourceSelectionFromBaseBranch(_ input: String? = nil) {
+        guard var sourceSelection else { return }
+        let projectId = selectedProjectIdForSourceOptions()
+        let options = config.sourceOptionsByProjectId[projectId] ?? []
+        sourceSelection.updateBaseBranch(
+            input ?? baseBranchField.stringValue,
+            defaultBranch: resolvedDefaultBranchName(),
+            availableSources: options.map(\.descriptor)
+        )
+        if case .thread(let descriptor) = sourceSelection,
+           let option = options.first(where: {
+               $0.descriptor.threadID == descriptor.threadID
+           }) {
+            selectSource(option, updateBaseBranchField: false)
+            return
+        }
+        self.sourceSelection = sourceSelection
+        updateSourcePresentation()
+    }
+
+    private func updateSourcePresentation() {
+        guard let selection = sourceSelection else {
+            sheetTitleLabel?.stringValue = config.title
+            window?.title = config.title
+            return
+        }
+
+        switch selection {
+        case .thread(let descriptor):
+            let projectId = selectedProjectIdForSourceOptions()
+            if let option = config.sourceOptionsByProjectId[projectId]?
+                .first(where: { $0.descriptor.threadID == descriptor.threadID }) {
+                sourcePicker.show(option: option)
+            }
+        case .branch(let branch):
+            sourcePicker.showBranch(name: branch)
+        }
+
+        let sourceName = selection.titleSourceName
+        let title = selection.isCustomBranch
+            ? String(localized: .ThreadStrings.threadCreationNewFromBranchTitle(sourceName))
+            : String(localized: .ThreadStrings.threadCreationNewFromTitle(sourceName))
+        let attributedTitle = NSMutableAttributedString(
+            string: title,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 20, weight: .semibold),
+                .foregroundColor: NSColor.labelColor,
+            ]
+        )
+        if let sourceRange = title.range(of: sourceName, options: .backwards) {
+            attributedTitle.addAttribute(
+                .foregroundColor,
+                value: NSColor.controlAccentColor,
+                range: NSRange(sourceRange, in: title)
+            )
+        }
+        sheetTitleLabel?.attributedStringValue = attributedTitle
+        window?.title = title
+    }
+
+    private func selectedProjectIdForSourceOptions() -> UUID {
+        if let picker = projectPicker {
+            let index = picker.indexOfSelectedItem
+            if index >= 0, index < projectPickerItems.count {
+                return projectPickerItems[index].id
+            }
+        }
+        if case .newThread(let projectId) = currentDraftScope {
+            return projectId
+        }
+        return projectPickerItems.first?.id ?? UUID()
+    }
+
     private func populateSectionPicker(for projectId: UUID) {
         sectionPicker.removeAllItems()
         sectionPickerItems = config.sectionsByProjectId[projectId] ?? []
@@ -1499,6 +1678,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         if let defaultId, let idx = sectionPickerItems.firstIndex(where: { $0.id == defaultId }) {
             sectionPicker.selectItem(at: idx)
         }
+        sectionPicker.target = self
+        sectionPicker.action = #selector(sectionPickerChanged)
+    }
+
+    @objc private func sectionPickerChanged() {
+        sectionSelectionWasManuallyChanged = true
     }
 
     private func makeNoticeBox(icon symbolName: String, text: String, color: NSColor) -> NSView {
@@ -1628,11 +1813,25 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     func comboBoxSelectionDidChange(_ notification: Notification) {
         clearBaseBranchError()
+        if (notification.object as? NSComboBox) === baseBranchField {
+            let input = ThreadCreationBaseBranchInput.resolve(
+                fieldValue: baseBranchField.stringValue,
+                selectedItem: baseBranchField.objectValueOfSelectedItem as? String
+            )
+            updateSourceSelectionFromBaseBranch(input)
+        }
     }
 
     func controlTextDidChange(_ notification: Notification) {
         if (notification.object as? NSComboBox) === baseBranchField {
             clearBaseBranchError()
+            updateSourceSelectionFromBaseBranch()
+        }
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        if (notification.object as? NSComboBox) === baseBranchField {
+            updateSourceSelectionFromBaseBranch()
         }
     }
 
@@ -1965,6 +2164,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let rawTitle = config.showTitleField
             ? titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
+        updateSourceSelectionFromBaseBranch()
 
         // Validate base branch exists before proceeding.
         // Skip validation for empty repos (no commits) — worktree creation handles
@@ -2094,6 +2294,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 branchName: nil,
                 baseBranch: rawBaseBranch.isEmpty ? nil : rawBaseBranch,
                 tabTitle: rawTitle.isEmpty ? nil : rawTitle,
+                sourceThreadId: sourceSelection?.sourceThreadID,
                 pendingPromptFileURL: pendingPromptFileURL,
                 selectedProject: selectedProject,
                 selectedSectionId: selectedSectionId,
@@ -2113,6 +2314,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 branchName: rawBranch.isEmpty ? nil : rawBranch,
                 baseBranch: rawBaseBranch.isEmpty ? nil : rawBaseBranch,
                 tabTitle: rawTitle.isEmpty ? nil : rawTitle,
+                sourceThreadId: sourceSelection?.sourceThreadID,
                 pendingPromptFileURL: isDraft ? nil : pendingPromptFileURL,
                 selectedProject: selectedProject,
                 selectedSectionId: selectedSectionId,
@@ -2133,6 +2335,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 branchName: rawBranch.isEmpty ? nil : rawBranch,
                 baseBranch: rawBaseBranch.isEmpty ? nil : rawBaseBranch,
                 tabTitle: rawTitle.isEmpty ? nil : rawTitle,
+                sourceThreadId: sourceSelection?.sourceThreadID,
                 pendingPromptFileURL: nil,
                 selectedProject: selectedProject,
                 selectedSectionId: selectedSectionId,

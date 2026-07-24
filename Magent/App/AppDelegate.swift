@@ -315,7 +315,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let threadMenuItem = NSMenuItem()
         let threadMenu = NSMenu(title: "Thread")
         threadMenu.addItem(withTitle: "New Thread", action: #selector(requestNewThreadFromActiveContext(_:)), keyEquivalent: "")
-        threadMenu.addItem(withTitle: "Fork Thread", action: #selector(requestForkThreadFromActiveContext(_:)), keyEquivalent: "")
+        threadMenu.addItem(
+            withTitle: String(localized: .ThreadStrings.threadCreationNewFromCurrentThreadMenu),
+            action: #selector(requestForkThreadFromActiveContext(_:)),
+            keyEquivalent: ""
+        )
         threadMenu.addItem(.separator())
         let aiRenameItem = threadMenu.addItem(withTitle: "AI Rename…", action: #selector(requestAIRenameFromActiveContext(_:)), keyEquivalent: "r")
         aiRenameItem.keyEquivalentModifierMask = [.command, .shift]

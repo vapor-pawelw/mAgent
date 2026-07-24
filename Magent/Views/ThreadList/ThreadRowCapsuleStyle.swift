@@ -24,6 +24,38 @@ enum ThreadRowCapsuleVisualState: Equatable {
     }
 }
 
+enum StandardThreadCapsuleBackgroundStyle {
+    static func fill(
+        isSelected: Bool,
+        appearance: NSAppearance,
+        accentColor: NSColor
+    ) -> NSColor {
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if isSelected {
+            return accentColor.withAlphaComponent(isDark ? 0.1 : 0.2)
+        }
+        return isDark
+            ? NSColor.white.withAlphaComponent(0.035)
+            : NSColor.black.withAlphaComponent(0.03)
+    }
+}
+
+enum ThreadCreationSourceCapsuleBackgroundStyle {
+    static func fill(
+        showsExpandedDetails: Bool,
+        isSelected: Bool,
+        appearance: NSAppearance,
+        accentColor: NSColor
+    ) -> NSColor {
+        guard showsExpandedDetails else { return .controlBackgroundColor }
+        return StandardThreadCapsuleBackgroundStyle.fill(
+            isSelected: isSelected,
+            appearance: appearance,
+            accentColor: accentColor
+        )
+    }
+}
+
 enum CompletedCapsuleStyle {
     static let fillOpacity: CGFloat = 0.06
     static let borderOpacity: CGFloat = 0.5
