@@ -63,9 +63,10 @@
 - Removed all pre-archive confirmation dialogs (agent busy warning, uncommitted-changes/unmerged-commits warning, local-sync-failure force-archive dialog). These previously stalled the UI for a git-status check before anything happened.
 - UI archive retries now use `force: true` only after the user confirms `Commit & Archive` and provides a non-empty commit message (defaulted to `Uncommitted changes on <branch> (<worktree>)`). The same forced path keeps non-conflict local-sync failures as archive warnings instead of blocking dialogs.
 - `MagentThread` has a new transient field `isArchiving: Bool` (not persisted). `ThreadManager` exposes `markThreadArchiving(id:)` and `clearThreadArchivingState(id:)`. The latter is called via a `defer` block in `archiveThread` so the overlay is always removed on failure.
-- The non-interactive local-sync merge-back phase now runs in a detached worker before archive completion, so large Local Sync Paths no longer freeze the app while the row stays in its archiving state.
+- The non-interactive local-sync merge-back phase now runs in an off-main-actor worker before archive completion, so large Local Sync Paths no longer freeze the app while the row stays in its archiving state.
 - The archiving overlay now belongs to `AlwaysEmphasizedRowView`, not `ThreadCell`, so the tint/spinner covers the full selected row bounds instead of only the cell content area.
-- `ThreadManager.archiveThread` shows the archive banner immediately after the UI state is updated, then fires remaining cleanup (tmux kills, worktree removal, symlink sweep, stale-session sweep) in a background `Task`. Tmux sessions are killed concurrently via `withTaskGroup`.
+- `ThreadManager.archiveThread` shows the archive banner immediately after the UI state is updated, then awaits off-main-actor cleanup (tmux kills, worktree removal, symlink sweep, stale-session sweep) while holding the shared archive-operation gate. The UI stays responsive and the thread is already gone from the sidebar, but later archive requests cannot race the cleanup. Tmux sessions within that one thread are still killed concurrently via `withTaskGroup`.
+- All in-app archive entry points share one `SerialAsyncOperationGate`. A request re-resolves its thread by ID after reaching the front of the queue, so duplicate or stale queued requests cannot repeat teardown for an already archived thread.
 
 ## What changed in the infernape thread (stale data after suspension points)
 

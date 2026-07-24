@@ -82,7 +82,7 @@ Useful options:
 ```
 
 The script intentionally does not perform changelog/docs decisions; handle those in the agent workflow before running the script.
-It always attempts `--ff-only` first and automatically falls back to a non-ff merge commit if branches have diverged.
+It acquires a repository-wide lock in the common git directory before checking the base worktree, merging, pushing, and calling `archive-thread`. Concurrent helpers targeting the same repository wait instead of racing on the base worktree or git index. The helper selects an already-merged no-op, `--ff-only`, or `--no-ff` merge from commit ancestry, so an unrelated git failure is never mistaken for branch divergence.
 
 ## Build Notes
 

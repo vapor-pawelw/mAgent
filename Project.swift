@@ -34,6 +34,7 @@ let project = Project(
                 "Magent/Services/IPCCommandHandler+Sections.swift",
                 "Magent/Services/IPCSocketServer.swift",
                 "Magent/Services/SessionTracker.swift",
+                "Magent/Services/SerialAsyncOperationGate.swift",
                 "Magent/Services/ThreadStore.swift",
                 "Magent/Services/SessionLifecycleService.swift",
                 "Magent/Services/SessionRecreationAction.swift",
@@ -133,6 +134,7 @@ let project = Project(
             deploymentTargets: .macOS("14.0"),
             sources: [
                 "Magent/Services/SessionTracker.swift",
+                "Magent/Services/SerialAsyncOperationGate.swift",
                 "Magent/Services/ThreadStore.swift",
                 "Magent/Services/ThreadManager+Errors.swift",
                 "Magent/Services/SessionRecreationAction.swift",

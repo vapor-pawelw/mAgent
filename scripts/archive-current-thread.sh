@@ -31,6 +31,7 @@ Options:
 Notes:
 - This script does not perform changelog/docs checks.
 - Source thread worktree and base worktree must both be clean.
+- Concurrent archive workflows for the same repository wait for one another.
 USAGE
 }
 
@@ -96,6 +97,71 @@ find_worktree_for_branch() {
       }
     }
   '
+}
+
+perform_archive_workflow() {
+  local source_dirty
+  local base_head_branch
+  local base_dirty
+  local source_ref
+  local archive_cmd
+
+  # The thread may have changed while this workflow waited behind another archive.
+  source_dirty="$(git -C "$worktree_path" status --porcelain)"
+  [[ -z "$source_dirty" ]] || die "Thread worktree has uncommitted changes. Commit/stash first."
+
+  base_head_branch="$(git -C "$base_worktree_path" rev-parse --abbrev-ref HEAD)"
+  [[ "$base_head_branch" == "$base_branch" ]] || die "Base worktree '$base_worktree_path' is on '$base_head_branch', expected '$base_branch'"
+
+  base_dirty="$(git -C "$base_worktree_path" status --porcelain)"
+  [[ -z "$base_dirty" ]] || die "Base worktree '$base_worktree_path' is dirty. Clean it before archiving."
+
+  echo "Archive plan:"
+  echo "- Project:       $project_name"
+  echo "- Thread:        $THREAD_NAME"
+  echo "- Source branch: $source_branch"
+  echo "- Base branch:   $base_branch"
+  echo "- Source path:   $worktree_path"
+  echo "- Base path:     $base_worktree_path"
+  if [[ "$PUSH_AFTER_MERGE" -eq 1 ]]; then
+    echo "- Push:          origin/$base_branch"
+  else
+    echo "- Push:          skipped (--no-push)"
+  fi
+  if [[ "$SKIP_LOCAL_SYNC" -eq 1 ]]; then
+    echo "- Archive sync:  skip local sync"
+  fi
+
+  # Use refs/heads/ to avoid ambiguity when branch name matches a worktree directory name.
+  source_ref="refs/heads/$source_branch"
+
+  echo "Merging '$source_branch' into '$base_branch'..."
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] Script will select already-merged, ff-only, or non-ff merge from ancestry."
+  elif git -C "$base_worktree_path" merge-base --is-ancestor "$source_ref" HEAD; then
+    echo "'$source_branch' is already contained in '$base_branch'; skipping merge."
+  elif git -C "$base_worktree_path" merge-base --is-ancestor HEAD "$source_ref"; then
+    git -C "$base_worktree_path" merge --ff-only "$source_ref" \
+      || die "Fast-forward merge failed while the archive lock was held."
+  else
+    git -C "$base_worktree_path" merge --no-ff "$source_ref"
+  fi
+
+  if [[ "$PUSH_AFTER_MERGE" -eq 1 ]]; then
+    run_cmd git -C "$base_worktree_path" push origin "$base_branch"
+  fi
+
+  archive_cmd=("$MAGENT_CLI" archive-thread --thread "$THREAD_NAME")
+  if [[ "$FORCE_ARCHIVE" -eq 1 ]]; then
+    archive_cmd+=(--force)
+  fi
+  if [[ "$SKIP_LOCAL_SYNC" -eq 1 ]]; then
+    archive_cmd+=(--skip-local-sync)
+  fi
+
+  run_cmd "${archive_cmd[@]}"
+
+  echo "Archive workflow completed for thread '$THREAD_NAME'."
 }
 
 while [[ $# -gt 0 ]]; do
@@ -183,63 +249,23 @@ if [[ -z "$base_branch" ]]; then
   echo "Base branch missing in thread metadata; defaulting to 'main'."
 fi
 
-source_dirty="$(git -C "$worktree_path" status --porcelain)"
-[[ -z "$source_dirty" ]] || die "Thread worktree has uncommitted changes. Commit/stash first."
-
 base_worktree_path="$(find_worktree_for_branch "$worktree_path" "$base_branch")"
 [[ -n "$base_worktree_path" ]] || die "Could not find a checked-out worktree for base branch '$base_branch'"
 [[ -d "$base_worktree_path" ]] || die "Base worktree path not found: $base_worktree_path"
 
-base_head_branch="$(git -C "$base_worktree_path" rev-parse --abbrev-ref HEAD)"
-[[ "$base_head_branch" == "$base_branch" ]] || die "Base worktree '$base_worktree_path' is on '$base_head_branch', expected '$base_branch'"
+common_git_dir="$(git -C "$base_worktree_path" rev-parse --path-format=absolute --git-common-dir)"
+[[ -n "$common_git_dir" && -d "$common_git_dir" ]] || die "Could not resolve the repository git directory"
+archive_lock_file="$common_git_dir/magent-archive.lock"
 
-base_dirty="$(git -C "$base_worktree_path" status --porcelain)"
-[[ -z "$base_dirty" ]] || die "Base worktree '$base_worktree_path' is dirty. Clean it before archiving."
-
-echo "Archive plan:"
-echo "- Project:       $project_name"
-echo "- Thread:        $THREAD_NAME"
-echo "- Source branch: $source_branch"
-echo "- Base branch:   $base_branch"
-echo "- Source path:   $worktree_path"
-echo "- Base path:     $base_worktree_path"
-if [[ "$PUSH_AFTER_MERGE" -eq 1 ]]; then
-  echo "- Push:          origin/$base_branch"
-else
-  echo "- Push:          skipped (--no-push)"
-fi
-if [[ "$SKIP_LOCAL_SYNC" -eq 1 ]]; then
-  echo "- Archive sync:  skip local sync"
-fi
-
-# Use refs/heads/ to avoid ambiguity when branch name matches a worktree directory name
-source_ref="refs/heads/$source_branch"
-
-echo "Merging '$source_branch' into '$base_branch' (ff-only first)..."
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  run_cmd git -C "$base_worktree_path" merge --ff-only "$source_ref"
-  echo "[dry-run] If ff-only fails, script will run: git -C $base_worktree_path merge --no-ff $source_ref"
+  echo "[dry-run] Would acquire repository archive lock: $archive_lock_file"
+  perform_archive_workflow
 else
-  if git -C "$base_worktree_path" merge --ff-only "$source_ref"; then
-    :
-  else
-    echo "Fast-forward unavailable; creating non-ff merge commit."
-    git -C "$base_worktree_path" merge --no-ff "$source_ref"
-  fi
+  require_cmd lockf
+  echo "Waiting for the repository archive lock..."
+  (
+    lockf 9
+    echo "Repository archive lock acquired."
+    perform_archive_workflow
+  ) 9>>"$archive_lock_file"
 fi
-
-if [[ "$PUSH_AFTER_MERGE" -eq 1 ]]; then
-  run_cmd git -C "$base_worktree_path" push origin "$base_branch"
-fi
-
-archive_cmd=("$MAGENT_CLI" archive-thread --thread "$THREAD_NAME")
-if [[ "$FORCE_ARCHIVE" -eq 1 ]]; then
-  archive_cmd+=(--force)
-fi
-if [[ "$SKIP_LOCAL_SYNC" -eq 1 ]]; then
-  archive_cmd+=(--skip-local-sync)
-fi
-
-run_cmd "${archive_cmd[@]}"
-
-echo "Archive workflow completed for thread '$THREAD_NAME'."

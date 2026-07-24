@@ -131,8 +131,9 @@ Before removing a thread worktree, Magent can merge configured `Copy` entries fo
 - Missing source path in thread worktree: skipped
 - Files unchanged in the thread since creation are skipped (no copy-back)
 - Archive merge-back sync methods are `@concurrent`, running filesystem work on the concurrent pool so the UI stays responsive
-- For UI callers (`force:true`, `awaitLocalSync:false`), the sync is deferred to a fire-and-forget background task — the thread disappears from the sidebar immediately. Sync failures show a warning banner if the app is still running.
+- For UI callers (`force:true`, `awaitLocalSync:false`), the sync is deferred until after UI teardown — the thread disappears from the sidebar immediately. The off-main-actor cleanup remains inside the serialized archive operation, and sync failures show a warning banner.
 - For IPC/CLI callers (`awaitLocalSync:true`), the sync is awaited so the result/warning can be returned in the response.
+- Archive operations are serialized app-wide, preventing two threads from copying into the same sync target or mutating shared archive persistence/worktree state at the same time.
 - Merge-back is additive and non-destructive:
   - directory entries are processed recursively
   - intermediate directories are created only when at least one child file is being copied
