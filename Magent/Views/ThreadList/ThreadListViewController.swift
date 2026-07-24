@@ -316,6 +316,7 @@ final class ThreadListViewController: NSViewController {
     var outlineView: NSOutlineView!
     private var scrollView: NSScrollView!
     private let sidebarChromeBlurView = SidebarChromeBlurView()
+    private let sidebarTitlebarInteractionView = SidebarTitlebarInteractionView()
     private var stickyHeaderOverlay: StickyHeaderOverlayView!
     private var stickyHeaderHeightConstraint: NSLayoutConstraint!
     private let noRepositoriesView = SidebarNoRepositoriesView()
@@ -990,6 +991,9 @@ final class ThreadListViewController: NSViewController {
         sidebarChromeBlurView.isHidden = true
         view.addSubview(sidebarChromeBlurView)
 
+        sidebarTitlebarInteractionView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(sidebarTitlebarInteractionView)
+
         // Sticky project/section header overlay — added last to sit above scroll view
         stickyHeaderOverlay = StickyHeaderOverlayView()
         stickyHeaderOverlay.translatesAutoresizingMaskIntoConstraints = false
@@ -1011,6 +1015,11 @@ final class ThreadListViewController: NSViewController {
             sidebarChromeBlurView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             sidebarChromeBlurView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             sidebarChromeBlurView.bottomAnchor.constraint(equalTo: stickyHeaderOverlay.bottomAnchor),
+
+            sidebarTitlebarInteractionView.topAnchor.constraint(equalTo: view.topAnchor),
+            sidebarTitlebarInteractionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            sidebarTitlebarInteractionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            sidebarTitlebarInteractionView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
 
             SidebarContentLayout.topConstraint(for: stickyHeaderOverlay, in: view),
             stickyHeaderOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),

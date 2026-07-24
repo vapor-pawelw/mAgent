@@ -25,6 +25,10 @@ final class SidebarChromeBlurView: NSVisualEffectView {
     }
 }
 
+final class SidebarTitlebarInteractionView: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
+}
+
 struct MainWindowChromeLayout {
     static func configure(_ window: NSWindow) {
         window.styleMask.insert(.fullSizeContentView)

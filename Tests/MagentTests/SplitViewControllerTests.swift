@@ -115,6 +115,16 @@ struct SplitViewControllerTests {
         #expect(blurView.hitTest(NSPoint(x: 20, y: 20)) == nil)
     }
 
+    @Test("Empty sidebar titlebar area delegates window dragging and double-click behavior to AppKit")
+    func sidebarTitlebarUsesNativeWindowInteraction() {
+        let interactionView = SidebarTitlebarInteractionView(
+            frame: NSRect(x: 0, y: 0, width: 280, height: 48)
+        )
+
+        #expect(interactionView.mouseDownCanMoveWindow)
+        #expect(interactionView.hitTest(NSPoint(x: 140, y: 24)) === interactionView)
+    }
+
     @Test("Sidebar scroll content rests below chrome but can move underneath it")
     func sidebarScrollViewportAccountsForChromeInsets() {
         let insets = SidebarScrollUnderlayLayout.contentInsets(
