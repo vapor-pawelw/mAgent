@@ -34,23 +34,36 @@ struct SidebarCenteringGeometry {
         rowMinY: CGFloat,
         rowHeight: CGFloat,
         viewportHeight: CGFloat,
-        documentHeight: CGFloat
+        documentHeight: CGFloat,
+        topInset: CGFloat = 0,
+        bottomInset: CGFloat = 0
     ) -> CGFloat? {
         guard rowMinY.isFinite,
               rowHeight.isFinite,
               viewportHeight.isFinite,
               documentHeight.isFinite,
+              topInset.isFinite,
+              bottomInset.isFinite,
               rowMinY >= 0,
               rowHeight > 0,
               viewportHeight > 0,
               documentHeight > 0,
+              topInset >= 0,
+              bottomInset >= 0,
               rowMinY + rowHeight <= documentHeight + 1 else {
             return nil
         }
 
-        let targetY = rowMinY + (rowHeight / 2) - (viewportHeight / 2)
-        let maximumY = max(0, documentHeight - viewportHeight)
-        return min(max(targetY, 0), maximumY)
+        let unobscuredHeight = viewportHeight - topInset - bottomInset
+        guard unobscuredHeight > 0 else { return nil }
+
+        let targetY = rowMinY + (rowHeight / 2) - (unobscuredHeight / 2) - topInset
+        let minimumY = -topInset
+        let maximumY = max(
+            minimumY,
+            documentHeight - unobscuredHeight - topInset
+        )
+        return min(max(targetY, minimumY), maximumY)
     }
 
     static func isAtTarget(

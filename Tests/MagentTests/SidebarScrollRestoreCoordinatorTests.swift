@@ -102,6 +102,34 @@ struct SidebarScrollRestoreCoordinatorTests {
     }
 
     @Test
+    func centeringUsesOnlyTheUnobscuredInsetViewport() {
+        #expect(SidebarCenteringGeometry.targetOriginY(
+            rowMinY: 20,
+            rowHeight: 40,
+            viewportHeight: 400,
+            documentHeight: 1_000,
+            topInset: 48,
+            bottomInset: 4
+        ) == -48)
+        #expect(SidebarCenteringGeometry.targetOriginY(
+            rowMinY: 300,
+            rowHeight: 40,
+            viewportHeight: 400,
+            documentHeight: 1_000,
+            topInset: 48,
+            bottomInset: 4
+        ) == 98)
+        #expect(SidebarCenteringGeometry.targetOriginY(
+            rowMinY: 940,
+            rowHeight: 40,
+            viewportHeight: 400,
+            documentHeight: 1_000,
+            topInset: 48,
+            bottomInset: 4
+        ) == 604)
+    }
+
+    @Test
     func initialCenteringOnlyCompletesAtTheRequestedScrollTarget() {
         #expect(SidebarCenteringGeometry.isAtTarget(
             currentOriginY: 299.5,

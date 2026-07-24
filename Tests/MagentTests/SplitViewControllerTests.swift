@@ -8,6 +8,118 @@ struct SplitViewControllerTests {
         #expect(SidebarTrackingSplitView().isVertical)
     }
 
+    @Test("Sidebar extends through the window titlebar")
+    func sidebarUsesFullHeightLayout() {
+        let sidebarItem = NSSplitViewItem(sidebarWithViewController: NSViewController())
+
+        MainWindowChromeLayout.configure(sidebarItem)
+
+        #expect(sidebarItem.allowsFullHeightLayout)
+    }
+
+    @Test("Current thread strip starts on the content side of the sidebar")
+    func toolbarTracksSidebarBeforeCurrentThread() throws {
+        let currentThread = NSToolbarItem.Identifier("currentThread")
+        let identifiers = MainWindowChromeLayout.defaultToolbarItemIdentifiers(
+            currentThread: currentThread,
+            addRepository: NSToolbarItem.Identifier("addRepository"),
+            recentlyArchived: NSToolbarItem.Identifier("recentlyArchived"),
+            settings: NSToolbarItem.Identifier("settings")
+        )
+        let separatorIndex = try #require(
+            identifiers.firstIndex(of: NSToolbarItem.Identifier.sidebarTrackingSeparator)
+        )
+        let currentThreadIndex = try #require(
+            identifiers.firstIndex(of: currentThread)
+        )
+
+        #expect(currentThreadIndex == separatorIndex + 1)
+    }
+
+    @Test("Sidebar toolbar separator tracks the split-view divider")
+    func toolbarSeparatorTracksSidebarDivider() {
+        let splitView = NSSplitView()
+        let separator = MainWindowChromeLayout.sidebarTrackingSeparator(for: splitView)
+
+        #expect(separator.splitView === splitView)
+        #expect(separator.dividerIndex == 0)
+    }
+
+    @Test("Main window keeps its existing vertical toolbar layout")
+    func mainWindowPreservesVerticalToolbarLayout() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 500),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.toolbarStyle = .expanded
+
+        MainWindowChromeLayout.configure(window)
+
+        #expect(window.styleMask.contains(.fullSizeContentView))
+        #expect(window.titlebarAppearsTransparent)
+        #expect(window.titleVisibility == .hidden)
+        #expect(window.toolbarStyle == .expanded)
+    }
+
+    @Test("Sidebar content starts below the window-control safe area")
+    func sidebarContentUsesSafeAreaTop() {
+        let container = NSView()
+        let content = NSView()
+        let constraint = SidebarContentLayout.topConstraint(for: content, in: container)
+
+        #expect(constraint.firstItem === content)
+        #expect(constraint.firstAttribute == .top)
+        #expect(constraint.secondItem === container.safeAreaLayoutGuide)
+        #expect(constraint.secondAttribute == .top)
+    }
+
+    @Test("Main detail content keeps the tab bar below the window toolbar")
+    func mainDetailContentUsesSafeAreaTop() {
+        let container = NSView()
+        let content = NSView()
+        let constraint = MainDetailContentLayout.topConstraint(for: content, in: container)
+
+        #expect(constraint.firstItem === content)
+        #expect(constraint.firstAttribute == .top)
+        #expect(constraint.secondItem === container.safeAreaLayoutGuide)
+        #expect(constraint.secondAttribute == .top)
+    }
+
+    @Test("Sidebar titlebar blur stays visually consistent and non-interactive")
+    func sidebarTitlebarBlurUsesStickyHeaderStyleWithoutCapturingClicks() {
+        let blurView = SidebarChromeBlurView(frame: NSRect(x: 0, y: 0, width: 280, height: 48))
+
+        #expect(blurView.blendingMode == .withinWindow)
+        #expect(blurView.material == .popover)
+        #expect(blurView.state == .active)
+        #expect(blurView.hitTest(NSPoint(x: 20, y: 20)) == nil)
+    }
+
+    @Test("Sidebar scroll content rests below chrome but can move underneath it")
+    func sidebarScrollViewportAccountsForChromeInsets() {
+        let insets = SidebarScrollUnderlayLayout.contentInsets(
+            safeAreaInsets: NSEdgeInsets(top: 48, left: 3, bottom: 2, right: 3)
+        )
+        let visibleRect = SidebarScrollUnderlayLayout.unobscuredRect(
+            clipBounds: NSRect(x: 0, y: 120, width: 280, height: 600),
+            contentInsets: insets
+        )
+
+        #expect(insets.top == 48)
+        #expect(insets.left == 0)
+        #expect(insets.bottom == 4)
+        #expect(insets.right == 0)
+        #expect(visibleRect == NSRect(x: 0, y: 168, width: 280, height: 548))
+        #expect(
+            SidebarScrollUnderlayLayout.clipOriginY(
+                documentYAtUnobscuredTop: 200,
+                topInset: insets.top
+            ) == 152
+        )
+    }
+
     @Test("Sidebar width range supports a compact minimum on small screens")
     func sidebarSupportsCompactWidth() {
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: NSViewController())
