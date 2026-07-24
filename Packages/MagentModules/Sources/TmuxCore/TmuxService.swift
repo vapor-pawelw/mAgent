@@ -3,6 +3,16 @@ import os
 import ShellInfra
 import MagentModels
 
+public struct AgentCompletionEvent: Equatable, Sendable {
+    public let sessionName: String
+    public let completedAt: Date
+
+    public init(sessionName: String, completedAt: Date) {
+        self.sessionName = sessionName
+        self.completedAt = completedAt
+    }
+}
+
 public final class TmuxService: Sendable {
 
     public static let shared = TmuxService()
@@ -212,7 +222,7 @@ public final class TmuxService: Sendable {
         // Legacy rollback path only: ensure the event log file exists so
         // pipe-pane can append to it when the old watcher mechanism is enabled.
         // Never truncate on startup — accumulated events are consumed by
-        // ThreadManager at launch via consumeAgentCompletionSessions().
+        // ThreadManager at launch via consumeAgentCompletionEvents().
         _ = try? await ShellExecutor.run("touch \(shellQuote(agentCompletionEventsPath))")
         // Install the bell-watcher script used by pipe-pane on agent sessions.
         installBellWatcherScript()
@@ -457,7 +467,7 @@ public final class TmuxService: Sendable {
     private func installBellWatcherScript() {
         let path = bellWatcherScriptPath
         // Only write if missing or outdated
-        let marker = "# magent-bell-watcher-v3"
+        let marker = "# magent-bell-watcher-v4"
         if let existing = try? String(contentsOfFile: path, encoding: .utf8), existing.hasPrefix(marker) {
             return
         }
@@ -471,7 +481,7 @@ public final class TmuxService: Sendable {
         #!/bin/sh
         SESSION="$1"
         LOG="\(agentCompletionEventsPath)"
-        exec perl -e '
+        exec perl -MTime::HiRes=time -e '
         $| = 1;
         my $s = $ARGV[0];
         my $f = $ARGV[1];
@@ -487,7 +497,7 @@ public final class TmuxService: Sendable {
                         $st = 2;  # C1 string command starter
                     } elsif ($c == 0x07) {
                         open(my $fh, ">>", $f);
-                        print $fh "$s\\n";
+                        print $fh "$s\\t" . time() . "\\n";
                         close($fh);
                     }
                 } elsif ($st == 1) {
@@ -537,7 +547,7 @@ public final class TmuxService: Sendable {
         _ = try? await ShellExecutor.run("tmux pipe-pane -t \(shellQuote(sessionName))")
     }
 
-    public func consumeAgentCompletionSessions() async -> [String] {
+    public func consumeAgentCompletionEvents(now: Date = Date()) async -> [AgentCompletionEvent] {
         // Atomically move the event log to a temp path, then read it.
         // mv is atomic on the same filesystem, so no events are lost between
         // read and truncation (the old cat-then-truncate had that race).
@@ -546,10 +556,18 @@ public final class TmuxService: Sendable {
         guard let output = try? await ShellExecutor.run(command), !output.isEmpty else {
             return []
         }
-        return output
-            .split(whereSeparator: \.isNewline)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        return output.split(whereSeparator: \.isNewline).compactMap { rawLine in
+            let line = String(rawLine).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { return nil }
+            let fields = line.split(separator: "\t", maxSplits: 1)
+            guard fields.count == 2, let timestamp = TimeInterval(fields[1]) else {
+                return AgentCompletionEvent(sessionName: line, completedAt: now)
+            }
+            return AgentCompletionEvent(
+                sessionName: String(fields[0]),
+                completedAt: Date(timeIntervalSince1970: timestamp)
+            )
+        }
     }
 
     /// Copies the current tmux copy-mode selection to the system clipboard, then exits copy-mode.

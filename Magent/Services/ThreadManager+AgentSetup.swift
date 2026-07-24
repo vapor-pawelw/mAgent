@@ -330,6 +330,20 @@ extension ThreadManager {
         )
     }
 
+    func recordSubmittedPromptTiming(
+        threadId: UUID,
+        sessionName: String,
+        prompt: String,
+        sentAt: Date = Date()
+    ) {
+        agentSetupService.recordSubmittedPromptTiming(
+            threadId: threadId,
+            sessionName: sessionName,
+            prompt: prompt,
+            sentAt: sentAt
+        )
+    }
+
     @discardableResult
     func remapSubmittedPromptHistory(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
         agentSetupService.remapSubmittedPromptHistory(threadIndex: index, sessionRenameMap: sessionRenameMap)

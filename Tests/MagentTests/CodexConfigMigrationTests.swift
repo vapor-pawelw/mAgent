@@ -103,6 +103,8 @@ struct CodexConfigMigrationTests {
         #expect(managed.contains("[[hooks.Stop]]"))
         #expect(managed.contains("@magent_codex_turn_state idle"))
         #expect(managed.contains("/tmp/magent-agent-completion-events.log"))
+        #expect(managed.contains("magent_completed_at"))
+        #expect(managed.contains("printf \"%s\\t%s\\n\""))
     }
 
     @Test("Managed lifecycle hooks remain single when config is prepared again")

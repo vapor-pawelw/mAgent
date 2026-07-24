@@ -1179,6 +1179,7 @@ final class ThreadLifecycleService {
                 $0.freshAgentSessions = []
                 $0.forwardedTmuxSessions = []
                 $0.submittedPromptsBySession = [:]
+                $0.submittedPromptTimingsBySession = [:]
                 $0.lastSelectedTabIdentifier = nil
             }
 
@@ -1263,6 +1264,7 @@ final class ThreadLifecycleService {
         thread.lastSelectedTabIdentifier = nil
         thread.customTabNames = [:]
         thread.submittedPromptsBySession = [:]
+        thread.submittedPromptTimingsBySession = [:]
     }
 
     // MARK: - Archive persistence (off main actor)

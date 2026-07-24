@@ -1356,6 +1356,10 @@ final class RenameService {
             store.threads[index].submittedPromptsBySession.removeValue(forKey: sessionName)
             store.threads[index].submittedPromptsBySession[resolvedSessionName] = promptHistory
         }
+        if let promptTimings = currentThread.submittedPromptTimingsBySession[sessionName] {
+            store.threads[index].submittedPromptTimingsBySession.removeValue(forKey: sessionName)
+            store.threads[index].submittedPromptTimingsBySession[resolvedSessionName] = promptTimings
+        }
         _ = remapTransientSessionState(index, [sessionName: resolvedSessionName])
         _ = remapInitialPromptInjectionState([sessionName: resolvedSessionName])
 

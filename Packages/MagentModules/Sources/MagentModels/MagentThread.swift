@@ -474,6 +474,25 @@ public nonisolated enum ThreadSidebarListState: Int, CaseIterable, Sendable {
     case hidden = 2
 }
 
+public nonisolated struct SubmittedPromptTiming: Codable, Equatable, Sendable {
+    public let id: UUID
+    public let text: String
+    public let sentAt: Date
+    public var completedAt: Date?
+
+    public init(
+        id: UUID = UUID(),
+        text: String,
+        sentAt: Date,
+        completedAt: Date? = nil
+    ) {
+        self.id = id
+        self.text = text
+        self.sentAt = sentAt
+        self.completedAt = completedAt
+    }
+}
+
 public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     private static let jiraTicketKeyRegex = try! NSRegularExpression(pattern: #"[A-Za-z]+-\d+"#)
 
@@ -548,6 +567,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var isThreadIconManuallySet: Bool
     /// Persisted per-session history of TOC-confirmed prompts (newest at end).
     public var submittedPromptsBySession: [String: [String]]
+    /// Persisted timing for prompts whose submission Magent directly observed.
+    public var submittedPromptTimingsBySession: [String: [SubmittedPromptTiming]]
     /// Snapshot of project local sync entries taken when the thread was created.
     /// `nil` means the thread predates entry snapshotting and should fall back to
     /// current project settings during archive.
@@ -892,6 +913,24 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         "Tab \(index)"
     }
 
+    @discardableResult
+    public mutating func completePendingPromptTimings(
+        for sessionName: String,
+        at completedAt: Date
+    ) -> Bool {
+        guard var timings = submittedPromptTimingsBySession[sessionName] else { return false }
+        var changed = false
+        for index in timings.indices
+        where timings[index].completedAt == nil && timings[index].sentAt <= completedAt {
+            timings[index].completedAt = completedAt
+            changed = true
+        }
+        if changed {
+            submittedPromptTimingsBySession[sessionName] = timings
+        }
+        return changed
+    }
+
     public enum CodingKeys: String, CodingKey {
         case id, projectId, name, worktreePath, branchName
         case tmuxSessionNames, agentTmuxSessions, sessionConversationIDs, sessionAgentTypes, sessionCreatedAts, freshAgentSessions, forwardedTmuxSessions, pinnedTmuxSessions, protectedTmuxSessions, isKeepAlive, didOfferKeepAlivePromotion
@@ -917,6 +956,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case threadIcon
         case isThreadIconManuallySet
         case submittedPromptsBySession
+        case submittedPromptTimingsBySession
         case localFileSyncEntriesSnapshot
         case localFileSyncPathsSnapshot
         case hasEverDoneWork
@@ -977,6 +1017,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         threadIcon: ThreadIcon = .other,
         isThreadIconManuallySet: Bool = false,
         submittedPromptsBySession: [String: [String]] = [:],
+        submittedPromptTimingsBySession: [String: [SubmittedPromptTiming]] = [:],
         localFileSyncEntriesSnapshot: [LocalFileSyncEntry]? = nil,
         hasEverDoneWork: Bool = false,
         persistedWebTabs: [PersistedWebTab] = [],
@@ -1033,6 +1074,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.threadIcon = threadIcon
         self.isThreadIconManuallySet = isThreadIconManuallySet
         self.submittedPromptsBySession = submittedPromptsBySession
+        self.submittedPromptTimingsBySession = submittedPromptTimingsBySession
         self.localFileSyncEntriesSnapshot = localFileSyncEntriesSnapshot
         self.hasEverDoneWork = hasEverDoneWork
         self.persistedWebTabs = persistedWebTabs
@@ -1059,6 +1101,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         tabNameSuffixCounters = completed.tabNameSuffixCounters
         baseBranch = completed.baseBranch
         submittedPromptsBySession = completed.submittedPromptsBySession
+        submittedPromptTimingsBySession = completed.submittedPromptTimingsBySession
         localFileSyncEntriesSnapshot = completed.localFileSyncEntriesSnapshot
         persistedWebTabs = completed.persistedWebTabs
         persistedDraftTabs = completed.persistedDraftTabs
@@ -1113,6 +1156,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             threadIcon: threadIcon,
             isThreadIconManuallySet: isThreadIconManuallySet,
             submittedPromptsBySession: submittedPromptsBySession,
+            submittedPromptTimingsBySession: submittedPromptTimingsBySession,
             localFileSyncEntriesSnapshot: localFileSyncEntriesSnapshot,
             hasEverDoneWork: hasEverDoneWork,
             persistedWebTabs: persistedWebTabs,
@@ -1196,6 +1240,10 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isThreadIconManuallySet = try container.decodeIfPresent(Bool.self, forKey: .isThreadIconManuallySet)
             ?? (threadIcon != .other)
         submittedPromptsBySession = try container.decodeIfPresent([String: [String]].self, forKey: .submittedPromptsBySession) ?? [:]
+        submittedPromptTimingsBySession = try container.decodeIfPresent(
+            [String: [SubmittedPromptTiming]].self,
+            forKey: .submittedPromptTimingsBySession
+        ) ?? [:]
         if let decodedEntries = try container.decodeIfPresent([LocalFileSyncEntry].self, forKey: .localFileSyncEntriesSnapshot) {
             localFileSyncEntriesSnapshot = decodedEntries
         } else {
@@ -1305,6 +1353,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(isThreadIconManuallySet, forKey: .isThreadIconManuallySet)
         if !submittedPromptsBySession.isEmpty {
             try container.encode(submittedPromptsBySession, forKey: .submittedPromptsBySession)
+        }
+        if !submittedPromptTimingsBySession.isEmpty {
+            try container.encode(submittedPromptTimingsBySession, forKey: .submittedPromptTimingsBySession)
         }
         try container.encodeIfPresent(localFileSyncEntriesSnapshot, forKey: .localFileSyncEntriesSnapshot)
         try container.encodeIfPresent(localFileSyncEntriesSnapshot?.map(\.path), forKey: .localFileSyncPathsSnapshot)

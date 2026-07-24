@@ -11,6 +11,7 @@ This document covers Prompt TOC parsing and jump behavior.
 - Prompt coordinates must be resolved from a fresh pane capture when a row is selected because tmux history-limit eviction can shift every retained line upward.
 - The visible agent tab is rescanned every three seconds and shortly after Escape steering. Returning to a cached tab retries transient empty captures instead of clearing known prompt history.
 - TOC rows may show only a 3-line preview, but prompt actions like `Copy prompt` should use the full submitted prompt text.
+- Prompts whose submission Magent directly observed show a small secondary footer with their sent time and either `In progress` or their completion time. Historical prompts without trustworthy timing metadata keep the existing text-only row instead of displaying an inferred timestamp.
 
 ## TOC capsule/hover UI
 
@@ -20,6 +21,7 @@ This document covers Prompt TOC parsing and jump behavior.
 - The pinned TOC stays expanded and always shows its unpin button. Its rectangular header and full-height divider meet the panel edges without inset rounding. The divider matches the subtle top-bar separators and shows the standard horizontal resize cursor across a forgiving 8pt hit target; drag it to resize the split. The chosen width and pin state persist across launches.
 - Both floating and pinned prompt lists show the newest prompt first and the oldest last. The newest row is selected by default, and each newly submitted prompt takes that visual selection without navigating the terminal; clicking it still jumps to the prompt. Initial loads stay at the top, while periodic reloads anchor older reading positions below any newly inserted rows unless the user is already near the newest edge.
 - Each prompt row shows its ordinal in a small borderless, high-contrast badge instead of prefixing the prompt text. Floating rows keep compact 11pt, three-line previews; pinned rows use 12pt text and allow up to five lines.
+- Timing footers use secondary-label color and a font two points smaller than the prompt preview.
 - The toolbar toggle button and in-panel × close button are removed — TOC is always-on; users disable it in Settings.
 - No agent name appears in the header; only the title and count badge.
 
@@ -59,6 +61,8 @@ Pinned mode does not update the floating position. Its leading-edge resize updat
 - Parser line indexes are derived from full `tmux capture-pane -S - -E -` output and are therefore top-relative.
 - TOC navigation resolves the selected prompt against a fresh full-pane capture, then uses `history-top` + `scroll-down lineIndex`. `scroll-down` moves the viewport 1 line toward newer content regardless of cursor position. After `history-top` (viewport top = 0) + `lineIndex` scroll-downs, viewport top = `lineIndex`. The fresh lookup is required because line indexes stay stable only while tmux appends below them; once `history-limit` evicts oldest lines, every retained index shifts upward. All navigation commands are chained with tmux's `\;` separator in a single IPC message so the server processes them atomically and avoids a visible intermediate flash.
 - `captureFullPane` must return the **raw, untrimmed** stdout. Leading empty lines are part of the copy-mode coordinate space (history-top = line 0) and must not be stripped. Trailing newlines produce one harmless trailing empty element in the split that no prompt marker can match. Any trimming of leading content shifts all split array indexes and causes `scroll-down` to land at the wrong position.
+- Prompt timing is persisted separately from TOC-confirmed prompt history in `MagentThread.submittedPromptTimingsBySession`. Normal terminal Return submissions, successful initial-prompt injection, and IPC prompt injection record `sentAt`. The shared session-completion path stamps every unfinished timing record sent no later than the completion event with the same `completedAt`, which covers steering prompts from one turn without completing a newer turn when event consumption is delayed.
+- Timing records are matched back to TOC entries newest-first by normalized prompt text, so a newly observed repeat such as `continue` does not donate its timestamp to an identical historical row. Long locally typed prompts may be retained as a suffix by the terminal input observer, so sufficiently long suffix matches are accepted; short fuzzy matches are deliberately rejected.
 
 ## Multi-line prompt capture
 

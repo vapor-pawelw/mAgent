@@ -1121,24 +1121,30 @@ final class SessionLifecycleService {
     }
 
     func checkForAgentCompletions() async {
-        let sessions = await tmux.consumeAgentCompletionSessions()
-        guard !sessions.isEmpty else { return }
-        await processAgentCompletionSessions(sessions)
+        let events = await tmux.consumeAgentCompletionEvents()
+        guard !events.isEmpty else { return }
+        await processAgentCompletionEvents(events)
     }
 
-    private func processAgentCompletionSessions(_ sessions: [String], now: Date = Date()) async {
-        guard !sessions.isEmpty else { return }
+    private func processAgentCompletionEvents(_ events: [AgentCompletionEvent]) async {
+        guard !events.isEmpty else { return }
 
         let settings = persistence.loadSettings()
         let playSound = settings.playSoundForAgentCompletion
-        let orderedUniqueSessions = deduplicatedSessions(sessions)
-        let result = processCompletedAgentSessions(
-            orderedUniqueSessions,
-            completedAt: now,
-            settings: settings,
-            playSound: playSound,
-            shouldApplyRecentCompletionCooldown: true
-        )
+        let orderedUniqueEvents = deduplicatedCompletionEvents(events)
+        var result = CompletionProcessingResult()
+        for event in orderedUniqueEvents {
+            let eventResult = processCompletedAgentSessions(
+                [event.sessionName],
+                completedAt: event.completedAt,
+                settings: settings,
+                playSound: playSound,
+                shouldApplyRecentCompletionCooldown: true
+            )
+            result.changed = result.changed || eventResult.changed
+            result.changedThreadIds.formUnion(eventResult.changedThreadIds)
+            result.newlyUnreadThreadIds.formUnion(eventResult.newlyUnreadThreadIds)
+        }
 
         guard result.changed else { return }
         persistence.debouncedSaveActiveThreads(store.threads)
@@ -1156,7 +1162,7 @@ final class SessionLifecycleService {
         // (no ThreadDetailViewController), so the TOC-based rename path
         // never fires. We spawn these as fire-and-forget tasks to avoid
         // blocking the completion notification flow.
-        for session in orderedUniqueSessions {
+        for session in orderedUniqueEvents.map(\.sessionName) {
             if let index = store.threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }),
                !store.threads[index].didAutoRenameFromFirstPrompt,
                !store.threads[index].isMain {
@@ -1178,7 +1184,7 @@ final class SessionLifecycleService {
                     postBusySessionsChanged?(thread)
                 }
             }
-            for session in orderedUniqueSessions {
+            for session in orderedUniqueEvents.map(\.sessionName) {
                 if let index = store.threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }) {
                     NotificationCenter.default.post(
                         name: .magentAgentCompletionDetected,
@@ -1197,6 +1203,20 @@ final class SessionLifecycleService {
         sessions.reduce(into: [String]()) { result, session in
             if !result.contains(session) {
                 result.append(session)
+            }
+        }
+    }
+
+    private func deduplicatedCompletionEvents(
+        _ events: [AgentCompletionEvent]
+    ) -> [AgentCompletionEvent] {
+        events.reduce(into: [AgentCompletionEvent]()) { result, event in
+            if let index = result.firstIndex(where: { $0.sessionName == event.sessionName }) {
+                if event.completedAt > result[index].completedAt {
+                    result[index] = event
+                }
+            } else {
+                result.append(event)
             }
         }
     }
@@ -1224,6 +1244,10 @@ final class SessionLifecycleService {
             }
 
             store.threads[index].lastAgentCompletionAt = completedAt
+            _ = store.threads[index].completePendingPromptTimings(
+                for: session,
+                at: completedAt
+            )
             if settings.autoReorderThreadsOnAgentCompletion {
                 bumpThreadToTop?(store.threads[index].id)
             }
@@ -1492,7 +1516,9 @@ final class SessionLifecycleService {
                         && !isBusy
                         && store.thread(byId: threadId)?.waitingForInputSessions.contains(session) == false
                         && store.thread(byId: threadId)?.rateLimitedSessions[session] == nil {
-                        await processAgentCompletionSessions([session])
+                        await processAgentCompletionEvents([
+                            AgentCompletionEvent(sessionName: session, completedAt: Date()),
+                        ])
                     }
 
                 case .claude?:
@@ -1997,6 +2023,10 @@ final class SessionLifecycleService {
         let settings = persistence.loadSettings()
         let completedAt = Date()
         store.threads[index].lastAgentCompletionAt = completedAt
+        _ = store.threads[index].completePendingPromptTimings(
+            for: sessionName,
+            at: completedAt
+        )
         if settings.autoReorderThreadsOnAgentCompletion {
             bumpThreadToTop?(threadId)
         }

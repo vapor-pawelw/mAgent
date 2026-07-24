@@ -1,9 +1,78 @@
 import AppKit
+import MagentCore
 
 struct PromptTOCEntry: Sendable {
     let lineIndex: Int
     let displayText: String
     let fullText: String
+    let timing: SubmittedPromptTiming?
+
+    init(
+        lineIndex: Int,
+        displayText: String,
+        fullText: String,
+        timing: SubmittedPromptTiming? = nil
+    ) {
+        self.lineIndex = lineIndex
+        self.displayText = displayText
+        self.fullText = fullText
+        self.timing = timing
+    }
+}
+
+enum PromptTOCTimingResolver {
+    static func attaching(
+        _ timings: [SubmittedPromptTiming],
+        to entries: [PromptTOCEntry]
+    ) -> [PromptTOCEntry] {
+        var resolved = entries
+        var nextTimingIndex = timings.endIndex
+
+        for entryIndex in entries.indices.reversed() {
+            guard let matchingIndex = timings.indices[..<nextTimingIndex].last(where: {
+                timingText(timings[$0].text, matches: entries[entryIndex].fullText)
+            }) else {
+                continue
+            }
+            nextTimingIndex = matchingIndex
+            resolved[entryIndex] = PromptTOCEntry(
+                lineIndex: entries[entryIndex].lineIndex,
+                displayText: entries[entryIndex].displayText,
+                fullText: entries[entryIndex].fullText,
+                timing: timings[matchingIndex]
+            )
+        }
+        return resolved
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func timingText(_ timingText: String, matches promptText: String) -> Bool {
+        let normalizedTiming = normalized(timingText)
+        let normalizedPrompt = normalized(promptText)
+        if normalizedTiming == normalizedPrompt {
+            return true
+        }
+        return normalizedTiming.count >= 80 && normalizedPrompt.hasSuffix(normalizedTiming)
+    }
+}
+
+enum PromptTOCFooterState: Equatable {
+    case inProgress(sentAt: Date)
+    case completed(sentAt: Date, completedAt: Date)
+
+    init?(timing: SubmittedPromptTiming?) {
+        guard let timing else { return nil }
+        if let completedAt = timing.completedAt {
+            self = .completed(sentAt: timing.sentAt, completedAt: completedAt)
+        } else {
+            self = .inProgress(sentAt: timing.sentAt)
+        }
+    }
 }
 
 struct PromptTOCNavigationTarget: Equatable {

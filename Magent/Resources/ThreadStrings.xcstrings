@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "promptTOCTimingCompleted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent %1$@ · Completed %2$@"
+          }
+        }
+      }
+    },
+    "promptTOCTimingInProgress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent %@ · In progress"
+          }
+        }
+      }
+    },
     "threadActivityIndicatorCircle": {
       "extractionState": "manual",
       "localizations": {

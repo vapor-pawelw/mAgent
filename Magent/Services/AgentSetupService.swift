@@ -688,7 +688,23 @@ final class AgentSetupService {
                 if !appeared {
                     NSLog("[injectPendingPromptNow] prompt fingerprint not found — sending Enter anyway")
                 }
-                try? await tmux.sendEnter(sessionName: sessionName)
+                do {
+                    try await tmux.sendEnter(sessionName: sessionName)
+                } catch {
+                    NSLog("[injectPendingPromptNow] sendEnter failed: \(error)")
+                    await postInitialPromptInjectionFailure(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    )
+                    return
+                }
+                recordSubmittedPromptTiming(
+                    threadId: nil,
+                    sessionName: sessionName,
+                    prompt: prompt
+                )
             } else {
                 do {
                     try await tmux.sendText(sessionName: sessionName, text: prompt)
@@ -930,7 +946,23 @@ final class AgentSetupService {
                 if !appeared {
                     NSLog("[injectAfterStart] prompt fingerprint not found in pane for session \(sessionName) — sending Enter anyway")
                 }
-                try? await tmux.sendEnter(sessionName: sessionName)
+                do {
+                    try await tmux.sendEnter(sessionName: sessionName)
+                } catch {
+                    NSLog("[injectAfterStart] sendEnter failed for session \(sessionName): \(error)")
+                    await postInitialPromptInjectionFailure(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    )
+                    return
+                }
+                recordSubmittedPromptTiming(
+                    threadId: nil,
+                    sessionName: sessionName,
+                    prompt: prompt
+                )
                 pendingPromptInjectionSessions.removeValue(forKey: sessionName)
                 pendingPromptInjectionTasks.removeValue(forKey: sessionName)
                 postAgentKeysInjectedNotification(sessionName: sessionName, includedInitialPrompt: true)
@@ -1532,6 +1564,29 @@ final class AgentSetupService {
         replaceSubmittedPromptHistory(threadId: threadId, sessionName: sessionName, prompts: current + [prompt])
     }
 
+    func recordSubmittedPromptTiming(
+        threadId: UUID?,
+        sessionName: String,
+        prompt: String,
+        sentAt: Date = Date()
+    ) {
+        guard let index = store.threads.firstIndex(where: { thread in
+            threadId.map { thread.id == $0 } ?? thread.agentTmuxSessions.contains(sessionName)
+        }) else { return }
+        guard store.threads[index].agentTmuxSessions.contains(sessionName) else { return }
+
+        let normalizedPrompt = normalizedSubmittedPrompt(prompt)
+        guard !normalizedPrompt.isEmpty else { return }
+
+        var timings = store.threads[index].submittedPromptTimingsBySession[sessionName] ?? []
+        timings.append(SubmittedPromptTiming(text: normalizedPrompt, sentAt: sentAt))
+        if timings.count > Self.maxSubmittedPromptsPerSession {
+            timings = Array(timings.suffix(Self.maxSubmittedPromptsPerSession))
+        }
+        store.threads[index].submittedPromptTimingsBySession[sessionName] = timings
+        try? persistence.saveActiveThreads(store.threads)
+    }
+
     private func normalizedSubmittedPrompt(_ prompt: String) -> String {
         prompt
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
@@ -1556,24 +1611,47 @@ final class AgentSetupService {
 
         if changed || updated.count != store.threads[index].submittedPromptsBySession.count {
             store.threads[index].submittedPromptsBySession = updated
-            return true
+            changed = true
         }
-        return false
+
+        var updatedTimings: [String: [SubmittedPromptTiming]] = [:]
+        for (sessionName, timings) in store.threads[index].submittedPromptTimingsBySession {
+            let newName = sessionRenameMap[sessionName] ?? sessionName
+            updatedTimings[newName, default: []].append(contentsOf: timings)
+            if newName != sessionName {
+                changed = true
+            }
+        }
+        for sessionName in updatedTimings.keys {
+            updatedTimings[sessionName]?.sort { $0.sentAt < $1.sentAt }
+        }
+        if changed || updatedTimings.count != store.threads[index].submittedPromptTimingsBySession.count {
+            store.threads[index].submittedPromptTimingsBySession = updatedTimings
+        }
+        return changed
     }
 
     @discardableResult
     func pruneSubmittedPromptHistoryToKnownSessions(threadIndex index: Int) -> Bool {
         guard store.threads.indices.contains(index) else { return false }
 
+        var changed = false
         let validSessions = Set(store.threads[index].tmuxSessionNames)
         let filtered = store.threads[index].submittedPromptsBySession.filter { key, prompts in
             validSessions.contains(key) && !prompts.isEmpty
         }
         if filtered != store.threads[index].submittedPromptsBySession {
             store.threads[index].submittedPromptsBySession = filtered
-            return true
+            changed = true
         }
-        return false
+        let filteredTimings = store.threads[index].submittedPromptTimingsBySession.filter {
+            validSessions.contains($0.key) && !$0.value.isEmpty
+        }
+        if filteredTimings != store.threads[index].submittedPromptTimingsBySession {
+            store.threads[index].submittedPromptTimingsBySession = filteredTimings
+            changed = true
+        }
+        return changed
     }
 
     // MARK: - Session-State Rekey/Prune
@@ -1671,15 +1749,15 @@ final class AgentSetupService {
 
     func installClaudeHooksSettings(for appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) {
         let themeSuffix = preserveAgentColorTheme ? "-notheme" : ""
-        let marker = "magent-settings-v2-\(appearanceMode.rawValue)\(themeSuffix)"
+        let marker = "magent-settings-v3-\(appearanceMode.rawValue)\(themeSuffix)"
         let path = Self.claudeHooksSettingsPath
         if let existing = try? String(contentsOfFile: path, encoding: .utf8),
            existing.contains(marker) {
             return
         }
         let eventsPath = "/tmp/magent-agent-completion-events.log"
-        // The Stop hook runs `tmux display-message` to get the session name and
-        // appends it to the event log. Guarded by MAGENT_WORKTREE_NAME so it
+        // Keep the event time so delayed consumption cannot complete a later turn.
+        // Guarded by MAGENT_WORKTREE_NAME so it
         // only fires inside Magent-managed sessions.
         var settings: [String: Any] = [
             "_comment": marker,
@@ -1689,7 +1767,7 @@ final class AgentSetupService {
                         "hooks": [
                             [
                                 "type": "command",
-                                "command": "[ -n \"$MAGENT_WORKTREE_NAME\" ] && tmux display-message -p '#{session_name}' >> \(eventsPath) || true",
+                                "command": "[ -n \"$MAGENT_WORKTREE_NAME\" ] && printf '%s\\t%s\\n' \"$(tmux display-message -p '#{session_name}')\" \"$(/usr/bin/perl -MTime::HiRes=time -e 'print time')\" >> \(eventsPath) || true",
                                 "timeout": 5,
                             ],
                         ],

@@ -255,7 +255,7 @@ extension ThreadDetailViewController {
             promptTOCView?.setLoading(agentType: agentType)
         }
 
-        guard let entries = await capturePromptEntries(
+        guard let capturedEntries = await capturePromptEntries(
             sessionName: sessionName,
             agentType: agentType,
             retryEmptyEntries: shouldRetryEmptyEntries
@@ -267,12 +267,17 @@ extension ThreadDetailViewController {
         }
         guard !Task.isCancelled else { return }
         guard currentSessionName() == sessionName else { return }
-        if entries.isEmpty, knownPromptCount > 0 {
+        if capturedEntries.isEmpty, knownPromptCount > 0 {
             promptTOCEmptyCaptureRetryAttemptedSessions.insert(sessionName)
             return
         }
         promptTOCEmptyCaptureRetryAttemptedSessions.remove(sessionName)
 
+        let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let entries = PromptTOCTimingResolver.attaching(
+            currentThread.submittedPromptTimingsBySession[sessionName] ?? [],
+            to: capturedEntries
+        )
         threadManager.replaceSubmittedPromptHistory(
             threadId: thread.id,
             sessionName: sessionName,
@@ -1356,11 +1361,55 @@ private final class PromptTOCNonInteractiveView: NSView {
     }
 }
 
+private enum PromptTOCFooterFormatter {
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static let dateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    static func text(for state: PromptTOCFooterState?, now: Date = Date()) -> String? {
+        guard let state else { return nil }
+
+        switch state {
+        case .inProgress(let sentAt):
+            return String(
+                localized: .ThreadStrings.promptTOCTimingInProgress(
+                    formatted(sentAt, now: now)
+                )
+            )
+        case .completed(let sentAt, let completedAt):
+            return String(
+                localized: .ThreadStrings.promptTOCTimingCompleted(
+                    formatted(sentAt, now: now),
+                    formatted(completedAt, now: now)
+                )
+            )
+        }
+    }
+
+    private static func formatted(_ date: Date, now: Date) -> String {
+        Calendar.current.isDate(date, inSameDayAs: now)
+            ? timeFormatter.string(from: date)
+            : dateTimeFormatter.string(from: date)
+    }
+}
+
 private final class PromptTOCEntryRowView: NSView {
     let entryIndex: Int
     private let ordinalBadgeView = PromptTOCNonInteractiveView()
     private let ordinalLabel: PromptTOCLabel
     private let label: PromptTOCLabel
+    private let footerLabel = PromptTOCLabel(labelWithString: "")
+    private let textStack = NSStackView()
     private var ordinalBadgeWidthConstraint: NSLayoutConstraint!
     private var showsAlternateBackground = false
     var isSelected = false {
@@ -1371,12 +1420,17 @@ private final class PromptTOCEntryRowView: NSView {
 
     var onRightClick: ((Int, NSEvent) -> Void)?
 
-    init(entryIndex: Int, promptText: String, isPinned: Bool) {
+    init(
+        entryIndex: Int,
+        promptText: String,
+        footerText: String?,
+        isPinned: Bool
+    ) {
         self.entryIndex = entryIndex
         self.ordinalLabel = PromptTOCLabel(labelWithString: "\(entryIndex + 1)")
         self.label = PromptTOCLabel(wrappingLabelWithString: promptText)
         super.init(frame: .zero)
-        setupUI()
+        setupUI(footerText: footerText)
         setPinnedPresentation(isPinned)
     }
 
@@ -1411,7 +1465,7 @@ private final class PromptTOCEntryRowView: NSView {
         ))
     }
 
-    private func setupUI() {
+    private func setupUI(footerText: String?) {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.cornerRadius = 6
@@ -1446,8 +1500,24 @@ private final class PromptTOCEntryRowView: NSView {
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
+        footerLabel.stringValue = footerText ?? ""
+        footerLabel.translatesAutoresizingMaskIntoConstraints = false
+        footerLabel.textColor = .secondaryLabelColor
+        footerLabel.isSelectable = false
+        footerLabel.isEditable = false
+        footerLabel.lineBreakMode = .byTruncatingTail
+        footerLabel.maximumNumberOfLines = 1
+        footerLabel.isHidden = footerText == nil
+
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 3
+        textStack.addArrangedSubview(label)
+        textStack.addArrangedSubview(footerLabel)
+
         addSubview(ordinalBadgeView)
-        addSubview(label)
+        addSubview(textStack)
         ordinalBadgeWidthConstraint = ordinalBadgeView.widthAnchor.constraint(
             equalToConstant: PromptTOCOrdinalBadgeStyle.height
         )
@@ -1463,10 +1533,12 @@ private final class PromptTOCEntryRowView: NSView {
             ordinalLabel.leadingAnchor.constraint(greaterThanOrEqualTo: ordinalBadgeView.leadingAnchor, constant: 2),
             ordinalLabel.trailingAnchor.constraint(lessThanOrEqualTo: ordinalBadgeView.trailingAnchor, constant: -2),
 
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            label.leadingAnchor.constraint(equalTo: ordinalBadgeView.trailingAnchor, constant: 6),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            textStack.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            textStack.leadingAnchor.constraint(equalTo: ordinalBadgeView.trailingAnchor, constant: 6),
+            textStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            textStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            label.widthAnchor.constraint(equalTo: textStack.widthAnchor),
+            footerLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
         ])
 
         updateAppearance()
@@ -1477,6 +1549,7 @@ private final class PromptTOCEntryRowView: NSView {
         label.stringValue = presentation.promptText
         label.font = .monospacedSystemFont(ofSize: presentation.promptFontSize, weight: .regular)
         label.maximumNumberOfLines = presentation.maximumPromptLines
+        footerLabel.font = .systemFont(ofSize: presentation.promptFontSize - 2, weight: .regular)
         ordinalBadgeWidthConstraint.constant = presentation.ordinalBadgeWidth
         label.invalidateIntrinsicContentSize()
         invalidateIntrinsicContentSize()
@@ -1636,6 +1709,9 @@ final class PromptTableOfContentsView: NSView {
             let row = PromptTOCEntryRowView(
                 entryIndex: entryIndex,
                 promptText: entry.displayText,
+                footerText: PromptTOCFooterFormatter.text(
+                    for: PromptTOCFooterState(timing: entry.timing)
+                ),
                 isPinned: presentationState.isPinned
             )
             row.setAlternateBackgroundVisible(!displayIndex.isMultiple(of: 2))

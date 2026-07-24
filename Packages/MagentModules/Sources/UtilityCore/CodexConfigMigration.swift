@@ -115,7 +115,7 @@ public enum CodexConfigMigration {
 
     [[hooks.Stop.hooks]]
     type = "command"
-    command = 'if [ -n "$MAGENT_WORKTREE_NAME" ]; then tmux set-option -pq -t "$TMUX_PANE" @magent_codex_turn_state idle; tmux display-message -p -t "$TMUX_PANE" "#{session_name}" >> /tmp/magent-agent-completion-events.log; fi; true'
+    command = 'if [ -n "$MAGENT_WORKTREE_NAME" ]; then tmux set-option -pq -t "$TMUX_PANE" @magent_codex_turn_state idle; magent_session="$(tmux display-message -p -t "$TMUX_PANE" "#{session_name}")"; magent_completed_at="$(/usr/bin/perl -MTime::HiRes=time -e "print time")"; printf "%s\\t%s\\n" "$magent_session" "$magent_completed_at" >> /tmp/magent-agent-completion-events.log; fi; true'
     timeout = 5
     \(magentHooksEndMarker)
     """

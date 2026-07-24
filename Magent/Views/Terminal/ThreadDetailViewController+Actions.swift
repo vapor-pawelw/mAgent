@@ -1398,6 +1398,11 @@ extension ThreadDetailViewController {
 
         if thread.agentTmuxSessions.contains(sessionName) {
             threadManager.markSessionBusy(threadId: thread.id, sessionName: sessionName)
+            threadManager.recordSubmittedPromptTiming(
+                threadId: thread.id,
+                sessionName: sessionName,
+                prompt: trimmed
+            )
         }
 
         if thread.agentTmuxSessions.contains(sessionName) {

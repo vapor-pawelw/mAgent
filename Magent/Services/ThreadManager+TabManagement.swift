@@ -518,6 +518,7 @@ extension ThreadManager {
         threads[idx].customTabNames.removeValue(forKey: sessionName)
         threads[idx].manuallyRenamedTabs.remove(sessionName)
         threads[idx].submittedPromptsBySession.removeValue(forKey: sessionName)
+        threads[idx].submittedPromptTimingsBySession.removeValue(forKey: sessionName)
         threads[idx].tmuxSessionNames.removeAll { $0 == sessionName }
         if threads[idx].lastSelectedTabIdentifier == sessionName {
             threads[idx].lastSelectedTabIdentifier = threads[idx].tmuxSessionNames.first

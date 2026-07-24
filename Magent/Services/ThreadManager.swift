@@ -958,8 +958,8 @@ final class ThreadManager {
         // We map them to unread completion state at startup (instead of dropping
         // them), and intentionally do not touch recentBellBySession here so busy
         // process re-detection is not suppressed on relaunch.
-        let startupCompletionSessions = await tmux.consumeAgentCompletionSessions()
-        applyStartupCompletionSessions(startupCompletionSessions)
+        let startupCompletionEvents = await tmux.consumeAgentCompletionEvents()
+        applyStartupCompletionEvents(startupCompletionEvents)
 
         // Seed visit timestamps so no sessions are evicted immediately after launch.
         let launchNow = Date()
@@ -994,23 +994,28 @@ final class ThreadManager {
     /// Applies completion events collected during app downtime.
     /// This preserves unread completion indicators after relaunch without
     /// affecting transient busy/waiting state derived from live tmux processes.
-    private func applyStartupCompletionSessions(_ sessions: [String]) {
-        guard !sessions.isEmpty else { return }
+    private func applyStartupCompletionEvents(_ events: [AgentCompletionEvent]) {
+        guard !events.isEmpty else { return }
 
-        let now = Date()
-        let orderedUniqueSessions = sessions.reduce(into: [String]()) { result, session in
-            if !result.contains(session) {
-                result.append(session)
+        let orderedUniqueEvents = events.reduce(into: [AgentCompletionEvent]()) { result, event in
+            if let index = result.firstIndex(where: { $0.sessionName == event.sessionName }) {
+                if event.completedAt > result[index].completedAt {
+                    result[index] = event
+                }
+            } else {
+                result.append(event)
             }
         }
 
         var changed = false
-        for session in orderedUniqueSessions {
+        for event in orderedUniqueEvents {
+            let session = event.sessionName
             guard let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }) else {
                 continue
             }
 
-            threads[index].lastAgentCompletionAt = now
+            threads[index].lastAgentCompletionAt = event.completedAt
+            _ = threads[index].completePendingPromptTimings(for: session, at: event.completedAt)
             bumpThreadToTopOfSection(threads[index].id)
 
             let isActiveThread = threads[index].id == activeThreadId

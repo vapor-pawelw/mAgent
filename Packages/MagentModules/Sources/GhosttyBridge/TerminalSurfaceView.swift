@@ -460,7 +460,11 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         let isReturnKey = event.keyCode == 36 || event.keyCode == 76 || event.characters == "\r"
         if isReturnKey {
             let hasOnlyShift = event.modifierFlags.intersection([.command, .control, .option]).isEmpty
-            guard hasOnlyShift, !event.modifierFlags.contains(.shift) else { return }
+            guard hasOnlyShift else { return }
+            if event.modifierFlags.contains(.shift) {
+                currentInputLine.append("\n")
+                return
+            }
             let submitted = currentInputLine.trimmingCharacters(in: .whitespacesAndNewlines)
             currentInputLine.removeAll(keepingCapacity: true)
             if !submitted.isEmpty {

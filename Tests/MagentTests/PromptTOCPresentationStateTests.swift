@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 import Testing
 
 @Suite("Prompt TOC presentation")
@@ -223,5 +224,112 @@ struct PromptTOCPresentationStateTests {
             PromptTOCContentWidthMode.resolve(isPinned: true, isTOCVisible: false)
                 == .fullWidth
         )
+    }
+
+    @Test("TOC timing follows matching prompt occurrences and leaves unknown history unchanged")
+    func timingResolutionMatchesPromptOccurrences() {
+        let firstSentAt = Date(timeIntervalSince1970: 100)
+        let secondSentAt = Date(timeIntervalSince1970: 200)
+        let completedAt = Date(timeIntervalSince1970: 260)
+        let entries = [
+            PromptTOCEntry(lineIndex: 10, displayText: "First prompt", fullText: "First\nprompt"),
+            PromptTOCEntry(lineIndex: 20, displayText: "Historical prompt", fullText: "Historical prompt"),
+            PromptTOCEntry(lineIndex: 30, displayText: "First prompt", fullText: "First prompt"),
+        ]
+        let timings = [
+            SubmittedPromptTiming(text: "First prompt", sentAt: firstSentAt, completedAt: completedAt),
+            SubmittedPromptTiming(text: "First prompt", sentAt: secondSentAt),
+        ]
+
+        let resolved = PromptTOCTimingResolver.attaching(timings, to: entries)
+
+        #expect(resolved[0].timing?.sentAt == firstSentAt)
+        #expect(resolved[0].timing?.completedAt == completedAt)
+        #expect(resolved[1].timing == nil)
+        #expect(resolved[2].timing?.sentAt == secondSentAt)
+    }
+
+    @Test("A newly observed repeated prompt receives timing on its newest TOC occurrence")
+    func timingResolutionPrefersNewestRepeatedPrompt() {
+        let sentAt = Date(timeIntervalSince1970: 200)
+        let entries = [
+            PromptTOCEntry(lineIndex: 10, displayText: "Continue", fullText: "Continue"),
+            PromptTOCEntry(lineIndex: 20, displayText: "Other", fullText: "Other"),
+            PromptTOCEntry(lineIndex: 30, displayText: "Continue", fullText: "Continue"),
+        ]
+
+        let resolved = PromptTOCTimingResolver.attaching(
+            [SubmittedPromptTiming(text: "Continue", sentAt: sentAt)],
+            to: entries
+        )
+
+        #expect(resolved[0].timing == nil)
+        #expect(resolved[2].timing?.sentAt == sentAt)
+    }
+
+    @Test("TOC footer distinguishes unfinished and completed prompt turns")
+    func footerStateReflectsCompletion() {
+        let sentAt = Date(timeIntervalSince1970: 100)
+        let completedAt = Date(timeIntervalSince1970: 160)
+
+        #expect(
+            PromptTOCFooterState(
+                timing: SubmittedPromptTiming(text: "Pending", sentAt: sentAt)
+            ) == .inProgress(sentAt: sentAt)
+        )
+        #expect(
+            PromptTOCFooterState(
+                timing: SubmittedPromptTiming(
+                    text: "Done",
+                    sentAt: sentAt,
+                    completedAt: completedAt
+                )
+            ) == .completed(sentAt: sentAt, completedAt: completedAt)
+        )
+        #expect(PromptTOCFooterState(timing: nil) == nil)
+    }
+
+    @Test("Agent completion closes every prompt submitted during the active turn")
+    func completionClosesPendingPromptTimings() {
+        let sessionName = "ma-project-thread"
+        let firstSentAt = Date(timeIntervalSince1970: 100)
+        let secondSentAt = Date(timeIntervalSince1970: 120)
+        let completedAt = Date(timeIntervalSince1970: 180)
+        let nextTurnSentAt = Date(timeIntervalSince1970: 200)
+        var thread = MagentThread(
+            projectId: UUID(),
+            name: "thread",
+            worktreePath: "/tmp/thread",
+            branchName: "feature/thread",
+            submittedPromptTimingsBySession: [
+                sessionName: [
+                    SubmittedPromptTiming(
+                        text: "Already done",
+                        sentAt: Date(timeIntervalSince1970: 20),
+                        completedAt: Date(timeIntervalSince1970: 40)
+                    ),
+                    SubmittedPromptTiming(text: "First steering prompt", sentAt: firstSentAt),
+                    SubmittedPromptTiming(text: "Second steering prompt", sentAt: secondSentAt),
+                    SubmittedPromptTiming(text: "Next turn", sentAt: nextTurnSentAt),
+                ],
+            ]
+        )
+
+        let didComplete = thread.completePendingPromptTimings(for: sessionName, at: completedAt)
+        #expect(didComplete)
+
+        let timings = thread.submittedPromptTimingsBySession[sessionName]
+        #expect(timings?[0].completedAt == Date(timeIntervalSince1970: 40))
+        #expect(timings?[1].completedAt == completedAt)
+        #expect(timings?[2].completedAt == completedAt)
+        #expect(timings?[3].completedAt == nil)
+        let didCompleteAgain = thread.completePendingPromptTimings(for: sessionName, at: completedAt)
+        #expect(!didCompleteAgain)
+
+        let restored = try? JSONDecoder().decode(
+            MagentThread.self,
+            from: JSONEncoder().encode(thread)
+        )
+        #expect(restored?.submittedPromptTimingsBySession[sessionName] == timings)
     }
 }

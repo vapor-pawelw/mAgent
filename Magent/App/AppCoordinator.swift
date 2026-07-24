@@ -434,6 +434,10 @@ final class AppCoordinator {
             canonical: canonical.submittedPromptsBySession,
             duplicate: duplicate.submittedPromptsBySession
         )
+        merged.submittedPromptTimingsBySession = mergePromptTimings(
+            canonical: canonical.submittedPromptTimingsBySession,
+            duplicate: duplicate.submittedPromptTimingsBySession
+        )
         merged.customTabNames = mergeDictionaries(
             canonical.customTabNames,
             duplicate.customTabNames
@@ -536,6 +540,20 @@ final class AppCoordinator {
         return merged
     }
 
+    private func mergePromptTimings(
+        canonical: [String: [SubmittedPromptTiming]],
+        duplicate: [String: [SubmittedPromptTiming]]
+    ) -> [String: [SubmittedPromptTiming]] {
+        var merged = canonical
+        for (sessionName, timings) in duplicate {
+            var existing = merged[sessionName] ?? []
+            let knownIDs = Set(existing.map(\.id))
+            existing.append(contentsOf: timings.filter { !knownIDs.contains($0.id) })
+            merged[sessionName] = existing.sorted { $0.sentAt < $1.sentAt }
+        }
+        return merged
+    }
+
     private func mergeWebTabs(
         canonical: [PersistedWebTab],
         duplicate: [PersistedWebTab]
@@ -591,6 +609,9 @@ final class AppCoordinator {
         thread.sessionConversationIDs = thread.sessionConversationIDs.filter { validAgentSessions.contains($0.key) }
         thread.sessionAgentTypes = thread.sessionAgentTypes.filter { validAgentSessions.contains($0.key) }
         thread.submittedPromptsBySession = thread.submittedPromptsBySession.filter { validAgentSessions.contains($0.key) }
+        thread.submittedPromptTimingsBySession = thread.submittedPromptTimingsBySession.filter {
+            validAgentSessions.contains($0.key)
+        }
         thread.customTabNames = thread.customTabNames.filter { validTerminalSessions.contains($0.key) }
     }
 
