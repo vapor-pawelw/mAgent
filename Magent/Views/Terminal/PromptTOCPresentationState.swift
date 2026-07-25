@@ -129,6 +129,17 @@ enum PromptTOCOrdinalBadgeStyle {
     }
 }
 
+enum PromptTOCHeaderLayout {
+    static let countFont = NSFont.systemFont(ofSize: 13, weight: .bold)
+    static let countLabelHorizontalInset: CGFloat = 6
+    static let countBadgeMinimumWidth: CGFloat = 20
+
+    static func countBadgeWidth(for text: String) -> CGFloat {
+        let measuredWidth = (text as NSString).size(withAttributes: [.font: countFont]).width
+        return max(countBadgeMinimumWidth, ceil(measuredWidth) + (2 * countLabelHorizontalInset))
+    }
+}
+
 struct PromptTOCRowPresentation: Equatable {
     let ordinalText: String
     let promptText: String

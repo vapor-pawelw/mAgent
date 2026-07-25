@@ -72,6 +72,23 @@ struct PromptTOCPresentationStateTests {
         )
     }
 
+    @Test("TOC header reserves enough badge width for the full prompt count")
+    func headerCountBadgeWidth() {
+        let singleDigitWidth = PromptTOCHeaderLayout.countBadgeWidth(for: "9")
+        let multiDigitText = "12345"
+        let multiDigitWidth = PromptTOCHeaderLayout.countBadgeWidth(for: multiDigitText)
+        let renderedTextWidth = (multiDigitText as NSString).size(
+            withAttributes: [.font: PromptTOCHeaderLayout.countFont]
+        ).width
+
+        #expect(singleDigitWidth >= PromptTOCHeaderLayout.countBadgeMinimumWidth)
+        #expect(
+            multiDigitWidth >= ceil(renderedTextWidth) +
+                (2 * PromptTOCHeaderLayout.countLabelHorizontalInset)
+        )
+        #expect(multiDigitWidth > singleDigitWidth)
+    }
+
     @Test("TOC row keeps its ordinal separate and expands its pinned preview")
     func rowPresentationAdaptsToPinnedMode() {
         let floating = PromptTOCRowPresentation(

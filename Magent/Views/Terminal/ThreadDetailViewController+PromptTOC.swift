@@ -1632,6 +1632,7 @@ final class PromptTableOfContentsView: NSView {
     private let pinnedResizeHandle = PromptTOCPinnedResizeHandleView()
     private var resizeHandleIconView: NSImageView?
     private var cornerHandleViews: [NSView] = []
+    private var countBadgeWidthConstraint: NSLayoutConstraint?
     private var scrollBottomConstraint: NSLayoutConstraint!
     private var scrollViewCollapseConstraint: NSLayoutConstraint!
     private var rowViews: [PromptTOCEntryRowView] = []
@@ -1661,7 +1662,7 @@ final class PromptTableOfContentsView: NSView {
         preservedScrollOffsetY = currentScrollOffsetY()
         shouldRestoreScrollToTopAfterReload = isScrolledToTopOrNearTop()
         previouslyNewestEntry = tocEntries.last
-        countLabel.stringValue = "…"
+        updateCountLabel("…")
         spinner.isHidden = false
         spinner.startAnimation(nil)
         emptyLabel.isHidden = true
@@ -1687,7 +1688,7 @@ final class PromptTableOfContentsView: NSView {
         )
         let shouldScrollToTop = shouldRestoreScrollToTopAfterReload
         tocEntries = entries
-        countLabel.stringValue = "\(entries.count)"
+        updateCountLabel("\(entries.count)")
         spinner.stopAnimation(nil)
         spinner.isHidden = true
         clearRows()
@@ -1845,11 +1846,15 @@ final class PromptTableOfContentsView: NSView {
 
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         titleLabel.textColor = NSColor(resource: .textPrimary)
+        titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        countLabel.font = .systemFont(ofSize: 13, weight: .bold)
+        countLabel.font = PromptTOCHeaderLayout.countFont
         countLabel.textColor = NSColor(resource: .textPrimary)
         countLabel.translatesAutoresizingMaskIntoConstraints = false
+        countLabel.lineBreakMode = .byClipping
+        countLabel.cell?.truncatesLastVisibleLine = false
         countLabel.setContentHuggingPriority(.required, for: .horizontal)
         countLabel.setContentHuggingPriority(.required, for: .vertical)
         countLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -1861,12 +1866,25 @@ final class PromptTableOfContentsView: NSView {
         countBadgeView.layer?.masksToBounds = true
         countBadgeView.setContentHuggingPriority(.required, for: .horizontal)
         countBadgeView.setContentHuggingPriority(.required, for: .vertical)
+        countBadgeView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        countBadgeView.setContentCompressionResistancePriority(.required, for: .vertical)
         countBadgeView.addSubview(countLabel)
+        let countBadgeWidthConstraint = countBadgeView.widthAnchor.constraint(
+            equalToConstant: PromptTOCHeaderLayout.countBadgeWidth(for: countLabel.stringValue)
+        )
+        self.countBadgeWidthConstraint = countBadgeWidthConstraint
         NSLayoutConstraint.activate([
             countBadgeView.heightAnchor.constraint(equalToConstant: 20),
+            countBadgeWidthConstraint,
             countLabel.centerYAnchor.constraint(equalTo: countBadgeView.centerYAnchor),
-            countLabel.leadingAnchor.constraint(equalTo: countBadgeView.leadingAnchor, constant: 6),
-            countLabel.trailingAnchor.constraint(equalTo: countBadgeView.trailingAnchor, constant: -6),
+            countLabel.leadingAnchor.constraint(
+                equalTo: countBadgeView.leadingAnchor,
+                constant: PromptTOCHeaderLayout.countLabelHorizontalInset
+            ),
+            countLabel.trailingAnchor.constraint(
+                equalTo: countBadgeView.trailingAnchor,
+                constant: -PromptTOCHeaderLayout.countLabelHorizontalInset
+            ),
         ])
 
         spinner.style = .spinning
@@ -1891,7 +1909,12 @@ final class PromptTableOfContentsView: NSView {
         ])
         updatePinButton()
 
-        let headerStack = NSStackView(views: [headerIcon, titleLabel, NSView(), countBadgeView, spinner, pinButton])
+        let flexibleSpacer = NSView()
+        flexibleSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        flexibleSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let headerStack = NSStackView(
+            views: [headerIcon, titleLabel, flexibleSpacer, countBadgeView, spinner, pinButton]
+        )
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.spacing = 5
@@ -2100,6 +2123,11 @@ final class PromptTableOfContentsView: NSView {
             rowsStack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
+    }
+
+    private func updateCountLabel(_ text: String) {
+        countLabel.stringValue = text
+        countBadgeWidthConstraint?.constant = PromptTOCHeaderLayout.countBadgeWidth(for: text)
     }
 
     private func currentScrollOffsetY() -> CGFloat {

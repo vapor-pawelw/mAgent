@@ -53,6 +53,7 @@
 
 #### Bug Fixes
 
+- Kept the full prompt count visible in the Table of Contents header instead of occasionally collapsing it to an ellipsis.
 - Prevented stale AI rename error banners after deleting, archiving, or otherwise removing a thread while its rename was still running.
 - Kept PR and Jira action titles readable on one line when the window toolbar is narrow.
 - Prevented simultaneous thread archives from racing on the main worktree, Local Sync files, or git metadata, with queued agent workflows now reporting the active thread and their live queue position.

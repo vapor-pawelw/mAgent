@@ -226,6 +226,11 @@ After the navigation was correct, a subtle per-session offset remained: sessions
 
 When a session is recreated (dead-session recovery, idle-eviction restore, worktree recovery), `selectTerminalTab` takes the slow path through `ensureSessionPrepared` → `selectPreparedTab`. `selectPreparedTab` calls `schedulePromptTOCRefresh()` immediately, but the tmux pane may not have rendered its full scrollback yet — `captureFullPane` can return an empty pane, producing 0 entries. A second delayed refresh (0.5s) is scheduled after recreation/eviction to pick up the content once the pane has settled. Without this, the TOC shows "0" until the user manually switches tabs.
 
+## Header layout
+
+- The prompt-count badge reserves a measured width for its complete value. Keep its horizontal compression resistance required so constrained and transitional layouts shorten the title before contracting the count into an ellipsis.
+- Update the badge width whenever the header switches between loading and a numeric count; a width calculated only during initial setup becomes stale when the count gains digits.
+
 ## Future debugging checklist
 
 - If Claude prompts disappear again, capture the pane with attributes (`tmux capture-pane -e -p -S - -E -`) and inspect both foreground and background styling before changing placeholder heuristics.
