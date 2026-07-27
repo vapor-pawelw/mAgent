@@ -6,11 +6,7 @@ public enum CodexConfigMigration {
 
     public static func preparingManagedConfig(from content: String) -> String {
         let migrated = migratingDeprecatedHooksFeatureKey(in: content)
-        let withoutExistingMagentHooks = removingManagedHooksBlock(from: migrated)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let separator = withoutExistingMagentHooks.isEmpty ? "" : "\n\n"
-
-        return withoutExistingMagentHooks + separator + magentHooksBlock + "\n"
+        return removingManagedHooksBlock(from: migrated)
     }
 
     public static func migratingDeprecatedHooksFeatureKey(in content: String) -> String {
@@ -102,31 +98,42 @@ public enum CodexConfigMigration {
             .joined(separator: "\n")
     }
 
-    private static let magentHooksBlock = """
-    \(magentHooksStartMarker)
-    [[hooks.UserPromptSubmit]]
-
-    [[hooks.UserPromptSubmit.hooks]]
-    type = "command"
-    command = '[ -n "$MAGENT_WORKTREE_NAME" ] && tmux set-option -pq -t "$TMUX_PANE" @magent_codex_turn_state active || true'
-    timeout = 5
-
-    [[hooks.Stop]]
-
-    [[hooks.Stop.hooks]]
-    type = "command"
-    command = 'if [ -n "$MAGENT_WORKTREE_NAME" ]; then tmux set-option -pq -t "$TMUX_PANE" @magent_codex_turn_state idle; magent_session="$(tmux display-message -p -t "$TMUX_PANE" "#{session_name}")"; magent_completed_at="$(/usr/bin/perl -MTime::HiRes=time -e "print time")"; printf "%s\\t%s\\n" "$magent_session" "$magent_completed_at" >> /tmp/magent-agent-completion-events.log; fi; true'
-    timeout = 5
-    \(magentHooksEndMarker)
-    """
 }
 
-public enum CodexHookBusyState {
-    public static func resolve(
-        hookState: String?,
-        paneShowsBusy: Bool,
-        paneShowsIdlePrompt: Bool
-    ) -> Bool {
-        hookState == "idle" && paneShowsIdlePrompt ? false : paneShowsBusy
+public enum CodexPaneActivity {
+    public static func isBusy(in paneContent: String, maxLines: Int = 25) -> Bool {
+        let lines = paneContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map(String.init)
+        let separatorIndex = lines.lastIndex { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return trimmed.count >= 20 && trimmed.allSatisfy { $0 == "─" }
+        }
+        let scopedStart = separatorIndex.map { lines.index(after: $0) } ?? lines.startIndex
+        let recentLines = lines[scopedStart...]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .suffix(maxLines)
+
+        for line in recentLines.reversed() {
+            if line.hasPrefix("\u{203A}") {
+                return false
+            }
+            if isBusyStatusLine(line) {
+                return true
+            }
+        }
+        return false
+    }
+
+    public static func isBusyStatusLine(_ line: String) -> Bool {
+        let normalized = line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if normalized.contains("• esc to interrupt)") { return true }
+        if normalized.contains("working (") && normalized.contains("esc to interrupt") { return true }
+        if normalized.contains("working (") && normalized.contains("background terminal running") { return true }
+        if normalized.contains("background terminal running") { return true }
+        return false
     }
 }

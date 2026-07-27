@@ -821,33 +821,26 @@ public final class TmuxService: Sendable {
     /// Only includes sessions from the given set that are alive.
     public func activePaneStates(
         forSessions sessionNames: Set<String>
-    ) async -> [String: (command: String, title: String, pid: pid_t, codexHookState: String?)] {
+    ) async -> [String: (command: String, title: String, pid: pid_t)] {
         guard !sessionNames.isEmpty else { return [:] }
         guard let output = try? await ShellExecutor.run(
-            "tmux list-panes -a -F '#{session_name}\t#{pane_active}\t#{pane_current_command}\t#{pane_title}\t#{pane_pid}\t#{@magent_codex_turn_state}'"
+            "tmux list-panes -a -F '#{session_name}\t#{pane_active}\t#{pane_current_command}\t#{pane_title}\t#{pane_pid}'"
         ), !output.isEmpty else {
             return [:]
         }
-        var result = [String: (command: String, title: String, pid: pid_t, codexHookState: String?)]()
+        var result = [String: (command: String, title: String, pid: pid_t)]()
         for line in output.split(whereSeparator: \.isNewline) {
-            let parts = line.split(separator: "\t", maxSplits: 5, omittingEmptySubsequences: false)
-            guard parts.count >= 6 else { continue }
+            let parts = line.split(separator: "\t", maxSplits: 4, omittingEmptySubsequences: false)
+            guard parts.count >= 5 else { continue }
             let session = String(parts[0])
             guard sessionNames.contains(session) else { continue }
             let isActive = parts[1] == "1"
             let command = String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
             let title = String(parts[3]).trimmingCharacters(in: .whitespacesAndNewlines)
             let pid = pid_t(parts[4].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-            let rawCodexHookState = String(parts[5]).trimmingCharacters(in: .whitespacesAndNewlines)
-            let codexHookState = rawCodexHookState.isEmpty ? nil : rawCodexHookState
             // Prefer the active pane; fall back to first pane seen.
             if isActive || result[session] == nil {
-                result[session] = (
-                    command: command,
-                    title: title,
-                    pid: pid,
-                    codexHookState: codexHookState
-                )
+                result[session] = (command: command, title: title, pid: pid)
             }
         }
         return result
