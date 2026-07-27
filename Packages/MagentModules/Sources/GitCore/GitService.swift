@@ -7,6 +7,26 @@ public enum PRFetchError: Error {
     case cliFailure(stderr: String)
 }
 
+public struct WorktreeChangeTransfer: Sendable, Equatable {
+    public let stashCommit: String
+    public let sourceWorktreePath: String
+    public let destinationWorktreePath: String
+
+    public init(stashCommit: String, sourceWorktreePath: String, destinationWorktreePath: String) {
+        self.stashCommit = stashCommit
+        self.sourceWorktreePath = sourceWorktreePath
+        self.destinationWorktreePath = destinationWorktreePath
+    }
+}
+
+public struct InterruptedTabMove: Sendable, Equatable {
+    public let stashCommit: String
+    public let sourceThreadID: UUID
+    public let destinationThreadID: UUID
+    public let sourceSessionName: String
+    public let destinationThreadName: String
+}
+
 extension PRFetchError: LocalizedError {
     public var errorDescription: String? {
         switch self {
@@ -248,6 +268,172 @@ public final class GitService: Sendable {
         _ = try await ShellExecutor.run(
             "git branch -D \(shellQuote(branchName))",
             workingDirectory: repoPath
+        )
+    }
+
+    /// Removes transferable changes from the source and retains them in a recovery
+    /// stash without touching the destination. This lets callers prepare local-only
+    /// destination files before applying the user's edits as the final layer.
+    public func prepareWorktreeChangeTransfer(
+        sourceWorktreePath: String,
+        destinationWorktreePath: String,
+        recoveryMarker: String? = nil
+    ) async throws -> WorktreeChangeTransfer? {
+        let status = try await ShellExecutor.run(
+            "git status --porcelain",
+            workingDirectory: sourceWorktreePath
+        )
+        guard !status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        let marker = recoveryMarker ?? "magent-tab-move-\(UUID().uuidString.lowercased())"
+        _ = try await ShellExecutor.run(
+            "git stash push --include-untracked --message \(shellQuote(marker))",
+            workingDirectory: sourceWorktreePath
+        )
+        let stashList = try await ShellExecutor.run(
+            "git stash list --format=%H%x09%gs",
+            workingDirectory: sourceWorktreePath
+        )
+        guard let stashCommit = stashList
+            .components(separatedBy: "\n")
+            .compactMap({ line -> String? in
+                let parts = line.split(separator: "\t", maxSplits: 1).map(String.init)
+                guard parts.count == 2, parts[1].hasSuffix(marker) else { return nil }
+                return parts[0]
+            })
+            .first else {
+            throw GitError.commandFailed(
+                "Git could not stash all source changes for the tab move. Nested repository or submodule changes must be handled separately."
+            )
+        }
+
+        let transfer = WorktreeChangeTransfer(
+            stashCommit: stashCommit,
+            sourceWorktreePath: sourceWorktreePath,
+            destinationWorktreePath: destinationWorktreePath
+        )
+        let remainingStatus = try await ShellExecutor.run(
+            "git status --porcelain",
+            workingDirectory: sourceWorktreePath
+        )
+        guard remainingStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            do {
+                try await rollbackWorktreeChangeTransfer(transfer)
+            } catch {
+                throw GitError.commandFailed(
+                    """
+                    Git could not stash all source changes or restore the transferable subset. \
+                    Recovery stash \(stashCommit) was kept. \(error.localizedDescription)
+                    """
+                )
+            }
+            throw GitError.commandFailed(
+                "Git cannot move nested repository or submodule changes. Handle them separately and try again."
+            )
+        }
+        return transfer
+    }
+
+    public func applyWorktreeChangeTransfer(_ transfer: WorktreeChangeTransfer) async throws {
+        // A failed stash apply may leave conflict state in the destination. The
+        // transaction owner must remove or otherwise clean that disposable worktree
+        // before restoring the source.
+        _ = try await ShellExecutor.run(
+            "git stash apply --index \(shellQuote(transfer.stashCommit))",
+            workingDirectory: transfer.destinationWorktreePath
+        )
+    }
+
+    public func finishWorktreeChangeTransfer(_ transfer: WorktreeChangeTransfer) async throws {
+        try await dropStash(
+            commit: transfer.stashCommit,
+            workingDirectory: transfer.sourceWorktreePath
+        )
+    }
+
+    public func restoreWorktreeChangeTransfer(_ transfer: WorktreeChangeTransfer) async throws {
+        _ = try await ShellExecutor.run(
+            "git stash apply --index \(shellQuote(transfer.stashCommit))",
+            workingDirectory: transfer.sourceWorktreePath
+        )
+    }
+
+    public func rollbackWorktreeChangeTransfer(_ transfer: WorktreeChangeTransfer) async throws {
+        try await restoreWorktreeChangeTransfer(transfer)
+        try await dropStash(
+            commit: transfer.stashCommit,
+            workingDirectory: transfer.sourceWorktreePath
+        )
+    }
+
+    public static func tabMoveRecoveryMarker(
+        sourceThreadID: UUID,
+        destinationThreadID: UUID,
+        sourceSessionName: String,
+        destinationThreadName: String
+    ) -> String {
+        [
+            "magent-tab-move-v1",
+            sourceThreadID.uuidString.lowercased(),
+            destinationThreadID.uuidString.lowercased(),
+            sourceSessionName,
+            destinationThreadName,
+        ].joined(separator: "|")
+    }
+
+    public func interruptedTabMoves(repoPath: String) async throws -> [InterruptedTabMove] {
+        let output = try await ShellExecutor.run(
+            "git stash list --format=%H%x09%gs",
+            workingDirectory: repoPath
+        )
+
+        return output.components(separatedBy: "\n").compactMap { line in
+            let columns = line.split(separator: "\t", maxSplits: 1).map(String.init)
+            guard columns.count == 2,
+                  let markerRange = columns[1].range(of: "magent-tab-move-v1|") else {
+                return nil
+            }
+            let fields = columns[1][markerRange.lowerBound...].split(
+                separator: "|",
+                maxSplits: 4
+            ).map(String.init)
+            guard fields.count == 5,
+                  let sourceThreadID = UUID(uuidString: fields[1]),
+                  let destinationThreadID = UUID(uuidString: fields[2]),
+                  !fields[3].isEmpty,
+                  !fields[4].isEmpty else {
+                return nil
+            }
+            return InterruptedTabMove(
+                stashCommit: columns[0],
+                sourceThreadID: sourceThreadID,
+                destinationThreadID: destinationThreadID,
+                sourceSessionName: fields[3],
+                destinationThreadName: fields[4]
+            )
+        }
+    }
+
+    private func dropStash(commit: String, workingDirectory: String) async throws {
+        let list = try await ShellExecutor.run(
+            "git stash list --format=%H%x09%gd",
+            workingDirectory: workingDirectory
+        )
+        guard let reference = list
+            .components(separatedBy: "\n")
+            .compactMap({ line -> String? in
+                let parts = line.split(separator: "\t", maxSplits: 1).map(String.init)
+                guard parts.count == 2, parts[0] == commit else { return nil }
+                return parts[1]
+            })
+            .first else {
+            throw GitError.commandFailed("Could not find the recovery stash created for the tab move.")
+        }
+        _ = try await ShellExecutor.run(
+            "git stash drop \(shellQuote(reference))",
+            workingDirectory: workingDirectory
         )
     }
 
@@ -758,6 +944,14 @@ public final class GitService: Sendable {
         )
         return result.exitCode == 0
             && !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    public func worktreeHasChanges(worktreePath: String) async throws -> Bool {
+        let output = try await ShellExecutor.run(
+            "git status --porcelain",
+            workingDirectory: worktreePath
+        )
+        return !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Stages all tracked/untracked (non-ignored) changes and commits them with `message`.

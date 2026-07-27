@@ -1687,6 +1687,70 @@ extension ThreadDetailViewController {
         )
     }
 
+    func moveTerminalTabToNewThread(at index: Int) {
+        guard index < tabSlots.count,
+              case .terminal(let sessionName) = tabSlots[index],
+              thread.terminalTabMigration(for: sessionName) != nil else {
+            BannerManager.shared.show(
+                message: String(localized: .ThreadStrings.tabMoveRequiresResumableAgent),
+                style: .warning
+            )
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = String(localized: .ThreadStrings.tabMoveTitle)
+        alert.informativeText = String(localized: .ThreadStrings.tabMoveMessage)
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: String(localized: .ThreadStrings.tabMoveAction))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        Task {
+            do {
+                let created = try await threadManager.moveTerminalTabToNewThread(
+                    sourceThreadID: thread.id,
+                    sessionName: sessionName
+                )
+                let createdSession = created.tmuxSessionNames.first
+                await MainActor.run {
+                    NotificationCenter.default.post(
+                        name: .magentNavigateToThread,
+                        object: nil,
+                        userInfo: [
+                            "threadId": created.id,
+                            "sessionName": createdSession as Any,
+                            "revealSidebarIfHidden": true,
+                        ]
+                    )
+                    BannerManager.shared.show(
+                        message: String(localized: .ThreadStrings.tabMoveSucceeded),
+                        style: .info
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    let message = switch error {
+                    case ThreadManagerError.tabMoveRequiresIdleAgent:
+                        String(localized: .ThreadStrings.tabMoveRequiresIdleAgent)
+                    case ThreadManagerError.tabMoveRequiresResumableAgent:
+                        String(localized: .ThreadStrings.tabMoveRequiresResumableAgent)
+                    case ThreadManagerError.tabMoveResumeFailed:
+                        String(localized: .ThreadStrings.tabMoveResumeFailed)
+                    default:
+                        error.localizedDescription
+                    }
+                    BannerManager.shared.show(
+                        message: message,
+                        style: .error,
+                        duration: nil,
+                        isDismissible: true
+                    )
+                }
+            }
+        }
+    }
+
     func exportTabContext(at index: Int) {
         guard index < tabSlots.count, case .terminal(let sessionName) = tabSlots[index] else { return }
         let sourceAgent = threadManager.agentType(for: thread, sessionName: sessionName)

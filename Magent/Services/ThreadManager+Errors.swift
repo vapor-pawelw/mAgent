@@ -13,6 +13,9 @@ enum ThreadManagerError: LocalizedError {
     case nameGenerationFailed(diagnostic: String?)
     case worktreePathConflict([String])
     case noExpectedBranch
+    case tabMoveRequiresIdleAgent
+    case tabMoveRequiresResumableAgent
+    case tabMoveResumeFailed
     case archiveCancelled
     /// Refused to archive because the worktree has uncommitted/untracked changes.
     case dirtyWorktree(worktreePath: String)
@@ -53,6 +56,12 @@ enum ThreadManagerError: LocalizedError {
             return "Cannot move worktrees — the following directories already exist in the destination: \(list)"
         case .noExpectedBranch:
             return "No expected branch configured. Set the default branch in project settings."
+        case .tabMoveRequiresIdleAgent:
+            return "The agent must be idle before its tab can move."
+        case .tabMoveRequiresResumableAgent:
+            return "The tab does not have a resumable agent conversation."
+        case .tabMoveResumeFailed:
+            return "The agent conversation could not be resumed in the new worktree."
         case .archiveCancelled:
             return "Archive cancelled."
         case .dirtyWorktree(let worktreePath):

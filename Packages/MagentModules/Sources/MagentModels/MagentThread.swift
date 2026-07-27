@@ -1092,13 +1092,20 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public mutating func mergePhase2Setup(from completed: MagentThread) {
         tmuxSessionNames = completed.tmuxSessionNames
         agentTmuxSessions = completed.agentTmuxSessions
+        sessionConversationIDs = completed.sessionConversationIDs
         sessionCreatedAts = completed.sessionCreatedAts
         freshAgentSessions = completed.freshAgentSessions
         sessionAgentTypes = completed.sessionAgentTypes
         forwardedTmuxSessions = completed.forwardedTmuxSessions
+        pinnedTmuxSessions = completed.pinnedTmuxSessions
+        protectedTmuxSessions = completed.protectedTmuxSessions
         lastSelectedTabIdentifier = completed.lastSelectedTabIdentifier
+        agentHasRun = completed.agentHasRun
+        unreadCompletionSessions = completed.unreadCompletionSessions
+        unreadRateLimitSessions = completed.unreadRateLimitSessions
         customTabNames = completed.customTabNames
         tabNameSuffixCounters = completed.tabNameSuffixCounters
+        manuallyRenamedTabs = completed.manuallyRenamedTabs
         baseBranch = completed.baseBranch
         submittedPromptsBySession = completed.submittedPromptsBySession
         submittedPromptTimingsBySession = completed.submittedPromptTimingsBySession

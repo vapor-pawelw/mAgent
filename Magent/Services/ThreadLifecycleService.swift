@@ -11,6 +11,7 @@ final class ThreadLifecycleService {
     let git: GitService
     private let threadMutationGate: SerialAsyncOperationGate
     private let threadDisplayNumberAllocator = ThreadDisplayNumberAllocator()
+    private var pendingTabMoveChangeTransfers: [UUID: WorktreeChangeTransfer] = [:]
 
     // MARK: - Delegate callbacks
 
@@ -23,7 +24,7 @@ final class ThreadLifecycleService {
 
     // Agent setup
     var resolveAgentType: ((UUID, AgentType?, AppSettings) -> AgentType?)?
-    var agentStartCommand: ((AppSettings, UUID?, AgentType?, String, String, String?, String?, Bool) -> String)?
+    var agentStartCommand: ((AppSettings, UUID?, AgentType?, String, String, String?, Bool, String?, String?, Bool) -> String)?
     var terminalStartCommand: ((String, String) -> String)?
     var trustDirectoryIfNeeded: ((String, AgentType?) -> Void)?
     var effectiveAgentType: ((UUID) -> AgentType?)?
@@ -146,7 +147,9 @@ final class ThreadLifecycleService {
         modelId: String? = nil,
         reasoningLevel: String? = nil,
         codexFastMode: Bool = false,
-        localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil
+        localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil,
+        terminalTabMigration: TerminalTabMigration? = nil,
+        moveChangesFromWorktreePath: String? = nil
     ) async throws -> MagentThread {
         var name = ""
         var foundUnique = false
@@ -277,6 +280,10 @@ final class ThreadLifecycleService {
             onThreadCreated?(pendingThreadWithBusy)
         }
 
+        var didCreateWorktree = false
+        var changeTransfer: WorktreeChangeTransfer?
+        var migrationSessionName: String?
+
         // Phase 2: Perform git and tmux setup. On failure, clean up the pending thread.
         do {
             // Create git worktree branching off the requested base branch, or the
@@ -299,6 +306,24 @@ final class ThreadLifecycleService {
                 worktreePath: worktreePath,
                 baseBranch: baseBranch
             )
+            didCreateWorktree = true
+
+            if let sourcePath = moveChangesFromWorktreePath,
+               sourcePath != worktreePath {
+                let recoveryMarker = terminalTabMigration.map {
+                    GitService.tabMoveRecoveryMarker(
+                        sourceThreadID: $0.sourceThreadID,
+                        destinationThreadID: threadID,
+                        sourceSessionName: $0.sourceSessionName,
+                        destinationThreadName: name
+                    )
+                }
+                changeTransfer = try await git.prepareWorktreeChangeTransfer(
+                    sourceWorktreePath: sourcePath,
+                    destinationWorktreePath: worktreePath,
+                    recoveryMarker: recoveryMarker
+                )
+            }
 
             let localFileSyncEntriesSnapshot: [LocalFileSyncEntry] = {
                 guard let override = localFileSyncEntriesOverride else {
@@ -327,6 +352,9 @@ final class ThreadLifecycleService {
             } catch {
                 try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: worktreePath)
                 throw error
+            }
+            if let changeTransfer {
+                try await git.applyWorktreeChangeTransfer(changeTransfer)
             }
 
             // Record fork-point commit in the worktree metadata cache
@@ -412,21 +440,25 @@ final class ThreadLifecycleService {
             }
 
             let selectedAgentType: AgentType?
-            if useAgentCommand {
+            if let terminalTabMigration {
+                selectedAgentType = terminalTabMigration.agentType
+            } else if useAgentCommand {
                 selectedAgentType = resolveAgentType?(project.id, requestedAgentType, settings)
             } else {
                 selectedAgentType = nil
             }
 
-            let firstTabDisplayName = useAgentCommand
+            let firstTabDisplayName = terminalTabMigration?.displayName
+                ?? (useAgentCommand
                 ? TmuxSessionNaming.defaultTabDisplayName(
                     for: selectedAgentType,
                     modelLabel: resolvedModelLabel?(selectedAgentType, modelId),
                     reasoningLevel: reasoningLevel
                 )
-                : "Terminal"
+                : "Terminal")
             let firstTabSlug = ThreadManager.sanitizeForTmux(firstTabDisplayName)
             let tmuxSessionName = ThreadManager.buildSessionName(repoSlug: repoSlug, threadName: name, tabSlug: firstTabSlug)
+            migrationSessionName = terminalTabMigration == nil ? nil : tmuxSessionName
             let sessionCreatedAt = Date()
 
             // Pre-trust the worktree directory so the selected agent doesn't show a trust dialog
@@ -444,7 +476,18 @@ final class ThreadLifecycleService {
             let envExports = shellExportCommand?(sessionEnvironment) ?? ""
             let startCmd: String
             if useAgentCommand {
-                startCmd = agentStartCommand?(settings, project.id, selectedAgentType, envExports, worktreePath, modelId, reasoningLevel, codexFastMode) ?? ""
+                startCmd = agentStartCommand?(
+                    settings,
+                    project.id,
+                    selectedAgentType,
+                    envExports,
+                    worktreePath,
+                    terminalTabMigration?.conversationID,
+                    terminalTabMigration != nil,
+                    modelId,
+                    reasoningLevel,
+                    codexFastMode
+                ) ?? ""
             } else {
                 startCmd = terminalStartCommand?(envExports, worktreePath) ?? ""
             }
@@ -466,7 +509,7 @@ final class ThreadLifecycleService {
                 await tmux.setupBellPipe(for: tmuxSessionName)
             }
 
-            let thread = MagentThread(
+            var thread = MagentThread(
                 id: threadID,
                 projectId: project.id,
                 name: name,
@@ -494,6 +537,13 @@ final class ThreadLifecycleService {
                 }(),
                 localFileSyncEntriesSnapshot: localFileSyncEntriesSnapshot
             )
+            if let terminalTabMigration {
+                thread.installMigratedTerminalTab(
+                    terminalTabMigration,
+                    sessionName: tmuxSessionName,
+                    createdAt: sessionCreatedAt
+                )
+            }
 
             store.pendingThreadIds.remove(threadID)
             if let idx = store.threads.firstIndex(where: { $0.id == threadID }) {
@@ -508,6 +558,13 @@ final class ThreadLifecycleService {
             sessionTracker.sessionLastVisitedAt[tmuxSessionName] = sessionCreatedAt
 
             try persistence.saveActiveThreads(store.threads)
+            if let changeTransfer {
+                if terminalTabMigration != nil {
+                    pendingTabMoveChangeTransfers[threadID] = changeTransfer
+                } else {
+                    try? await git.finishWorktreeChangeTransfer(changeTransfer)
+                }
+            }
             await MainActor.run {
                 self.onThreadsChanged?()
                 NotificationCenter.default.post(
@@ -559,7 +616,22 @@ final class ThreadLifecycleService {
             }
 
             return thread
-        } catch {
+        } catch let creationError {
+            var recoveryError: Error?
+            if let migrationSessionName {
+                try? await tmux.killSession(name: migrationSessionName)
+            }
+            if terminalTabMigration != nil, didCreateWorktree {
+                try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: worktreePath)
+                try? await git.deleteBranch(repoPath: project.repoPath, branchName: branchName)
+            }
+            if let changeTransfer {
+                do {
+                    try await git.rollbackWorktreeChangeTransfer(changeTransfer)
+                } catch {
+                    recoveryError = error
+                }
+            }
             // Clean up the pending thread from in-memory state; it was never persisted.
             store.pendingThreadIds.remove(threadID)
             store.threads.removeAll { $0.id == threadID }
@@ -568,10 +640,21 @@ final class ThreadLifecycleService {
                 NotificationCenter.default.post(
                     name: .magentThreadCreationFinished,
                     object: nil,
-                    userInfo: ["threadId": threadID, "error": error.localizedDescription]
+                    userInfo: [
+                        "threadId": threadID,
+                        "error": (recoveryError ?? creationError).localizedDescription,
+                    ]
                 )
             }
-            throw error
+            if let recoveryError {
+                throw GitError.commandFailed(
+                    """
+                    Thread creation failed and the source changes could not be restored automatically. \
+                    The recovery stash was kept. \(recoveryError.localizedDescription)
+                    """
+                )
+            }
+            throw creationError
         }
     }
 
@@ -589,6 +672,275 @@ final class ThreadLifecycleService {
         let firstTabSlug = ThreadManager.sanitizeForTmux(TmuxSessionNaming.defaultTabDisplayName(for: agentType))
         let tmuxExists = await tmux.hasSession(name: ThreadManager.buildSessionName(repoSlug: slug, threadName: name, tabSlug: firstTabSlug))
         return !branchExists && !tmuxExists
+    }
+
+    func finishTabMoveChangeTransfer(for threadID: UUID) async {
+        guard let transfer = pendingTabMoveChangeTransfers.removeValue(forKey: threadID) else {
+            return
+        }
+        try? await git.finishWorktreeChangeTransfer(transfer)
+    }
+
+    func rollbackTabMoveChangeTransfer(for threadID: UUID) async throws {
+        guard let transfer = pendingTabMoveChangeTransfers[threadID] else {
+            return
+        }
+        try await git.rollbackWorktreeChangeTransfer(transfer)
+        pendingTabMoveChangeTransfers.removeValue(forKey: threadID)
+    }
+
+    private struct TabMoveRecoveryIssue {
+        let stage: TabMoveRecoveryFailureStage
+        let transfer: WorktreeChangeTransfer?
+        let details: String
+    }
+
+    func recoverInterruptedTabMoves(projects: [Project]) async {
+        var issues: [TabMoveRecoveryIssue] = []
+
+        for project in projects {
+            let interruptedMoves: [InterruptedTabMove]
+            do {
+                interruptedMoves = try await git.interruptedTabMoves(repoPath: project.repoPath)
+            } catch {
+                issues.append(TabMoveRecoveryIssue(
+                    stage: .recoveryScan,
+                    transfer: nil,
+                    details: String(
+                        localized: .ThreadStrings.tabMoveRecoveryScanDetails(
+                            project.name,
+                            error.localizedDescription
+                        )
+                    )
+                ))
+                continue
+            }
+
+            for interruptedMove in interruptedMoves {
+                guard let sourceThread = store.thread(byId: interruptedMove.sourceThreadID) else {
+                    NSLog(
+                        "[TabMoveRecovery] Keeping stash %@ because source thread %@ is unavailable",
+                        interruptedMove.stashCommit,
+                        interruptedMove.sourceThreadID.uuidString
+                    )
+                    issues.append(TabMoveRecoveryIssue(
+                        stage: .sourceThreadUnavailable,
+                        transfer: nil,
+                        details: String(
+                            localized: .ThreadStrings.tabMoveRecoverySourceUnavailableDetails(
+                                interruptedMove.stashCommit
+                            )
+                        )
+                    ))
+                    continue
+                }
+
+                let destinationThread = store.thread(byId: interruptedMove.destinationThreadID)
+                let destinationPath = destinationThread?.worktreePath
+                    ?? "\(project.resolvedWorktreesBasePath())/\(interruptedMove.destinationThreadName)"
+                let transfer = WorktreeChangeTransfer(
+                    stashCommit: interruptedMove.stashCommit,
+                    sourceWorktreePath: sourceThread.worktreePath,
+                    destinationWorktreePath: destinationPath
+                )
+
+                guard sourceThread.tmuxSessionNames.contains(interruptedMove.sourceSessionName) else {
+                    do {
+                        try await git.finishWorktreeChangeTransfer(transfer)
+                    } catch {
+                        issues.append(tabMoveRecoveryCleanupIssue(
+                            transfer: transfer,
+                            threadName: sourceThread.name,
+                            error: error
+                        ))
+                    }
+                    continue
+                }
+
+                let sourceWorktreeIsDirty: Bool
+                do {
+                    sourceWorktreeIsDirty = try await git.worktreeHasChanges(
+                        worktreePath: sourceThread.worktreePath
+                    )
+                } catch {
+                    issues.append(TabMoveRecoveryIssue(
+                        stage: .sourceWorktreeInspection,
+                        transfer: nil,
+                        details: String(
+                            localized: .ThreadStrings.tabMoveRecoverySourceInspectionDetails(
+                                sourceThread.name,
+                                interruptedMove.stashCommit,
+                                error.localizedDescription
+                            )
+                        )
+                    ))
+                    continue
+                }
+                guard !sourceWorktreeIsDirty else {
+                    issues.append(TabMoveRecoveryIssue(
+                        stage: .sourceWorktreeChanged,
+                        transfer: nil,
+                        details: String(
+                            localized: .ThreadStrings.tabMoveRecoverySourceChangedDetails(
+                                sourceThread.name,
+                                interruptedMove.stashCommit
+                            )
+                        )
+                    ))
+                    continue
+                }
+
+                do {
+                    if let destinationThread {
+                        try await deleteThread(destinationThread)
+                    } else {
+                        var isDirectory: ObjCBool = false
+                        if FileManager.default.fileExists(
+                            atPath: destinationPath,
+                            isDirectory: &isDirectory
+                        ), isDirectory.boolValue {
+                            try await git.removeWorktree(
+                                repoPath: project.repoPath,
+                                worktreePath: destinationPath
+                            )
+                        } else {
+                            await git.pruneWorktrees(repoPath: project.repoPath)
+                        }
+                        if await git.branchExists(
+                            repoPath: project.repoPath,
+                            branchName: interruptedMove.destinationThreadName
+                        ) {
+                            try await git.deleteBranch(
+                                repoPath: project.repoPath,
+                                branchName: interruptedMove.destinationThreadName
+                            )
+                        }
+                    }
+                } catch {
+                    issues.append(TabMoveRecoveryIssue(
+                        stage: .destinationCleanup,
+                        transfer: nil,
+                        details: String(
+                            localized: .ThreadStrings.tabMoveRecoveryDestinationCleanupDetails(
+                                sourceThread.name,
+                                interruptedMove.stashCommit,
+                                error.localizedDescription
+                            )
+                        )
+                    ))
+                    continue
+                }
+
+                do {
+                    try await git.restoreWorktreeChangeTransfer(transfer)
+                } catch {
+                    issues.append(TabMoveRecoveryIssue(
+                        stage: .sourceRestore,
+                        transfer: nil,
+                        details: String(
+                            localized: .ThreadStrings.tabMoveRecoverySourceRestoreDetails(
+                                sourceThread.name,
+                                interruptedMove.stashCommit,
+                                error.localizedDescription
+                            )
+                        )
+                    ))
+                    continue
+                }
+
+                do {
+                    try await git.finishWorktreeChangeTransfer(transfer)
+                } catch {
+                    issues.append(tabMoveRecoveryCleanupIssue(
+                        transfer: transfer,
+                        threadName: sourceThread.name,
+                        error: error
+                    ))
+                }
+            }
+        }
+
+        if !issues.isEmpty {
+            showTabMoveRecoveryBanner(for: issues)
+        }
+    }
+
+    private func tabMoveRecoveryCleanupIssue(
+        transfer: WorktreeChangeTransfer,
+        threadName: String,
+        error: Error
+    ) -> TabMoveRecoveryIssue {
+        TabMoveRecoveryIssue(
+            stage: .redundantStashCleanup,
+            transfer: transfer,
+            details: String(
+                localized: .ThreadStrings.tabMoveRecoveryStashCleanupDetails(
+                    threadName,
+                    transfer.stashCommit,
+                    error.localizedDescription
+                )
+            )
+        )
+    }
+
+    private func showTabMoveRecoveryBanner(for issues: [TabMoveRecoveryIssue]) {
+        let actionRequiredIssues = issues.filter { $0.stage.retryScope == nil }
+        let bannerPolicy = TabMoveRecoveryBannerPolicy(stages: issues.map(\.stage))
+        let cleanupIssues = bannerPolicy.retryScope == .redundantStashCleanup
+            ? issues.filter { $0.transfer != nil }
+            : []
+        let message = actionRequiredIssues.isEmpty
+            ? String(localized: .ThreadStrings.tabMoveRecoveryCleanupFailed)
+            : String(localized: .ThreadStrings.tabMoveRecoveryActionRequired)
+        let actions: [BannerAction]
+        if cleanupIssues.isEmpty {
+            actions = []
+        } else {
+            actions = [
+                BannerAction(title: String(localized: .ThreadStrings.tabMoveRecoveryRetryCleanup)) {
+                    [weak self] in
+                    Task { [weak self] in
+                        await self?.retryTabMoveRecoveryCleanup(cleanupIssues)
+                    }
+                }
+            ]
+        }
+
+        BannerManager.shared.show(
+            message: message,
+            style: actionRequiredIssues.isEmpty ? .warning : .error,
+            duration: nil,
+            isDismissible: true,
+            actions: actions,
+            details: issues.map(\.details).joined(separator: "\n\n"),
+            detailsCollapsedTitle: String(localized: .ThreadStrings.tabMoveRecoveryShowDetails),
+            detailsExpandedTitle: String(localized: .ThreadStrings.tabMoveRecoveryHideDetails)
+        )
+    }
+
+    private func retryTabMoveRecoveryCleanup(_ cleanupIssues: [TabMoveRecoveryIssue]) async {
+        var remainingCleanupIssues: [TabMoveRecoveryIssue] = []
+        for issue in cleanupIssues {
+            guard let transfer = issue.transfer else { continue }
+            do {
+                try await git.finishWorktreeChangeTransfer(transfer)
+            } catch {
+                remainingCleanupIssues.append(tabMoveRecoveryCleanupIssue(
+                    transfer: transfer,
+                    threadName: (transfer.sourceWorktreePath as NSString).lastPathComponent,
+                    error: error
+                ))
+            }
+        }
+
+        if remainingCleanupIssues.isEmpty {
+            BannerManager.shared.show(
+                message: String(localized: .ThreadStrings.tabMoveRecoveryCleanupSucceeded),
+                style: .info
+            )
+        } else {
+            showTabMoveRecoveryBanner(for: remainingCleanupIssues)
+        }
     }
 
     // MARK: - Main Thread
@@ -627,7 +979,7 @@ final class ThreadLifecycleService {
             selectedAgentType
         ) ?? []
         let envExports = shellExportCommand?(sessionEnvironment) ?? ""
-        let startCmd = agentStartCommand?(settings, project.id, selectedAgentType, envExports, project.repoPath, nil, nil, false) ?? ""
+        let startCmd = agentStartCommand?(settings, project.id, selectedAgentType, envExports, project.repoPath, nil, false, nil, nil, false) ?? ""
         try await tmux.createSession(
             name: tmuxSessionName,
             workingDirectory: project.repoPath,

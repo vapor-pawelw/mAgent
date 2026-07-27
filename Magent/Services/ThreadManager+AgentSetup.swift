@@ -458,6 +458,7 @@ extension ThreadManager {
         envExports: String,
         workingDirectory: String,
         resumeSessionID: String? = nil,
+        requiresSuccessfulResume: Bool = false,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
         codexFastMode: Bool = false
@@ -469,6 +470,7 @@ extension ThreadManager {
             envExports: envExports,
             workingDirectory: workingDirectory,
             resumeSessionID: resumeSessionID,
+            requiresSuccessfulResume: requiresSuccessfulResume,
             modelId: modelId,
             reasoningLevel: reasoningLevel,
             codexFastMode: codexFastMode

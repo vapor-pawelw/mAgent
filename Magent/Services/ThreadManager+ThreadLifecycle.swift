@@ -42,7 +42,9 @@ extension ThreadManager {
         modelId: String? = nil,
         reasoningLevel: String? = nil,
         codexFastMode: Bool = false,
-        localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil
+        localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil,
+        terminalTabMigration: TerminalTabMigration? = nil,
+        moveChangesFromWorktreePath: String? = nil
     ) async throws -> MagentThread {
         try await threadLifecycleService.createThread(
             project: project,
@@ -65,7 +67,9 @@ extension ThreadManager {
             modelId: modelId,
             reasoningLevel: reasoningLevel,
             codexFastMode: codexFastMode,
-            localFileSyncEntriesOverride: localFileSyncEntriesOverride
+            localFileSyncEntriesOverride: localFileSyncEntriesOverride,
+            terminalTabMigration: terminalTabMigration,
+            moveChangesFromWorktreePath: moveChangesFromWorktreePath
         )
     }
 
