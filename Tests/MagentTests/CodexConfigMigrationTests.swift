@@ -84,8 +84,8 @@ struct CodexConfigMigrationTests {
         #expect(migrated.contains("hooks = true"))
     }
 
-    @Test("Managed config preserves user hooks and adds Magent lifecycle hooks")
-    func addsMagentLifecycleHooks() {
+    @Test("Managed config preserves user hooks without adding Magent lifecycle hooks")
+    func doesNotAddMagentLifecycleHooks() {
         let input = """
         model = "gpt-5.6"
 
@@ -98,51 +98,62 @@ struct CodexConfigMigrationTests {
         let managed = CodexConfigMigration.preparingManagedConfig(from: input)
 
         #expect(managed.contains("command = \"user-stop-hook\""))
-        #expect(managed.contains("[[hooks.UserPromptSubmit]]"))
-        #expect(managed.contains("@magent_codex_turn_state active"))
-        #expect(managed.contains("[[hooks.Stop]]"))
-        #expect(managed.contains("@magent_codex_turn_state idle"))
-        #expect(managed.contains("/tmp/magent-agent-completion-events.log"))
-        #expect(managed.contains("magent_completed_at"))
-        #expect(managed.contains("printf \"%s\\t%s\\n\""))
+        #expect(!managed.contains("[[hooks.UserPromptSubmit]]"))
+        #expect(!managed.contains("@magent_codex_turn_state"))
     }
 
-    @Test("Managed lifecycle hooks remain single when config is prepared again")
-    func managedHooksAreIdempotent() {
-        let once = CodexConfigMigration.preparingManagedConfig(from: "")
-        let twice = CodexConfigMigration.preparingManagedConfig(from: once)
+    @Test("Managed config removes lifecycle hooks injected by older Magent builds")
+    func removesPreviouslyManagedHooks() {
+        let input = """
+        model = "gpt-5.6"
 
-        #expect(twice.components(separatedBy: "# magent-managed-codex-hooks-start").count == 2)
-        #expect(twice.components(separatedBy: "[[hooks.UserPromptSubmit]]").count == 2)
-        #expect(twice.components(separatedBy: "[[hooks.Stop]]").count == 2)
+        # magent-managed-codex-hooks-start
+        [[hooks.Stop]]
+        [[hooks.Stop.hooks]]
+        type = "command"
+        command = "magent-stop-hook"
+        # magent-managed-codex-hooks-end
+        """
+
+        let managed = CodexConfigMigration.preparingManagedConfig(from: input)
+
+        #expect(managed.contains("model = \"gpt-5.6\""))
+        #expect(!managed.contains("magent-managed-codex-hooks"))
+        #expect(!managed.contains("magent-stop-hook"))
     }
 
-    @Test("Codex Stop hook idle state overrides stale pane busy text")
-    func stopHookIdleStateOverridesPaneText() {
-        #expect(!CodexHookBusyState.resolve(
-            hookState: "idle",
-            paneShowsBusy: true,
-            paneShowsIdlePrompt: true
-        ))
-        #expect(CodexHookBusyState.resolve(
-            hookState: "idle",
-            paneShowsBusy: true,
-            paneShowsIdlePrompt: false
-        ))
-        #expect(CodexHookBusyState.resolve(
-            hookState: "active",
-            paneShowsBusy: true,
-            paneShowsIdlePrompt: true
-        ))
-        #expect(CodexHookBusyState.resolve(
-            hookState: nil,
-            paneShowsBusy: true,
-            paneShowsIdlePrompt: true
-        ))
-        #expect(!CodexHookBusyState.resolve(
-            hookState: nil,
-            paneShowsBusy: false,
-            paneShowsIdlePrompt: false
-        ))
+    @Test("A newer Codex idle prompt clears stale busy output")
+    func newerIdlePromptWins() {
+        let pane = """
+        › Run the tests
+        Working (2m 12s • esc to interrupt)
+        Finished successfully
+        ›
+        """
+
+        #expect(!CodexPaneActivity.isBusy(in: pane))
+    }
+
+    @Test("A newer Codex activity footer keeps the session busy")
+    func newerBusyStatusWins() {
+        let pane = """
+        Working (2m 12s • esc to interrupt)
+        › Run the tests
+        Working (3s • esc to interrupt) · 1 background terminal running
+        """
+
+        #expect(CodexPaneActivity.isBusy(in: pane))
+    }
+
+    @Test("Older Codex pane scopes cannot latch busy state")
+    func olderPaneScopeIsIgnored() {
+        let pane = """
+        › Run the tests
+        Working (2m 12s • esc to interrupt)
+        ──────────────────────────────
+        Finished successfully
+        """
+
+        #expect(!CodexPaneActivity.isBusy(in: pane))
     }
 }

@@ -1460,16 +1460,9 @@ final class SessionLifecycleService {
 
                 switch detectedAgent {
                 case .codex?:
-                    // Codex: busy while active "Working"/interrupt/background status
-                    // markers are visible in the latest scope. A Stop hook's idle state
-                    // wins over stale off-screen markers until the next submitted prompt
-                    // changes the pane option back to active.
-                    let paneActivity = await codexPaneActivity(sessionName: session)
-                    let isBusy = CodexHookBusyState.resolve(
-                        hookState: paneState.codexHookState,
-                        paneShowsBusy: paneActivity.showsBusy,
-                        paneShowsIdlePrompt: paneActivity.showsIdlePrompt
-                    )
+                    // Codex is busy when the newest meaningful pane state is an
+                    // active Working/interrupt/background status rather than a prompt.
+                    let isBusy = await paneShowsCodexBusyState(sessionName: session)
                     guard let currentThread = store.thread(byId: threadId) else { continue }
                     let wasBusy = currentThread.busySessions.contains(session)
                     if isBusy {
@@ -1823,22 +1816,22 @@ final class SessionLifecycleService {
 
     private static let codexBusyHeuristicSelfCheck: Void = {
         assert(
-            isCodexBusyStatusLine("• esc to interrupt)"),
+            CodexPaneActivity.isBusyStatusLine("• esc to interrupt)"),
             "Codex busy heuristic failed: interrupt marker should be busy"
         )
         assert(
-            isCodexBusyStatusLine("Working (35m 47s • esc to interrupt) · 1 background terminal running"),
+            CodexPaneActivity.isBusyStatusLine(
+                "Working (35m 47s • esc to interrupt) · 1 background terminal running"
+            ),
             "Codex busy heuristic failed: Working line with background terminal should be busy"
         )
         assert(
-            !isCodexBusyStatusLine("› Write tests for @filename"),
+            !CodexPaneActivity.isBusyStatusLine("› Write tests for @filename"),
             "Codex busy heuristic failed: prompt line should not be busy"
         )
     }()
 
-    private func codexPaneActivity(
-        sessionName: String
-    ) async -> (showsBusy: Bool, showsIdlePrompt: Bool) {
+    private func paneShowsCodexBusyState(sessionName: String) async -> Bool {
 #if DEBUG
         Self.codexBusyHeuristicSelfCheck
 #endif
@@ -1851,13 +1844,10 @@ final class SessionLifecycleService {
         } else if let cachedContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 200) {
             paneContent = cachedContent
         } else {
-            return (false, false)
+            return false
         }
 
-        return (
-            paneContentShowsCodexBusyStatus(paneContent),
-            paneContentShowsCodexIdlePrompt(paneContent)
-        )
+        return paneContentShowsCodexBusyStatus(paneContent)
     }
 
     private func paneContentSupportsAgentHint(sessionName: String, hintedAgent: AgentType) async -> Bool {
@@ -1879,24 +1869,7 @@ final class SessionLifecycleService {
     }
 
     private func paneContentShowsCodexBusyStatus(_ paneContent: String) -> Bool {
-        recentNonEmptyLines(from: paneContent, maxLines: 25).contains(where: Self.isCodexBusyStatusLine)
-    }
-
-    private func paneContentShowsCodexIdlePrompt(_ paneContent: String) -> Bool {
-        recentNonEmptyLines(from: paneContent, maxLines: 25).contains {
-            $0.hasPrefix("\u{203A}")
-        }
-    }
-
-    private static func isCodexBusyStatusLine(_ line: String) -> Bool {
-        let normalized = line
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        if normalized.contains("• esc to interrupt)") { return true }
-        if normalized.contains("working (") && normalized.contains("esc to interrupt") { return true }
-        if normalized.contains("working (") && normalized.contains("background terminal running") { return true }
-        if normalized.contains("background terminal running") { return true }
-        return false
+        CodexPaneActivity.isBusy(in: paneContent)
     }
 
     private func latestScopeLines(from paneContent: String) -> [String] {

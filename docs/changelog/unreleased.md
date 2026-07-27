@@ -27,7 +27,7 @@
 
 #### Bug Fixes
 
-- Fixed completed background Codex tabs sometimes remaining busy until opened by using Codex lifecycle events while retaining tmux polling as a fallback.
+- Fixed completed background Codex tabs sometimes remaining busy until opened by recognizing when a newer idle prompt supersedes stale activity text.
 - Stopped Magent-launched Codex tabs from showing the deprecated `features.codex_hooks` warning when the user's Codex config still uses the old key.
 
 ### Thread
