@@ -196,6 +196,7 @@ Prompt row interaction/visual rules:
 - Row hit target is the full row (not only text), so clicking anywhere in the row triggers navigation.
 - Display entries newest-first while retaining chronological source indexes. Select the newest prompt initially and when a newly confirmed prompt is appended, without triggering terminal navigation.
 - Row labels can wrap up to 3 lines when floating and 5 lines when pinned, then truncate. Keep ordinals visually separate from prompt text.
+- Build prompt timing footers from independently aligned labels: relative start time leads, completed duration trails, and measured layout hides the duration as a whole when it cannot fit. Keep exact start and duration details in the row-level tooltip so narrow layouts do not discard the information.
 - Keep a distinction between row preview text and the submitted prompt payload: UI rows may show a wrapped/truncated preview, but prompt actions like `Copy prompt` and rename-from-prompt must operate on the full submitted prompt text.
 - Apply subtle alternating row backgrounds to improve scanability without dominating the terminal UI.
 - Keep the TOC drag header visually distinct from the body; a slightly darker top band helps communicate that the header is the draggable region without making the whole panel heavier.

@@ -1,24 +1,35 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "promptTOCTimingCompleted": {
+    "promptTOCTimingJustNow": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sent %1$@ · Completed %2$@"
+            "value": "Just now"
           }
         }
       }
     },
-    "promptTOCTimingInProgress": {
+    "promptTOCTimingStartToolTip": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sent %@ · In progress"
+            "value": "Start time: %@"
+          }
+        }
+      }
+    },
+    "promptTOCTimingWorkedFor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Worked for %@"
           }
         }
       }

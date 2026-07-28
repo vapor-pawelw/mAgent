@@ -284,26 +284,85 @@ struct PromptTOCPresentationStateTests {
         #expect(resolved[2].timing?.sentAt == sentAt)
     }
 
-    @Test("TOC footer distinguishes unfinished and completed prompt turns")
-    func footerStateReflectsCompletion() {
-        let sentAt = Date(timeIntervalSince1970: 100)
-        let completedAt = Date(timeIntervalSince1970: 160)
-
-        #expect(
-            PromptTOCFooterState(
-                timing: SubmittedPromptTiming(text: "Pending", sentAt: sentAt)
-            ) == .inProgress(sentAt: sentAt)
-        )
-        #expect(
-            PromptTOCFooterState(
+    @Test("TOC start time uses just now, minutes, hours, then days")
+    func relativeStartTimeGranularity() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let state = { (elapsed: TimeInterval) in
+            PromptTOCTimingPresentationState(
                 timing: SubmittedPromptTiming(
-                    text: "Done",
-                    sentAt: sentAt,
-                    completedAt: completedAt
+                    text: "Prompt",
+                    sentAt: now.addingTimeInterval(-elapsed)
                 )
-            ) == .completed(sentAt: sentAt, completedAt: completedAt)
+            )
+        }
+
+        #expect(state(59)?.relativeStartComponents(now: now) == nil)
+        #expect(state(60)?.relativeStartComponents(now: now) == DateComponents(minute: -1))
+        #expect(state(3_599)?.relativeStartComponents(now: now) == DateComponents(minute: -59))
+        #expect(state(3_600)?.relativeStartComponents(now: now) == DateComponents(hour: -1))
+        #expect(state(86_399)?.relativeStartComponents(now: now) == DateComponents(hour: -23))
+        #expect(state(86_400)?.relativeStartComponents(now: now) == DateComponents(day: -1))
+        #expect(state(864_000)?.relativeStartComponents(now: now) == DateComponents(day: -10))
+    }
+
+    @Test("TOC worked duration is nonnegative and hidden instead of truncated")
+    func workedDurationPresentation() {
+        let sentAt = Date(timeIntervalSince1970: 100)
+        let completed = PromptTOCTimingPresentationState(
+            timing: SubmittedPromptTiming(
+                text: "Prompt",
+                sentAt: sentAt,
+                completedAt: Date(timeIntervalSince1970: 130)
+            )
         )
-        #expect(PromptTOCFooterState(timing: nil) == nil)
+        let outOfOrder = PromptTOCTimingPresentationState(
+            timing: SubmittedPromptTiming(
+                text: "Prompt",
+                sentAt: sentAt,
+                completedAt: Date(timeIntervalSince1970: 90)
+            )
+        )
+
+        #expect(completed?.workedDuration == 30)
+        #expect(outOfOrder?.workedDuration == 0)
+        #expect(
+            PromptTOCTimingPresentationState.shouldShowWorkedDuration(
+                availableWidth: 180,
+                startWidth: 60,
+                durationWidth: 80,
+                spacing: 8
+            )
+        )
+        #expect(
+            !PromptTOCTimingPresentationState.shouldShowWorkedDuration(
+                availableWidth: 140,
+                startWidth: 60,
+                durationWidth: 80,
+                spacing: 8
+            )
+        )
+    }
+
+    @Test("TOC exact start hint includes the date only for earlier days")
+    func exactStartHintDateDecision() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 200_000)
+        let sameDay = PromptTOCTimingPresentationState(
+            timing: SubmittedPromptTiming(
+                text: "Prompt",
+                sentAt: Date(timeIntervalSince1970: 199_900)
+            )
+        )
+        let earlierDay = PromptTOCTimingPresentationState(
+            timing: SubmittedPromptTiming(
+                text: "Prompt",
+                sentAt: Date(timeIntervalSince1970: 100_000)
+            )
+        )
+
+        #expect(sameDay?.exactStartIncludesDate(now: now, calendar: calendar) == false)
+        #expect(earlierDay?.exactStartIncludesDate(now: now, calendar: calendar) == true)
     }
 
     @Test("Agent completion closes every prompt submitted during the active turn")

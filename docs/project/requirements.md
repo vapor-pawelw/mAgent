@@ -182,6 +182,7 @@ If no repositories are configured after onboarding, the sidebar shows a centered
 - TOC visibility is a single app-wide preference: toggling show/hide in Settings must immediately apply to other open thread panels and persist across app relaunches.
 - Selecting a TOC row must resolve that prompt against a fresh pane capture, then anchor it at the top of the terminal scroll viewport when possible. The fresh lookup must account for line-index shifts after tmux history-limit eviction.
 - Prompt rows use a distinct high-contrast ordinal badge. Floating previews support up to 3 lines; pinned previews use slightly larger text and support up to 5 lines.
+- Observed prompt timing uses a leading relative start time, limited to minutes, hours, and days after `Just now`. Completed prompts show a trailing `Worked for` duration only when it fits without truncation. The row tooltip always includes the exact start time and includes the duration when available.
 - TOC context-menu actions that operate on prompt text (for example `Copy prompt`) must use the full submitted prompt payload, not the 3-line row preview.
 - When the TOC is visible, it must remain directly clickable; the terminal surface must not intercept pointer events over the panel.
 

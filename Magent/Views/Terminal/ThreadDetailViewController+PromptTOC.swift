@@ -1361,7 +1361,13 @@ private final class PromptTOCNonInteractiveView: NSView {
     }
 }
 
-private enum PromptTOCFooterFormatter {
+private struct PromptTOCTimingPresentation {
+    let startText: String
+    let workedText: String?
+    let toolTip: String
+}
+
+private enum PromptTOCTimingFormatter {
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .none
@@ -1376,41 +1382,75 @@ private enum PromptTOCFooterFormatter {
         return formatter
     }()
 
-    static func text(for state: PromptTOCFooterState?, now: Date = Date()) -> String? {
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.dateTimeStyle = .numeric
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+
+    private static let durationFormatter: DateComponentsFormatter = {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.day, .hour, .minute, .second]
+        formatter.maximumUnitCount = 1
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+
+    static func presentation(
+        for state: PromptTOCTimingPresentationState?,
+        now: Date = Date()
+    ) -> PromptTOCTimingPresentation? {
         guard let state else { return nil }
 
-        switch state {
-        case .inProgress(let sentAt):
-            return String(
-                localized: .ThreadStrings.promptTOCTimingInProgress(
-                    formatted(sentAt, now: now)
-                )
+        let startText: String
+        if let components = state.relativeStartComponents(now: now) {
+            startText = relativeFormatter.localizedString(from: components)
+        } else {
+            startText = String(localized: .ThreadStrings.promptTOCTimingJustNow)
+        }
+
+        let exactStartFormatter = state.exactStartIncludesDate(now: now)
+            ? dateTimeFormatter
+            : timeFormatter
+        let startToolTip = String(
+            localized: .ThreadStrings.promptTOCTimingStartToolTip(
+                exactStartFormatter.string(from: state.sentAt)
             )
-        case .completed(let sentAt, let completedAt):
-            return String(
-                localized: .ThreadStrings.promptTOCTimingCompleted(
-                    formatted(sentAt, now: now),
-                    formatted(completedAt, now: now)
-                )
+        )
+        guard let workedDuration = state.workedDuration,
+              let formattedDuration = durationFormatter.string(from: workedDuration) else {
+            return PromptTOCTimingPresentation(
+                startText: startText,
+                workedText: nil,
+                toolTip: startToolTip
             )
         }
-    }
 
-    private static func formatted(_ date: Date, now: Date) -> String {
-        Calendar.current.isDate(date, inSameDayAs: now)
-            ? timeFormatter.string(from: date)
-            : dateTimeFormatter.string(from: date)
+        let workedText = String(
+            localized: .ThreadStrings.promptTOCTimingWorkedFor(formattedDuration)
+        )
+        return PromptTOCTimingPresentation(
+            startText: startText,
+            workedText: workedText,
+            toolTip: "\(startToolTip)\n\(workedText)"
+        )
     }
 }
 
 private final class PromptTOCEntryRowView: NSView {
+    private static let timingSpacing: CGFloat = 8
+
     let entryIndex: Int
     private let ordinalBadgeView = PromptTOCNonInteractiveView()
     private let ordinalLabel: PromptTOCLabel
     private let label: PromptTOCLabel
-    private let footerLabel = PromptTOCLabel(labelWithString: "")
+    private let startLabel = PromptTOCLabel(labelWithString: "")
+    private let workedLabel = PromptTOCLabel(labelWithString: "")
+    private let timingView = PromptTOCNonInteractiveView()
     private let textStack = NSStackView()
     private var ordinalBadgeWidthConstraint: NSLayoutConstraint!
+    private var timingSeparationConstraint: NSLayoutConstraint!
     private var showsAlternateBackground = false
     var isSelected = false {
         didSet {
@@ -1423,14 +1463,14 @@ private final class PromptTOCEntryRowView: NSView {
     init(
         entryIndex: Int,
         promptText: String,
-        footerText: String?,
+        timingPresentation: PromptTOCTimingPresentation?,
         isPinned: Bool
     ) {
         self.entryIndex = entryIndex
         self.ordinalLabel = PromptTOCLabel(labelWithString: "\(entryIndex + 1)")
         self.label = PromptTOCLabel(wrappingLabelWithString: promptText)
         super.init(frame: .zero)
-        setupUI(footerText: footerText)
+        setupUI(timingPresentation: timingPresentation)
         setPinnedPresentation(isPinned)
     }
 
@@ -1441,6 +1481,11 @@ private final class PromptTOCEntryRowView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        updateWorkedLabelVisibility()
     }
 
     func setAlternateBackgroundVisible(_ isVisible: Bool) {
@@ -1465,10 +1510,11 @@ private final class PromptTOCEntryRowView: NSView {
         ))
     }
 
-    private func setupUI(footerText: String?) {
+    private func setupUI(timingPresentation: PromptTOCTimingPresentation?) {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.cornerRadius = 6
+        toolTip = timingPresentation?.toolTip
 
         ordinalBadgeView.translatesAutoresizingMaskIntoConstraints = false
         ordinalBadgeView.wantsLayer = true
@@ -1500,21 +1546,46 @@ private final class PromptTOCEntryRowView: NSView {
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        footerLabel.stringValue = footerText ?? ""
-        footerLabel.translatesAutoresizingMaskIntoConstraints = false
-        footerLabel.textColor = .secondaryLabelColor
-        footerLabel.isSelectable = false
-        footerLabel.isEditable = false
-        footerLabel.lineBreakMode = .byTruncatingTail
-        footerLabel.maximumNumberOfLines = 1
-        footerLabel.isHidden = footerText == nil
+        timingView.translatesAutoresizingMaskIntoConstraints = false
+        timingView.isHidden = timingPresentation == nil
+
+        startLabel.stringValue = timingPresentation?.startText ?? ""
+        startLabel.translatesAutoresizingMaskIntoConstraints = false
+        startLabel.textColor = .secondaryLabelColor
+        startLabel.lineBreakMode = .byTruncatingTail
+        startLabel.maximumNumberOfLines = 1
+        startLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+
+        workedLabel.stringValue = timingPresentation?.workedText ?? ""
+        workedLabel.translatesAutoresizingMaskIntoConstraints = false
+        workedLabel.textColor = .secondaryLabelColor
+        workedLabel.lineBreakMode = .byClipping
+        workedLabel.maximumNumberOfLines = 1
+        workedLabel.isHidden = timingPresentation?.workedText == nil
+        workedLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        timingView.addSubview(startLabel)
+        timingView.addSubview(workedLabel)
+        timingSeparationConstraint = startLabel.trailingAnchor.constraint(
+            lessThanOrEqualTo: workedLabel.leadingAnchor,
+            constant: -Self.timingSpacing
+        )
+        NSLayoutConstraint.activate([
+            startLabel.topAnchor.constraint(equalTo: timingView.topAnchor),
+            startLabel.leadingAnchor.constraint(equalTo: timingView.leadingAnchor),
+            startLabel.bottomAnchor.constraint(equalTo: timingView.bottomAnchor),
+            startLabel.trailingAnchor.constraint(lessThanOrEqualTo: timingView.trailingAnchor),
+            workedLabel.topAnchor.constraint(equalTo: timingView.topAnchor),
+            workedLabel.trailingAnchor.constraint(equalTo: timingView.trailingAnchor),
+            workedLabel.bottomAnchor.constraint(equalTo: timingView.bottomAnchor),
+        ])
 
         textStack.translatesAutoresizingMaskIntoConstraints = false
         textStack.orientation = .vertical
         textStack.alignment = .leading
         textStack.spacing = 3
         textStack.addArrangedSubview(label)
-        textStack.addArrangedSubview(footerLabel)
+        textStack.addArrangedSubview(timingView)
 
         addSubview(ordinalBadgeView)
         addSubview(textStack)
@@ -1538,7 +1609,7 @@ private final class PromptTOCEntryRowView: NSView {
             textStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             textStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
             label.widthAnchor.constraint(equalTo: textStack.widthAnchor),
-            footerLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
+            timingView.widthAnchor.constraint(equalTo: textStack.widthAnchor),
         ])
 
         updateAppearance()
@@ -1549,13 +1620,38 @@ private final class PromptTOCEntryRowView: NSView {
         label.stringValue = presentation.promptText
         label.font = .monospacedSystemFont(ofSize: presentation.promptFontSize, weight: .regular)
         label.maximumNumberOfLines = presentation.maximumPromptLines
-        footerLabel.font = .systemFont(ofSize: presentation.promptFontSize - 2, weight: .regular)
+        let timingFont = NSFont.systemFont(ofSize: presentation.promptFontSize - 2, weight: .regular)
+        startLabel.font = timingFont
+        workedLabel.font = timingFont
         ordinalBadgeWidthConstraint.constant = presentation.ordinalBadgeWidth
         label.invalidateIntrinsicContentSize()
+        startLabel.invalidateIntrinsicContentSize()
+        workedLabel.invalidateIntrinsicContentSize()
         invalidateIntrinsicContentSize()
         superview?.invalidateIntrinsicContentSize()
         superview?.needsLayout = true
         needsLayout = true
+    }
+
+    private func updateWorkedLabelVisibility() {
+        guard !workedLabel.stringValue.isEmpty else {
+            workedLabel.isHidden = true
+            timingSeparationConstraint.isActive = false
+            return
+        }
+
+        let shouldShow = PromptTOCTimingPresentationState.shouldShowWorkedDuration(
+            availableWidth: timingView.bounds.width,
+            startWidth: startLabel.intrinsicContentSize.width,
+            durationWidth: workedLabel.intrinsicContentSize.width,
+            spacing: Self.timingSpacing
+        )
+        if workedLabel.isHidden == shouldShow {
+            workedLabel.isHidden = !shouldShow
+        }
+        if timingSeparationConstraint.isActive != shouldShow {
+            timingSeparationConstraint.isActive = shouldShow
+        }
     }
 
     private func updateAppearance() {
@@ -1710,8 +1806,8 @@ final class PromptTableOfContentsView: NSView {
             let row = PromptTOCEntryRowView(
                 entryIndex: entryIndex,
                 promptText: entry.displayText,
-                footerText: PromptTOCFooterFormatter.text(
-                    for: PromptTOCFooterState(timing: entry.timing)
+                timingPresentation: PromptTOCTimingFormatter.presentation(
+                    for: PromptTOCTimingPresentationState(timing: entry.timing)
                 ),
                 isPinned: presentationState.isPinned
             )

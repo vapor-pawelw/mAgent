@@ -11,7 +11,7 @@ This document covers Prompt TOC parsing and jump behavior.
 - Prompt coordinates must be resolved from a fresh pane capture when a row is selected because tmux history-limit eviction can shift every retained line upward.
 - The visible agent tab is rescanned every three seconds and shortly after Escape steering. Returning to a cached tab retries transient empty captures instead of clearing known prompt history.
 - TOC rows may show only a 3-line preview, but prompt actions like `Copy prompt` should use the full submitted prompt text.
-- Prompts whose submission Magent directly observed show a small secondary footer with their sent time and either `In progress` or their completion time. Historical prompts without trustworthy timing metadata keep the existing text-only row instead of displaying an inferred timestamp.
+- Prompts whose submission Magent directly observed show a small secondary footer. The start is relative (`Just now`, then minutes, hours, and days). Completed prompts also show `Worked for <duration>` aligned to the trailing edge when space permits; narrow rows omit that trailing label instead of truncating it. Hovering anywhere over the row reveals the exact start time and completed duration. Historical prompts without trustworthy timing metadata keep the existing text-only row instead of displaying inferred timing.
 
 ## TOC capsule/hover UI
 
@@ -21,7 +21,7 @@ This document covers Prompt TOC parsing and jump behavior.
 - The pinned TOC stays expanded and always shows its unpin button. Its rectangular header and full-height divider meet the panel edges without inset rounding. The divider matches the subtle top-bar separators and shows the standard horizontal resize cursor across a forgiving 8pt hit target; drag it to resize the split. The chosen width and pin state persist across launches.
 - Both floating and pinned prompt lists show the newest prompt first and the oldest last. The newest row is selected by default, and each newly submitted prompt takes that visual selection without navigating the terminal; clicking it still jumps to the prompt. Initial loads stay at the top, while periodic reloads anchor older reading positions below any newly inserted rows unless the user is already near the newest edge.
 - Each prompt row shows its ordinal in a small borderless, high-contrast badge instead of prefixing the prompt text. Floating rows keep compact 11pt, three-line previews; pinned rows use 12pt text and allow up to five lines.
-- Timing footers use secondary-label color and a font two points smaller than the prompt preview.
+- Timing footers use secondary-label color and a font two points smaller than the prompt preview. Relative start time stays on the leading edge, while completed duration uses the trailing edge and is omitted when both labels cannot fit.
 - The toolbar toggle button and in-panel × close button are removed — TOC is always-on; users disable it in Settings.
 - No agent name appears in the header; only the title and count badge.
 

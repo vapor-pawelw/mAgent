@@ -61,17 +61,45 @@ enum PromptTOCTimingResolver {
     }
 }
 
-enum PromptTOCFooterState: Equatable {
-    case inProgress(sentAt: Date)
-    case completed(sentAt: Date, completedAt: Date)
+struct PromptTOCTimingPresentationState: Equatable {
+    let sentAt: Date
+    let completedAt: Date?
 
     init?(timing: SubmittedPromptTiming?) {
         guard let timing else { return nil }
-        if let completedAt = timing.completedAt {
-            self = .completed(sentAt: timing.sentAt, completedAt: completedAt)
-        } else {
-            self = .inProgress(sentAt: timing.sentAt)
+        sentAt = timing.sentAt
+        completedAt = timing.completedAt
+    }
+
+    func relativeStartComponents(now: Date) -> DateComponents? {
+        let elapsed = max(0, now.timeIntervalSince(sentAt))
+        switch elapsed {
+        case ..<60:
+            return nil
+        case ..<3_600:
+            return DateComponents(minute: -max(1, Int(elapsed / 60)))
+        case ..<86_400:
+            return DateComponents(hour: -max(1, Int(elapsed / 3_600)))
+        default:
+            return DateComponents(day: -max(1, Int(elapsed / 86_400)))
         }
+    }
+
+    var workedDuration: TimeInterval? {
+        completedAt.map { max(0, $0.timeIntervalSince(sentAt)) }
+    }
+
+    func exactStartIncludesDate(now: Date, calendar: Calendar = .current) -> Bool {
+        !calendar.isDate(sentAt, inSameDayAs: now)
+    }
+
+    static func shouldShowWorkedDuration(
+        availableWidth: CGFloat,
+        startWidth: CGFloat,
+        durationWidth: CGFloat,
+        spacing: CGFloat
+    ) -> Bool {
+        startWidth + spacing + durationWidth <= availableWidth
     }
 }
 
