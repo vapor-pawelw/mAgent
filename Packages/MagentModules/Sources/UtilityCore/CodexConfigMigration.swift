@@ -115,6 +115,16 @@ public enum CodexPaneActivity {
             .filter { !$0.isEmpty }
             .suffix(maxLines)
 
+        // Codex keeps the composer below MCP startup progress, so the lower prompt
+        // does not mean the session is idle while that interruptible row is visible.
+        if recentLines.suffix(8).contains(where: { line in
+            let normalized = line.lowercased()
+            return normalized.hasPrefix("• starting mcp server")
+                && normalized.contains("esc to interrupt")
+        }) {
+            return true
+        }
+
         for line in recentLines.reversed() {
             if line.hasPrefix("\u{203A}") {
                 return false
