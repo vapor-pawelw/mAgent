@@ -158,6 +158,7 @@ let project = Project(
                 "Magent/Services/TabPinningState.swift",
                 "Magent/App/SidebarDividerResizeIntent.swift",
                 "Magent/Views/ThreadList/SidebarModels.swift",
+                "Magent/Views/ThreadList/DiffPanelHeaderActionStack.swift",
                 "Magent/Views/ThreadList/SectionHeaderStripStyle.swift",
                 "Magent/Views/ThreadList/StickyHeaderBackdropMask.swift",
                 "Magent/Views/ThreadList/ThreadRowBadgeLayout.swift",

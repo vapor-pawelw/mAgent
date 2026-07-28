@@ -338,4 +338,18 @@ struct SplitViewControllerTests {
 
         #expect(position == 260)
     }
+
+    @Test("Selecting the Diff tab keeps the changes panel fitting width stable")
+    func diffSelectionKeepsChangesPanelWidthStable() {
+        let stack = DiffPanelHeaderActionStack()
+        stack.refreshButton.title = "Refresh"
+        stack.infoButton.title = "Info"
+        stack.showsInfoButton = false
+        let commitsWidth = stack.fittingSize.width
+
+        stack.showsInfoButton = true
+        let changesWidth = stack.fittingSize.width
+
+        #expect(abs(changesWidth - commitsWidth) < 0.5)
+    }
 }

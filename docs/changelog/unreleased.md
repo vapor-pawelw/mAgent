@@ -122,7 +122,7 @@
 - Fixed main worktree branch text clipping and kept status-free sidebar thread rows from stretching their text layout.
 - Kept stale-activity badges off main worktrees.
 - Kept consistent spacing between thread descriptions and their branch line when PR or Jira status badges are present.
-- Kept the sidebar width stable during thread selection without interfering with manual divider dragging.
+- Kept the sidebar width stable during thread selection and Diff-tab opening without interfering with manual divider dragging.
 - Kept the first repository's normal header and collapse control usable at the top of the sidebar before sticky headers activate.
 - Removed the unintended trailing area beneath sticky repository and section headers.
 - Fixed trailing thread status icons following the text width instead of aligning to the sidebar row's trailing content edge, and kept archive suggestions centered on the text without overlapping the spaced status row.

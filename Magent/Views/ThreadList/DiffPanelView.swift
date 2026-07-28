@@ -198,9 +198,9 @@ final class DiffPanelView: NSView {
     private let tabBarStack = NSStackView()
     private let commitsTabButton = NSButton()
     private let changesTabButton = NSButton()
-    private let topRightButtonStack = NSStackView()
-    private let refreshButton = NSButton()
-    private let infoButton = NSButton()
+    private let topRightButtonStack = DiffPanelHeaderActionStack()
+    private var refreshButton: NSButton { topRightButtonStack.refreshButton }
+    private var infoButton: NSButton { topRightButtonStack.infoButton }
     private let contextThreadBadgeView = NSView()
     private let commitContextLabel = NSTextField(labelWithString: "")
     private let scrollView = NonFlashingScrollView()
@@ -375,14 +375,6 @@ final class DiffPanelView: NSView {
         infoButton.setContentHuggingPriority(.required, for: .horizontal)
         infoButton.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        topRightButtonStack.orientation = .horizontal
-        topRightButtonStack.spacing = 6
-        topRightButtonStack.alignment = .centerY
-        topRightButtonStack.setContentHuggingPriority(.required, for: .horizontal)
-        topRightButtonStack.setContentCompressionResistancePriority(.required, for: .horizontal)
-        topRightButtonStack.translatesAutoresizingMaskIntoConstraints = false
-        topRightButtonStack.addArrangedSubview(refreshButton)
-        topRightButtonStack.addArrangedSubview(infoButton)
         addSubview(topRightButtonStack)
 
         contextThreadBadgeView.wantsLayer = true
@@ -1118,7 +1110,7 @@ final class DiffPanelView: NSView {
         let inactiveColor = NSColor(resource: .textSecondary)
         commitsTabButton.contentTintColor = activeTab == .commits ? activeColor : inactiveColor
         changesTabButton.contentTintColor = activeTab == .changes ? activeColor : inactiveColor
-        infoButton.isHidden = activeTab == .commits
+        topRightButtonStack.showsInfoButton = activeTab == .changes
     }
 
     private func rebuildRows() {
@@ -1636,6 +1628,7 @@ final class DiffPanelView: NSView {
         }
         nameLabel.attributedStringValue = attributed
         nameLabel.lineBreakMode = .byTruncatingTail
+        nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
         let pathTooltip = fullPathTooltip(for: entry.relativePath)
         nameLabel.toolTip = pathTooltip
