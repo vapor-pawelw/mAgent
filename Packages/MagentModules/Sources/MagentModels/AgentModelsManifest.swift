@@ -85,6 +85,8 @@ public enum AgentReasoningLevelPresentation {
             return "xH"
         case "max":
             return "Max"
+        case "ultra":
+            return "Ultra"
         default:
             return trimmed
         }
