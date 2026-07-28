@@ -88,6 +88,7 @@ Codex busy detection is scoped to the **latest pane scope** (content after the l
 In that recent window, any of the following marks Codex busy:
 
 - `• esc to interrupt)`
+- A `•`-prefixed `Starting MCP server(s)` row with `esc to interrupt` on the same line within the last eight non-empty lines, even when Codex renders its composer prompt below it
 - `Working (... esc to interrupt ...)`
 - `Working (... background terminal running ...)`
 - `background terminal running`

@@ -145,6 +145,47 @@ struct CodexConfigMigrationTests {
         #expect(CodexPaneActivity.isBusy(in: pane))
     }
 
+    @Test("Codex MCP startup remains busy while its composer is visible")
+    func mcpStartupOverridesComposerPrompt() {
+        let pane = """
+        • Starting MCP servers (4/5): xcodebuildmcp (23s • esc to interrupt)
+
+        › Explain this codebase
+        """
+
+        #expect(CodexPaneActivity.isBusy(in: pane))
+    }
+
+    @Test("Separate stale MCP and interrupt text does not override an idle prompt")
+    func unrelatedMCPTextDoesNotOverrideIdlePrompt() {
+        let pane = """
+        • Starting MCP servers failed earlier
+        Working (2m 12s • esc to interrupt)
+        Finished successfully
+        ›
+        """
+
+        #expect(!CodexPaneActivity.isBusy(in: pane))
+    }
+
+    @Test("Older exact MCP startup rows do not latch busy state")
+    func olderMCPStartupDoesNotOverrideIdlePrompt() {
+        let pane = """
+        • Starting MCP servers (4/5): xcodebuildmcp (23s • esc to interrupt)
+        Startup result
+        Turn output 1
+        Turn output 2
+        Turn output 3
+        Turn output 4
+        Turn output 5
+        Turn output 6
+        Turn output 7
+        ›
+        """
+
+        #expect(!CodexPaneActivity.isBusy(in: pane))
+    }
+
     @Test("Older Codex pane scopes cannot latch busy state")
     func olderPaneScopeIsIgnored() {
         let pane = """
