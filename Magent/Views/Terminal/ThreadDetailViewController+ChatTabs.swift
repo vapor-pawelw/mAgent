@@ -873,6 +873,23 @@ extension ThreadDetailViewController {
                 codexSandboxEnabled: codexSandboxEnabled,
                 attachments: self.agentChatAttachments(from: preparedAttachments),
                 codexSteerStream: codexSteerStream,
+                onStatusUpdate: { [weak self] status in
+                    guard let self else { return }
+                    guard self.chatRequestTaskTokensByIdentifier[identifier] == taskToken else { return }
+                    let statusText = switch status {
+                    case .startingCodex:
+                        String(localized: .ThreadStrings.chatStatusStartingCodex)
+                    }
+                    self.setPendingAssistantMessage(
+                        identifier: identifier,
+                        pendingAssistantID: pendingAssistant.id,
+                        text: statusText
+                    )
+                    if self.activeChatTabId == identifier,
+                       let currentChatIndex = self.chatIndex(for: identifier) {
+                        self.refreshChatTabView(chatIndex: currentChatIndex)
+                    }
+                },
                 onStreamingUpdate: { [weak self] update in
                     guard let self else { return }
                     guard self.chatRequestTaskTokensByIdentifier[identifier] == taskToken else { return }

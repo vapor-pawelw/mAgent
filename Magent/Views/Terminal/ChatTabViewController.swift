@@ -1897,9 +1897,15 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         now: Date = Date()
     ) -> String {
         let elapsed = max(0, now.timeIntervalSince(startedAt))
-        let verb = placeholderText.trimmingCharacters(in: .whitespacesAndNewlines) == ChatBusyStateRecovery.continuedWorkPlaceholderText
-            ? "Still working"
-            : "Working"
+        let trimmedPlaceholder = placeholderText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let verb: String
+        if trimmedPlaceholder == String(localized: .ThreadStrings.chatStatusStartingCodex) {
+            verb = String(localized: .ThreadStrings.chatStatusStartingCodexVerb)
+        } else if trimmedPlaceholder == ChatBusyStateRecovery.continuedWorkPlaceholderText {
+            verb = "Still working"
+        } else {
+            verb = "Working"
+        }
         return "\(verb) (\(formattedElapsedDuration(elapsed)) • esc to interrupt)"
     }
 

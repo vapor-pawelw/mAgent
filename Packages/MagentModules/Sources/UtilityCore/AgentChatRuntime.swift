@@ -37,6 +37,10 @@ public nonisolated struct AgentChatStreamingUpdate: Sendable, Equatable {
     }
 }
 
+public nonisolated enum AgentChatStatusUpdate: Sendable, Equatable {
+    case startingCodex
+}
+
 public nonisolated struct AgentChatJSONLineBuffer: Sendable {
     private var buffer = Data()
 
@@ -160,6 +164,272 @@ public nonisolated final class AgentChatStreamingCoalescer: Sendable {
     }
 }
 
+nonisolated struct CodexAppServerConnectionConfiguration: Equatable, Sendable {
+    let workingDirectory: String
+    let developerInstructions: String?
+    let skipPermissions: Bool
+    let sandboxEnabled: Bool
+}
+
+nonisolated final class CodexAppServerProcessHost {
+    let process: Process
+    let stdinPipe: Pipe
+    let stdoutPipe: Pipe
+    let stderrPipe: Pipe
+    let configuration: CodexAppServerConnectionConfiguration
+    var threadID: String?
+    var isInUse: Bool
+    var lastUsedAt: Date
+    private let handlerLock = NSLock()
+    private let requestIDLock = NSLock()
+    private let stdoutBufferLock = NSLock()
+    private var handlerGeneration = 0
+    private var nextJSONRPCRequestID = 1
+    private var stdoutBuffer = AgentChatJSONLineBuffer()
+
+    init(
+        process: Process,
+        stdinPipe: Pipe,
+        stdoutPipe: Pipe,
+        stderrPipe: Pipe,
+        configuration: CodexAppServerConnectionConfiguration,
+        threadID: String? = nil,
+        isInUse: Bool = true,
+        lastUsedAt: Date = Date()
+    ) {
+        self.process = process
+        self.stdinPipe = stdinPipe
+        self.stdoutPipe = stdoutPipe
+        self.stderrPipe = stderrPipe
+        self.configuration = configuration
+        self.threadID = threadID
+        self.isInUse = isInUse
+        self.lastUsedAt = lastUsedAt
+    }
+
+    func installReadabilityHandlers(
+        discardBufferedStdout: Bool = false,
+        onStdoutData: @escaping (Data) -> Void,
+        onStderrData: @escaping (Data) -> Void
+    ) {
+        handlerLock.lock()
+        if discardBufferedStdout {
+            stdoutBufferLock.lock()
+            stdoutBuffer = AgentChatJSONLineBuffer()
+            stdoutBufferLock.unlock()
+        }
+        handlerGeneration += 1
+        let generation = handlerGeneration
+        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            guard let self else { return }
+            handlerLock.lock()
+            guard generation == handlerGeneration else {
+                handlerLock.unlock()
+                return
+            }
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+            } else {
+                onStdoutData(data)
+            }
+            handlerLock.unlock()
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            guard let self else { return }
+            handlerLock.lock()
+            guard generation == handlerGeneration else {
+                handlerLock.unlock()
+                return
+            }
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+            } else {
+                onStderrData(data)
+            }
+            handlerLock.unlock()
+        }
+        handlerLock.unlock()
+    }
+
+    func installIdleDrainers() {
+        installReadabilityHandlers(
+            onStdoutData: { [weak self] data in
+                _ = self?.appendStdout(data)
+            },
+            onStderrData: { _ in }
+        )
+    }
+
+    func stopReading() {
+        handlerLock.lock()
+        handlerGeneration += 1
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
+        handlerLock.unlock()
+    }
+
+    func appendStdout(_ data: Data) -> [String] {
+        stdoutBufferLock.lock()
+        defer { stdoutBufferLock.unlock() }
+        return stdoutBuffer.append(data)
+    }
+
+    var remainingStdoutText: String {
+        stdoutBufferLock.lock()
+        defer { stdoutBufferLock.unlock() }
+        return stdoutBuffer.remainingText
+    }
+
+    func allocateRequestID() -> Int {
+        requestIDLock.lock()
+        defer { requestIDLock.unlock() }
+        let requestID = nextJSONRPCRequestID
+        nextJSONRPCRequestID += 1
+        return requestID
+    }
+}
+
+nonisolated final class CodexAppServerProcessPool: @unchecked Sendable {
+    // @unchecked Sendable: pool membership and lease metadata are serialized by `lock`;
+    // a successfully acquired host is exclusively leased until `release`.
+    private let lock = NSCondition()
+    private var hostsByThreadID: [String: CodexAppServerProcessHost] = [:]
+    private let maximumIdleHosts: Int
+
+    init(maximumIdleHosts: Int = 6) {
+        self.maximumIdleHosts = maximumIdleHosts
+    }
+
+    func acquire(
+        threadID: String,
+        configuration: CodexAppServerConnectionConfiguration,
+        isCancelled: () -> Bool = { false }
+    ) -> CodexAppServerProcessHost? {
+        lock.lock()
+        if isCancelled() {
+            lock.unlock()
+            return nil
+        }
+        while let host = hostsByThreadID[threadID], host.isInUse {
+            if isCancelled() {
+                lock.unlock()
+                return nil
+            }
+            _ = lock.wait(until: Date().addingTimeInterval(0.25))
+        }
+        guard let host = hostsByThreadID[threadID] else {
+            lock.unlock()
+            return nil
+        }
+        guard host.process.isRunning else {
+            hostsByThreadID.removeValue(forKey: threadID)
+            lock.broadcast()
+            lock.unlock()
+            terminate([host])
+            return nil
+        }
+        guard host.configuration == configuration else {
+            hostsByThreadID.removeValue(forKey: threadID)
+            lock.broadcast()
+            lock.unlock()
+            terminate([host])
+            return nil
+        }
+        host.isInUse = true
+        host.lastUsedAt = Date()
+        lock.unlock()
+        return host
+    }
+
+    @discardableResult
+    func register(
+        _ host: CodexAppServerProcessHost,
+        threadID: String,
+        isCancelled: () -> Bool = { false }
+    ) -> Bool {
+        var hostsToTerminate: [CodexAppServerProcessHost] = []
+        lock.lock()
+        if isCancelled() {
+            lock.unlock()
+            return false
+        }
+        while let existing = hostsByThreadID[threadID],
+              existing !== host,
+              existing.isInUse {
+            if isCancelled() {
+                lock.unlock()
+                return false
+            }
+            _ = lock.wait(until: Date().addingTimeInterval(0.25))
+        }
+        if let replaced = hostsByThreadID.updateValue(host, forKey: threadID),
+           replaced !== host,
+           !replaced.isInUse {
+            hostsToTerminate.append(replaced)
+        }
+        host.threadID = threadID
+        hostsToTerminate.append(contentsOf: pruneIdleHostsIfNeeded(excluding: host))
+        lock.broadcast()
+        lock.unlock()
+        terminate(hostsToTerminate)
+        return true
+    }
+
+    func release(_ host: CodexAppServerProcessHost, keepAlive: Bool) {
+        var hostsToTerminate: [CodexAppServerProcessHost] = []
+        lock.lock()
+        host.isInUse = false
+        host.lastUsedAt = Date()
+        let ownsRegisteredEntry = host.threadID.flatMap { hostsByThreadID[$0] } === host
+        if !ownsRegisteredEntry || !keepAlive || !host.process.isRunning {
+            if let threadID = host.threadID,
+               hostsByThreadID[threadID] === host {
+                hostsByThreadID.removeValue(forKey: threadID)
+            }
+            hostsToTerminate.append(host)
+        } else {
+            hostsToTerminate.append(contentsOf: pruneIdleHostsIfNeeded(excluding: host))
+        }
+        lock.broadcast()
+        lock.unlock()
+        terminate(hostsToTerminate)
+    }
+
+    private func pruneIdleHostsIfNeeded(
+        excluding protectedHost: CodexAppServerProcessHost
+    ) -> [CodexAppServerProcessHost] {
+        let allIdleHosts = hostsByThreadID.values.filter { !$0.isInUse }
+        let excessCount = max(0, allIdleHosts.count - maximumIdleHosts)
+        guard excessCount > 0 else { return [] }
+
+        let evictionCandidates = allIdleHosts
+            .filter { $0 !== protectedHost }
+            .sorted { $0.lastUsedAt < $1.lastUsedAt }
+        let evicted = Array(evictionCandidates.prefix(excessCount))
+        for host in evicted {
+            if let threadID = host.threadID,
+               hostsByThreadID[threadID] === host {
+                hostsByThreadID.removeValue(forKey: threadID)
+            }
+        }
+        return evicted
+    }
+
+    private func terminate(_ hosts: [CodexAppServerProcessHost]) {
+        for host in hosts {
+            host.installIdleDrainers()
+            try? host.stdinPipe.fileHandleForWriting.close()
+            if host.process.isRunning {
+                host.process.terminate()
+                host.process.waitUntilExit()
+            }
+            host.stopReading()
+        }
+    }
+}
+
 public nonisolated struct AgentChatAttachment: Sendable, Equatable {
     public nonisolated enum Kind: String, Sendable, Equatable {
         case file
@@ -179,6 +449,7 @@ public nonisolated struct AgentChatAttachment: Sendable, Equatable {
 public nonisolated enum AgentChatRuntime {
     private static let codexThreadReadyTimeout: TimeInterval = 20
     private static let codexTurnCompletionPollInterval: TimeInterval = 1
+    private static let codexAppServerProcessPool = CodexAppServerProcessPool()
 
     public nonisolated static func execute(
         agentType: AgentType,
@@ -194,6 +465,7 @@ public nonisolated enum AgentChatRuntime {
         attachments: [AgentChatAttachment] = [],
         codexSteerStream: AsyncStream<String>? = nil,
         cancellationHandle: ShellExecutor.CancellationHandle? = nil,
+        onStatusUpdate: (@Sendable @MainActor (AgentChatStatusUpdate) -> Void)? = nil,
         onStreamingUpdate: (@Sendable @MainActor (AgentChatStreamingUpdate) -> Void)? = nil
     ) async -> AgentChatExecutionResult {
         if Task.isCancelled {
@@ -226,6 +498,7 @@ public nonisolated enum AgentChatRuntime {
                 codexSandboxEnabled: codexSandboxEnabled,
                 attachments: normalizedAttachmentList,
                 steerStream: codexSteerStream,
+                onStatusUpdate: onStatusUpdate,
                 onStreamingUpdate: onStreamingUpdate
             )
             let trimmedAppServerText = appServerResult.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -247,6 +520,7 @@ public nonisolated enum AgentChatRuntime {
                     codexSandboxEnabled: codexSandboxEnabled,
                     attachments: normalizedAttachmentList,
                     steerStream: codexSteerStream,
+                    onStatusUpdate: onStatusUpdate,
                     onStreamingUpdate: onStreamingUpdate
                 )
                 let trimmedFreshText = freshThreadResult.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -330,10 +604,17 @@ public nonisolated enum AgentChatRuntime {
     private nonisolated final class ProcessCancellationBox: @unchecked Sendable {
         private let lock = NSLock()
         private var process: Process?
+        private var cancellationRequested = false
 
         func setProcess(_ process: Process) {
             lock.lock()
-            self.process = process
+            if cancellationRequested {
+                if process.isRunning {
+                    process.terminate()
+                }
+            } else {
+                self.process = process
+            }
             lock.unlock()
         }
 
@@ -343,12 +624,19 @@ public nonisolated enum AgentChatRuntime {
             lock.unlock()
         }
 
+        var isCancelled: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return cancellationRequested
+        }
+
         func cancel() {
             lock.lock()
-            let process = process
+            cancellationRequested = true
+            if let process, process.isRunning {
+                process.terminate()
+            }
             lock.unlock()
-            guard let process, process.isRunning else { return }
-            process.terminate()
         }
     }
 
@@ -363,6 +651,7 @@ public nonisolated enum AgentChatRuntime {
         codexSandboxEnabled: Bool,
         attachments: [AgentChatAttachment],
         steerStream: AsyncStream<String>?,
+        onStatusUpdate: (@Sendable @MainActor (AgentChatStatusUpdate) -> Void)?,
         onStreamingUpdate: (@Sendable @MainActor (AgentChatStreamingUpdate) -> Void)?
     ) async -> AgentChatExecutionResult {
         let cancellationBox = ProcessCancellationBox()
@@ -382,6 +671,7 @@ public nonisolated enum AgentChatRuntime {
                         attachments: attachments,
                         steerStream: steerStream,
                         cancellationBox: cancellationBox,
+                        onStatusUpdate: onStatusUpdate,
                         onStreamingUpdate: onStreamingUpdate
                     )
                     continuation.resume(returning: result)
@@ -404,10 +694,10 @@ public nonisolated enum AgentChatRuntime {
         attachments: [AgentChatAttachment],
         steerStream: AsyncStream<String>?,
         cancellationBox: ProcessCancellationBox,
+        onStatusUpdate: (@Sendable @MainActor (AgentChatStatusUpdate) -> Void)?,
         onStreamingUpdate: (@Sendable @MainActor (AgentChatStreamingUpdate) -> Void)?
     ) -> AgentChatExecutionResult {
         final class State {
-            var stdoutBuffer = AgentChatJSONLineBuffer()
             var stderrBuffer = Data()
             var threadID: String?
             var activeTurnID: String?
@@ -415,12 +705,82 @@ public nonisolated enum AgentChatRuntime {
             var turnStatus: String?
             var failure: String?
             var pendingSteerRequestIDs: Set<Int> = []
-            var nextSteerRequestID: Int = 1_000_000
             var assistantMessageOrder: [String] = []
             var assistantMessagesByID: [String: String] = [:]
         }
 
+        let connectionConfiguration = CodexAppServerConnectionConfiguration(
+            workingDirectory: workingDirectory,
+            developerInstructions: normalizedNonEmpty(codexDeveloperInstructions),
+            skipPermissions: codexSkipPermissions,
+            sandboxEnabled: codexSandboxEnabled
+        )
+        let resumedThreadID = normalizedSessionID(conversationSessionID)
+        let reusedHost = resumedThreadID.flatMap {
+            codexAppServerProcessPool.acquire(
+                threadID: $0,
+                configuration: connectionConfiguration,
+                isCancelled: { cancellationBox.isCancelled }
+            )
+        }
+        if cancellationBox.isCancelled {
+            if let reusedHost {
+                codexAppServerProcessPool.release(reusedHost, keepAlive: true)
+            }
+            return AgentChatExecutionResult(
+                assistantText: "Request cancelled.",
+                conversationSessionID: resumedThreadID
+            )
+        }
+        if reusedHost == nil, let onStatusUpdate {
+            DispatchQueue.main.async {
+                onStatusUpdate(.startingCodex)
+            }
+        }
+        let host: CodexAppServerProcessHost = reusedHost ?? {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            let codexFlagArgs = codexPermissionFlags(
+                skipPermissions: codexSkipPermissions,
+                sandboxEnabled: codexSandboxEnabled
+            )
+            let codexAppServerCommand = (
+                ["command codex"] +
+                codexFlagArgs +
+                ["app-server", "--listen", "stdio://"]
+            ).joined(separator: " ")
+            process.arguments = ["-c", codexAppServerCommand]
+            process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
+
+            var environment = ProcessInfo.processInfo.environment
+            if environment["PATH"] == nil {
+                environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            }
+            if environment["LANG"] == nil {
+                environment["LANG"] = "C.UTF-8"
+            }
+            process.environment = environment
+
+            let stdinPipe = Pipe()
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+            process.standardInput = stdinPipe
+            process.standardOutput = stdoutPipe
+            process.standardError = stderrPipe
+            return CodexAppServerProcessHost(
+                process: process,
+                stdinPipe: stdinPipe,
+                stdoutPipe: stdoutPipe,
+                stderrPipe: stderrPipe,
+                configuration: connectionConfiguration
+            )
+        }()
+
         let state = State()
+        state.threadID = reusedHost?.threadID
+        let initializeRequestID = host.allocateRequestID()
+        let threadRequestID = host.allocateRequestID()
+        let turnRequestID = host.allocateRequestID()
         let streamingCoalescer = onStreamingUpdate.map {
             AgentChatStreamingCoalescer(onUpdate: $0)
         }
@@ -431,12 +791,15 @@ public nonisolated enum AgentChatRuntime {
         final class SteerQueue {
             private let lock = NSLock()
             private var values: [String] = []
+            private var isClosed = false
 
             func append(_ value: String) {
                 let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { return }
                 lock.lock()
-                values.append(trimmed)
+                if !isClosed {
+                    values.append(trimmed)
+                }
                 lock.unlock()
             }
 
@@ -445,6 +808,13 @@ public nonisolated enum AgentChatRuntime {
                 defer { lock.unlock() }
                 guard !values.isEmpty else { return nil }
                 return values.removeFirst()
+            }
+
+            func close() {
+                lock.lock()
+                isClosed = true
+                values.removeAll()
+                lock.unlock()
             }
         }
         let steerQueue = SteerQueue()
@@ -460,35 +830,11 @@ public nonisolated enum AgentChatRuntime {
             steerPumpTask = nil
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        let codexFlagArgs = codexPermissionFlags(
-            skipPermissions: codexSkipPermissions,
-            sandboxEnabled: codexSandboxEnabled
-        )
-        let codexAppServerCommand = (
-            ["command codex"] +
-            codexFlagArgs +
-            ["app-server", "--listen", "stdio://"]
-        ).joined(separator: " ")
-        process.arguments = ["-c", codexAppServerCommand]
-        process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
-
-        var environment = ProcessInfo.processInfo.environment
-        if environment["PATH"] == nil {
-            environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        }
-        if environment["LANG"] == nil {
-            environment["LANG"] = "C.UTF-8"
-        }
-        process.environment = environment
-
-        let stdinPipe = Pipe()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
+        let process = host.process
+        let stdinPipe = host.stdinPipe
+        let stdoutPipe = host.stdoutPipe
+        let stderrPipe = host.stderrPipe
+        var shouldKeepProcessAlive = false
 
         func sendJSON(_ payload: [String: Any]) {
             guard let data = try? JSONSerialization.data(withJSONObject: payload),
@@ -580,7 +926,7 @@ public nonisolated enum AgentChatRuntime {
                     return
                 }
 
-                if id == 2 {
+                if id == threadRequestID {
                     let threadID = ((object["result"] as? [String: Any])?["thread"] as? [String: Any])?["id"] as? String
                     lock.lock()
                     state.threadID = normalizedSessionID(threadID)
@@ -686,90 +1032,88 @@ public nonisolated enum AgentChatRuntime {
             }
         }
 
-        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if data.isEmpty { return }
-
-            lock.lock()
-            let lines = state.stdoutBuffer.append(data)
-
-            for rawLine in lines {
-                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !line.isEmpty {
-                    lock.unlock()
-                    handleJSONLine(line)
-                    lock.lock()
+        host.installReadabilityHandlers(
+            discardBufferedStdout: reusedHost != nil,
+            onStdoutData: { data in
+                let lines = host.appendStdout(data)
+                for rawLine in lines {
+                    let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !line.isEmpty {
+                        handleJSONLine(line)
+                    }
                 }
+            },
+            onStderrData: { data in
+                lock.lock()
+                state.stderrBuffer.append(data)
+                lock.unlock()
             }
-            lock.unlock()
-        }
-
-        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            lock.lock()
-            state.stderrBuffer.append(data)
-            lock.unlock()
-        }
+        )
 
         defer {
+            steerQueue.close()
             steerPumpTask?.cancel()
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
             cancellationBox.clear()
-            if process.isRunning {
-                process.terminate()
+            if shouldKeepProcessAlive {
+                host.installIdleDrainers()
+            } else {
+                host.stopReading()
             }
+            codexAppServerProcessPool.release(host, keepAlive: shouldKeepProcessAlive)
         }
 
-        do {
-            try process.run()
-            cancellationBox.setProcess(process)
-        } catch {
-            return AgentChatExecutionResult(
-                assistantText: "Codex app-server failed: \(error.localizedDescription)",
-                conversationSessionID: normalizedSessionID(conversationSessionID)
-            )
-        }
+        if reusedHost == nil {
+            do {
+                try process.run()
+                cancellationBox.setProcess(process)
+            } catch {
+                return AgentChatExecutionResult(
+                    assistantText: "Codex app-server failed: \(error.localizedDescription)",
+                    conversationSessionID: resumedThreadID
+                )
+            }
 
-        sendJSON([
-            "id": 1,
-            "method": "initialize",
-            "params": [
-                "clientInfo": [
-                    "name": "magent",
-                    "title": "Magent",
-                    "version": "dev",
+            sendJSON([
+                "id": initializeRequestID,
+                "method": "initialize",
+                "params": [
+                    "clientInfo": [
+                        "name": "magent",
+                        "title": "Magent",
+                        "version": "dev",
+                    ],
                 ],
-            ],
-        ])
-        sendJSON([
-            "method": "initialized",
-            "params": [:],
-        ])
+            ])
+            sendJSON([
+                "method": "initialized",
+                "params": [:],
+            ])
 
-        let threadRequestParams: [String: Any] = {
-            var params: [String: Any] = [
-                "cwd": workingDirectory,
-            ]
-            if let developerInstructions = normalizedNonEmpty(codexDeveloperInstructions) {
-                // App-server steering for the whole thread (and subsequent turns).
-                params["developerInstructions"] = developerInstructions
-                params["baseInstructions"] = developerInstructions
-            }
-            if let threadID = normalizedSessionID(conversationSessionID) {
-                params["threadId"] = threadID
-            }
-            return params
-        }()
+            let threadRequestParams: [String: Any] = {
+                var params: [String: Any] = [
+                    "cwd": workingDirectory,
+                ]
+                if let developerInstructions = connectionConfiguration.developerInstructions {
+                    // App-server steering for the whole thread (and subsequent turns).
+                    params["developerInstructions"] = developerInstructions
+                    params["baseInstructions"] = developerInstructions
+                }
+                if let resumedThreadID {
+                    params["threadId"] = resumedThreadID
+                }
+                return params
+            }()
 
-        sendJSON([
-            "id": 2,
-            "method": normalizedSessionID(conversationSessionID) == nil ? "thread/start" : "thread/resume",
-            "params": threadRequestParams,
-        ])
+            sendJSON([
+                "id": threadRequestID,
+                "method": resumedThreadID == nil ? "thread/start" : "thread/resume",
+                "params": threadRequestParams,
+            ])
 
-        _ = threadReadySemaphore.wait(timeout: .now() + Self.codexThreadReadyTimeout)
+            _ = threadReadySemaphore.wait(timeout: .now() + Self.codexThreadReadyTimeout)
+        } else {
+            cancellationBox.setProcess(process)
+        }
 
         lock.lock()
         let resolvedThreadID = state.threadID
@@ -795,6 +1139,18 @@ public nonisolated enum AgentChatRuntime {
                 conversationSessionID: normalizedSessionID(conversationSessionID)
             )
         }
+        if reusedHost == nil {
+            guard codexAppServerProcessPool.register(
+                host,
+                threadID: threadID,
+                isCancelled: { cancellationBox.isCancelled }
+            ) else {
+                return AgentChatExecutionResult(
+                    assistantText: "Request cancelled.",
+                    conversationSessionID: threadID
+                )
+            }
+        }
 
         let inputItems = codexInputItems(prompt: prompt, attachments: attachments)
         var turnParams: [String: Any] = [
@@ -811,7 +1167,7 @@ public nonisolated enum AgentChatRuntime {
         }
 
         sendJSON([
-            "id": 3,
+            "id": turnRequestID,
             "method": "turn/start",
             "params": turnParams,
         ])
@@ -820,10 +1176,9 @@ public nonisolated enum AgentChatRuntime {
             while let steerText = steerQueue.popFirst() {
                 lock.lock()
                 let activeTurnID = state.activeTurnID
-                let nextSteerRequestID = state.nextSteerRequestID
+                let steerRequestID = host.allocateRequestID()
                 if activeTurnID != nil {
-                    state.nextSteerRequestID += 1
-                    state.pendingSteerRequestIDs.insert(nextSteerRequestID)
+                    state.pendingSteerRequestIDs.insert(steerRequestID)
                 }
                 lock.unlock()
 
@@ -833,7 +1188,7 @@ public nonisolated enum AgentChatRuntime {
                     break
                 }
                 sendJSON([
-                    "id": nextSteerRequestID,
+                    "id": steerRequestID,
                     "method": "turn/steer",
                     "params": [
                         "threadId": threadID,
@@ -856,11 +1211,6 @@ public nonisolated enum AgentChatRuntime {
             if !process.isRunning { break }
         }
 
-        if process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
-        }
-
         if Task.isCancelled {
             return AgentChatExecutionResult(
                 assistantText: "Request cancelled.",
@@ -870,8 +1220,9 @@ public nonisolated enum AgentChatRuntime {
 
         lock.lock()
         let stderr = String(data: state.stderrBuffer, encoding: .utf8) ?? ""
-        let stdout = state.stdoutBuffer.remainingText
+        let stdout = host.remainingStdoutText
         let failure = state.failure
+        let turnCompletedSuccessfully = state.turnCompleted && state.turnStatus == "completed"
         let mergedAssistant = mergedAssistantText(state)
         lock.unlock()
 
@@ -883,6 +1234,7 @@ public nonisolated enum AgentChatRuntime {
         }
         let finalText = mergedAssistant.trimmingCharacters(in: .whitespacesAndNewlines)
         if !finalText.isEmpty {
+            shouldKeepProcessAlive = turnCompletedSuccessfully && process.isRunning
             return AgentChatExecutionResult(
                 assistantText: finalText,
                 conversationSessionID: threadID

@@ -3,12 +3,14 @@ import MagentModels
 
 public enum ChatBusyStateRecovery {
     public static let loadingPlaceholderText = "Thinking..."
+    public static let startingCodexPlaceholderText = "Starting Codex..."
     public static let continuedWorkPlaceholderText = "Still working..."
     public static let cancelledPlaceholderText = "Request cancelled."
 
     public static func isAssistantLoadingPlaceholder(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed == loadingPlaceholderText
+            || trimmed == startingCodexPlaceholderText
             || trimmed == continuedWorkPlaceholderText
             || trimmed == "Thinking."
             || trimmed == "Thinking.."

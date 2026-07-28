@@ -2695,6 +2695,28 @@
           }
         }
       }
+    },
+    "chatStatusStartingCodex": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting Codex..."
+          }
+        }
+      }
+    },
+    "chatStatusStartingCodexVerb": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting Codex"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

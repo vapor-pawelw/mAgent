@@ -8,19 +8,24 @@ struct ChatBusyStateRecoveryTests {
     @Test("Converts stale assistant loading placeholders after relaunch")
     func convertsLoadingPlaceholders() {
         let assistantThinking = PersistedChatMessage(role: .assistant, text: "Thinking...")
+        let assistantStartingCodex = PersistedChatMessage(
+            role: .assistant,
+            text: ChatBusyStateRecovery.startingCodexPlaceholderText
+        )
         let assistantContinued = PersistedChatMessage(role: .assistant, text: "Still working...")
         let assistantWorking = PersistedChatMessage(role: .assistant, text: "Working (42s • esc to interrupt)")
         let userMessage = PersistedChatMessage(role: .user, text: "hello")
 
         let result = ChatBusyStateRecovery.normalizedMessagesForAppRelaunch(
-            [assistantThinking, assistantContinued, assistantWorking, userMessage]
+            [assistantThinking, assistantStartingCodex, assistantContinued, assistantWorking, userMessage]
         )
 
         #expect(result.didMutate)
         #expect(result.messages[0].text == ChatBusyStateRecovery.cancelledPlaceholderText)
         #expect(result.messages[1].text == ChatBusyStateRecovery.cancelledPlaceholderText)
         #expect(result.messages[2].text == ChatBusyStateRecovery.cancelledPlaceholderText)
-        #expect(result.messages[3].text == "hello")
+        #expect(result.messages[3].text == ChatBusyStateRecovery.cancelledPlaceholderText)
+        #expect(result.messages[4].text == "hello")
     }
 
     @Test("Leaves non-loading assistant text unchanged")
