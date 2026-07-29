@@ -2234,6 +2234,17 @@
         }
       }
     },
+    "chatSlashCommandHelpMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Available slash commands:\n%@"
+          }
+        }
+      }
+    },
     "chatSlashCommandHooksDescription": {
       "extractionState": "manual",
       "localizations": {

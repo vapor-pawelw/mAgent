@@ -6,10 +6,101 @@ import ShellInfra
 public nonisolated struct AgentChatExecutionResult: Sendable, Equatable {
     public let assistantText: String
     public let conversationSessionID: String?
+    public let deferredSteerInputs: [AgentChatSteerInput]
 
-    public init(assistantText: String, conversationSessionID: String?) {
+    public init(
+        assistantText: String,
+        conversationSessionID: String?,
+        deferredSteerInputs: [AgentChatSteerInput] = []
+    ) {
         self.assistantText = assistantText
         self.conversationSessionID = conversationSessionID
+        self.deferredSteerInputs = deferredSteerInputs
+    }
+}
+
+public nonisolated struct AgentChatSteerInput: Sendable, Equatable, Identifiable {
+    public let id: UUID
+    public let text: String
+
+    public init(id: UUID = UUID(), text: String) {
+        self.id = id
+        self.text = text
+    }
+}
+
+public nonisolated final class AgentChatSteerChannel: Sendable {
+    private struct State: Sendable {
+        var pendingInputs: [AgentChatSteerInput] = []
+        var inFlightInputsByID: [UUID: AgentChatSteerInput] = [:]
+        var inFlightInputOrder: [UUID] = []
+        var isClosed = false
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    private let submissionSemaphore = DispatchSemaphore(value: 0)
+
+    public init() {}
+
+    @discardableResult
+    public func submit(_ input: AgentChatSteerInput) -> Bool {
+        let trimmed = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let normalized = AgentChatSteerInput(id: input.id, text: trimmed)
+        let accepted = state.withLock { state in
+            guard !state.isClosed else { return false }
+            state.pendingInputs.append(normalized)
+            return true
+        }
+        if accepted {
+            submissionSemaphore.signal()
+        }
+        return accepted
+    }
+
+    func popFirst() -> AgentChatSteerInput? {
+        state.withLock { state in
+            guard !state.pendingInputs.isEmpty else { return nil }
+            let input = state.pendingInputs.removeFirst()
+            state.inFlightInputsByID[input.id] = input
+            state.inFlightInputOrder.append(input.id)
+            return input
+        }
+    }
+
+    func prepend(_ input: AgentChatSteerInput) {
+        state.withLock { state in
+            guard !state.isClosed else { return }
+            state.inFlightInputsByID.removeValue(forKey: input.id)
+            state.inFlightInputOrder.removeAll { $0 == input.id }
+            state.pendingInputs.insert(input, at: 0)
+        }
+    }
+
+    func acknowledge(id: UUID) {
+        state.withLock { state in
+            state.inFlightInputsByID.removeValue(forKey: id)
+            state.inFlightInputOrder.removeAll { $0 == id }
+        }
+    }
+
+    func waitForSubmission(timeout: DispatchTime) -> DispatchTimeoutResult {
+        submissionSemaphore.wait(timeout: timeout)
+    }
+
+    public func closeAndDrain() -> [AgentChatSteerInput] {
+        state.withLock { state in
+            state.isClosed = true
+            let inFlightInputs = state.inFlightInputOrder.compactMap {
+                state.inFlightInputsByID[$0]
+            }
+            defer {
+                state.pendingInputs.removeAll()
+                state.inFlightInputsByID.removeAll()
+                state.inFlightInputOrder.removeAll()
+            }
+            return inFlightInputs + state.pendingInputs
+        }
     }
 }
 
@@ -39,6 +130,28 @@ public nonisolated struct AgentChatStreamingUpdate: Sendable, Equatable {
 
 public nonisolated enum AgentChatStatusUpdate: Sendable, Equatable {
     case startingCodex
+}
+
+nonisolated enum CodexAppServerPromptReplaySafety: Sendable, Equatable {
+    case safeBeforeTurn
+    case unsafeAfterTurnStarted
+}
+
+nonisolated struct CodexAppServerAttempt: Sendable, Equatable {
+    let result: AgentChatExecutionResult
+    let replaySafety: CodexAppServerPromptReplaySafety
+}
+
+nonisolated enum CodexAppServerFallbackPolicy {
+    static func isFailure(_ result: AgentChatExecutionResult) -> Bool {
+        let trimmed = result.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("Codex app-server failed:")
+            || trimmed == "No response from Codex."
+    }
+
+    static func shouldFallbackToExec(_ attempt: CodexAppServerAttempt) -> Bool {
+        isFailure(attempt.result) && attempt.replaySafety == .safeBeforeTurn
+    }
 }
 
 public nonisolated struct AgentChatJSONLineBuffer: Sendable {
@@ -449,6 +562,7 @@ public nonisolated struct AgentChatAttachment: Sendable, Equatable {
 public nonisolated enum AgentChatRuntime {
     private static let codexThreadReadyTimeout: TimeInterval = 20
     private static let codexTurnCompletionPollInterval: TimeInterval = 1
+    private static let codexSteerAcknowledgementGracePeriod: TimeInterval = 2
     private static let codexAppServerProcessPool = CodexAppServerProcessPool()
 
     public nonisolated static func execute(
@@ -463,22 +577,39 @@ public nonisolated enum AgentChatRuntime {
         codexSkipPermissions: Bool = false,
         codexSandboxEnabled: Bool = false,
         attachments: [AgentChatAttachment] = [],
-        codexSteerStream: AsyncStream<String>? = nil,
+        codexSteerChannel: AgentChatSteerChannel? = nil,
         cancellationHandle: ShellExecutor.CancellationHandle? = nil,
         onStatusUpdate: (@Sendable @MainActor (AgentChatStatusUpdate) -> Void)? = nil,
         onStreamingUpdate: (@Sendable @MainActor (AgentChatStreamingUpdate) -> Void)? = nil
     ) async -> AgentChatExecutionResult {
-        if Task.isCancelled {
+        func finalized(_ result: AgentChatExecutionResult) -> AgentChatExecutionResult {
+            let pendingSteerInputs = codexSteerChannel?.closeAndDrain() ?? []
+            guard !pendingSteerInputs.isEmpty else { return result }
+            var seenIDs = Set<UUID>()
+            let combined = (result.deferredSteerInputs + pendingSteerInputs).filter {
+                seenIDs.insert($0.id).inserted
+            }
             return AgentChatExecutionResult(
+                assistantText: result.assistantText,
+                conversationSessionID: result.conversationSessionID,
+                deferredSteerInputs: combined
+            )
+        }
+
+        if Task.isCancelled {
+            return finalized(AgentChatExecutionResult(
                 assistantText: "Request cancelled.",
                 conversationSessionID: normalizedSessionID(conversationSessionID)
-            )
+            ))
         }
 
         let normalizedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedAttachmentList = normalizedAttachments(attachments)
         guard !normalizedPrompt.isEmpty || !normalizedAttachmentList.isEmpty else {
-            return AgentChatExecutionResult(assistantText: "Prompt is empty.", conversationSessionID: normalizedSessionID(conversationSessionID))
+            return finalized(AgentChatExecutionResult(
+                assistantText: "Prompt is empty.",
+                conversationSessionID: normalizedSessionID(conversationSessionID)
+            ))
         }
         let promptWithAttachmentContext = promptWithAttachmentContext(
             basePrompt: normalizedPrompt,
@@ -497,18 +628,15 @@ public nonisolated enum AgentChatRuntime {
                 codexSkipPermissions: codexSkipPermissions,
                 codexSandboxEnabled: codexSandboxEnabled,
                 attachments: normalizedAttachmentList,
-                steerStream: codexSteerStream,
+                steerChannel: codexSteerChannel,
                 onStatusUpdate: onStatusUpdate,
                 onStreamingUpdate: onStreamingUpdate
             )
-            let trimmedAppServerText = appServerResult.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let appServerFailed = trimmedAppServerText.hasPrefix("Codex app-server failed:")
-                || trimmedAppServerText == "No response from Codex."
 
             if shouldRetryCodexWithFreshThread(
                 previousConversationSessionID: conversationSessionID,
-                appServerText: appServerResult.assistantText
-            ) {
+                appServerText: appServerResult.result.assistantText
+            ), appServerResult.replaySafety == .safeBeforeTurn {
                 let freshThreadResult = await executeCodexViaAppServer(
                     prompt: promptWithAttachmentContext,
                     workingDirectory: workingDirectory,
@@ -519,25 +647,21 @@ public nonisolated enum AgentChatRuntime {
                     codexSkipPermissions: codexSkipPermissions,
                     codexSandboxEnabled: codexSandboxEnabled,
                     attachments: normalizedAttachmentList,
-                    steerStream: codexSteerStream,
+                    steerChannel: codexSteerChannel,
                     onStatusUpdate: onStatusUpdate,
                     onStreamingUpdate: onStreamingUpdate
                 )
-                let trimmedFreshText = freshThreadResult.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-                let freshFailed = trimmedFreshText.hasPrefix("Codex app-server failed:")
-                    || trimmedFreshText == "No response from Codex."
-                if !freshFailed {
-                    return freshThreadResult
+                if !CodexAppServerFallbackPolicy.isFailure(freshThreadResult.result) {
+                    return finalized(freshThreadResult.result)
+                }
+                if !CodexAppServerFallbackPolicy.shouldFallbackToExec(freshThreadResult) {
+                    return finalized(freshThreadResult.result)
                 }
                 // If resume metadata is stale, fallback execution should start a fresh
                 // conversation instead of trying to resume the same broken thread ID.
                 fallbackConversationSessionID = nil
-            }
-
-            // Fall back to `codex exec --json` only when app-server failed for reasons
-            // other than explicit cancellation.
-            if !appServerFailed {
-                return appServerResult
+            } else if !CodexAppServerFallbackPolicy.shouldFallbackToExec(appServerResult) {
+                return finalized(appServerResult.result)
             }
         }
 
@@ -552,10 +676,10 @@ public nonisolated enum AgentChatRuntime {
             codexSandboxEnabled: codexSandboxEnabled,
             attachments: normalizedAttachmentList
         ) else {
-            return AgentChatExecutionResult(
+            return finalized(AgentChatExecutionResult(
                 assistantText: "Chat is not supported for \(agentType.displayName).",
                 conversationSessionID: normalizedSessionID(conversationSessionID)
-            )
+            ))
         }
 
         let result = await ShellExecutor.executeCancellable(
@@ -567,27 +691,33 @@ public nonisolated enum AgentChatRuntime {
         let effectiveSessionID = parsed.conversationSessionID ?? normalizedSessionID(fallbackConversationSessionID)
 
         if Task.isCancelled {
-            return AgentChatExecutionResult(
+            return finalized(AgentChatExecutionResult(
                 assistantText: "Request cancelled.",
                 conversationSessionID: effectiveSessionID
-            )
+            ))
         }
 
         if result.exitCode == 0 {
             let parsedText = parsed.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
             if !parsedText.isEmpty {
-                return AgentChatExecutionResult(assistantText: parsedText, conversationSessionID: effectiveSessionID)
+                return finalized(AgentChatExecutionResult(
+                    assistantText: parsedText,
+                    conversationSessionID: effectiveSessionID
+                ))
             }
 
             let fallbackText = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             if !fallbackText.isEmpty {
-                return AgentChatExecutionResult(assistantText: fallbackText, conversationSessionID: effectiveSessionID)
+                return finalized(AgentChatExecutionResult(
+                    assistantText: fallbackText,
+                    conversationSessionID: effectiveSessionID
+                ))
             }
 
-            return AgentChatExecutionResult(
+            return finalized(AgentChatExecutionResult(
                 assistantText: "No response from \(agentType.displayName).",
                 conversationSessionID: effectiveSessionID
-            )
+            ))
         }
 
         let details = conciseErrorDetails(stderr: result.stderr, stdout: result.stdout)
@@ -598,7 +728,10 @@ public nonisolated enum AgentChatRuntime {
             message = "\(agentType.displayName) chat failed (exit \(result.exitCode))."
         }
 
-        return AgentChatExecutionResult(assistantText: message, conversationSessionID: effectiveSessionID)
+        return finalized(AgentChatExecutionResult(
+            assistantText: message,
+            conversationSessionID: effectiveSessionID
+        ))
     }
 
     private nonisolated final class ProcessCancellationBox: @unchecked Sendable {
@@ -650,10 +783,10 @@ public nonisolated enum AgentChatRuntime {
         codexSkipPermissions: Bool,
         codexSandboxEnabled: Bool,
         attachments: [AgentChatAttachment],
-        steerStream: AsyncStream<String>?,
+        steerChannel: AgentChatSteerChannel?,
         onStatusUpdate: (@Sendable @MainActor (AgentChatStatusUpdate) -> Void)?,
         onStreamingUpdate: (@Sendable @MainActor (AgentChatStreamingUpdate) -> Void)?
-    ) async -> AgentChatExecutionResult {
+    ) async -> CodexAppServerAttempt {
         let cancellationBox = ProcessCancellationBox()
 
         return await withTaskCancellationHandler {
@@ -669,7 +802,7 @@ public nonisolated enum AgentChatRuntime {
                         codexSkipPermissions: codexSkipPermissions,
                         codexSandboxEnabled: codexSandboxEnabled,
                         attachments: attachments,
-                        steerStream: steerStream,
+                        steerChannel: steerChannel,
                         cancellationBox: cancellationBox,
                         onStatusUpdate: onStatusUpdate,
                         onStreamingUpdate: onStreamingUpdate
@@ -692,11 +825,11 @@ public nonisolated enum AgentChatRuntime {
         codexSkipPermissions: Bool,
         codexSandboxEnabled: Bool,
         attachments: [AgentChatAttachment],
-        steerStream: AsyncStream<String>?,
+        steerChannel: AgentChatSteerChannel?,
         cancellationBox: ProcessCancellationBox,
         onStatusUpdate: (@Sendable @MainActor (AgentChatStatusUpdate) -> Void)?,
         onStreamingUpdate: (@Sendable @MainActor (AgentChatStreamingUpdate) -> Void)?
-    ) -> AgentChatExecutionResult {
+    ) -> CodexAppServerAttempt {
         final class State {
             var stderrBuffer = Data()
             var threadID: String?
@@ -704,7 +837,7 @@ public nonisolated enum AgentChatRuntime {
             var turnCompleted = false
             var turnStatus: String?
             var failure: String?
-            var pendingSteerRequestIDs: Set<Int> = []
+            var pendingSteerInputsByRequestID: [Int: AgentChatSteerInput] = [:]
             var assistantMessageOrder: [String] = []
             var assistantMessagesByID: [String: String] = [:]
         }
@@ -727,9 +860,12 @@ public nonisolated enum AgentChatRuntime {
             if let reusedHost {
                 codexAppServerProcessPool.release(reusedHost, keepAlive: true)
             }
-            return AgentChatExecutionResult(
-                assistantText: "Request cancelled.",
-                conversationSessionID: resumedThreadID
+            return CodexAppServerAttempt(
+                result: AgentChatExecutionResult(
+                    assistantText: "Request cancelled.",
+                    conversationSessionID: resumedThreadID
+                ),
+                replaySafety: .safeBeforeTurn
             )
         }
         if reusedHost == nil, let onStatusUpdate {
@@ -787,48 +923,7 @@ public nonisolated enum AgentChatRuntime {
         let lock = NSLock()
         let threadReadySemaphore = DispatchSemaphore(value: 0)
         let turnCompletedSemaphore = DispatchSemaphore(value: 0)
-        let steerDrainSemaphore = DispatchSemaphore(value: 0)
-        final class SteerQueue {
-            private let lock = NSLock()
-            private var values: [String] = []
-            private var isClosed = false
-
-            func append(_ value: String) {
-                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return }
-                lock.lock()
-                if !isClosed {
-                    values.append(trimmed)
-                }
-                lock.unlock()
-            }
-
-            func popFirst() -> String? {
-                lock.lock()
-                defer { lock.unlock() }
-                guard !values.isEmpty else { return nil }
-                return values.removeFirst()
-            }
-
-            func close() {
-                lock.lock()
-                isClosed = true
-                values.removeAll()
-                lock.unlock()
-            }
-        }
-        let steerQueue = SteerQueue()
-        let steerPumpTask: Task<Void, Never>?
-        if let steerStream {
-            steerPumpTask = Task.detached(priority: .userInitiated) {
-                for await steerText in steerStream {
-                    steerQueue.append(steerText)
-                    steerDrainSemaphore.signal()
-                }
-            }
-        } else {
-            steerPumpTask = nil
-        }
+        let steerResponseSemaphore = DispatchSemaphore(value: 0)
 
         let process = host.process
         let stdinPipe = host.stdinPipe
@@ -906,14 +1001,15 @@ public nonisolated enum AgentChatRuntime {
 
             if let id = object["id"] as? Int {
                 lock.lock()
-                let isSteerResponse = state.pendingSteerRequestIDs.contains(id)
-                if isSteerResponse {
-                    state.pendingSteerRequestIDs.remove(id)
-                }
+                let steerInput = state.pendingSteerInputsByRequestID[id]
                 lock.unlock()
 
                 if let error = parseResponseError(object) {
-                    if isSteerResponse {
+                    if let steerInput {
+                        lock.lock()
+                        state.pendingSteerInputsByRequestID.removeValue(forKey: id)
+                        lock.unlock()
+                        steerResponseSemaphore.signal()
                         return
                     }
                     lock.lock()
@@ -926,6 +1022,13 @@ public nonisolated enum AgentChatRuntime {
                     return
                 }
 
+                if let steerInput {
+                    steerChannel?.acknowledge(id: steerInput.id)
+                    lock.lock()
+                    state.pendingSteerInputsByRequestID.removeValue(forKey: id)
+                    lock.unlock()
+                    steerResponseSemaphore.signal()
+                }
                 if id == threadRequestID {
                     let threadID = ((object["result"] as? [String: Any])?["thread"] as? [String: Any])?["id"] as? String
                     lock.lock()
@@ -1051,8 +1154,6 @@ public nonisolated enum AgentChatRuntime {
         )
 
         defer {
-            steerQueue.close()
-            steerPumpTask?.cancel()
             cancellationBox.clear()
             if shouldKeepProcessAlive {
                 host.installIdleDrainers()
@@ -1067,9 +1168,12 @@ public nonisolated enum AgentChatRuntime {
                 try process.run()
                 cancellationBox.setProcess(process)
             } catch {
-                return AgentChatExecutionResult(
-                    assistantText: "Codex app-server failed: \(error.localizedDescription)",
-                    conversationSessionID: resumedThreadID
+                return CodexAppServerAttempt(
+                    result: AgentChatExecutionResult(
+                        assistantText: "Codex app-server failed: \(error.localizedDescription)",
+                        conversationSessionID: resumedThreadID
+                    ),
+                    replaySafety: .safeBeforeTurn
                 )
             }
 
@@ -1121,22 +1225,31 @@ public nonisolated enum AgentChatRuntime {
         lock.unlock()
 
         if Task.isCancelled {
-            return AgentChatExecutionResult(
-                assistantText: "Request cancelled.",
-                conversationSessionID: resolvedThreadID ?? normalizedSessionID(conversationSessionID)
+            return CodexAppServerAttempt(
+                result: AgentChatExecutionResult(
+                    assistantText: "Request cancelled.",
+                    conversationSessionID: resolvedThreadID ?? normalizedSessionID(conversationSessionID)
+                ),
+                replaySafety: .safeBeforeTurn
             )
         }
 
         guard let threadID = resolvedThreadID else {
             if let earlyFailure {
-                return AgentChatExecutionResult(
-                    assistantText: "Codex app-server failed: \(earlyFailure)",
-                    conversationSessionID: normalizedSessionID(conversationSessionID)
+                return CodexAppServerAttempt(
+                    result: AgentChatExecutionResult(
+                        assistantText: "Codex app-server failed: \(earlyFailure)",
+                        conversationSessionID: normalizedSessionID(conversationSessionID)
+                    ),
+                    replaySafety: .safeBeforeTurn
                 )
             }
-            return AgentChatExecutionResult(
-                assistantText: "Codex app-server failed: missing thread id",
-                conversationSessionID: normalizedSessionID(conversationSessionID)
+            return CodexAppServerAttempt(
+                result: AgentChatExecutionResult(
+                    assistantText: "Codex app-server failed: missing thread id",
+                    conversationSessionID: normalizedSessionID(conversationSessionID)
+                ),
+                replaySafety: .safeBeforeTurn
             )
         }
         if reusedHost == nil {
@@ -1145,9 +1258,12 @@ public nonisolated enum AgentChatRuntime {
                 threadID: threadID,
                 isCancelled: { cancellationBox.isCancelled }
             ) else {
-                return AgentChatExecutionResult(
-                    assistantText: "Request cancelled.",
-                    conversationSessionID: threadID
+                return CodexAppServerAttempt(
+                    result: AgentChatExecutionResult(
+                        assistantText: "Request cancelled.",
+                        conversationSessionID: threadID
+                    ),
+                    replaySafety: .safeBeforeTurn
                 )
             }
         }
@@ -1173,18 +1289,18 @@ public nonisolated enum AgentChatRuntime {
         ])
 
         func trySendSteerRequests() {
-            while let steerText = steerQueue.popFirst() {
+            while let steerInput = steerChannel?.popFirst() {
                 lock.lock()
                 let activeTurnID = state.activeTurnID
                 let steerRequestID = host.allocateRequestID()
                 if activeTurnID != nil {
-                    state.pendingSteerRequestIDs.insert(steerRequestID)
+                    state.pendingSteerInputsByRequestID[steerRequestID] = steerInput
                 }
                 lock.unlock()
 
                 guard let activeTurnID else {
                     // Turn ID not ready yet; keep this steer prompt for the next cycle.
-                    steerQueue.append(steerText)
+                    steerChannel?.prepend(steerInput)
                     break
                 }
                 sendJSON([
@@ -1193,7 +1309,7 @@ public nonisolated enum AgentChatRuntime {
                     "params": [
                         "threadId": threadID,
                         "expectedTurnId": activeTurnID,
-                        "input": codexInputItems(prompt: steerText, attachments: []),
+                        "input": codexInputItems(prompt: steerInput.text, attachments: []),
                     ],
                 ])
             }
@@ -1201,7 +1317,7 @@ public nonisolated enum AgentChatRuntime {
 
         while true {
             trySendSteerRequests()
-            if steerDrainSemaphore.wait(timeout: .now()) == .success {
+            if steerChannel?.waitForSubmission(timeout: .now()) == .success {
                 continue
             }
             if turnCompletedSemaphore.wait(timeout: .now() + Self.codexTurnCompletionPollInterval) == .success {
@@ -1211,10 +1327,29 @@ public nonisolated enum AgentChatRuntime {
             if !process.isRunning { break }
         }
 
+        let steerAcknowledgementDeadline = Date().addingTimeInterval(
+            Self.codexSteerAcknowledgementGracePeriod
+        )
+        while Date() < steerAcknowledgementDeadline {
+            lock.lock()
+            let hasPendingSteerResponses = !state.pendingSteerInputsByRequestID.isEmpty
+            lock.unlock()
+            guard hasPendingSteerResponses else { break }
+            let remaining = max(0, steerAcknowledgementDeadline.timeIntervalSinceNow)
+            _ = steerResponseSemaphore.wait(timeout: .now() + min(0.1, remaining))
+        }
+
+        lock.lock()
+        state.pendingSteerInputsByRequestID.removeAll()
+        lock.unlock()
+
         if Task.isCancelled {
-            return AgentChatExecutionResult(
-                assistantText: "Request cancelled.",
-                conversationSessionID: threadID
+            return CodexAppServerAttempt(
+                result: AgentChatExecutionResult(
+                    assistantText: "Request cancelled.",
+                    conversationSessionID: threadID
+                ),
+                replaySafety: .unsafeAfterTurnStarted
             )
         }
 
@@ -1227,30 +1362,42 @@ public nonisolated enum AgentChatRuntime {
         lock.unlock()
 
         if let failure {
-            return AgentChatExecutionResult(
-                assistantText: "Codex app-server failed: \(failure)",
-                conversationSessionID: threadID
+            return CodexAppServerAttempt(
+                result: AgentChatExecutionResult(
+                    assistantText: "Codex app-server failed: \(failure)",
+                    conversationSessionID: threadID
+                ),
+                replaySafety: .unsafeAfterTurnStarted
             )
         }
         let finalText = mergedAssistant.trimmingCharacters(in: .whitespacesAndNewlines)
         if !finalText.isEmpty {
             shouldKeepProcessAlive = turnCompletedSuccessfully && process.isRunning
-            return AgentChatExecutionResult(
-                assistantText: finalText,
-                conversationSessionID: threadID
+            return CodexAppServerAttempt(
+                result: AgentChatExecutionResult(
+                    assistantText: finalText,
+                    conversationSessionID: threadID
+                ),
+                replaySafety: .unsafeAfterTurnStarted
             )
         }
 
         if let details = conciseErrorDetails(stderr: stderr, stdout: stdout) {
-            return AgentChatExecutionResult(
-                assistantText: "Codex app-server failed: \(details)",
-                conversationSessionID: threadID
+            return CodexAppServerAttempt(
+                result: AgentChatExecutionResult(
+                    assistantText: "Codex app-server failed: \(details)",
+                    conversationSessionID: threadID
+                ),
+                replaySafety: .unsafeAfterTurnStarted
             )
         }
 
-        return AgentChatExecutionResult(
-            assistantText: "No response from Codex.",
-            conversationSessionID: threadID
+        return CodexAppServerAttempt(
+            result: AgentChatExecutionResult(
+                assistantText: "No response from Codex.",
+                conversationSessionID: threadID
+            ),
+            replaySafety: .unsafeAfterTurnStarted
         )
     }
 

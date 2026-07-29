@@ -245,7 +245,7 @@ final class ThreadDetailViewController: NSViewController {
     var chatPersistenceScheduleState = ChatPersistenceScheduleState()
     var chatStreamingUIRefreshTasksByIdentifier: [String: Task<Void, Never>] = [:]
     var chatStreamingLastUIRefreshAtByIdentifier: [String: Date] = [:]
-    var chatSteerInputContinuationsByIdentifier: [String: AsyncStream<String>.Continuation] = [:]
+    var chatSteerChannelsByIdentifier: [String: AgentChatSteerChannel] = [:]
     var chatQueuedPromptsByIdentifier: [String: [(messageID: UUID, text: String, attachments: [PersistedChatAttachment])]] = [:]
     var chatAutoRenameTasksByIdentifier: [String: Task<Void, Never>] = [:]
     var activeDraftTabId: String?
@@ -656,8 +656,7 @@ final class ThreadDetailViewController: NSViewController {
         chatStreamingUIRefreshTasksByIdentifier.values.forEach { $0.cancel() }
         chatStreamingUIRefreshTasksByIdentifier.removeAll()
         chatStreamingLastUIRefreshAtByIdentifier.removeAll()
-        chatSteerInputContinuationsByIdentifier.values.forEach { $0.finish() }
-        chatSteerInputContinuationsByIdentifier.removeAll()
+        chatSteerChannelsByIdentifier.removeAll()
         chatQueuedPromptsByIdentifier.removeAll()
         dismissInitialPromptFailureBanner()
         dismissPendingPromptBanner()
@@ -1119,9 +1118,8 @@ final class ThreadDetailViewController: NSViewController {
             chatRequestTaskTokensByIdentifier = chatRequestTaskTokensByIdentifier.filter { validChatIdentifiers.contains($0.key) }
             chatPendingAssistantMessageIDsByIdentifier = chatPendingAssistantMessageIDsByIdentifier.filter { validChatIdentifiers.contains($0.key) }
             chatStreamingAssistantMessageIDsByIdentifier = chatStreamingAssistantMessageIDsByIdentifier.filter { validChatIdentifiers.contains($0.key) }
-            for staleID in chatSteerInputContinuationsByIdentifier.keys where !validChatIdentifiers.contains(staleID) {
-                chatSteerInputContinuationsByIdentifier[staleID]?.finish()
-                chatSteerInputContinuationsByIdentifier.removeValue(forKey: staleID)
+            for staleID in chatSteerChannelsByIdentifier.keys where !validChatIdentifiers.contains(staleID) {
+                chatSteerChannelsByIdentifier.removeValue(forKey: staleID)
             }
             chatQueuedPromptsByIdentifier = chatQueuedPromptsByIdentifier.filter { validChatIdentifiers.contains($0.key) }
 

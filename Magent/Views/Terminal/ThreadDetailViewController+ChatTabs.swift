@@ -342,10 +342,11 @@ extension ThreadDetailViewController {
 
     func removeChatTab(identifier: String) {
         guard let slotIndex = tabSlots.firstIndex(of: .chat(identifier: identifier)) else { return }
-        cancelInFlightChatRequest(identifier: identifier)
-        chatSteerInputContinuationsByIdentifier[identifier]?.finish()
-        chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
-        chatQueuedPromptsByIdentifier.removeValue(forKey: identifier)
+        cancelInFlightChatRequest(
+            identifier: identifier,
+            queueBehavior: .discardQueuedPrompts
+        )
+        chatSteerChannelsByIdentifier.removeValue(forKey: identifier)
         chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
         chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
         chatDraftPersistenceTasksByIdentifier[identifier]?.cancel()
@@ -668,7 +669,7 @@ extension ThreadDetailViewController {
             if chatTabs[entryIndex].agentType == .codex,
                normalizedAttachments.isEmpty,
                !trimmedText.isEmpty,
-               let steerContinuation = chatSteerInputContinuationsByIdentifier[identifier] {
+               let steerChannel = chatSteerChannelsByIdentifier[identifier] {
                 let metadata = chatMessageMetadata(for: entryIndex)
                 chatTabs[entryIndex].messages = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
                     into: chatTabs[entryIndex].messages,
@@ -683,9 +684,20 @@ extension ThreadDetailViewController {
                     reasoningLevel: metadata.reasoningLevel
                 )
                 chatTabs[entryIndex].messages.append(steeringMessage)
+                let steerInput = AgentChatSteerInput(
+                    id: steeringMessage.id,
+                    text: trimmedText
+                )
+                if !steerChannel.submit(steerInput) {
+                    enqueueChatPrompt(
+                        identifier: identifier,
+                        messageID: steeringMessage.id,
+                        text: trimmedText,
+                        attachments: []
+                    )
+                }
                 persistChatTabs()
                 refreshChatTabView(chatIndex: entryIndex)
-                steerContinuation.yield(trimmedText)
                 return
             }
 
@@ -855,7 +867,7 @@ extension ThreadDetailViewController {
         let selectedModelId = chatTabs[chatIndex].modelId
         let selectedReasoningLevel = chatTabs[chatIndex].reasoningLevel
         let taskToken = UUID()
-        let codexSteerStream = makeCodexSteerStreamIfNeeded(identifier: identifier, agentType: agentType)
+        let codexSteerChannel = makeCodexSteerChannelIfNeeded(identifier: identifier, agentType: agentType)
         chatRequestTaskTokensByIdentifier[identifier] = taskToken
 
         let task = Task { [weak self] in
@@ -872,7 +884,7 @@ extension ThreadDetailViewController {
                 codexSkipPermissions: codexSkipPermissions,
                 codexSandboxEnabled: codexSandboxEnabled,
                 attachments: self.agentChatAttachments(from: preparedAttachments),
-                codexSteerStream: codexSteerStream,
+                codexSteerChannel: codexSteerChannel,
                 onStatusUpdate: { [weak self] status in
                     guard let self else { return }
                     guard self.chatRequestTaskTokensByIdentifier[identifier] == taskToken else { return }
@@ -906,8 +918,7 @@ extension ThreadDetailViewController {
                 guard self.chatRequestTaskTokensByIdentifier[identifier] == taskToken else { return }
                 self.chatRequestTasksByIdentifier.removeValue(forKey: identifier)
                 self.chatRequestTaskTokensByIdentifier.removeValue(forKey: identifier)
-                self.chatSteerInputContinuationsByIdentifier[identifier]?.finish()
-                self.chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
+                self.chatSteerChannelsByIdentifier.removeValue(forKey: identifier)
                 self.chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
                 self.chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
                 guard let currentIndex = self.chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
@@ -937,6 +948,17 @@ extension ThreadDetailViewController {
                 self.chatStreamingAssistantMessageIndicesByIdentifier.removeValue(forKey: identifier)
                 self.chatTabs[currentIndex].conversationSessionID = response.conversationSessionID
                 self.syncChatModelReasoningFromAgentMessage(chatIndex: currentIndex, output: response.assistantText)
+                for deferredInput in response.deferredSteerInputs {
+                    guard self.chatTabs[currentIndex].messages.contains(where: { $0.id == deferredInput.id }) else {
+                        continue
+                    }
+                    self.enqueueChatPrompt(
+                        identifier: identifier,
+                        messageID: deferredInput.id,
+                        text: deferredInput.text,
+                        attachments: []
+                    )
+                }
                 self.persistChatTabs()
                 self.refreshChatTabView(chatIndex: currentIndex)
                 self.refreshTabStatusIndicators()
@@ -962,13 +984,43 @@ extension ThreadDetailViewController {
         chatRequestTasksByIdentifier[identifier] != nil
     }
 
-    func cancelInFlightChatRequest(identifier: String) {
+    func cancelInFlightChatRequest(
+        identifier: String,
+        queueBehavior: ChatPromptQueueCancellationBehavior = .continueWithNextPrompt
+    ) {
+        let deferredSteerInputs = chatSteerChannelsByIdentifier
+            .removeValue(forKey: identifier)?
+            .closeAndDrain() ?? []
+        var queuedPrompts = chatQueuedPromptsByIdentifier[identifier] ?? []
+        if queueBehavior == .continueWithNextPrompt {
+            for input in deferredSteerInputs where !queuedPrompts.contains(where: { $0.messageID == input.id }) {
+                queuedPrompts.append((
+                    messageID: input.id,
+                    text: input.text,
+                    attachments: []
+                ))
+            }
+            if let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) {
+                let messageOrder = chatTabs[chatIndex].messages.enumerated().reduce(into: [UUID: Int]()) {
+                    $0[$1.element.id] = $0[$1.element.id] ?? $1.offset
+                }
+                queuedPrompts.sort {
+                    (messageOrder[$0.messageID] ?? Int.max) < (messageOrder[$1.messageID] ?? Int.max)
+                }
+            }
+        }
+        let queueTransition = ChatPromptQueuePolicy.transitionAfterCancellation(
+            queuedPrompts: queuedPrompts,
+            behavior: queueBehavior
+        )
+        updateQueuedChatPrompts(
+            identifier: identifier,
+            prompts: queueTransition.remainingPrompts
+        )
         guard let task = chatRequestTasksByIdentifier[identifier] else { return }
         task.cancel()
         chatRequestTasksByIdentifier.removeValue(forKey: identifier)
         chatRequestTaskTokensByIdentifier.removeValue(forKey: identifier)
-        chatSteerInputContinuationsByIdentifier[identifier]?.finish()
-        chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
         chatStreamingAssistantMessageIDsByIdentifier.removeValue(forKey: identifier)
         chatStreamingAssistantMessageIndicesByIdentifier.removeValue(forKey: identifier)
         chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
@@ -983,7 +1035,9 @@ extension ThreadDetailViewController {
         }
 
         refreshTabStatusIndicators()
-        dispatchQueuedChatPromptIfNeeded(identifier: identifier)
+        if let nextPrompt = queueTransition.nextPrompt {
+            startQueuedChatPrompt(identifier: identifier, prompt: nextPrompt)
+        }
     }
 
     private func enqueueChatPrompt(
@@ -993,6 +1047,7 @@ extension ThreadDetailViewController {
         attachments: [PersistedChatAttachment]
     ) {
         var queue = chatQueuedPromptsByIdentifier[identifier] ?? []
+        guard !queue.contains(where: { $0.messageID == messageID }) else { return }
         queue.append((messageID: messageID, text: text, attachments: attachments))
         chatQueuedPromptsByIdentifier[identifier] = queue
     }
@@ -1006,14 +1061,32 @@ extension ThreadDetailViewController {
         } else {
             chatQueuedPromptsByIdentifier[identifier] = queue
         }
+        startQueuedChatPrompt(identifier: identifier, prompt: nextPrompt)
+    }
+
+    private func startQueuedChatPrompt(
+        identifier: String,
+        prompt: (messageID: UUID, text: String, attachments: [PersistedChatAttachment])
+    ) {
         guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
         startChatPromptRequest(
             identifier: identifier,
-            promptText: nextPrompt.text,
-            attachments: nextPrompt.attachments,
+            promptText: prompt.text,
+            attachments: prompt.attachments,
             chatIndex: chatIndex,
-            existingQueuedUserMessageID: nextPrompt.messageID
+            existingQueuedUserMessageID: prompt.messageID
         )
+    }
+
+    private func updateQueuedChatPrompts(
+        identifier: String,
+        prompts: [(messageID: UUID, text: String, attachments: [PersistedChatAttachment])]
+    ) {
+        if prompts.isEmpty {
+            chatQueuedPromptsByIdentifier.removeValue(forKey: identifier)
+        } else {
+            chatQueuedPromptsByIdentifier[identifier] = prompts
+        }
     }
 
     private func applyStreamingAssistantUpdate(
@@ -1149,31 +1222,17 @@ extension ThreadDetailViewController {
         raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func makeCodexSteerStreamIfNeeded(
+    private func makeCodexSteerChannelIfNeeded(
         identifier: String,
         agentType: AgentType
-    ) -> AsyncStream<String>? {
+    ) -> AgentChatSteerChannel? {
         guard agentType == .codex else {
-            chatSteerInputContinuationsByIdentifier[identifier]?.finish()
-            chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
+            chatSteerChannelsByIdentifier.removeValue(forKey: identifier)
             return nil
         }
-        chatSteerInputContinuationsByIdentifier[identifier]?.finish()
-        chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
-
-        return AsyncStream<String> { [weak self] continuation in
-            guard let self else {
-                continuation.finish()
-                return
-            }
-            self.chatSteerInputContinuationsByIdentifier[identifier] = continuation
-            continuation.onTermination = { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.chatSteerInputContinuationsByIdentifier.removeValue(forKey: identifier)
-                }
-            }
-        }
+        let channel = AgentChatSteerChannel()
+        chatSteerChannelsByIdentifier[identifier] = channel
+        return channel
     }
 
     private func handleChatSlashCommandIfNeeded(identifier: String, chatIndex: Int, text: String) -> Bool {
@@ -1186,7 +1245,10 @@ extension ThreadDetailViewController {
 
         switch command {
         case "/clear":
-            cancelInFlightChatRequest(identifier: identifier)
+            cancelInFlightChatRequest(
+                identifier: identifier,
+                queueBehavior: .discardQueuedPrompts
+            )
             chatTabs[chatIndex].messages.removeAll()
             chatTabs[chatIndex].conversationSessionID = nil
             persistChatTabs()
@@ -1216,20 +1278,30 @@ extension ThreadDetailViewController {
         let commands: [String]
         switch agentType {
         case .codex:
-            commands = ["/help", "/clear", "/model <id>", "/effort <none|low|medium|high|xhigh>"]
+            let levels = AgentModelsService.shared.config(for: .codex)?
+                .effectiveReasoningLevels(for: chatTabs[chatIndex].modelId)
+                ?? ["none", "low", "medium", "high", "xhigh", "max", "ultra"]
+            commands = [
+                "/help",
+                "/clear",
+                "/model <id>",
+                AgentChatHelpCommandBuilder.effortUsage(reasoningLevels: levels),
+            ]
         case .claude:
             commands = ["/help", "/clear", "/model <id>", "/effort <low|medium|high>"]
         case .custom:
             commands = ["/clear"]
         }
 
-        let body = "Available slash commands:\n" + commands.map { "• \($0)" }.joined(separator: "\n")
+        let commandList = commands.map { "• \($0)" }.joined(separator: "\n")
+        let body = String(localized: .ThreadStrings.chatSlashCommandHelpMessage(commandList))
         let metadata = chatMessageMetadata(for: chatIndex)
         let assistant = PersistedChatMessage(
             role: .assistant,
             text: body,
             modelId: metadata.modelId,
-            reasoningLevel: metadata.reasoningLevel
+            reasoningLevel: metadata.reasoningLevel,
+            origin: .localUI
         )
         chatTabs[chatIndex].messages.append(assistant)
         persistChatTabs()
@@ -1314,7 +1386,8 @@ extension ThreadDetailViewController {
             role: .assistant,
             text: text,
             modelId: metadata.modelId,
-            reasoningLevel: metadata.reasoningLevel
+            reasoningLevel: metadata.reasoningLevel,
+            origin: .localUI
         )
         chatTabs[chatIndex].messages.append(assistant)
         persistChatTabs()

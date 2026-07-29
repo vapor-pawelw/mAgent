@@ -138,6 +138,11 @@ public nonisolated enum ChatMessageRole: String, Codable, Sendable {
     case system
 }
 
+public nonisolated enum ChatMessageOrigin: String, Codable, Sendable {
+    case agentTranscript
+    case localUI
+}
+
 public nonisolated enum PersistedChatAttachmentKind: String, Codable, Sendable {
     case file
     case image
@@ -209,6 +214,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
     public var modelId: String?
     public var reasoningLevel: String?
     public var toolEvent: PersistedChatToolEvent?
+    public var origin: ChatMessageOrigin
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -219,6 +225,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         case modelId
         case reasoningLevel
         case toolEvent
+        case origin
     }
 
     public init(
@@ -229,7 +236,8 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         createdAt: Date = Date(),
         modelId: String? = nil,
         reasoningLevel: String? = nil,
-        toolEvent: PersistedChatToolEvent? = nil
+        toolEvent: PersistedChatToolEvent? = nil,
+        origin: ChatMessageOrigin = .agentTranscript
     ) {
         self.id = id
         self.role = role
@@ -239,6 +247,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         self.modelId = modelId
         self.reasoningLevel = reasoningLevel
         self.toolEvent = toolEvent
+        self.origin = origin
     }
 
     public init(from decoder: Decoder) throws {
@@ -251,6 +260,7 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
         reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
         toolEvent = try container.decodeIfPresent(PersistedChatToolEvent.self, forKey: .toolEvent)
+        origin = try container.decodeIfPresent(ChatMessageOrigin.self, forKey: .origin) ?? .agentTranscript
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -265,6 +275,9 @@ public nonisolated struct PersistedChatMessage: Codable, Sendable, Equatable, Id
         try container.encodeIfPresent(modelId, forKey: .modelId)
         try container.encodeIfPresent(reasoningLevel, forKey: .reasoningLevel)
         try container.encodeIfPresent(toolEvent, forKey: .toolEvent)
+        if origin != .agentTranscript {
+            try container.encode(origin, forKey: .origin)
+        }
     }
 }
 

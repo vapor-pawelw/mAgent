@@ -49,22 +49,57 @@ public enum CodexChatTranscriptReconciler {
         fromCodexJSONL jsonl: String,
         existingMessages: [PersistedChatMessage] = []
     ) -> [PersistedChatMessage] {
-        let existingUsersByText = Dictionary(
-            existingMessages.filter { $0.role == .user }.map { ($0.text, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-        let existingUsersByCanonicalText = Dictionary(
-            existingMessages.filter { $0.role == .user }.map { (canonicalUserText($0.text), $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-        let existingAssistantsByText = Dictionary(
-            existingMessages.filter { $0.role == .assistant }.map { ($0.text, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-        let existingSystemsByText = Dictionary(
-            existingMessages.filter { $0.role == .system }.map { ($0.text, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
+        var exactExistingIndices: [ChatMessageMatchKey: [Int]] = [:]
+        var canonicalUserIndices: [String: [Int]] = [:]
+        for (index, message) in existingMessages.enumerated() {
+            let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            exactExistingIndices[
+                ChatMessageMatchKey(roleRawValue: message.role.rawValue, text: trimmed),
+                default: []
+            ].append(index)
+            if message.role == .user {
+                canonicalUserIndices[canonicalUserText(trimmed), default: []].append(index)
+            }
+        }
+        var exactExistingCursors: [ChatMessageMatchKey: Int] = [:]
+        var canonicalUserCursors: [String: Int] = [:]
+        var consumedExistingIndices = Set<Int>()
+        var parsedIndexByExistingIndex: [Int: Int] = [:]
+
+        func takeNextIndex(from indices: [Int]?, cursor: inout Int) -> Int? {
+            guard let indices else { return nil }
+            while cursor < indices.count {
+                let candidate = indices[cursor]
+                cursor += 1
+                if consumedExistingIndices.insert(candidate).inserted {
+                    return candidate
+                }
+            }
+            return nil
+        }
+
+        func takeExistingIndex(role: ChatMessageRole, text: String) -> Int? {
+            let exactKey = ChatMessageMatchKey(roleRawValue: role.rawValue, text: text)
+            var exactCursor = exactExistingCursors[exactKey] ?? 0
+            if let index = takeNextIndex(
+                from: exactExistingIndices[exactKey],
+                cursor: &exactCursor
+            ) {
+                exactExistingCursors[exactKey] = exactCursor
+                return index
+            }
+            exactExistingCursors[exactKey] = exactCursor
+
+            guard role == .user else { return nil }
+            let canonicalText = canonicalUserText(text)
+            var canonicalCursor = canonicalUserCursors[canonicalText] ?? 0
+            let index = takeNextIndex(
+                from: canonicalUserIndices[canonicalText],
+                cursor: &canonicalCursor
+            )
+            canonicalUserCursors[canonicalText] = canonicalCursor
+            return index
+        }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -92,11 +127,8 @@ public enum CodexChatTranscriptReconciler {
             }
             lastAppended = (role, trimmed)
 
-            let existing: PersistedChatMessage? = switch role {
-            case .user: existingUsersByText[trimmed] ?? existingUsersByCanonicalText[canonicalUserText(trimmed)]
-            case .assistant: existingAssistantsByText[trimmed]
-            case .system: existingSystemsByText[trimmed]
-            }
+            let existingIndex = takeExistingIndex(role: role, text: trimmed)
+            let existing = existingIndex.map { existingMessages[$0] }
             messages.append(PersistedChatMessage(
                 id: existing?.id ?? UUID(),
                 role: role,
@@ -105,8 +137,12 @@ public enum CodexChatTranscriptReconciler {
                 createdAt: existing?.createdAt ?? createdAt ?? Date(),
                 modelId: existing?.modelId,
                 reasoningLevel: existing?.reasoningLevel,
-                toolEvent: existing?.toolEvent ?? toolEvent
+                toolEvent: existing?.toolEvent ?? toolEvent,
+                origin: existing?.origin ?? .agentTranscript
             ))
+            if let existingIndex {
+                parsedIndexByExistingIndex[existingIndex] = messages.count - 1
+            }
         }
 
         func appendToolCall(name: String, arguments: String, callID: String?, createdAt: Date?) {
@@ -238,8 +274,61 @@ public enum CodexChatTranscriptReconciler {
             }
         }
 
-        return messages
+        return mergingLocalMessages(
+            existingMessages,
+            parsedMessages: messages,
+            parsedIndexByExistingIndex: parsedIndexByExistingIndex
+        )
     }
+
+    private static func mergingLocalMessages(
+        _ existingMessages: [PersistedChatMessage],
+        parsedMessages: [PersistedChatMessage],
+        parsedIndexByExistingIndex: [Int: Int]
+    ) -> [PersistedChatMessage] {
+        var merged: [PersistedChatMessage] = []
+        var parsedCursor = 0
+
+        for (existingIndex, existingMessage) in existingMessages.enumerated() {
+            if let parsedIndex = parsedIndexByExistingIndex[existingIndex],
+               parsedIndex >= parsedCursor {
+                merged.append(contentsOf: parsedMessages[parsedCursor...parsedIndex])
+                parsedCursor = parsedIndex + 1
+            } else if shouldRetainLocalMessage(existingMessage) {
+                merged.append(existingMessage)
+            }
+        }
+
+        if parsedCursor < parsedMessages.count {
+            merged.append(contentsOf: parsedMessages[parsedCursor...])
+        }
+        return merged
+    }
+
+    private static func shouldRetainLocalMessage(_ message: PersistedChatMessage) -> Bool {
+        if message.origin == .localUI || message.role == .system {
+            return true
+        }
+        if case .status = ChatMessageDisplayPlanner.plan(for: message).kind {
+            return true
+        }
+        guard message.role == .assistant else { return false }
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return legacyLocalAssistantPrefixes.contains(where: text.hasPrefix)
+    }
+
+    private static let legacyLocalAssistantPrefixes = [
+        "Available slash commands:",
+        "Codex chat supports ",
+        "Current model:",
+        "No model selected.",
+        "Unknown model:",
+        "Model changed to ",
+        "Current reasoning effort:",
+        "No reasoning effort selected.",
+        "Unsupported reasoning effort:",
+        "Reasoning effort set to ",
+    ]
 
     private static func canonicalUserText(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -277,6 +366,11 @@ public enum CodexChatTranscriptReconciler {
         }
         return nil
     }
+}
+
+private struct ChatMessageMatchKey: Hashable {
+    let roleRawValue: String
+    let text: String
 }
 
 private struct CodexSessionLine: Decodable {

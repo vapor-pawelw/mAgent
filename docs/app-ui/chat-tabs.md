@@ -3,6 +3,7 @@
 ## User-facing behavior
 
 - Chat tabs render agent messages, user prompts, attachments, model-change markers, and restored tool activity from Claude/Codex transcripts.
+- Codex transcript restoration merges agent JSONL with locally-authored UI messages. `PersistedChatMessage.origin == .localUI` marks slash-command replies and model-change notices that must survive reconciliation; legacy system/status/known slash-command messages remain supported.
 - User prompts remain right-aligned bubbles, while ordinary assistant replies render unboxed at a wider readable measure. Status messages keep a contained treatment so errors, cancellations, and approval blockers remain distinct.
 - Assistant Markdown renders headings, ordered and unordered lists, block quotes, separators, fenced code blocks, inline code, bold text, and links instead of exposing their source markers.
 - In-progress assistant work uses an unboxed inline spinner and elapsed status text instead of an animated placeholder bubble.
@@ -38,6 +39,7 @@
 - `ChatFinalAssistantMessageReconciler` attaches `toolEvent` when final assistant text is itself a tool transcript, so live completions and restored transcripts follow the same presentation path.
 - `CodexChatTranscriptReconciler` and `ClaudeChatTranscriptReconciler` pair matching tool calls/results into one persisted message when transcript IDs are available, falling back to standalone output messages when a pair cannot be found.
   Restored tool messages should carry both backward-compatible transcript text and `toolEvent`.
+- Transcript reconciliation matches repeated text by occurrence, not by a single text dictionary entry. Each legitimate repeated prompt/reply must retain its own UUID, timestamp, attachments, and model metadata.
 - Codex `/effort none` selects the `none` reasoning effort.
 
 ## Gotchas
@@ -57,3 +59,5 @@
 - Do not drop raw details from persisted tool messages; users still need to inspect exact commands, arguments, and output when debugging agent behavior.
 - Hidden disclosure bodies must not participate in width measurement. Tool rows take the available readable width directly, capped by the transcript measure and current view width.
 - Warm app-server readers must switch to an idle drainer between turns. Handler swaps must quiesce the previous reader, and a new active lease must discard any partial idle notification before parsing the next turn. Per-turn handlers must never remain attached while a process is available for reuse.
+- Treat fallback to `codex exec --json` as prompt replay. It is allowed only when app-server failed before `turn/start`; approval blockers, failed/completed turns, and no-response outcomes may already have produced side effects and must be returned without replay.
+- `AgentChatSteerChannel` owns unacknowledged steering inputs until app-server acknowledges them. Rejected, completion-raced, or fallback-time inputs are returned as deferred work and queued as the next turn. Closing a chat or `/clear` uses destructive cancellation and discards both queued and unacknowledged inputs before cancelling the active task.

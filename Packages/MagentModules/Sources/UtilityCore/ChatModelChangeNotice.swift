@@ -30,7 +30,8 @@ public enum ChatModelChangeNotice {
                 text: noticeText(modelName: nextModelName ?? nextModelId, reasoningLevel: nextReasoningLevel),
                 createdAt: createdAt,
                 modelId: nextModelId,
-                reasoningLevel: nextReasoningLevel
+                reasoningLevel: nextReasoningLevel,
+                origin: .localUI
             )
         )
         return updated

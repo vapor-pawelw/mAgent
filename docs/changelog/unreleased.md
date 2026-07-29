@@ -37,9 +37,12 @@
 
 #### Bug Fixes
 
+- Prevented failed or approval-blocked Codex turns from replaying the same prompt, preserved steering messages that race with completion, and stopped queued prompts from starting after closing or clearing a chat.
+- Preserved model-change markers, local chat statuses, repeated-message identity, timestamps, attachments, and model metadata when restoring Codex transcripts.
 - Reused warmed Codex chat processes between prompts so later replies no longer wait for integrations to initialize again.
 - Fixed Codex’s no-reasoning option being labeled `Fast` in chat controls.
 - Fixed Codex chat tabs crashing when restored activity summaries contained multiple icon rows.
+- Kept `/help` reasoning choices aligned with every effort level supported by the selected Codex model.
 - Keep failed or still-running tools and action-required chat statuses visible instead of hiding them inside collapsed activity summaries.
 - Fixed `Continue in...` from a Codex chat showing only Claude Code instead of including and preferring the configured Codex default.
 
