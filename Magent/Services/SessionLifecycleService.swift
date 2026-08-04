@@ -1020,15 +1020,18 @@ final class SessionLifecycleService {
 
     private func sendAgentWaitingNotification(for thread: MagentThread, projectName: String, playSound: Bool, sessionName: String) {
         let settings = persistence.loadSettings()
+        let delivery = AgentAttentionDeliveryPlan(
+            showSystemBanners: settings.showSystemBanners,
+            playSound: playSound,
+            soundName: settings.agentCompletionSoundName
+        )
 
-        if settings.showSystemBanners {
-            let content = UNMutableNotificationContent()
-            content.title = String(localized: .NotificationStrings.notificationsAgentNeedsInputTitle)
-            content.body = "\(projectName) · \(thread.taskDescription ?? thread.name)"
-            if playSound {
-                content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.agentCompletionSoundName))
-            }
-            content.userInfo = ["threadId": thread.id.uuidString, "sessionName": sessionName]
+        if delivery.presentsSystemBanner {
+            let content = delivery.makeSystemNotificationContent(
+                title: String(localized: .NotificationStrings.notificationsAgentNeedsInputTitle),
+                body: "\(projectName) · \(thread.taskDescription ?? thread.name)",
+                userInfo: ["threadId": thread.id.uuidString, "sessionName": sessionName]
+            )
 
             let request = UNNotificationRequest(
                 identifier: "magent-agent-waiting-\(UUID().uuidString)",
@@ -1038,8 +1041,7 @@ final class SessionLifecycleService {
             UNUserNotificationCenter.current().add(request)
         }
 
-        if playSound {
-            let soundName = settings.agentCompletionSoundName
+        if let soundName = delivery.appSoundName {
             DispatchQueue.main.async {
                 if let sound = NSSound(named: NSSound.Name(soundName)) {
                     sound.play()
@@ -1286,15 +1288,18 @@ final class SessionLifecycleService {
 
     private func sendAgentCompletionNotification(for thread: MagentThread, projectName: String, playSound: Bool, sessionName: String) {
         let settings = persistence.loadSettings()
+        let delivery = AgentAttentionDeliveryPlan(
+            showSystemBanners: settings.showSystemBanners,
+            playSound: playSound,
+            soundName: settings.agentCompletionSoundName
+        )
 
-        if settings.showSystemBanners {
-            let content = UNMutableNotificationContent()
-            content.title = String(localized: .NotificationStrings.notificationsAgentFinishedTitle)
-            content.body = "\(projectName) · \(thread.taskDescription ?? thread.name)"
-            if playSound {
-                content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.agentCompletionSoundName))
-            }
-            content.userInfo = ["threadId": thread.id.uuidString, "sessionName": sessionName]
+        if delivery.presentsSystemBanner {
+            let content = delivery.makeSystemNotificationContent(
+                title: String(localized: .NotificationStrings.notificationsAgentFinishedTitle),
+                body: "\(projectName) · \(thread.taskDescription ?? thread.name)",
+                userInfo: ["threadId": thread.id.uuidString, "sessionName": sessionName]
+            )
 
             let request = UNNotificationRequest(
                 identifier: "magent-agent-finished-\(UUID().uuidString)",
@@ -1304,10 +1309,7 @@ final class SessionLifecycleService {
             UNUserNotificationCenter.current().add(request)
         }
 
-        // Play sound directly via NSSound as a fallback — UNNotification sound
-        // can be throttled by macOS when many notifications are delivered.
-        if playSound {
-            let soundName = settings.agentCompletionSoundName
+        if let soundName = delivery.appSoundName {
             DispatchQueue.main.async {
                 if let sound = NSSound(named: NSSound.Name(soundName)) {
                     sound.play()

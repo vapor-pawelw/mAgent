@@ -40,6 +40,7 @@ let project = Project(
                 "Magent/Services/SessionRecreationAction.swift",
                 "Magent/Services/SessionRecreationService.swift",
                 "Magent/Services/AgentSetupService.swift",
+                "Magent/Services/AgentAttentionDeliveryPlan.swift",
                 "Magent/Services/BackgroundAICommandBuilder.swift",
                 "Magent/Services/RenameFailurePresentation.swift",
                 "Magent/Services/RenameGenerationPromptBuilder.swift",
@@ -138,6 +139,7 @@ let project = Project(
             deploymentTargets: .macOS("14.0"),
             sources: [
                 "Magent/Services/SessionTracker.swift",
+                "Magent/Services/AgentAttentionDeliveryPlan.swift",
                 "Magent/Services/BackgroundAICommandBuilder.swift",
                 "Magent/Services/RenameFailurePresentation.swift",
                 "Magent/Services/RenameGenerationPromptBuilder.swift",
