@@ -59,8 +59,11 @@ extension ThreadDetailViewController {
         tocView.onSelectEntry = { [weak self] entryIndex in
             self?.handlePromptTOCSelection(entryIndex: entryIndex)
         }
-        tocView.onRenameFromEntry = { [weak self] entryIndex in
-            self?.handlePromptTOCRenameFromEntry(entryIndex: entryIndex)
+        tocView.onRenameThreadFromEntry = { [weak self] entryIndex in
+            self?.handlePromptTOCThreadRenameFromEntry(entryIndex: entryIndex)
+        }
+        tocView.onRenameTabFromEntry = { [weak self] entryIndex in
+            self?.handlePromptTOCTabRenameFromEntry(entryIndex: entryIndex)
         }
         tocView.onDragGesture = { [weak self] gesture in
             self?.handlePromptTOCDrag(gesture)
@@ -950,7 +953,7 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func handlePromptTOCRenameFromEntry(entryIndex: Int) {
+    private func handlePromptTOCThreadRenameFromEntry(entryIndex: Int) {
         guard entryIndex >= 0, entryIndex < promptTOCEntries.count else { return }
         guard let parentWindow = view.window else { return }
         let entry = promptTOCEntries[entryIndex]
@@ -979,11 +982,42 @@ extension ThreadDetailViewController {
                 } catch {
                     await MainActor.run {
                         BannerManager.shared.show(
-                            message: "AI Rename failed: \(error.localizedDescription)",
+                            message: String(
+                                localized: .ThreadStrings.promptTOCRenameThreadFailed(
+                                    error.localizedDescription
+                                )
+                            ),
                             style: .error
                         )
                     }
                 }
+            }
+        }
+    }
+
+    private func handlePromptTOCTabRenameFromEntry(entryIndex: Int) {
+        guard entryIndex >= 0, entryIndex < promptTOCEntries.count,
+              let sessionName = currentSessionName(),
+              promptTOCSessionName == sessionName else { return }
+        let prompt = promptTOCEntries[entryIndex].fullText
+        let threadId = thread.id
+
+        Task { [weak self] in
+            guard let self else { return }
+            let result = await self.threadManager.renameTabFromPrompt(
+                threadId: threadId,
+                sessionName: sessionName,
+                prompt: prompt
+            )
+            await MainActor.run {
+                guard result != .renamed, result != .cancelled else { return }
+                let message = result == .alreadyInProgress
+                    ? String(localized: .ThreadStrings.promptTOCRenameTabInProgress)
+                    : String(localized: .ThreadStrings.promptTOCRenameTabFailed)
+                BannerManager.shared.show(
+                    message: message,
+                    style: result == .alreadyInProgress ? .info : .error
+                )
             }
         }
     }
@@ -1707,7 +1741,8 @@ final class PromptTOCPinnedResizeHandleView: NSView {
 
 final class PromptTableOfContentsView: NSView {
     var onSelectEntry: ((Int) -> Void)?
-    var onRenameFromEntry: ((Int) -> Void)?
+    var onRenameThreadFromEntry: ((Int) -> Void)?
+    var onRenameTabFromEntry: ((Int) -> Void)?
     var onDragGesture: ((NSPanGestureRecognizer) -> Void)?
     var onResizeGesture: ((NSPanGestureRecognizer, TOCResizeCorner) -> Void)?
     var onHoverStateChanged: ((Bool) -> Void)?
@@ -2283,31 +2318,49 @@ final class PromptTableOfContentsView: NSView {
     }
 
     private func showRenameContextMenu(for entryIndex: Int, event: NSEvent) {
-        let menu = NSMenu()
-
-        let copyItem = NSMenuItem(
-            title: "Copy prompt",
-            action: #selector(handleCopyPromptFromContextMenu(_:)),
-            keyEquivalent: ""
-        )
-        copyItem.target = self
-        copyItem.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
-        copyItem.representedObject = NSNumber(value: entryIndex)
-        menu.addItem(copyItem)
-
-        menu.addItem(.separator())
-
-        let renameItem = NSMenuItem(
-            title: "AI Rename…",
-            action: #selector(handleRenameFromContextMenu(_:)),
-            keyEquivalent: ""
-        )
-        renameItem.target = self
-        renameItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
-        renameItem.representedObject = NSNumber(value: entryIndex)
-        menu.addItem(renameItem)
-
+        let menu = makeEntryContextMenu(entryIndex: entryIndex)
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    func makeEntryContextMenu(entryIndex: Int) -> NSMenu {
+        let menu = NSMenu()
+        for action in PromptTOCContextMenuAction.actions {
+            if action == .renameThread {
+                menu.addItem(.separator())
+            }
+            let item: NSMenuItem
+            switch action {
+            case .copyPrompt:
+                item = NSMenuItem(
+                    title: String(localized: .ThreadStrings.promptTOCCopyPrompt),
+                    action: #selector(handleCopyPromptFromContextMenu(_:)),
+                    keyEquivalent: ""
+                )
+                item.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
+            case .renameThread:
+                item = NSMenuItem(
+                    title: String(localized: .ThreadStrings.promptTOCRenameThread),
+                    action: #selector(handleRenameThreadFromContextMenu(_:)),
+                    keyEquivalent: ""
+                )
+                item.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
+            case .renameTab:
+                item = NSMenuItem(
+                    title: String(localized: .ThreadStrings.promptTOCRenameTab),
+                    action: #selector(handleRenameTabFromContextMenu(_:)),
+                    keyEquivalent: ""
+                )
+                item.image = NSImage(
+                    systemSymbolName: "rectangle.and.pencil.and.ellipsis",
+                    accessibilityDescription: nil
+                )
+            }
+            item.target = self
+            item.representedObject = NSNumber(value: entryIndex)
+            menu.addItem(item)
+        }
+
+        return menu
     }
 
     @objc private func handleCopyPromptFromContextMenu(_ sender: NSMenuItem) {
@@ -2318,9 +2371,14 @@ final class PromptTableOfContentsView: NSView {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    @objc private func handleRenameFromContextMenu(_ sender: NSMenuItem) {
+    @objc private func handleRenameThreadFromContextMenu(_ sender: NSMenuItem) {
         guard let index = (sender.representedObject as? NSNumber)?.intValue else { return }
-        onRenameFromEntry?(index)
+        onRenameThreadFromEntry?(index)
+    }
+
+    @objc private func handleRenameTabFromContextMenu(_ sender: NSMenuItem) {
+        guard let index = (sender.representedObject as? NSNumber)?.intValue else { return }
+        onRenameTabFromEntry?(index)
     }
 
     @objc private func handleDrag(_ gesture: NSPanGestureRecognizer) {

@@ -9,6 +9,13 @@ struct CachedRenameResult {
     let taskDescription: RenameService.GeneratedTaskDescription?
 }
 
+enum PromptTabRenameResult: Equatable {
+    case renamed
+    case alreadyInProgress
+    case cancelled
+    case failed
+}
+
 final class RenameService {
 
     let store: ThreadStore
@@ -1161,12 +1168,52 @@ final class RenameService {
     // MARK: - Rename Tab
 
     func autoRenameTabIfNeeded(threadId: UUID, sessionName: String, prompt: String) async {
-        guard persistence.loadSettings().autoRenameTabs else { return }
-        guard let initialThread = store.threads.first(where: { $0.id == threadId }),
-              TabNameAllocator.shouldAttemptAutoRename(thread: initialThread, sessionName: sessionName),
-              !autoTabRenameInProgress.contains(sessionName) else { return }
+        _ = await renameTabFromPrompt(
+            threadId: threadId,
+            sessionName: sessionName,
+            prompt: prompt,
+            requiresAutoRenameEligibility: true
+        )
+    }
 
-        guard let operationId = autoTabRenameOperations.start(sessionName: sessionName) else { return }
+    func renameTabFromPrompt(
+        threadId: UUID,
+        sessionName: String,
+        prompt: String
+    ) async -> PromptTabRenameResult {
+        if autoTabRenameInProgress.contains(sessionName) {
+            return .alreadyInProgress
+        }
+        return await renameTabFromPrompt(
+            threadId: threadId,
+            sessionName: sessionName,
+            prompt: prompt,
+            requiresAutoRenameEligibility: false
+        )
+    }
+
+    private func renameTabFromPrompt(
+        threadId: UUID,
+        sessionName: String,
+        prompt: String,
+        requiresAutoRenameEligibility: Bool
+    ) async -> PromptTabRenameResult {
+        if requiresAutoRenameEligibility {
+            guard persistence.loadSettings().autoRenameTabs else { return .cancelled }
+        }
+        guard let initialThread = store.threads.first(where: { $0.id == threadId }),
+              initialThread.tmuxSessionNames.contains(sessionName) else { return .cancelled }
+        guard !autoTabRenameInProgress.contains(sessionName) else { return .alreadyInProgress }
+        if requiresAutoRenameEligibility {
+            guard TabNameAllocator.shouldAttemptAutoRename(
+                thread: initialThread,
+                sessionName: sessionName
+            ) else { return .cancelled }
+        }
+
+        guard let operationId = autoTabRenameOperations.start(sessionName: sessionName) else {
+            return .alreadyInProgress
+        }
         onTabAutoRenameStateChanged?(sessionName, true)
         defer {
             if let currentSessionName = autoTabRenameOperations.finish(operationId: operationId) {
@@ -1203,11 +1250,14 @@ final class RenameService {
 
             guard let currentSessionName = autoTabRenameOperations.sessionName(operationId: operationId),
                   let index = store.threads.firstIndex(where: { $0.id == threadId }),
-                  persistence.loadSettings().autoRenameTabs,
-                  TabNameAllocator.shouldAttemptAutoRename(
-                      thread: store.threads[index],
-                      sessionName: currentSessionName
-                  ) else { return }
+                  store.threads[index].tmuxSessionNames.contains(currentSessionName),
+                  !requiresAutoRenameEligibility || (
+                      persistence.loadSettings().autoRenameTabs &&
+                      TabNameAllocator.shouldAttemptAutoRename(
+                          thread: store.threads[index],
+                          sessionName: currentSessionName
+                      )
+                  ) else { return .cancelled }
             let uniqueName = allocateUniqueTabDisplayNameCallback?(
                 generatedName,
                 index,
@@ -1219,8 +1269,9 @@ final class RenameService {
             store.threads[index].manuallyRenamedTabs.insert(currentSessionName)
             try? persistence.saveActiveThreads(store.threads)
             onThreadsChanged?()
-            return
+            return .renamed
         }
+        return .failed
     }
 
     func remapAutoTabRenameState(sessionRenameMap: [String: String]) {

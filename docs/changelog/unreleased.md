@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Thread
+
+#### Improvements
+
+- Prompt context menus now distinguish thread and tab renaming, with clearer prompt-based thread rename wording and one-click tab naming.
+
 ### Agents
 
 #### Improvements
