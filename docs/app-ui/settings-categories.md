@@ -6,7 +6,7 @@
 - Appearance and color preferences live in `Settings > Appearance`.
 - Terminal-specific preferences now live in `Settings > Terminal`.
 - Thread-focused preferences now live in `Settings > Threads`.
-- `General` currently owns update controls, archive defaults, the keyboard shortcuts reference card, the Data Backup backup/restore card, and the environment-variable reference used by startup injection settings.
+- `General` currently owns Magent and Codex CLI update controls, archive defaults, the keyboard shortcuts reference card, the Data Backup backup/restore card, and the environment-variable reference used by startup injection settings.
 - `Appearance` owns app/terminal light-dark appearance, the app primary color, and the "Don't override agent color theme" toggle.
 - `Terminal` owns Ghostty mouse-wheel override behavior and terminal overlay visibility toggles.
 - `Threads` owns thread naming defaults, thread sections, recently archived thread restore history, startup injection fields, the review prompt, sidebar display options (wide threads, thread icons, optional worktree names, PR/Jira status badge toggles, busy/idle duration toggle), and session management (idle session eviction limit, terminal surface cache limit, and "Protect pinned threads and tabs from eviction" toggle).

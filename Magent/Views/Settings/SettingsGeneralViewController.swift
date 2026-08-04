@@ -13,6 +13,9 @@ final class SettingsGeneralViewController: NSViewController {
     private var updateChangelogScrollView: NSScrollView!
     private var updateChangelogTextView: NSTextView!
     private var isUpdateChangelogExpanded = false
+    private var checkCodexUpdateButton: NSButton!
+    private var installCodexUpdateButton: NSButton!
+    private var codexUpdateStatusLabel: NSTextField!
     private var syncLocalPathsOnArchiveCheckbox: NSButton!
     private var externalLinkPreferencePopup: NSPopUpButton!
     private var createBackupButton: NSButton!
@@ -36,6 +39,12 @@ final class SettingsGeneralViewController: NSViewController {
             self,
             selector: #selector(handleUpdateStateChanged),
             name: .magentUpdateStateChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCodexUpdateStateChanged),
+            name: .magentCodexUpdateStateChanged,
             object: nil
         )
         NotificationCenter.default.addObserver(
@@ -121,6 +130,42 @@ final class SettingsGeneralViewController: NSViewController {
         updateChangelogScrollView.translatesAutoresizingMaskIntoConstraints = false
         updateChangelogScrollView.isHidden = true
         updatesSection.addArrangedSubview(updateChangelogScrollView)
+
+        let codexDivider = NSBox()
+        codexDivider.boxType = .separator
+        updatesSection.addArrangedSubview(codexDivider)
+
+        let codexUpdateDescription = NSTextField(
+            wrappingLabelWithString: String(localized: .UpdateStrings.codexUpdateSettingsDescription)
+        )
+        codexUpdateDescription.font = .systemFont(ofSize: 11)
+        codexUpdateDescription.textColor = NSColor(resource: .textSecondary)
+        updatesSection.addArrangedSubview(codexUpdateDescription)
+
+        checkCodexUpdateButton = NSButton(
+            title: String(localized: .UpdateStrings.codexCheckNow),
+            target: self,
+            action: #selector(checkCodexUpdateNowTapped)
+        )
+        checkCodexUpdateButton.bezelStyle = .rounded
+        checkCodexUpdateButton.controlSize = .small
+        updatesSection.addArrangedSubview(checkCodexUpdateButton)
+
+        installCodexUpdateButton = NSButton(
+            title: String(localized: .UpdateStrings.updateNow),
+            target: self,
+            action: #selector(updateCodexNowTapped)
+        )
+        installCodexUpdateButton.bezelStyle = .rounded
+        installCodexUpdateButton.controlSize = .small
+        installCodexUpdateButton.isHidden = true
+        updatesSection.addArrangedSubview(installCodexUpdateButton)
+
+        codexUpdateStatusLabel = NSTextField(wrappingLabelWithString: "")
+        codexUpdateStatusLabel.font = .systemFont(ofSize: 11)
+        codexUpdateStatusLabel.textColor = NSColor(resource: .textSecondary)
+        codexUpdateStatusLabel.isHidden = true
+        updatesSection.addArrangedSubview(codexUpdateStatusLabel)
 
         let (linksCard, linksSection) = createSectionCard(
             title: "Links",
@@ -295,6 +340,8 @@ final class SettingsGeneralViewController: NSViewController {
             backupCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             updatesDesc.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
             updateStatusLabel.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
+            codexUpdateStatusLabel.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
+            codexUpdateDescription.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
             updateChangelogScrollView.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
             updateChangelogScrollView.heightAnchor.constraint(equalToConstant: 160),
             linksDesc.widthAnchor.constraint(equalTo: linksSection.widthAnchor),
@@ -303,6 +350,7 @@ final class SettingsGeneralViewController: NSViewController {
         ])
 
         refreshUpdateControls()
+        refreshCodexUpdateControls()
         refreshBackupControls()
     }
 
@@ -381,6 +429,7 @@ final class SettingsGeneralViewController: NSViewController {
         settings.autoCheckForUpdates = autoCheckForUpdatesCheckbox.state == .on
         try? persistence.saveSettings(settings)
         UpdateService.shared.handleAutoCheckSettingChanged()
+        CodexUpdateService.shared.handleAutoCheckSettingChanged()
     }
 
     @objc private func syncLocalPathsOnArchiveToggled() {
@@ -404,6 +453,14 @@ final class SettingsGeneralViewController: NSViewController {
         }
     }
 
+    @objc private func checkCodexUpdateNowTapped() {
+        Task { @MainActor in await CodexUpdateService.shared.checkManually() }
+    }
+
+    @objc private func updateCodexNowTapped() {
+        Task { @MainActor in await CodexUpdateService.shared.installAvailableUpdate() }
+    }
+
     @objc private func updateNowTapped() {
         Task { @MainActor in
             guard !UpdateService.shared.isUpdateDownloadInProgress,
@@ -418,6 +475,10 @@ final class SettingsGeneralViewController: NSViewController {
 
     @objc private func handleUpdateStateChanged() {
         refreshUpdateControls()
+    }
+
+    @objc private func handleCodexUpdateStateChanged() {
+        refreshCodexUpdateControls()
     }
 
     @objc private func handleBackupSnapshotsChanged() {
@@ -501,6 +562,32 @@ final class SettingsGeneralViewController: NSViewController {
             updateChangelogTextView.string = ""
             isUpdateChangelogExpanded = false
         }
+    }
+
+    private func refreshCodexUpdateControls() {
+        guard isViewLoaded else { return }
+        let service = CodexUpdateService.shared
+        checkCodexUpdateButton.isEnabled = !service.isChecking && !service.isUpdating
+        checkCodexUpdateButton.title = service.isChecking
+            ? String(localized: .UpdateStrings.codexChecking)
+            : String(localized: .UpdateStrings.codexCheckNow)
+
+        guard let summary = service.pendingUpdateSummary else {
+            installCodexUpdateButton.isHidden = true
+            codexUpdateStatusLabel.isHidden = true
+            codexUpdateStatusLabel.stringValue = ""
+            return
+        }
+
+        installCodexUpdateButton.isHidden = false
+        installCodexUpdateButton.isEnabled = !service.isUpdating
+        installCodexUpdateButton.title = service.isUpdating
+            ? String(localized: .UpdateStrings.codexUpdating)
+            : String(localized: .UpdateStrings.updateNow)
+        codexUpdateStatusLabel.stringValue = summary.isSkipped
+            ? String(localized: .UpdateStrings.codexUpdateSkipped(summary.availableVersion))
+            : String(localized: .UpdateStrings.codexUpdateAvailableSettings(summary.installedVersion, summary.availableVersion))
+        codexUpdateStatusLabel.isHidden = false
     }
 
     private func refreshUpdateChangelogDisclosure() {
@@ -619,6 +706,7 @@ final class SettingsGeneralViewController: NSViewController {
         let restorableFiles = PersistenceService.restorableCriticalFileNames
         ThreadManager.shared.stopSessionMonitor()
         UpdateService.shared.stopPeriodicUpdateChecks()
+        CodexUpdateService.shared.stopPeriodicChecks()
         BackupService.shared.stopPeriodicSnapshots()
         persistence.cancelPendingThreadSave()
         persistence.blockWrites(for: restorableFiles)
@@ -630,6 +718,7 @@ final class SettingsGeneralViewController: NSViewController {
             persistence.unblockWrites(for: restorableFiles)
             BackupService.shared.startPeriodicSnapshots()
             UpdateService.shared.startPeriodicUpdateChecks()
+            CodexUpdateService.shared.startPeriodicChecks()
             ThreadManager.shared.startSessionMonitor()
             throw error
         }

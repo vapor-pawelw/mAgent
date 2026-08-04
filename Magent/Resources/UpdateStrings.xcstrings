@@ -1,6 +1,54 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "codexCheckNow": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Check Codex Updates Now" } } }
+    },
+    "codexChecking": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Checking Codex…" } } }
+    },
+    "codexNotInstalled": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Codex CLI is not installed or could not be found." } } }
+    },
+    "codexUpToDate": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Codex CLI is up to date (%@)." } } }
+    },
+    "codexUpdateAvailable": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Codex CLI update available: %@ → %@" } } }
+    },
+    "codexUpdateAvailableSettings": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Codex CLI %@ is installed; %@ is available." } } }
+    },
+    "codexUpdateSkipped": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Codex CLI %@ is available. Its banner is skipped, but you can update here." } } }
+    },
+    "codexUpdateInstalling": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Updating Codex CLI in the background…" } } }
+    },
+    "codexUpdateSettingsDescription": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Keep the installed Codex CLI current without allowing its updater to interrupt new Magent terminal sessions." } } }
+    },
+    "codexUpdating": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Updating Codex…" } } }
+    },
+    "codexUpdateSucceeded": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Codex CLI was updated successfully." } } }
+    },
+    "codexUpdateFailed": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Codex CLI could not be updated." } } }
+    },
     "updateAvailable": {
       "extractionState": "manual",
       "localizations": {

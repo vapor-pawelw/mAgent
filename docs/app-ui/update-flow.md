@@ -1,6 +1,9 @@
 # Update Flow
 
 User-facing behavior:
+- Magent also checks an installed Codex CLI for stable updates. Codex update banners can be skipped independently from Magent releases; skipped Codex updates remain installable from `General` settings.
+- `General` settings always offers a manual Codex update check. The Codex update action and version status appear only after a newer version is detected.
+- Magent-managed Codex sessions disable Codex's own startup update check so an updater cannot replace the agent prompt or strand initial prompt injection at a shell.
 - `General` settings owns update preferences and actions: the launch-check checkbox, manual `Check for Updates Now`, and a staged update button (`Download` → disabled `Downloading...` with progress text → `Install & Relaunch` once ready).
 - Launch-time update checks run only when `AppSettings.autoCheckForUpdates` is enabled.
 - When auto-check is enabled, Magent also polls for new versions every hour in the background. The poller starts/stops immediately when the setting is toggled mid-session. Periodic checks that find an available update only show the banner once per version per session to avoid clobbering unrelated banners.
@@ -11,6 +14,8 @@ User-facing behavior:
 - `Skip this version` suppresses the launch/banner prompt for that exact version only. The skipped version still appears in Settings with an update button, and a newer version shows prompts again automatically.
 
 Implementation details:
+- `CodexUpdateService` resolves Codex through Magent's managed interactive login shell, compares `codex --version` with the npm package's stable `latest` release, and delegates installation to the install-aware `codex update` command. It does not hard-code `npm install`, because Codex may be installed by another supported package manager.
+- Codex checks follow the same launch/periodic setting as Magent checks, while `AppSettings.skippedCodexUpdateVersion` keeps skip state independent.
 - `UpdateService` queries the public repo's release list (`/releases?per_page=10`) instead of `/releases/latest`.
 - Release notes come from the GitHub release `body` and are passed through banner/settings UI as optional details text.
 - Detected update state is kept in memory by `UpdateService` and broadcast with `magentUpdateStateChanged`, which `SettingsGeneralViewController` observes to refresh its update card.

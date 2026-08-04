@@ -33,6 +33,7 @@ extension Notification.Name {
     static let magentProjectPathValidityRefreshRequested = Notification.Name("magentProjectPathValidityRefreshRequested")
     static let magentProjectVisibilityDidChange = Notification.Name("magentProjectVisibilityDidChange")
     static let magentUpdateStateChanged = Notification.Name("magentUpdateStateChanged")
+    static let magentCodexUpdateStateChanged = Notification.Name("magentCodexUpdateStateChanged")
     static let magentThreadCreationFinished = Notification.Name("magentThreadCreationFinished")
     /// Posted after thread metadata snapshots are applied in the sidebar so
     /// pop-out windows can refresh from the latest ThreadManager state.

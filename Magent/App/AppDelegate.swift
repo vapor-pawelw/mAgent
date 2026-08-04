@@ -215,6 +215,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         Task { @MainActor in
             await UpdateService.shared.checkForUpdatesOnLaunchIfEnabled()
             UpdateService.shared.startPeriodicUpdateChecks()
+            await CodexUpdateService.shared.checkOnLaunchIfEnabled()
+            CodexUpdateService.shared.startPeriodicChecks()
         }
         AgentModelsService.shared.refreshOnLaunch()
     }
@@ -224,6 +226,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         terminalCacheMemoryPressureSource = nil
         coordinator?.persistMainWindowFrame()
         UpdateService.shared.stopPeriodicUpdateChecks()
+        CodexUpdateService.shared.stopPeriodicChecks()
         NotificationCenter.default.removeObserver(self, name: .magentSettingsDidChange, object: nil)
         NotificationCenter.default.removeObserver(self, name: GhosttyAppManager.ghosttyRendererHealthUpdated, object: nil)
         if let systemAppearanceObserver {

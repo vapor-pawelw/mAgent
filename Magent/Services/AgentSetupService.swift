@@ -2278,6 +2278,7 @@ final class AgentSetupService {
     private func codexSessionLaunchFlags(for appearanceMode: AppAppearanceMode, preserveAgentColorTheme: Bool = false) -> String {
         var flags = [
             "-c \(ShellExecutor.shellQuote("tui.notification_method=\"bel\""))",
+            "-c \(ShellExecutor.shellQuote("check_for_update_on_startup=false"))",
         ]
         // Keep Codex rendering aligned with the terminal palette in explicit light mode.
         if !preserveAgentColorTheme && appearanceMode == .light {
