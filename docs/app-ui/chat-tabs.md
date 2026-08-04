@@ -8,6 +8,7 @@
 - Assistant Markdown renders headings, ordered and unordered lists, block quotes, separators, fenced code blocks, inline code, bold text, and links instead of exposing their source markers.
 - In-progress assistant work uses an unboxed inline spinner and elapsed status text instead of an animated placeholder bubble.
 - Message timestamps and sent model/reasoning metadata stay out of the transcript and remain available from the message hover tooltip.
+- Right-clicking a message offers copy and can generate a concise tab name from that message, even when automatic tab naming is disabled. Message-based names are treated as manual names, so later model changes and automatic naming do not overwrite them.
 - The composer uses the same rounded prompt surface styling as new thread and new tab sheets: a multiline text area above an integrated footer containing attachment, model, reasoning, and send controls.
 - Codex chat tabs expose the `None` reasoning effort from the bottom-left picker and store/pass it as Codex `reasoningLevel: "none"`.
 - Codex chat tab titles mirror terminal tab naming from the selected model and reasoning effort, with ` (Chat)` appended. On the first submitted prompt, the regular automatic tab-naming setting can replace that default with a concise task name. Automatic updates preserve manually renamed chat tabs.

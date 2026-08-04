@@ -744,6 +744,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private let createdAt: Date
     private let onOpenLink: ((String) -> Void)?
     private let onOpenAttachment: ((PersistedChatAttachment) -> Void)?
+    private let onRenameTabFromMessage: ((String) -> Void)?
     private let isQueuedSubmissionPending: Bool
     private let rendersAsSeparator: Bool
     private var bubbleHeightConstraint: NSLayoutConstraint?
@@ -787,11 +788,13 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         fontSize: CGFloat,
         queuedSubmissionPending: Bool = false,
         onOpenLink: ((String) -> Void)? = nil,
-        onOpenAttachment: ((PersistedChatAttachment) -> Void)? = nil
+        onOpenAttachment: ((PersistedChatAttachment) -> Void)? = nil,
+        onRenameTabFromMessage: ((String) -> Void)? = nil
     ) {
         self.createdAt = message.createdAt
         self.onOpenLink = onOpenLink
         self.onOpenAttachment = onOpenAttachment
+        self.onRenameTabFromMessage = onRenameTabFromMessage
         self.isQueuedSubmissionPending = queuedSubmissionPending
         self.rendersAsSeparator = message.role == .system
         self.isLoadingIndicatorBubble = message.role == .assistant && Self.isThinkingPlaceholderText(message.text)
@@ -1054,6 +1057,28 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
         addSubview(bubbleRow)
 
+        let contextMenu = NSMenu()
+        let copyItem = NSMenuItem(
+            title: String(localized: .ThreadStrings.chatMessageCopy),
+            action: #selector(copyMessage),
+            keyEquivalent: ""
+        )
+        copyItem.target = self
+        contextMenu.addItem(copyItem)
+        if onRenameTabFromMessage != nil,
+           ChatMessageContextActions.availableActions(messageText: message.text).contains(.renameTabFromMessage) {
+            let renameItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.chatMessageRenameTab),
+                action: #selector(renameTabFromMessage),
+                keyEquivalent: ""
+            )
+            renameItem.target = self
+            contextMenu.addItem(renameItem)
+        }
+        menu = contextMenu
+        container.menu = contextMenu
+        messageTextView.menu = contextMenu
+
         NSLayoutConstraint.activate([
             container.widthAnchor.constraint(lessThanOrEqualToConstant: maxBubbleWidth),
 
@@ -1106,6 +1131,16 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
         needsLayout = true
         superview?.needsLayout = true
+    }
+
+    @objc private func copyMessage() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(renderedMessage.text, forType: .string)
+    }
+
+    @objc private func renameTabFromMessage() {
+        onRenameTabFromMessage?(renderedMessage.text)
     }
 
     func updateMessageInPlace(_ message: PersistedChatMessage) -> Bool {
@@ -1953,6 +1988,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     var onDraftAttachmentsChanged: (([PersistedChatAttachment]) -> Void)?
     var onCancelRunningCommand: (() -> Void)?
     var onOpenMarkdownLink: ((String) -> Void)?
+    var onRenameTabFromMessage: ((String) -> Void)?
     var onModelReasoningChanged: ((String?, String?) -> Void)?
     var isCommandRunning: (() -> Bool)?
 
@@ -2731,7 +2767,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             onOpenLink: onOpenMarkdownLink,
             onOpenAttachment: { [weak self] attachment in
                 self?.openAttachmentPreview(attachment)
-            }
+            },
+            onRenameTabFromMessage: onRenameTabFromMessage
         )
         if bubble.updatesRelativeTimestamp {
             loadingMessageBubble = bubble

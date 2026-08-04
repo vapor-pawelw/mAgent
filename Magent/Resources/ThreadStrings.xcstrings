@@ -2728,6 +2728,28 @@
           }
         }
       }
+    },
+    "chatMessageCopy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy message"
+          }
+        }
+      }
+    },
+    "chatMessageRenameTab": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename tab from message"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -1208,6 +1208,30 @@ final class RenameService {
         projectId: UUID?
     ) async -> String? {
         guard persistence.loadSettings().autoRenameTabs else { return nil }
+        return await generateTabName(
+            prompt: prompt,
+            preferredAgent: preferredAgent,
+            projectId: projectId
+        )
+    }
+
+    func generateTabNameFromMessage(
+        _ message: String,
+        preferredAgent: AgentType?,
+        projectId: UUID?
+    ) async -> String? {
+        await generateTabName(
+            prompt: message,
+            preferredAgent: preferredAgent,
+            projectId: projectId
+        )
+    }
+
+    private func generateTabName(
+        prompt: String,
+        preferredAgent: AgentType?,
+        projectId: UUID?
+    ) async -> String? {
 
         let truncatedPrompt = String(prompt.prefix(500))
         let aiPrompt = """
@@ -1233,7 +1257,7 @@ final class RenameService {
                 workingDirectory: workingDirectory,
                 timeoutNanos: 60_000_000_000
             ), let generatedName = TabNameAllocator.sanitizedGeneratedName(raw) else { continue }
-            return persistence.loadSettings().autoRenameTabs ? generatedName : nil
+            return generatedName
         }
         return nil
     }

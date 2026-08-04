@@ -255,6 +255,9 @@ extension ThreadDetailViewController {
             vc.onOpenMarkdownLink = { [weak self] target in
                 self?.handleChatMarkdownLinkTap(target)
             }
+            vc.onRenameTabFromMessage = { [weak self] message in
+                self?.renameChatTab(identifier: identifier, fromMessage: message)
+            }
             vc.onDraftChanged = { [weak self] draftInput in
                 self?.updateChatDraftInput(identifier: identifier, draftInput: draftInput)
             }
@@ -416,6 +419,42 @@ extension ThreadDetailViewController {
         }
         persistChatTabs()
         refreshTabTooltips()
+    }
+
+    private func renameChatTab(identifier: String, fromMessage message: String) {
+        guard let chatIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+        let entry = chatTabs[chatIndex]
+        Task { [weak self] in
+            guard let self,
+                  let generatedName = await self.threadManager.generateTabNameFromMessage(
+                      message,
+                      preferredAgent: entry.agentType,
+                      projectId: self.thread.projectId
+                  ),
+                  let currentIndex = self.chatTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+
+            let usedNames = self.tabSlots.enumerated().compactMap { slotIndex, slot -> String? in
+                guard slot != .chat(identifier: identifier), self.tabItems.indices.contains(slotIndex) else { return nil }
+                return self.tabItems[slotIndex].titleLabel.stringValue
+            }
+            let allocation = TabNameAllocator.allocate(
+                requestedName: generatedName,
+                usedNames: usedNames,
+                counters: self.thread.tabNameSuffixCounters
+            )
+            if let counterUpdate = allocation.counterUpdate {
+                self.thread.tabNameSuffixCounters[counterUpdate.normalizedBase] = counterUpdate.suffix
+            }
+
+            self.chatTabs[currentIndex].title = allocation.displayName
+            self.chatTabs[currentIndex].isTitleManuallySet = true
+            if let slotIndex = self.tabSlots.firstIndex(of: .chat(identifier: identifier)) {
+                self.tabItems[slotIndex].titleLabel.stringValue = allocation.displayName
+                self.rebuildTabBar()
+            }
+            self.persistChatTabs()
+            self.refreshTabTooltips()
+        }
     }
 
     // MARK: - Continue In
