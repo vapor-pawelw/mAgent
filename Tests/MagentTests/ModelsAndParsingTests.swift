@@ -2014,6 +2014,32 @@ struct AgentChatRuntimeParsingTests {
         #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: true, sandboxEnabled: true) == ["--yolo"])
     }
 
+    @Test("Codex app-server turns override resumed thread permissions")
+    func codexAppServerPermissionOverridesSelection() {
+        #expect(AgentChatRuntime.codexAppServerPermissionOverrides(
+            skipPermissions: true,
+            sandboxEnabled: false
+        ) == CodexAppServerPermissionOverrides(
+            approvalPolicy: "never",
+            sandboxPolicyType: "dangerFullAccess"
+        ))
+        #expect(AgentChatRuntime.codexAppServerPermissionOverrides(
+            skipPermissions: false,
+            sandboxEnabled: true
+        ) == CodexAppServerPermissionOverrides(
+            approvalPolicy: "on-request",
+            sandboxPolicyType: "workspaceWrite"
+        ))
+        #expect(AgentChatRuntime.codexAppServerPermissionOverrides(
+            skipPermissions: false,
+            sandboxEnabled: false
+        ) == nil)
+        #expect(AgentChatRuntime.codexAppServerPermissionOverrides(
+            skipPermissions: true,
+            sandboxEnabled: true
+        )?.sandboxPolicyType == "dangerFullAccess")
+    }
+
     @Test("Claude stream JSON prefers result text and captures session id")
     func claudeResultAndSessionID() {
         let stdout = """

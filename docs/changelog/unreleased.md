@@ -37,6 +37,7 @@
 
 #### Bug Fixes
 
+- Kept Codex chat permissions in sync with Agent Settings when continuing an existing conversation, including Full Access and sandbox mode.
 - Prevented failed or approval-blocked Codex turns from replaying the same prompt, preserved steering messages that race with completion, and stopped queued prompts from starting after closing or clearing a chat.
 - Preserved model-change markers, local chat statuses, repeated-message identity, timestamps, attachments, and model metadata when restoring Codex transcripts.
 - Reused warmed Codex chat processes between prompts so later replies no longer wait for integrations to initialize again.

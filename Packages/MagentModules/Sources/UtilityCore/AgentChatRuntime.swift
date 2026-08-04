@@ -559,6 +559,16 @@ public nonisolated struct AgentChatAttachment: Sendable, Equatable {
     }
 }
 
+public nonisolated struct CodexAppServerPermissionOverrides: Sendable, Equatable {
+    public let approvalPolicy: String
+    public let sandboxPolicyType: String
+
+    public init(approvalPolicy: String, sandboxPolicyType: String) {
+        self.approvalPolicy = approvalPolicy
+        self.sandboxPolicyType = sandboxPolicyType
+    }
+}
+
 public nonisolated enum AgentChatRuntime {
     private static let codexThreadReadyTimeout: TimeInterval = 20
     private static let codexTurnCompletionPollInterval: TimeInterval = 1
@@ -1275,6 +1285,14 @@ public nonisolated enum AgentChatRuntime {
             "cwd": workingDirectory,
         ]
 
+        if let permissionOverrides = codexAppServerPermissionOverrides(
+            skipPermissions: codexSkipPermissions,
+            sandboxEnabled: codexSandboxEnabled
+        ) {
+            turnParams["approvalPolicy"] = permissionOverrides.approvalPolicy
+            turnParams["sandboxPolicy"] = ["type": permissionOverrides.sandboxPolicyType]
+        }
+
         if let modelID = normalizedNonEmpty(modelId) {
             turnParams["model"] = modelID
         }
@@ -1622,6 +1640,25 @@ public nonisolated enum AgentChatRuntime {
             return ["--full-auto"]
         }
         return []
+    }
+
+    public nonisolated static func codexAppServerPermissionOverrides(
+        skipPermissions: Bool,
+        sandboxEnabled: Bool
+    ) -> CodexAppServerPermissionOverrides? {
+        if skipPermissions {
+            return CodexAppServerPermissionOverrides(
+                approvalPolicy: "never",
+                sandboxPolicyType: "dangerFullAccess"
+            )
+        }
+        if sandboxEnabled {
+            return CodexAppServerPermissionOverrides(
+                approvalPolicy: "on-request",
+                sandboxPolicyType: "workspaceWrite"
+            )
+        }
+        return nil
     }
 
     public nonisolated static func parseClaudeModelChange(from output: String) -> (modelLabel: String, effortLevel: String?)? {
