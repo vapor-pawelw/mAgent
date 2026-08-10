@@ -23,6 +23,7 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 - Dock badge updates are centralized in `ThreadManager.updateDockBadge()`.
 - The Dock badge uses thread count, not unread session count, so it matches the sidebar's thread-level completion affordance.
 - The Dock completion setting is persisted as `AppSettings.showDockBadgeAndBounceForUnreadCompletions`.
+- Completion and waiting-for-input sounds are played directly by Magent exactly once. System notification requests stay silent, so enabling banners cannot cause macOS and Magent to play the same sound independently; direct playback also keeps sounds working when notification permission is denied.
 - Toggling the setting in Notifications refreshes the Dock badge immediately instead of waiting for the next completion event.
 - Focus-driven clearing is window-aware: `SplitViewController` clears unread completion for the currently visible thread when the main window becomes key or stays focused during a completion event, and `ThreadPopoutWindowController` mirrors that behavior for separate thread windows.
 
@@ -42,6 +43,7 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 
 - Do not re-expand the Dock badge count to include `waitingForInputSessions`; the Dock badge is intentionally scoped to finished unread work only.
 - Do not gate the Dock badge/bounce toggle on macOS notification permission. Dock behavior should remain available even when system notification banners are disabled or denied.
+- Keep agent-attention notification requests silent while `AgentAttentionDeliveryPlan` owns direct sound playback. Adding a notification-content sound recreates duplicate audio when banners are enabled.
 - Keep Dock-side effects routed through the existing completion state. Adding a second unread-tracking path will drift from the sidebar and tab indicators.
 - Keep the Codex fallback transition-based, not unconditional idle detection. Re-firing completion on every idle poll would recreate dots and notifications after the user already read the thread.
 - Do not inject Codex lifecycle hooks into the managed config. Non-managed command hooks require explicit user trust, so app-owned busy/completion detection must remain outside Codex's hook system.

@@ -5,3 +5,7 @@
 #### Improvements
 
 - Magent can now detect, skip, and install Codex CLI updates without Codex interrupting new terminal sessions with its own updater.
+
+#### Bug Fixes
+
+- Agent completion and input-needed alerts now play their configured sound once instead of sometimes playing it twice when system banners are enabled.
