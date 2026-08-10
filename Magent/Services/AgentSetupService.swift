@@ -1587,6 +1587,26 @@ final class AgentSetupService {
         try? persistence.saveActiveThreads(store.threads)
     }
 
+    func reconcileSubmittedPromptTimings(
+        threadId: UUID,
+        sessionName: String,
+        authoritativeTimings: [SubmittedPromptTiming]
+    ) {
+        guard !authoritativeTimings.isEmpty,
+              let index = store.threads.firstIndex(where: { $0.id == threadId }),
+              store.threads[index].agentTmuxSessions.contains(sessionName) else { return }
+        let local = store.threads[index].submittedPromptTimingsBySession[sessionName] ?? []
+        let reconciled = AgentPromptTimelineReader.reconcile(
+            local: local,
+            authoritative: authoritativeTimings
+        )
+        guard reconciled != local else { return }
+        store.threads[index].submittedPromptTimingsBySession[sessionName] = Array(
+            reconciled.suffix(Self.maxSubmittedPromptsPerSession)
+        )
+        try? persistence.saveActiveThreads(store.threads)
+    }
+
     private func normalizedSubmittedPrompt(_ prompt: String) -> String {
         prompt
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)

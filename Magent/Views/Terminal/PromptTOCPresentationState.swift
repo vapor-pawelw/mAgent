@@ -7,6 +7,8 @@ struct PromptTOCEntry: Sendable {
     let fullText: String
     let timing: SubmittedPromptTiming?
 
+    var isAvailableInTerminalHistory: Bool { lineIndex >= 0 }
+
     init(
         lineIndex: Int,
         displayText: String,
@@ -17,6 +19,72 @@ struct PromptTOCEntry: Sendable {
         self.displayText = displayText
         self.fullText = fullText
         self.timing = timing
+    }
+}
+
+enum PromptTOCCacheMerger {
+    static func merge(cachedPrompts: [String], liveEntries: [PromptTOCEntry]) -> [PromptTOCEntry] {
+        guard !cachedPrompts.isEmpty else { return liveEntries }
+        guard !liveEntries.isEmpty else {
+            return cachedPrompts.map { cachedEntry(text: $0) }
+        }
+
+        let cached = cachedPrompts.map(normalized(_:))
+        let live = liveEntries.map { normalized($0.fullText) }
+        var commonSuffixLengths = Array(
+            repeating: Array(repeating: 0, count: live.count + 1),
+            count: cached.count + 1
+        )
+        for cachedIndex in cached.indices.reversed() {
+            for liveIndex in live.indices.reversed() {
+                commonSuffixLengths[cachedIndex][liveIndex] = if cached[cachedIndex] == live[liveIndex] {
+                    commonSuffixLengths[cachedIndex + 1][liveIndex + 1] + 1
+                } else {
+                    max(
+                        commonSuffixLengths[cachedIndex + 1][liveIndex],
+                        commonSuffixLengths[cachedIndex][liveIndex + 1]
+                    )
+                }
+            }
+        }
+
+        var merged: [PromptTOCEntry] = []
+        var cachedIndex = 0
+        var liveIndex = 0
+        while cachedIndex < cached.count, liveIndex < live.count {
+            if cached[cachedIndex] == live[liveIndex],
+               commonSuffixLengths[cachedIndex + 1][liveIndex]
+                == commonSuffixLengths[cachedIndex][liveIndex] {
+                // A shortened live tail with repeated text belongs to the newest
+                // possible cached occurrence, not an older identical prompt.
+                merged.append(cachedEntry(text: cachedPrompts[cachedIndex]))
+                cachedIndex += 1
+            } else if cached[cachedIndex] == live[liveIndex] {
+                merged.append(liveEntries[liveIndex])
+                cachedIndex += 1
+                liveIndex += 1
+            } else if commonSuffixLengths[cachedIndex + 1][liveIndex]
+                >= commonSuffixLengths[cachedIndex][liveIndex + 1] {
+                merged.append(cachedEntry(text: cachedPrompts[cachedIndex]))
+                cachedIndex += 1
+            } else {
+                merged.append(liveEntries[liveIndex])
+                liveIndex += 1
+            }
+        }
+        merged.append(contentsOf: cachedPrompts[cachedIndex...].map { cachedEntry(text: $0) })
+        merged.append(contentsOf: liveEntries[liveIndex...])
+        return merged
+    }
+
+    private static func cachedEntry(text: String) -> PromptTOCEntry {
+        PromptTOCEntry(lineIndex: -1, displayText: text, fullText: text)
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

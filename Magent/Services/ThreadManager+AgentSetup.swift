@@ -344,6 +344,18 @@ extension ThreadManager {
         )
     }
 
+    func reconcileSubmittedPromptTimings(
+        threadId: UUID,
+        sessionName: String,
+        authoritativeTimings: [SubmittedPromptTiming]
+    ) {
+        agentSetupService.reconcileSubmittedPromptTimings(
+            threadId: threadId,
+            sessionName: sessionName,
+            authoritativeTimings: authoritativeTimings
+        )
+    }
+
     @discardableResult
     func remapSubmittedPromptHistory(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
         agentSetupService.remapSubmittedPromptHistory(threadIndex: index, sessionRenameMap: sessionRenameMap)

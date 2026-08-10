@@ -1345,6 +1345,10 @@ extension ThreadDetailViewController {
             if promptTOCEmptyCaptureRetryAttemptedSessions.remove(oldName) != nil {
                 promptTOCEmptyCaptureRetryAttemptedSessions.insert(newName)
             }
+            if let signature = promptTOCTranscriptRefinedSignatures.removeValue(forKey: oldName) {
+                promptTOCTranscriptRefinedSignatures[newName] = signature
+            }
+            promptTOCTranscriptRefinementInFlightSessions.remove(oldName)
         }
     }
 

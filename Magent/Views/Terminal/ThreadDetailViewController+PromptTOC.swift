@@ -269,14 +269,18 @@ extension ThreadDetailViewController {
         guard currentSessionName() == sessionName else { return }
         if capturedEntries.isEmpty, knownPromptCount > 0 {
             promptTOCEmptyCaptureRetryAttemptedSessions.insert(sessionName)
-            return
+        } else {
+            promptTOCEmptyCaptureRetryAttemptedSessions.remove(sessionName)
         }
-        promptTOCEmptyCaptureRetryAttemptedSessions.remove(sessionName)
 
         let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let mergedEntries = PromptTOCCacheMerger.merge(
+            cachedPrompts: currentThread.submittedPromptsBySession[sessionName] ?? [],
+            liveEntries: capturedEntries
+        )
         let entries = PromptTOCTimingResolver.attaching(
             currentThread.submittedPromptTimingsBySession[sessionName] ?? [],
-            to: capturedEntries
+            to: mergedEntries
         )
         threadManager.replaceSubmittedPromptHistory(
             threadId: thread.id,
@@ -317,6 +321,13 @@ extension ThreadDetailViewController {
             entries,
             agentType: agentType
         )
+        refinePromptTOCTimingsFromTranscript(
+            threadId: thread.id,
+            sessionName: sessionName,
+            agentType: agentType,
+            conversationID: currentThread.sessionConversationIDs[sessionName],
+            persistedPromptCount: currentThread.submittedPromptsBySession[sessionName]?.count ?? 0
+        )
         if previousSessionName != sessionName {
             restorePromptTOCSize(for: sessionName)
             restorePromptTOCPosition(for: sessionName)
@@ -326,6 +337,48 @@ extension ThreadDetailViewController {
         // Force layout so tocView.frame is up-to-date before clamping.
         terminalContainer.layoutSubtreeIfNeeded()
         clampPromptTOCPositionIfNeeded()
+    }
+
+    private func refinePromptTOCTimingsFromTranscript(
+        threadId: UUID,
+        sessionName: String,
+        agentType: AgentType?,
+        conversationID: String?,
+        persistedPromptCount: Int
+    ) {
+        guard let agentType, agentType != .custom,
+              let conversationID, !conversationID.isEmpty else { return }
+        let expectedPromptCount = max(promptTOCEntries.count, persistedPromptCount)
+        let refinementSignature = "\(conversationID):\(expectedPromptCount)"
+        guard promptTOCTranscriptRefinedSignatures[sessionName] != refinementSignature,
+              promptTOCTranscriptRefinementInFlightSessions.insert(sessionName).inserted else { return }
+        Task { @concurrent in
+            let timings = AgentPromptTimelineReader.timings(
+                agentType: agentType,
+                sessionID: conversationID
+            )
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.promptTOCTranscriptRefinementInFlightSessions.remove(sessionName)
+                guard !timings.isEmpty else { return }
+                self.threadManager.reconcileSubmittedPromptTimings(
+                    threadId: threadId,
+                    sessionName: sessionName,
+                    authoritativeTimings: timings
+                )
+                if timings.count >= expectedPromptCount, timings.allSatisfy({ $0.completedAt != nil }) {
+                    self.promptTOCTranscriptRefinedSignatures[sessionName] = refinementSignature
+                }
+                guard self.currentSessionName() == sessionName else { return }
+                let currentThread = self.threadManager.threads.first(where: { $0.id == threadId })
+                let entries = PromptTOCTimingResolver.attaching(
+                    currentThread?.submittedPromptTimingsBySession[sessionName] ?? [],
+                    to: self.promptTOCEntries
+                )
+                self.promptTOCEntries = entries
+                self.promptTOCView?.setEntries(entries, agentType: agentType)
+            }
+        }
     }
 
     private func capturePromptEntries(
@@ -1464,13 +1517,17 @@ private final class PromptTOCEntryRowView: NSView {
         entryIndex: Int,
         promptText: String,
         timingPresentation: PromptTOCTimingPresentation?,
+        isAvailableInTerminalHistory: Bool,
         isPinned: Bool
     ) {
         self.entryIndex = entryIndex
         self.ordinalLabel = PromptTOCLabel(labelWithString: "\(entryIndex + 1)")
         self.label = PromptTOCLabel(wrappingLabelWithString: promptText)
         super.init(frame: .zero)
-        setupUI(timingPresentation: timingPresentation)
+        setupUI(
+            timingPresentation: timingPresentation,
+            isAvailableInTerminalHistory: isAvailableInTerminalHistory
+        )
         setPinnedPresentation(isPinned)
     }
 
@@ -1510,11 +1567,21 @@ private final class PromptTOCEntryRowView: NSView {
         ))
     }
 
-    private func setupUI(timingPresentation: PromptTOCTimingPresentation?) {
+    private func setupUI(
+        timingPresentation: PromptTOCTimingPresentation?,
+        isAvailableInTerminalHistory: Bool
+    ) {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.cornerRadius = 6
-        toolTip = timingPresentation?.toolTip
+        let unavailableText = String(localized: .ThreadStrings.promptTOCOutsideTerminalHistory)
+        toolTip = if isAvailableInTerminalHistory {
+            timingPresentation?.toolTip
+        } else if let timingToolTip = timingPresentation?.toolTip {
+            "\(unavailableText)\n\(timingToolTip)"
+        } else {
+            unavailableText
+        }
 
         ordinalBadgeView.translatesAutoresizingMaskIntoConstraints = false
         ordinalBadgeView.wantsLayer = true
@@ -1547,9 +1614,11 @@ private final class PromptTOCEntryRowView: NSView {
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         timingView.translatesAutoresizingMaskIntoConstraints = false
-        timingView.isHidden = timingPresentation == nil
+        timingView.isHidden = timingPresentation == nil && isAvailableInTerminalHistory
 
-        startLabel.stringValue = timingPresentation?.startText ?? ""
+        startLabel.stringValue = isAvailableInTerminalHistory
+            ? timingPresentation?.startText ?? ""
+            : unavailableText
         startLabel.translatesAutoresizingMaskIntoConstraints = false
         startLabel.textColor = .secondaryLabelColor
         startLabel.lineBreakMode = .byTruncatingTail
@@ -1809,12 +1878,15 @@ final class PromptTableOfContentsView: NSView {
                 timingPresentation: PromptTOCTimingFormatter.presentation(
                     for: PromptTOCTimingPresentationState(timing: entry.timing)
                 ),
+                isAvailableInTerminalHistory: entry.isAvailableInTerminalHistory,
                 isPinned: presentationState.isPinned
             )
             row.setAlternateBackgroundVisible(!displayIndex.isMultiple(of: 2))
 
-            let tap = NSClickGestureRecognizer(target: self, action: #selector(handleEntryRowTap(_:)))
-            row.addGestureRecognizer(tap)
+            if entry.isAvailableInTerminalHistory {
+                let tap = NSClickGestureRecognizer(target: self, action: #selector(handleEntryRowTap(_:)))
+                row.addGestureRecognizer(tap)
+            }
             row.onRightClick = { [weak self] index, event in
                 self?.showRenameContextMenu(for: index, event: event)
             }

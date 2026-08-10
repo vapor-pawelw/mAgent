@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Thread
+
+#### Bug Fixes
+
+- Table of Contents history now survives terminal scrollback eviction, and prompt durations are refined from agent transcripts when available.
+
 ### Agents
 
 #### Improvements

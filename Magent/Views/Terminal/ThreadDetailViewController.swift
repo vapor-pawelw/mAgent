@@ -308,6 +308,8 @@ final class ThreadDetailViewController: NSViewController {
     var promptTOCNavigationGeneration: UUID?
     var promptTOCEmptyCaptureRetryAttemptedSessions: Set<String> = []
     var promptTOCEntries: [PromptTOCEntry] = []
+    var promptTOCTranscriptRefinedSignatures: [String: String] = [:]
+    var promptTOCTranscriptRefinementInFlightSessions: Set<String> = []
     var promptTOCSessionName: String?
     var scrollOverlayTrailingConstraint: NSLayoutConstraint?
     var scrollOverlayBottomConstraint: NSLayoutConstraint?

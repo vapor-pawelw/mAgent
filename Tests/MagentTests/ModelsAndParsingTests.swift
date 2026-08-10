@@ -1651,6 +1651,71 @@ struct PersistedChatTabTests {
 @Suite("AgentChatRuntime parsing")
 struct AgentChatRuntimeParsingTests {
 
+    @Test("Codex prompt timeline uses transcript timestamps and keeps active turns open")
+    func codexPromptTimeline() {
+        let jsonl = """
+        {"timestamp":"2026-05-22T08:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"first"}}
+        {"timestamp":"2026-05-22T08:00:05Z","type":"event_msg","payload":{"type":"task_complete"}}
+        {"timestamp":"2026-05-22T08:01:00.500Z","type":"event_msg","payload":{"type":"user_message","message":"second"}}
+        """
+
+        let timings = AgentPromptTimelineReader.timings(agentType: .codex, jsonl: jsonl)
+
+        #expect(timings.map(\.text) == ["first", "second"])
+        #expect(timings[0].completedAt?.timeIntervalSince(timings[0].sentAt) == 5)
+        #expect(timings[1].completedAt == nil)
+    }
+
+    @Test("Claude timeline ignores tool results when identifying prompts")
+    func claudePromptTimeline() {
+        let jsonl = """
+        {"type":"user","timestamp":"2026-05-22T08:00:00Z","message":{"content":[{"type":"text","text":"ship it"}]}}
+        {"type":"user","timestamp":"2026-05-22T08:00:01Z","message":{"content":[{"type":"tool_result","content":"output"}]}}
+        {"type":"result","timestamp":"2026-05-22T08:00:08Z"}
+        """
+
+        let timings = AgentPromptTimelineReader.timings(agentType: .claude, jsonl: jsonl)
+
+        #expect(timings.count == 1)
+        #expect(timings[0].text == "ship it")
+        #expect(timings[0].completedAt?.timeIntervalSince(timings[0].sentAt) == 8)
+    }
+
+    @Test("Transcript timing replaces provisional completion without losing local prompts")
+    func promptTimelineReconciliation() {
+        let local = [
+            SubmittedPromptTiming(
+                text: "first",
+                sentAt: Date(timeIntervalSince1970: 90),
+                completedAt: Date(timeIntervalSince1970: 200)
+            ),
+            SubmittedPromptTiming(text: "local only", sentAt: Date(timeIntervalSince1970: 300)),
+        ]
+        let authoritative = [
+            SubmittedPromptTiming(
+                text: "first",
+                sentAt: Date(timeIntervalSince1970: 100),
+                completedAt: Date(timeIntervalSince1970: 140)
+            ),
+        ]
+
+        let reconciled = AgentPromptTimelineReader.reconcile(
+            local: local,
+            authoritative: authoritative
+        )
+
+        #expect(reconciled.count == 2)
+        #expect(reconciled[0].sentAt == Date(timeIntervalSince1970: 100))
+        #expect(reconciled[0].completedAt == Date(timeIntervalSince1970: 140))
+        #expect(reconciled[0].id == local[0].id)
+        #expect(reconciled[1].text == "local only")
+
+        #expect(
+            AgentPromptTimelineReader.reconcile(local: reconciled, authoritative: authoritative)
+                == reconciled
+        )
+    }
+
     @Test("Codex permission flags support unrestricted, sandbox-auto, and ask modes")
     func codexPermissionFlagsSelection() {
         #expect(AgentChatRuntime.codexPermissionFlags(skipPermissions: true, sandboxEnabled: false) == ["--yolo"])

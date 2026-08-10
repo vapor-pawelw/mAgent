@@ -227,6 +227,75 @@ struct PromptTOCPresentationStateTests {
         #expect(PromptTOCRefreshPolicy.emptyCaptureRetryDelays == [0, 0.2, 0.5, 1])
     }
 
+    @Test("Cached TOC survives empty tmux scrollback")
+    func cachedTOCSurvivesEmptyScrollback() {
+        let merged = PromptTOCCacheMerger.merge(
+            cachedPrompts: ["Old prompt", "Recent prompt"],
+            liveEntries: []
+        )
+
+        #expect(merged.map(\.fullText) == ["Old prompt", "Recent prompt"])
+        #expect(merged.allSatisfy { $0.lineIndex == -1 })
+        #expect(merged.allSatisfy { !$0.isAvailableInTerminalHistory })
+    }
+
+    @Test("Live tmux tail replaces matching cache tail without duplicates")
+    func liveTailMergesWithCache() {
+        let merged = PromptTOCCacheMerger.merge(
+            cachedPrompts: ["First", "Repeated", "Third"],
+            liveEntries: [
+                PromptTOCEntry(lineIndex: 40, displayText: "Repeated", fullText: "Repeated"),
+                PromptTOCEntry(lineIndex: 80, displayText: "Third", fullText: "Third"),
+                PromptTOCEntry(lineIndex: 120, displayText: "Newest", fullText: "Newest"),
+            ]
+        )
+
+        #expect(merged.map(\.fullText) == ["First", "Repeated", "Third", "Newest"])
+        #expect(merged.map(\.lineIndex) == [-1, 40, 80, 120])
+        #expect(merged.map(\.isAvailableInTerminalHistory) == [false, true, true, true])
+    }
+
+    @Test("Non-contiguous live prompts regain navigation coordinates")
+    func nonContiguousLivePromptsRegainCoordinates() {
+        let merged = PromptTOCCacheMerger.merge(
+            cachedPrompts: ["First", "Missing middle", "Newest"],
+            liveEntries: [
+                PromptTOCEntry(lineIndex: 10, displayText: "First", fullText: "First"),
+                PromptTOCEntry(lineIndex: 90, displayText: "Newest", fullText: "Newest"),
+            ]
+        )
+
+        #expect(merged.map(\.lineIndex) == [10, -1, 90])
+    }
+
+    @Test("Repeated live follow-up is preserved as a distinct cached prompt")
+    func repeatedLiveFollowUpIsPreserved() {
+        let merged = PromptTOCCacheMerger.merge(
+            cachedPrompts: ["Start", "continue"],
+            liveEntries: [
+                PromptTOCEntry(lineIndex: 10, displayText: "Start", fullText: "Start"),
+                PromptTOCEntry(lineIndex: 20, displayText: "continue", fullText: "continue"),
+                PromptTOCEntry(lineIndex: 30, displayText: "Inspect", fullText: "Inspect"),
+                PromptTOCEntry(lineIndex: 40, displayText: "continue", fullText: "continue"),
+            ]
+        )
+
+        #expect(merged.map(\.fullText) == ["Start", "continue", "Inspect", "continue"])
+        #expect(merged.map(\.lineIndex) == [10, 20, 30, 40])
+    }
+
+    @Test("Short live tail attaches to newest repeated cached prompt")
+    func shortLiveTailAttachesToNewestRepeat() {
+        let merged = PromptTOCCacheMerger.merge(
+            cachedPrompts: ["continue", "continue"],
+            liveEntries: [
+                PromptTOCEntry(lineIndex: 80, displayText: "continue", fullText: "continue"),
+            ]
+        )
+
+        #expect(merged.map(\.lineIndex) == [-1, 80])
+    }
+
     @Test("Only a visible pinned TOC reserves terminal width")
     func contentWidthMode() {
         #expect(

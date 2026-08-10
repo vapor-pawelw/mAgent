@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "promptTOCOutsideTerminalHistory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outside terminal history"
+          }
+        }
+      }
+    },
     "promptTOCTimingJustNow": {
       "extractionState": "manual",
       "localizations": {
