@@ -130,6 +130,11 @@ public nonisolated struct AgentChatStreamingUpdate: Sendable, Equatable {
 
 public nonisolated enum AgentChatStatusUpdate: Sendable, Equatable {
     case startingCodex
+    case working
+
+    static func codexAppServerNotification(method: String) -> Self? {
+        method == "turn/started" ? .working : nil
+    }
 }
 
 nonisolated enum CodexAppServerPromptReplaySafety: Sendable, Equatable {
@@ -1052,6 +1057,13 @@ public nonisolated enum AgentChatRuntime {
             guard let method = object["method"] as? String,
                   let params = object["params"] as? [String: Any] else {
                 return
+            }
+
+            if let status = AgentChatStatusUpdate.codexAppServerNotification(method: method),
+               let onStatusUpdate {
+                DispatchQueue.main.async {
+                    onStatusUpdate(status)
+                }
             }
 
             switch method {

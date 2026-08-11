@@ -1,6 +1,7 @@
 import Foundation
 import MagentCore
 import Testing
+@testable import UtilityCore
 
 @Suite("Agent chat runtime streaming")
 struct AgentChatRuntimeStreamingTests {
@@ -74,5 +75,12 @@ struct AgentChatRuntimeStreamingTests {
                 isFinal: true
             ),
         ])
+    }
+
+    @Test("Codex reports active work as soon as a turn starts")
+    func codexTurnStartReplacesStartupStatus() {
+        #expect(AgentChatStatusUpdate.codexAppServerNotification(method: "thread/started") == nil)
+        #expect(AgentChatStatusUpdate.codexAppServerNotification(method: "turn/started") == .working)
+        #expect(AgentChatStatusUpdate.codexAppServerNotification(method: "item/started") == nil)
     }
 }

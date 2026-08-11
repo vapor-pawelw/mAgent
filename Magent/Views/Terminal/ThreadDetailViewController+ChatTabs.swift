@@ -1054,6 +1054,8 @@ extension ThreadDetailViewController {
                     let statusText = switch status {
                     case .startingCodex:
                         String(localized: .ThreadStrings.chatStatusStartingCodex)
+                    case .working:
+                        Self.chatLoadingPlaceholder
                     }
                     self.setPendingAssistantMessage(
                         identifier: identifier,

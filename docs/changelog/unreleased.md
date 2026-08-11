@@ -89,6 +89,7 @@
 
 #### Bug Fixes
 
+- Replaced the misleading long-running `Starting Codex` chat status as soon as Codex begins working.
 - Kept Codex chat permissions in sync with Agent Settings when continuing an existing conversation, and prevented Sandbox Auto chats from getting stuck on approval requests they cannot answer.
 - Prevented background tab refreshes from falsely cancelling active chats or leaving their Working timer running, and clarified compact Agent activity labels.
 - Kept loading a Codex chat tab from expanding the Magent window to its maximum width.

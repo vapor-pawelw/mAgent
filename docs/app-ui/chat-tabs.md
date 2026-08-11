@@ -9,6 +9,7 @@
 - Assistant Markdown renders headings, ordered and unordered lists, block quotes, separators, fenced code blocks, inline code, bold text, and links instead of exposing their source markers.
 - Completed fenced code blocks render as dedicated language-labeled cards with horizontal scrolling and one-click copying. Streaming text stays lightweight until the final block is available.
 - In-progress assistant work uses an unboxed inline spinner and elapsed status text instead of an animated placeholder bubble.
+- Codex chat status changes from startup to active work as soon as app-server confirms the turn, even when the turn begins with reasoning or tool calls instead of assistant text.
 - Message timestamps and sent model/reasoning metadata stay out of the transcript and appear in a borderless, high-contrast action row with a copy action when hovering a message.
 - Right-clicking a message offers copy and can generate a concise tab name from that message, even when automatic tab naming is disabled. Message-based names are treated as manual names, so later model changes and automatic naming do not overwrite them.
 - The composer uses the same rounded prompt surface styling as new thread and new tab sheets: a multiline text area above an integrated footer containing attachment, model, reasoning, and send controls.
