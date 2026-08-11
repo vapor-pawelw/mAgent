@@ -27,6 +27,7 @@ let project = Project(
             sources: [
                 "Magent/App/**",
                 "Magent/Services/AgentModelsService.swift",
+                "Magent/Services/ManagedShellStartup.swift",
                 "Magent/Services/BannerManager.swift",
                 "Magent/Services/CrashReportingService.swift",
                 "Magent/Services/DevSessionLog.swift",
@@ -141,6 +142,7 @@ let project = Project(
             deploymentTargets: .macOS("14.0"),
             sources: [
                 "Magent/Services/SessionTracker.swift",
+                "Magent/Services/ManagedShellStartup.swift",
                 "Magent/Services/AgentAttentionDeliveryPlan.swift",
                 "Magent/Services/BackgroundAICommandBuilder.swift",
                 "Magent/Services/RenameFailurePresentation.swift",
