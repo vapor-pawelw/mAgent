@@ -104,7 +104,7 @@ public enum CodexPaneActivity {
     public static func isBusy(in paneContent: String, maxLines: Int = 25) -> Bool {
         let lines = paneContent
             .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-            .map(String.init)
+            .map { strippingANSIEscapes(from: String($0)) }
         let separatorIndex = lines.lastIndex { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             return trimmed.count >= 20 && trimmed.allSatisfy { $0 == "─" }
@@ -160,5 +160,46 @@ public enum CodexPaneActivity {
         if normalized.contains("working (") && normalized.contains("background terminal running") { return true }
         if normalized.contains("background terminal running") { return true }
         return false
+    }
+
+    private static func strippingANSIEscapes(from string: String) -> String {
+        string.replacingOccurrences(
+            of: #"\x1b\[[0-9;]*[a-zA-Z]"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+}
+
+public struct CodexInitialPromptReadinessGate {
+    public static let defaultMinimumStableDuration: TimeInterval = 1.0
+
+    public let minimumStableDuration: TimeInterval
+    private var readySince: Date?
+    private var consecutiveUnreadyObservations = 0
+
+    public init(minimumStableDuration: TimeInterval = Self.defaultMinimumStableDuration) {
+        self.minimumStableDuration = minimumStableDuration
+    }
+
+    public mutating func observe(
+        at date: Date,
+        composerReady: Bool,
+        paneIsBusy: Bool
+    ) -> Bool {
+        guard composerReady, !paneIsBusy else {
+            consecutiveUnreadyObservations += 1
+            if consecutiveUnreadyObservations >= 2 {
+                readySince = nil
+            }
+            return false
+        }
+
+        consecutiveUnreadyObservations = 0
+        guard let readySince else {
+            self.readySince = date
+            return minimumStableDuration <= 0
+        }
+        return date.timeIntervalSince(readySince) >= minimumStableDuration
     }
 }

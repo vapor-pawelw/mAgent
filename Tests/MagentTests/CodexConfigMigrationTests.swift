@@ -180,6 +180,17 @@ struct CodexConfigMigrationTests {
         #expect(CodexPaneActivity.isBusy(in: pane))
     }
 
+    @Test("Codex MCP startup remains busy in ANSI-aware pane captures")
+    func ansiMCPStartupOverridesComposerPrompt() {
+        let pane = """
+        \u{1b}[2m• Starting MCP servers (4/5): xcodebuildmcp (23s • esc to interrupt)\u{1b}[0m
+
+        \u{1b}[1m›\u{1b}[0m \u{1b}[2mExplain this codebase\u{1b}[0m
+        """
+
+        #expect(CodexPaneActivity.isBusy(in: pane))
+    }
+
     @Test("Separate stale MCP and interrupt text does not override an idle prompt")
     func unrelatedMCPTextDoesNotOverrideIdlePrompt() {
         let pane = """
@@ -220,5 +231,111 @@ struct CodexConfigMigrationTests {
         """
 
         #expect(!CodexPaneActivity.isBusy(in: pane))
+    }
+
+    @Test("Codex initial prompt waits for a continuously idle composer")
+    func initialPromptWaitsForStableIdleComposer() {
+        let start = Date(timeIntervalSinceReferenceDate: 1_000)
+        var gate = CodexInitialPromptReadinessGate(minimumStableDuration: 1)
+
+        let immediatelyReady = gate.observe(at: start, composerReady: true, paneIsBusy: false)
+        let readyAfterPointEightSeconds = gate.observe(
+            at: start.addingTimeInterval(0.8),
+            composerReady: true,
+            paneIsBusy: false
+        )
+        let readyAfterOneSecond = gate.observe(
+            at: start.addingTimeInterval(1),
+            composerReady: true,
+            paneIsBusy: false
+        )
+
+        #expect(!immediatelyReady)
+        #expect(!readyAfterPointEightSeconds)
+        #expect(readyAfterOneSecond)
+    }
+
+    @Test("Codex startup activity resets initial prompt readiness")
+    func startupActivityResetsInitialPromptReadiness() {
+        let start = Date(timeIntervalSinceReferenceDate: 2_000)
+        var gate = CodexInitialPromptReadinessGate(minimumStableDuration: 1)
+
+        let initiallyReady = gate.observe(at: start, composerReady: true, paneIsBusy: false)
+        let readyDuringStartup = gate.observe(
+            at: start.addingTimeInterval(0.9),
+            composerReady: true,
+            paneIsBusy: true
+        )
+        let readyWhileStartupPersists = gate.observe(
+            at: start.addingTimeInterval(1),
+            composerReady: true,
+            paneIsBusy: true
+        )
+        let readyShortlyAfterStartup = gate.observe(
+            at: start.addingTimeInterval(1.2),
+            composerReady: true,
+            paneIsBusy: false
+        )
+        let readyAfterNewStableWindow = gate.observe(
+            at: start.addingTimeInterval(2.2),
+            composerReady: true,
+            paneIsBusy: false
+        )
+
+        #expect(!initiallyReady)
+        #expect(!readyDuringStartup)
+        #expect(!readyWhileStartupPersists)
+        #expect(!readyShortlyAfterStartup)
+        #expect(readyAfterNewStableWindow)
+    }
+
+    @Test("A disappearing Codex composer resets initial prompt readiness")
+    func missingComposerResetsInitialPromptReadiness() {
+        let start = Date(timeIntervalSinceReferenceDate: 3_000)
+        var gate = CodexInitialPromptReadinessGate(minimumStableDuration: 1)
+
+        let initiallyReady = gate.observe(at: start, composerReady: true, paneIsBusy: false)
+        let readyWithoutComposer = gate.observe(
+            at: start.addingTimeInterval(0.9),
+            composerReady: false,
+            paneIsBusy: false
+        )
+        let readyWhileComposerRemainsMissing = gate.observe(
+            at: start.addingTimeInterval(1),
+            composerReady: false,
+            paneIsBusy: false
+        )
+        let readyAfterComposerReturns = gate.observe(
+            at: start.addingTimeInterval(1.2),
+            composerReady: true,
+            paneIsBusy: false
+        )
+
+        #expect(!initiallyReady)
+        #expect(!readyWithoutComposer)
+        #expect(!readyWhileComposerRemainsMissing)
+        #expect(!readyAfterComposerReturns)
+    }
+
+    @Test("One transient Codex redraw does not restart initial prompt readiness")
+    func transientRedrawDoesNotResetReadiness() {
+        let start = Date(timeIntervalSinceReferenceDate: 4_000)
+        var gate = CodexInitialPromptReadinessGate(minimumStableDuration: 1)
+
+        let initiallyReady = gate.observe(at: start, composerReady: true, paneIsBusy: false)
+        let readyDuringRedraw = gate.observe(
+            at: start.addingTimeInterval(0.6),
+            composerReady: false,
+            paneIsBusy: false
+        )
+        let readyAfterStableWindow = gate.observe(
+            at: start.addingTimeInterval(1.2),
+            composerReady: true,
+            paneIsBusy: false
+        )
+
+        #expect(!initiallyReady)
+        #expect(!readyDuringRedraw)
+        #expect(readyAfterStableWindow)
     }
 }

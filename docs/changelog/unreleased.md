@@ -29,6 +29,7 @@
 
 - Kept the Start Agent recovery banner off terminal-only tabs and prevented it from flashing during normal agent startup.
 - Kept Codex tabs visibly busy while MCP servers start, even when Codex shows its composer at the same time.
+- New Codex threads now wait for startup activity to finish before submitting their initial prompt, preventing it from becoming a queued follow-up.
 - Fixed completed background Codex tabs sometimes remaining busy until opened by recognizing when a newer idle prompt supersedes stale activity text.
 - Stopped Magent-launched Codex tabs from showing the deprecated `features.codex_hooks` warning when the user's Codex config still uses the old key.
 
