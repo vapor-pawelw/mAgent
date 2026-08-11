@@ -2129,31 +2129,20 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     // MARK: - NSTextViewDelegate
 
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-            // Shift+Return inserts a newline; plain Return submits.
-            if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
-                return false
-            }
-            acceptTapped()
-            return true
+        guard let command = AgentLaunchPromptTextCommand(selector: commandSelector) else {
+            return false
         }
-        if commandSelector == #selector(NSResponder.insertTab(_:)) {
-            window?.selectNextKeyView(nil)
-            return true
-        }
-        if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
-            window?.selectPreviousKeyView(nil)
-            return true
-        }
-        if commandSelector == Selector(("undo:")) {
-            promptTextView.undoManager?.undo()
-            return true
-        }
-        if commandSelector == Selector(("redo:")) {
-            promptTextView.undoManager?.redo()
-            return true
-        }
-        return false
+        return command.perform(
+            isShiftReturn: NSApp.currentEvent?.modifierFlags.contains(.shift) == true,
+            actions: AgentLaunchPromptTextCommandActions(
+                submit: { [weak self] in self?.acceptTapped() },
+                cancel: { [weak self] in self?.cancelTapped() },
+                selectNextField: { [weak self] in self?.window?.selectNextKeyView(nil) },
+                selectPreviousField: { [weak self] in self?.window?.selectPreviousKeyView(nil) },
+                undo: { [weak self] in self?.promptTextView.undoManager?.undo() },
+                redo: { [weak self] in self?.promptTextView.undoManager?.redo() }
+            )
+        )
     }
 
     // MARK: - Actions

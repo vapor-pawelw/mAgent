@@ -124,6 +124,8 @@ The default-on `autoRenameTabs` setting uses a submitted prompt for each agent s
 
 ## UI: Launch Sheet
 
+When the prompt editor has keyboard focus, Escape routes through AppKit's `cancelOperation:` command and must dismiss the new-thread or new-tab sheet exactly like the Cancel button. Return submits, while Shift-Return inserts a newline.
+
 Type, Model, and Reasoning pickers share a **single row** in `AgentLaunchPromptSheetController`:
 
 ```
