@@ -758,7 +758,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private var messageAttachmentStripHeight: CGFloat = 0
     private var messageTextHidden = false
     private var toolPresentation: ChatToolTranscriptPresentation?
-    private var isActivitySummary: Bool { toolPresentation?.title == "Activity" }
+    private var isActivitySummary: Bool { toolPresentation?.title == "Agent activity" }
     private var statusPresentation: ChatMessageStatusPresentation?
     private var toolExpanded = false
     private var toolDisclosureFontSize: CGFloat = 12
@@ -960,7 +960,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             messageTextHidden = renderedMessageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (toolPresentation != nil && !toolExpanded)
             let attributedMessage = NSMutableAttributedString(
                 attributedString: Self.styledMarkdownText(
-                    toolPresentation?.title == "Activity"
+                    toolPresentation?.title == "Agent activity"
                         ? ChatTranscriptDisplayCompactor.plainText(fromActivitySummary: renderedMessageText)
                         : renderedMessageText,
                     baseColor: baseTextColor,
@@ -969,7 +969,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                     baseFontSize: fontSize
                 )
             )
-            if let toolPresentation, toolPresentation.title == "Activity" {
+            if let toolPresentation, toolPresentation.title == "Agent activity" {
                 Self.applyActivitySummaryStyle(
                     to: attributedMessage,
                     rawText: toolPresentation.body,
@@ -1594,7 +1594,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     }
 
     private static func toolSymbolName(for presentation: ChatToolTranscriptPresentation) -> String {
-        if presentation.title == "Activity" { return "bolt.horizontal.circle" }
+        if presentation.title == "Agent activity" { return "bolt.horizontal.circle" }
         let title = presentation.title.lowercased()
         if title.contains("patch") || title.contains("edit") { return "pencil.and.outline" }
         if title.contains("read") { return "doc.text.magnifyingglass" }
@@ -1859,7 +1859,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             range: fullRange
         )
 
-        let headlineRange = (attributed.string as NSString).range(of: "Activity")
+        let headlineRange = (attributed.string as NSString).range(of: "Agent activity")
         if headlineRange.location != NSNotFound {
             attributed.addAttributes(
                 [

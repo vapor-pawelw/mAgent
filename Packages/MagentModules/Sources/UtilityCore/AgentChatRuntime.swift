@@ -1654,7 +1654,7 @@ public nonisolated enum AgentChatRuntime {
         }
         if sandboxEnabled {
             return CodexAppServerPermissionOverrides(
-                approvalPolicy: "on-request",
+                approvalPolicy: "never",
                 sandboxPolicyType: "workspaceWrite"
             )
         }

@@ -592,6 +592,11 @@ public enum ChatToolTranscriptFormatter {
             return ("Apply patch", "Patch applied", changedFilesInlineSummary(changedFiles(fromPatch: arguments)))
         }
 
+        let normalizedName = name.lowercased()
+        if normalizedName == "exec" || normalizedName.hasSuffix(".exec") {
+            return ("Run agent tool", "Agent tool finished", nil)
+        }
+
         guard let dictionary = jsonObject(from: arguments) as? [String: Any] else {
             let cleanName = humanizedToolName(name)
             return (cleanName, "\(cleanName) finished", nil)

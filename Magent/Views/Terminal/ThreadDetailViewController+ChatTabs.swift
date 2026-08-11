@@ -19,9 +19,19 @@ extension ThreadDetailViewController {
     // MARK: - Restore (In-memory)
 
     func restoreChatTabItems() {
+        let inFlightEntriesByIdentifier = Dictionary(
+            uniqueKeysWithValues: chatTabs.compactMap { entry in
+                isChatRequestRunning(identifier: entry.identifier)
+                    ? (entry.identifier, entry)
+                    : nil
+            }
+        )
         var restoredTabsMutated = false
         chatTabIndicesByIdentifier.removeAll()
         chatTabs = thread.persistedChatTabs.map { persisted in
+            if let inFlightEntry = inFlightEntriesByIdentifier[persisted.identifier] {
+                return inFlightEntry
+            }
             let reconciledMessages: (messages: [PersistedChatMessage], didMutate: Bool)
             if persisted.agentType == .codex, let conversationSessionID = persisted.conversationSessionID {
                 reconciledMessages = CodexChatTranscriptReconciler.reconciledMessages(
@@ -73,6 +83,9 @@ extension ThreadDetailViewController {
                 isTitleManuallySet: persisted.isTitleManuallySet,
                 viewController: nil
             )
+        }
+        for entry in inFlightEntriesByIdentifier.values where !chatTabs.contains(where: { $0.identifier == entry.identifier }) {
+            chatTabs.append(entry)
         }
 
         if restoredTabsMutated {

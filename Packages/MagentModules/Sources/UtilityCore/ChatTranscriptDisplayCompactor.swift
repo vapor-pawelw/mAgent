@@ -174,7 +174,8 @@ public enum ChatTranscriptDisplayCompactor {
     }
 
     public static func isActivitySummary(_ message: PersistedChatMessage) -> Bool {
-        message.role == .assistant && message.text.hasPrefix("Activity\n")
+        message.role == .assistant
+            && (message.text.hasPrefix("Agent activity\n") || message.text.hasPrefix("Activity\n"))
     }
 
     public static func plainText(fromActivitySummary text: String) -> String {
@@ -228,7 +229,7 @@ public enum ChatTranscriptDisplayCompactor {
         let rows = lines.dropFirst(2).compactMap(abbreviatedActivityRow)
         return ChatToolTranscriptPresentation(
             kind: .output,
-            title: "Activity",
+            title: "Agent activity",
             detail: detail?.isEmpty == false ? detail : nil,
             body: rows.isEmpty ? "No activity details." : rows.joined(separator: "\n"),
             isExpandedByDefault: false

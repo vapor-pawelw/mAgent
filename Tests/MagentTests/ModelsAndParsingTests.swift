@@ -1794,11 +1794,25 @@ struct ChatTranscriptDisplayCompactorTests {
 
         let presentation = try #require(ChatTranscriptDisplayCompactor.activityPresentation(for: message))
 
-        #expect(presentation.title == "Activity")
+        #expect(presentation.title == "Agent activity")
         #expect(presentation.detail == "2 actions")
         #expect(presentation.body.contains("play.circle Run command: git status --short"))
         #expect(presentation.body.contains("checkmark.circle Command finished: git status --short"))
         #expect(!presentation.isExpandedByDefault)
+    }
+
+    @Test("Generic Codex exec tools use a user-facing activity label")
+    func genericExecToolUsesReadableLabel() {
+        let presentation = ChatToolTranscriptFormatter.presentation(
+            for: PersistedChatToolEvent(
+                kind: .call,
+                name: "functions.exec",
+                arguments: "const result = await tools.exec_command({cmd: 'git status'});"
+            )
+        )
+
+        #expect(presentation.title == "Run agent tool")
+        #expect(!presentation.title.contains("Exec"))
     }
 
     @Test("Activity symbol insertions remain valid when multiple icons shift the text")
@@ -2027,7 +2041,7 @@ struct AgentChatRuntimeParsingTests {
             skipPermissions: false,
             sandboxEnabled: true
         ) == CodexAppServerPermissionOverrides(
-            approvalPolicy: "on-request",
+            approvalPolicy: "never",
             sandboxPolicyType: "workspaceWrite"
         ))
         #expect(AgentChatRuntime.codexAppServerPermissionOverrides(
