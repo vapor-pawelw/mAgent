@@ -89,6 +89,7 @@
 
 #### Bug Fixes
 
+- Show live parallel-agent progress and tool activity in Codex chat tabs instead of leaving the conversation on `Working` until the delegated task finishes.
 - Replaced the misleading long-running `Starting Codex` chat status as soon as Codex begins working.
 - Kept Codex chat permissions in sync with Agent Settings when continuing an existing conversation, and prevented Sandbox Auto chats from getting stuck on approval requests they cannot answer.
 - Prevented background tab refreshes from falsely cancelling active chats or leaving their Working timer running, and clarified compact Agent activity labels.

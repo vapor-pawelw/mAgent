@@ -1304,6 +1304,9 @@ extension ThreadDetailViewController {
             }
             chatTabs[chatIndex].messages[messageIndex].modelId = metadata.modelId
             chatTabs[chatIndex].messages[messageIndex].reasoningLevel = metadata.reasoningLevel
+            if let toolEvent = update.toolEvent {
+                chatTabs[chatIndex].messages[messageIndex].toolEvent = toolEvent
+            }
         } else {
             let initialText: String
             switch update.textKind {
@@ -1316,7 +1319,8 @@ extension ThreadDetailViewController {
                 role: .assistant,
                 text: initialText,
                 modelId: metadata.modelId,
-                reasoningLevel: metadata.reasoningLevel
+                reasoningLevel: metadata.reasoningLevel,
+                toolEvent: update.toolEvent
             )
             let insertedIndex: Int
             if let pendingIndex = chatTabs[chatIndex].messages.firstIndex(where: { $0.id == pendingAssistantID }) {

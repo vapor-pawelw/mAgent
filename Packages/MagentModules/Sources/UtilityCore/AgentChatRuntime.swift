@@ -114,17 +114,20 @@ public nonisolated struct AgentChatStreamingUpdate: Sendable, Equatable {
     public let text: String
     public let textKind: TextKind
     public let isFinal: Bool
+    public let toolEvent: PersistedChatToolEvent?
 
     public init(
         itemID: String,
         text: String,
         textKind: TextKind = .replacement,
-        isFinal: Bool
+        isFinal: Bool,
+        toolEvent: PersistedChatToolEvent? = nil
     ) {
         self.itemID = itemID
         self.text = text
         self.textKind = textKind
         self.isFinal = isFinal
+        self.toolEvent = toolEvent
     }
 }
 
@@ -134,6 +137,238 @@ public nonisolated enum AgentChatStatusUpdate: Sendable, Equatable {
 
     static func codexAppServerNotification(method: String) -> Self? {
         method == "turn/started" ? .working : nil
+    }
+}
+
+nonisolated enum CodexAppServerLiveItemUpdate {
+    static func update(
+        for item: [String: Any],
+        isFinal: Bool,
+        sourceThreadID: String? = nil
+    ) -> AgentChatStreamingUpdate? {
+        guard let itemID = normalizedString(item["id"]),
+              let type = item["type"] as? String else {
+            return nil
+        }
+
+        let tool: (name: String, arguments: String, output: String?, failed: Bool, exitCode: String?)? = switch type {
+        case "commandExecution": commandExecutionTool(from: item)
+        case "fileChange": fileChangeTool(from: item)
+        case "mcpToolCall": mcpTool(from: item)
+        case "dynamicToolCall": dynamicTool(from: item)
+        case "collabAgentToolCall": collaborationTool(from: item)
+        case "subAgentActivity": subagentActivityTool(from: item)
+        default: nil
+        }
+        guard let tool else { return nil }
+        let arguments = sourceThreadID.map {
+            argumentsByAddingSourceThreadID($0, to: tool.arguments)
+        } ?? tool.arguments
+
+        let event: PersistedChatToolEvent
+        let text: String
+        if isFinal {
+            let output = tool.output ?? "Completed"
+            event = PersistedChatToolEvent(
+                kind: .result,
+                name: tool.name,
+                arguments: arguments,
+                output: output,
+                exitCode: tool.exitCode ?? (tool.failed ? "1" : "0")
+            )
+            text = ChatToolTranscriptFormatter.toolResultText(
+                name: tool.name,
+                arguments: arguments,
+                output: output
+            )
+        } else {
+            event = PersistedChatToolEvent(
+                kind: .call,
+                name: tool.name,
+                arguments: arguments
+            )
+            text = ChatToolTranscriptFormatter.toolCallText(
+                name: tool.name,
+                arguments: tool.arguments
+            )
+        }
+
+        return AgentChatStreamingUpdate(
+            itemID: sourceThreadID.map { "\($0):\(itemID)" } ?? itemID,
+            text: text,
+            isFinal: isFinal,
+            toolEvent: event
+        )
+    }
+
+    static func receiverThreadIDs(from item: [String: Any]) -> [String] {
+        guard item["type"] as? String == "collabAgentToolCall" else { return [] }
+        let receivers = (item["receiverThreadIds"] as? [Any] ?? []).compactMap(normalizedString)
+        let stateThreadIDs = (item["agentsStates"] as? [String: Any]).map { Array($0.keys) } ?? []
+        return Array(Set(receivers + stateThreadIDs)).sorted()
+    }
+
+    private static func commandExecutionTool(
+        from item: [String: Any]
+    ) -> (name: String, arguments: String, output: String?, failed: Bool, exitCode: String?) {
+        let arguments = jsonString([
+            "cmd": item["command"] as? String ?? "",
+            "workdir": item["cwd"] as? String ?? "",
+        ])
+        let status = item["status"] as? String
+        let exitCode = item["exitCode"] as? Int
+        return (
+            "exec_command",
+            arguments,
+            item["aggregatedOutput"] as? String,
+            status == "failed" || (exitCode.map { $0 != 0 } ?? false),
+            exitCode.map(String.init)
+        )
+    }
+
+    private static func fileChangeTool(
+        from item: [String: Any]
+    ) -> (name: String, arguments: String, output: String?, failed: Bool, exitCode: String?) {
+        let changes = item["changes"] as? [Any] ?? []
+        let status = item["status"] as? String
+        return (
+            "file_change",
+            jsonString(["changes": changes]),
+            jsonString(["status": status ?? "completed", "changes": changes]),
+            status == "failed",
+            nil
+        )
+    }
+
+    private static func mcpTool(
+        from item: [String: Any]
+    ) -> (name: String, arguments: String, output: String?, failed: Bool, exitCode: String?) {
+        let server = normalizedString(item["server"])
+        let name = [server, normalizedString(item["tool"])].compactMap { $0 }.joined(separator: ".")
+        let status = item["status"] as? String
+        let error = nonNullValue(item["error"])
+        let outputValue = error ?? nonNullValue(item["result"])
+        return (
+            name.isEmpty ? "mcp_tool" : name,
+            jsonString(item["arguments"]),
+            outputValue.map(jsonString),
+            status == "failed" || error != nil,
+            nil
+        )
+    }
+
+    private static func dynamicTool(
+        from item: [String: Any]
+    ) -> (name: String, arguments: String, output: String?, failed: Bool, exitCode: String?) {
+        let namespace = normalizedString(item["namespace"])
+        let name = [namespace, normalizedString(item["tool"])].compactMap { $0 }.joined(separator: ".")
+        let status = item["status"] as? String
+        return (
+            name.isEmpty ? "dynamic_tool" : name,
+            jsonString(item["arguments"]),
+            nonNullValue(item["contentItems"]).map(jsonString),
+            status == "failed" || item["success"] as? Bool == false,
+            nil
+        )
+    }
+
+    private static func collaborationTool(
+        from item: [String: Any]
+    ) -> (name: String, arguments: String, output: String?, failed: Bool, exitCode: String?) {
+        let rawTool = item["tool"] as? String ?? "collaboration"
+        let name = switch rawTool {
+        case "spawnAgent": "spawn_agent"
+        case "sendInput": "send_message"
+        case "resumeAgent": "resume_agent"
+        case "wait": "wait_agent"
+        case "closeAgent": "close_agent"
+        default: rawTool
+        }
+        var arguments: [String: Any] = [:]
+        for key in ["prompt", "model", "reasoningEffort", "receiverThreadIds"] {
+            if let value = item[key], !(value is NSNull) {
+                arguments[key] = value
+            }
+        }
+        let status = item["status"] as? String
+        let output = jsonString([
+            "status": status ?? "completed",
+            "agents": item["agentsStates"] ?? [:],
+        ])
+        return (name, jsonString(arguments), output, status == "failed", nil)
+    }
+
+    private static func subagentActivityTool(
+        from item: [String: Any]
+    ) -> (name: String, arguments: String, output: String?, failed: Bool, exitCode: String?) {
+        let fields: [String: Any] = [
+            "agent": item["agentPath"] ?? "",
+            "thread": item["agentThreadId"] ?? "",
+            "activity": item["kind"] ?? "updated",
+        ]
+        return ("parallel_agent_activity", jsonString(fields), jsonString(fields), false, nil)
+    }
+
+    private static func normalizedString(_ value: Any?) -> String? {
+        guard let string = value as? String else { return nil }
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func nonNullValue(_ value: Any?) -> Any? {
+        guard let value, !(value is NSNull) else { return nil }
+        return value
+    }
+
+    private static func argumentsByAddingSourceThreadID(_ threadID: String, to arguments: String) -> String {
+        guard let data = arguments.data(using: .utf8),
+              var dictionary = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return arguments
+        }
+        dictionary["agentThreadId"] = threadID
+        return jsonString(dictionary)
+    }
+
+    private static func jsonString(_ value: Any?) -> String {
+        guard let value else { return "" }
+        if let string = value as? String { return string }
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+              let string = String(data: data, encoding: .utf8) else {
+            return String(describing: value)
+        }
+        return string
+    }
+}
+
+nonisolated struct CodexAppServerLiveItemRouter {
+    private var relatedThreadIDs: Set<String> = []
+    private var bufferedUpdatesByThreadID: [String: [AgentChatStreamingUpdate]] = [:]
+
+    mutating func route(
+        _ update: AgentChatStreamingUpdate,
+        eventThreadID: String,
+        rootThreadID: String?,
+        newlyRelatedThreadIDs: [String]
+    ) -> [AgentChatStreamingUpdate] {
+        let belongsToVisibleConversation = eventThreadID == rootThreadID
+            || relatedThreadIDs.contains(eventThreadID)
+        guard belongsToVisibleConversation else {
+            if bufferedUpdatesByThreadID[eventThreadID] != nil || bufferedUpdatesByThreadID.count < 32 {
+                var buffered = bufferedUpdatesByThreadID[eventThreadID] ?? []
+                if buffered.count < 100 {
+                    buffered.append(update)
+                    bufferedUpdatesByThreadID[eventThreadID] = buffered
+                }
+            }
+            return []
+        }
+
+        relatedThreadIDs.formUnion(newlyRelatedThreadIDs)
+        let releasedUpdates = newlyRelatedThreadIDs.flatMap {
+            bufferedUpdatesByThreadID.removeValue(forKey: $0) ?? []
+        }
+        return releasedUpdates + [update]
     }
 }
 
@@ -239,6 +474,10 @@ public nonisolated final class AgentChatStreamingCoalescer: Sendable {
                 ))
             }
         }
+    }
+
+    public func flush() {
+        deliverPendingUpdates()
     }
 
     private func markPending(itemID: String, state: inout State) {
@@ -855,6 +1094,7 @@ public nonisolated enum AgentChatRuntime {
             var pendingSteerInputsByRequestID: [Int: AgentChatSteerInput] = [:]
             var assistantMessageOrder: [String] = []
             var assistantMessagesByID: [String: String] = [:]
+            var liveItemRouter = CodexAppServerLiveItemRouter()
         }
 
         let connectionConfiguration = CodexAppServerConnectionConfiguration(
@@ -985,6 +1225,42 @@ public nonisolated enum AgentChatRuntime {
                 .joined()
         }
 
+        func routeLiveToolItem(_ item: [String: Any], params: [String: Any], isFinal: Bool) {
+            guard let onStreamingUpdate,
+                  let eventThreadID = normalizedNonEmpty(params["threadId"] as? String) else {
+                return
+            }
+
+            lock.lock()
+            let rootThreadID = state.threadID
+            let sourceThreadID = eventThreadID == rootThreadID ? nil : eventThreadID
+            guard let update = CodexAppServerLiveItemUpdate.update(
+                for: item,
+                isFinal: isFinal,
+                sourceThreadID: sourceThreadID
+            ) else {
+                lock.unlock()
+                return
+            }
+            let relatedThreadIDs = CodexAppServerLiveItemUpdate.receiverThreadIDs(from: item)
+            let routedUpdates = state.liveItemRouter.route(
+                update,
+                eventThreadID: eventThreadID,
+                rootThreadID: rootThreadID,
+                newlyRelatedThreadIDs: relatedThreadIDs
+            )
+            lock.unlock()
+
+            guard !routedUpdates.isEmpty else { return }
+
+            streamingCoalescer?.flush()
+            DispatchQueue.main.async {
+                for routedUpdate in routedUpdates {
+                    onStreamingUpdate(routedUpdate)
+                }
+            }
+        }
+
         func handleJSONLine(_ line: String) {
             guard let object = parseJSONObject(line) else { return }
 
@@ -1085,8 +1361,21 @@ public nonisolated enum AgentChatRuntime {
                 lock.unlock()
             case "item/started":
                 guard let item = params["item"] as? [String: Any],
-                      let itemType = item["type"] as? String,
-                      itemType == "agentMessage",
+                      let itemType = item["type"] as? String else {
+                    return
+                }
+
+                let eventThreadID = normalizedNonEmpty(params["threadId"] as? String)
+                lock.lock()
+                let rootThreadID = state.threadID
+                lock.unlock()
+
+                if itemType != "agentMessage" {
+                    routeLiveToolItem(item, params: params, isFinal: false)
+                    return
+                }
+
+                guard eventThreadID == rootThreadID,
                       let itemID = normalizedNonEmpty(item["id"] as? String) else {
                     return
                 }
@@ -1102,7 +1391,12 @@ public nonisolated enum AgentChatRuntime {
                 lock.unlock()
                 streamingCoalescer?.begin(itemID: itemID, initialText: itemText)
             case "item/agentMessage/delta":
-                guard let itemID = normalizedNonEmpty(params["itemId"] as? String),
+                let eventThreadID = normalizedNonEmpty(params["threadId"] as? String)
+                lock.lock()
+                let rootThreadID = state.threadID
+                lock.unlock()
+                guard eventThreadID == rootThreadID,
+                      let itemID = normalizedNonEmpty(params["itemId"] as? String),
                       let delta = params["delta"] as? String else {
                     return
                 }
@@ -1116,8 +1410,21 @@ public nonisolated enum AgentChatRuntime {
                 streamingCoalescer?.append(delta: delta, itemID: itemID)
             case "item/completed":
                 guard let item = params["item"] as? [String: Any],
-                      let itemType = item["type"] as? String,
-                      itemType == "agentMessage",
+                      let itemType = item["type"] as? String else {
+                    return
+                }
+
+                let eventThreadID = normalizedNonEmpty(params["threadId"] as? String)
+                lock.lock()
+                let rootThreadID = state.threadID
+                lock.unlock()
+
+                if itemType != "agentMessage" {
+                    routeLiveToolItem(item, params: params, isFinal: true)
+                    return
+                }
+
+                guard eventThreadID == rootThreadID,
                       let itemID = normalizedNonEmpty(item["id"] as? String) else {
                     return
                 }

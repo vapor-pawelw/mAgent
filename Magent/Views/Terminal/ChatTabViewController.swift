@@ -1665,6 +1665,7 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         authoritativeMessage message: PersistedChatMessage
     ) -> Bool {
         guard message.id == renderedMessage.id,
+              update.toolEvent == nil,
               supportsStreamingUpdate,
               message.role == .assistant,
               message.attachments.isEmpty,
