@@ -6,6 +6,7 @@ extension Notification.Name {
     static let magentAgentCompletionDetected = Notification.Name("magentAgentCompletionDetected")
     static let magentAgentWaitingForInput = Notification.Name("magentAgentWaitingForInput")
     static let magentAgentBusySessionsChanged = Notification.Name("magentAgentBusySessionsChanged")
+    static let magentAgentShellStateChanged = Notification.Name("magentAgentShellStateChanged")
     static let magentAgentRateLimitChanged = Notification.Name("magentAgentRateLimitChanged")
     static let magentGlobalRateLimitSummaryChanged = Notification.Name("magentGlobalRateLimitSummaryChanged")
     static let magentSectionsDidChange = Notification.Name("magentSectionsDidChange")

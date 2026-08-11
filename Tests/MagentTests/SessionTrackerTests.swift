@@ -5,6 +5,18 @@ import MagentCore
 @Suite
 struct SessionTrackerTests {
 
+    @Test("Agent start offer requires an otherwise idle shell")
+    func agentStartOfferRequiresIdleShell() {
+        #expect(AgentSessionProcessState.isShellOnly(paneCommand: "zsh", childProcesses: []))
+        #expect(AgentSessionProcessState.isShellOnly(paneCommand: "-zsh", childProcesses: []))
+        #expect(AgentSessionProcessState.isShellOnly(paneCommand: "/bin/bash", childProcesses: []))
+        #expect(!AgentSessionProcessState.isShellOnly(
+            paneCommand: "zsh",
+            childProcesses: [(pid: 42, args: "python server.py")]
+        ))
+        #expect(!AgentSessionProcessState.isShellOnly(paneCommand: "codex", childProcesses: []))
+    }
+
     @Test
     func terminationDrainIncludesSessionsAddedAfterInitialSnapshot() {
         var drain = SessionTerminationDrain()

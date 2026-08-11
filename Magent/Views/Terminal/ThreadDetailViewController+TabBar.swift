@@ -529,6 +529,7 @@ extension ThreadDetailViewController {
         refreshPendingPromptBanner()
         refreshInitialPromptFailureBanner()
         refreshPendingPromptBanner()
+        refreshAgentShellBanner()
 
         // Clear unread completion, waiting, and rate limit indicators for this tab
         guard index < tabItems.count else { return true }
