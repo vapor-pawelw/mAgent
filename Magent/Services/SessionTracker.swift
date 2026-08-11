@@ -39,6 +39,24 @@ enum AgentSessionProcessState {
     }
 }
 
+enum AgentShellRelaunchOfferPolicy {
+    static let revealDelay: Duration = .seconds(7)
+    static let recheckInterval: Duration = .seconds(1)
+    static let maximumRecheckCount = 5
+
+    static func isCandidate(
+        isTrackedAgentSession: Bool,
+        configuredAgentType: AgentType?,
+        displayName: String
+    ) -> Bool {
+        guard isTrackedAgentSession,
+              configuredAgentType != nil else { return false }
+
+        return !TmuxSessionNaming.looksLikeDefaultTabName(displayName, for: nil)
+            && !TmuxSessionNaming.looksLikeAllocatorSuffixedDefaultTabName(displayName, for: nil)
+    }
+}
+
 /// Metadata cached after verifying a session belongs to its expected thread/path context.
 /// Avoids re-querying tmux on every `ensureSessionPrepared` call when nothing has changed.
 struct KnownGoodSessionContext {

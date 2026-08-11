@@ -17,6 +17,40 @@ struct SessionTrackerTests {
         #expect(!AgentSessionProcessState.isShellOnly(paneCommand: "codex", childProcesses: []))
     }
 
+    @Test("Agent relaunch offer excludes terminal-only sessions")
+    func agentRelaunchOfferExcludesTerminalOnlySessions() {
+        #expect(!AgentShellRelaunchOfferPolicy.isCandidate(
+            isTrackedAgentSession: true,
+            configuredAgentType: .codex,
+            displayName: "Terminal"
+        ))
+        #expect(!AgentShellRelaunchOfferPolicy.isCandidate(
+            isTrackedAgentSession: true,
+            configuredAgentType: .claude,
+            displayName: "Terminal-2"
+        ))
+        #expect(!AgentShellRelaunchOfferPolicy.isCandidate(
+            isTrackedAgentSession: true,
+            configuredAgentType: nil,
+            displayName: "Implement login flow"
+        ))
+        #expect(AgentShellRelaunchOfferPolicy.revealDelay == .seconds(7))
+    }
+
+    @Test("Agent relaunch offer recognizes agent tab names")
+    func agentRelaunchOfferRecognizesAgentTabNames() {
+        #expect(AgentShellRelaunchOfferPolicy.isCandidate(
+            isTrackedAgentSession: true,
+            configuredAgentType: .codex,
+            displayName: "Codex"
+        ))
+        #expect(AgentShellRelaunchOfferPolicy.isCandidate(
+            isTrackedAgentSession: true,
+            configuredAgentType: .claude,
+            displayName: "Implement login flow"
+        ))
+    }
+
     @Test
     func terminationDrainIncludesSessionsAddedAfterInitialSnapshot() {
         var drain = SessionTerminationDrain()
