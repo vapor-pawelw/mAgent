@@ -255,7 +255,7 @@ extension ThreadDetailViewController {
         promptTOCCanShowForCurrentTab = true
         applyPromptTOCVisibility()
         if !hasVisibleEntries {
-            promptTOCView?.setLoading(agentType: agentType)
+            promptTOCView?.setLoading(knownPromptCount: knownPromptCount)
         }
 
         guard let capturedEntries = await capturePromptEntries(
@@ -1793,8 +1793,10 @@ enum TOCResizeCorner {
 
 final class PromptTOCPinnedResizeHandleView: NSView {
     override func draw(_ dirtyRect: NSRect) {
-        PromptTOCPinnedResizeStyle.dividerColor.setFill()
-        PromptTOCPinnedResizeStyle.dividerRect(in: bounds).fill()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            PromptTOCPinnedResizeStyle.dividerColor(appearance: effectiveAppearance).setFill()
+            PromptTOCPinnedResizeStyle.dividerRect(in: bounds).fill()
+        }
     }
 
     override func resetCursorRects() {
@@ -1858,11 +1860,11 @@ final class PromptTableOfContentsView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func setLoading(agentType: AgentType?) {
+    func setLoading(knownPromptCount: Int) {
         preservedScrollOffsetY = currentScrollOffsetY()
         shouldRestoreScrollToTopAfterReload = isScrolledToTopOrNearTop()
         previouslyNewestEntry = tocEntries.last
-        updateCountLabel("…")
+        updateCountLabel(PromptTOCHeaderLayout.loadingCountText(knownPromptCount: knownPromptCount))
         spinner.isHidden = false
         spinner.startAnimation(nil)
         emptyLabel.isHidden = true
@@ -2136,7 +2138,10 @@ final class PromptTableOfContentsView: NSView {
         rowsContainer.addSubview(rowsStack)
 
         NSLayoutConstraint.activate([
-            rowsStack.topAnchor.constraint(equalTo: rowsContainer.topAnchor),
+            rowsStack.topAnchor.constraint(
+                equalTo: rowsContainer.topAnchor,
+                constant: PromptTOCHeaderLayout.listTopInset
+            ),
             rowsStack.leadingAnchor.constraint(equalTo: rowsContainer.leadingAnchor),
             rowsStack.trailingAnchor.constraint(equalTo: rowsContainer.trailingAnchor),
             rowsStack.bottomAnchor.constraint(equalTo: rowsContainer.bottomAnchor),
@@ -2247,16 +2252,21 @@ final class PromptTableOfContentsView: NSView {
 
             if !collapsed {
                 // Start header background animation at the same time as frame expand (0.22s) + content delay (0.20s) + fade (0.14s) = 0.56s total
-                let targetColor = NSColor.separatorColor.withAlphaComponent(0.14)
+                var targetColor = NSColor.clear.cgColor
+                effectiveAppearance.performAsCurrentDrawingAppearance {
+                    targetColor = PromptTOCHeaderLayout.backgroundColor(
+                        appearance: effectiveAppearance
+                    ).cgColor
+                }
                 let headerBgAnim = CABasicAnimation(keyPath: "backgroundColor")
                 headerBgAnim.fromValue = NSColor.clear.cgColor
-                headerBgAnim.toValue = targetColor.cgColor
+                headerBgAnim.toValue = targetColor
                 headerBgAnim.duration = 0.56
                 headerBgAnim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 headerBgAnim.fillMode = .forwards
                 headerBgAnim.isRemovedOnCompletion = false
                 headerBackgroundView.layer?.add(headerBgAnim, forKey: "headerBgExpand")
-                headerBackgroundView.layer?.backgroundColor = targetColor.cgColor
+                headerBackgroundView.layer?.backgroundColor = targetColor
             }
 
             if !collapsed {
@@ -2545,7 +2555,9 @@ final class PromptTableOfContentsView: NSView {
             }
             layer?.backgroundColor = backgroundColor.cgColor
 
-            headerBackgroundView.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.14).cgColor
+            headerBackgroundView.layer?.backgroundColor = PromptTOCHeaderLayout.backgroundColor(
+                appearance: effectiveAppearance
+            ).cgColor
 
             headerIcon.contentTintColor = NSColor(resource: .textSecondary)
             pinButton.contentTintColor = NSColor(resource: .textSecondary)

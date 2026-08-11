@@ -210,8 +210,11 @@ enum PromptTOCRefreshPolicy {
 }
 
 enum PromptTOCPinnedResizeStyle {
-    static var dividerColor: NSColor { .tertiaryLabelColor }
     static var cursor: NSCursor { .resizeLeftRight }
+
+    static func dividerColor(appearance: NSAppearance) -> NSColor {
+        PromptTOCHeaderLayout.backgroundColor(appearance: appearance)
+    }
 
     static func dividerRect(in bounds: CGRect) -> CGRect {
         CGRect(x: bounds.minX, y: bounds.minY, width: 1, height: bounds.height)
@@ -237,6 +240,19 @@ enum PromptTOCHeaderLayout {
     static let countFont = NSFont.systemFont(ofSize: 13, weight: .bold)
     static let countLabelHorizontalInset: CGFloat = 6
     static let countBadgeMinimumWidth: CGFloat = 20
+    static let listTopInset: CGFloat = 8
+
+    static func backgroundColor(appearance: NSAppearance) -> NSColor {
+        StandardThreadCapsuleBackgroundStyle.fill(
+            isSelected: false,
+            appearance: appearance,
+            accentColor: .controlAccentColor
+        )
+    }
+
+    static func loadingCountText(knownPromptCount: Int) -> String {
+        "\(max(0, knownPromptCount))"
+    }
 
     static func countBadgeWidth(for text: String) -> CGFloat {
         let measuredWidth = (text as NSString).size(withAttributes: [.font: countFont]).width

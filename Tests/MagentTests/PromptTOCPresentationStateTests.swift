@@ -67,9 +67,21 @@ struct PromptTOCPresentationStateTests {
         )
     }
 
-    @Test("Pinned divider matches toolbar separators and uses the horizontal resize cursor")
+    @Test("Pinned divider matches the TOC header and uses the horizontal resize cursor")
     func pinnedDividerAppearanceAndCursor() {
-        #expect(PromptTOCPinnedResizeStyle.dividerColor == NSColor.tertiaryLabelColor)
+        let appearance = NSAppearance(named: .darkAqua)!
+        #expect(
+            PromptTOCPinnedResizeStyle.dividerColor(appearance: appearance)
+                == PromptTOCHeaderLayout.backgroundColor(appearance: appearance)
+        )
+        #expect(
+            PromptTOCHeaderLayout.backgroundColor(appearance: appearance)
+                == StandardThreadCapsuleBackgroundStyle.fill(
+                    isSelected: false,
+                    appearance: appearance,
+                    accentColor: .controlAccentColor
+                )
+        )
         #expect(PromptTOCPinnedResizeStyle.cursor === NSCursor.resizeLeftRight)
     }
 
@@ -98,6 +110,12 @@ struct PromptTOCPresentationStateTests {
                 (2 * PromptTOCHeaderLayout.countLabelHorizontalInset)
         )
         #expect(multiDigitWidth > singleDigitWidth)
+    }
+
+    @Test("TOC refresh keeps the known prompt count visible")
+    func loadingCountKeepsKnownValue() {
+        #expect(PromptTOCHeaderLayout.loadingCountText(knownPromptCount: 42) == "42")
+        #expect(PromptTOCHeaderLayout.loadingCountText(knownPromptCount: 0) == "0")
     }
 
     @Test("TOC row keeps its ordinal separate and expands its pinned preview")

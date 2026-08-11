@@ -2592,7 +2592,7 @@ final class ThreadDetailViewController: NSViewController {
 }
 
 final class VerticalSeparatorView: NSView {
-    static var separatorColor: NSColor { PromptTOCPinnedResizeStyle.dividerColor }
+    static var separatorColor: NSColor { .tertiaryLabelColor }
 
     override var intrinsicContentSize: NSSize { NSSize(width: 1, height: 18) }
     override func draw(_ dirtyRect: NSRect) {
