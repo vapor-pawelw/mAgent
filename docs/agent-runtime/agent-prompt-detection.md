@@ -49,7 +49,7 @@ Falls back to a content-volume heuristic: the pane is considered ready when it h
 
 ## Shell & Agent Startup
 
-- **Shell CWD**: Uses managed `ZDOTDIR` (`/tmp/magent-zdotdir`) with `MAGENT_START_CWD` env var. Do not reintroduce post-start `send-keys cd` — the managed zshrc handles cwd after user rc/profile loads. If `/tmp` was cleared, `terminalStartCommand(...)` recreates the zdotdir.
+- **Shell profiles and CWD**: Uses managed `ZDOTDIR` (`/tmp/magent-zdotdir`) with `MAGENT_START_CWD`. Standard terminal tabs source user shell files; agent tabs use an isolated profile that skips all user dotfiles while retaining Magent helpers and a minimal executable `PATH`. Do not reintroduce post-start `send-keys cd` — the managed zshrc handles cwd. If `/tmp` was cleared, startup recreates the zdotdir.
 - **Agent binary invocation**: Always prefix with `command` built-in (e.g. `command claude`, `command codex`) in `AppSettings.command(for:)` and `resumableAgentCommand`. User shell functions for `claude`/`codex` can inject conflicting flags; `command` resolves the binary directly, skipping functions and aliases.
 - **Interactive shell blockers**: If `waitForAgentPrompt` times out, check pane for `[Y/n]`, `Press any key`, etc. via `detectsInteractiveShellBlocker` before sending text. Abort injection and show retry banner if found.
 
