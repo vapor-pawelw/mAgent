@@ -291,6 +291,8 @@ final class ThreadDetailViewController: NSViewController {
     var recoveryBannerTopConstraint: NSLayoutConstraint?
     var agentShellBanner: BannerView?
     var agentShellBannerSessionName: String?
+    var agentShellBannerPendingSessionName: String?
+    var agentShellBannerRevealTask: Task<Void, Never>?
     var agentStartRequestedSessions: Set<String> = []
     private var pendingPromptRecoveryReminderState = PendingPromptRecoveryReminderState()
     var showsPendingPromptRecoveryReminder: Bool {
@@ -624,6 +626,7 @@ final class ThreadDetailViewController: NSViewController {
     /// before this controller is removed. Called from SplitContentContainerViewController.setContent
     /// since deinit can't access @MainActor properties.
     func cleanUpBeforeRemoval() {
+        cancelAgentShellBannerReveal()
         promptTOCPeriodicRefreshTask?.cancel()
         promptTOCPeriodicRefreshTask = nil
         promptTOCNavigationTask?.cancel()
@@ -650,6 +653,7 @@ final class ThreadDetailViewController: NSViewController {
         promptTOCRefreshTask?.cancel()
         scrollFABRefreshTask?.cancel()
         backgroundSessionPreparationTask?.cancel()
+        agentShellBannerRevealTask?.cancel()
         sessionPreparationTasks.values.forEach { $0.cancel() }
         let chatRequestTasks = chatRequestTasksByIdentifier.values
         let chatStreamingCheckpointTasks = chatStreamingCheckpointTasksByIdentifier.values
@@ -2174,19 +2178,70 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func refreshAgentShellBanner() {
-        guard initialPromptFailureBanner == nil,
-              pendingPromptBanner == nil,
-              recoveryBanner == nil,
-              let sessionName = currentSessionName(),
-              thread.agentTmuxSessions.contains(sessionName),
-              !agentStartRequestedSessions.contains(sessionName),
-              threadManager.isAgentSessionAtShell(sessionName) else {
+        guard let sessionName = currentSessionName(),
+              isAgentShellBannerCandidate(sessionName: sessionName) else {
+            cancelAgentShellBannerReveal()
+            dismissAgentShellBanner()
+            return
+        }
+        guard threadManager.isAgentSessionAtShell(sessionName) else {
             dismissAgentShellBanner()
             return
         }
         guard agentShellBannerSessionName != sessionName || agentShellBanner == nil else { return }
+        guard agentShellBannerPendingSessionName != sessionName else { return }
 
         dismissAgentShellBanner()
+        cancelAgentShellBannerReveal()
+        agentShellBannerPendingSessionName = sessionName
+        agentShellBannerRevealTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: AgentShellRelaunchOfferPolicy.revealDelay)
+            guard !Task.isCancelled, let self else { return }
+
+            for recheck in 0...AgentShellRelaunchOfferPolicy.maximumRecheckCount {
+                guard self.isAgentShellBannerCandidate(sessionName: sessionName) else {
+                    self.agentShellBannerRevealTask = nil
+                    self.agentShellBannerPendingSessionName = nil
+                    return
+                }
+                if self.threadManager.isAgentSessionAtShell(sessionName) {
+                    self.agentShellBannerRevealTask = nil
+                    self.agentShellBannerPendingSessionName = nil
+                    self.showAgentShellBannerIfEligible(sessionName: sessionName)
+                    return
+                }
+                guard recheck < AgentShellRelaunchOfferPolicy.maximumRecheckCount else { break }
+                try? await Task.sleep(for: AgentShellRelaunchOfferPolicy.recheckInterval)
+                guard !Task.isCancelled else { return }
+            }
+
+            self.agentShellBannerRevealTask = nil
+            self.agentShellBannerPendingSessionName = nil
+        }
+    }
+
+    private func isAgentShellBannerCandidate(sessionName: String) -> Bool {
+        guard initialPromptFailureBanner == nil,
+              pendingPromptBanner == nil,
+              recoveryBanner == nil,
+              currentSessionName() == sessionName,
+              !agentStartRequestedSessions.contains(sessionName) else { return false }
+
+        let currentThread = latestThreadSnapshot()
+        guard let sessionIndex = currentThread.tmuxSessionNames.firstIndex(of: sessionName) else {
+            return false
+        }
+        return AgentShellRelaunchOfferPolicy.isCandidate(
+            isTrackedAgentSession: currentThread.agentTmuxSessions.contains(sessionName),
+            configuredAgentType: currentThread.sessionAgentTypes[sessionName],
+            displayName: currentThread.displayName(for: sessionName, at: sessionIndex)
+        )
+    }
+
+    private func showAgentShellBannerIfEligible(sessionName: String) {
+        guard isAgentShellBannerCandidate(sessionName: sessionName),
+              threadManager.isAgentSessionAtShell(sessionName) else { return }
+
         let banner = BannerView(config: BannerConfig(
             message: "The agent has exited and this tab is back at its shell.",
             style: .info,
@@ -2231,6 +2286,12 @@ final class ThreadDetailViewController: NSViewController {
         agentShellBanner?.removeFromSuperview()
         agentShellBanner = nil
         agentShellBannerSessionName = nil
+    }
+
+    private func cancelAgentShellBannerReveal() {
+        agentShellBannerRevealTask?.cancel()
+        agentShellBannerRevealTask = nil
+        agentShellBannerPendingSessionName = nil
     }
 
     private func copyPromptToPasteboard(_ prompt: String) {
