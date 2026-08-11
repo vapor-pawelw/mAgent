@@ -41,6 +41,8 @@ Codex uses `─────────` separator lines between conversation tu
 
 Prompt detection must drop trailing blank/filler lines before clipping to its "recent lines" window. On tall tmux panes, Codex can leave the real `›` placeholder prompt well above a large block of empty bottom space; taking the last N raw lines first can miss the visible prompt entirely and cause false startup timeouts.
 
+An empty composer is not sufficient during startup: Codex can render it while MCP servers or other interruptible startup work is still active. Initial-prompt injection also requires the pane's Codex activity state to remain idle for a one-second stabilization window. Two consecutive busy or missing-composer observations reset that window; tolerating one observation avoids false resets from a torn redraw while still preventing Enter from turning the initial prompt into a queued follow-up.
+
 The tmux capture window must therefore stay wider than the recent-line suffix used by readiness detection. Current implementation captures the last 120 pane lines, trims filler, and only then narrows to the recent prompt-check window. Future refactors must preserve that order rather than shrinking `capture-pane` back down to the same size as the final suffix.
 
 ## Custom / Unknown Agent

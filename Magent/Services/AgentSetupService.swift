@@ -163,7 +163,11 @@ final class AgentSetupService {
         interval: TimeInterval = 0.3
     ) async -> Bool {
         let needsAnsi = agentType == .codex
-        let deadline = Date().addingTimeInterval(timeout)
+        var codexReadinessGate = CodexInitialPromptReadinessGate()
+        let stabilizationAllowance = agentType == .codex
+            ? codexReadinessGate.minimumStableDuration + interval
+            : 0
+        let deadline = Date().addingTimeInterval(timeout + stabilizationAllowance)
         while Date() < deadline {
             let content: String?
             if needsAnsi {
@@ -177,8 +181,19 @@ final class AgentSetupService {
                     lastLines: Self.agentPromptCaptureLines
                 )
             }
-            if let content, isAgentPromptReady(content, agentType: agentType) {
-                return true
+            if let content {
+                let composerReady = isAgentPromptReady(content, agentType: agentType)
+                if agentType == .codex {
+                    if codexReadinessGate.observe(
+                        at: Date(),
+                        composerReady: composerReady,
+                        paneIsBusy: CodexPaneActivity.isBusy(in: content)
+                    ) {
+                        return true
+                    }
+                } else if composerReady {
+                    return true
+                }
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
