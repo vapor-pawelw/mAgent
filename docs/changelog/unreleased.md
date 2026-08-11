@@ -39,7 +39,7 @@
 - Unified new and forked thread creation with a context-aware visual source picker for starting from the main worktree, another thread, or any branch.
 - Added `magent-cli finish-thread` to safely merge, optionally push, and archive any managed thread across registered repositories while leaving repository-specific preparation to caller-owned workflows.
 - Pin the prompt Table of Contents beside terminal and chat content, browse newest-first high-contrast numbered rows with roomier pinned previews, then resize or detach the split while terminal content immediately reclaims the available width.
-- Prompt Table of Contents rows now show a readable relative start time and, when space permits, a trailing worked duration, with exact timing available on hover.
+- Prompt Table of Contents rows now keep showing their cached relative start time and worked duration after terminal history rolls over, with exact timing and navigation availability on hover.
 
 #### Improvements
 
@@ -59,7 +59,7 @@
 - Prevented stale AI rename error banners after deleting, archiving, or otherwise removing a thread while its rename was still running.
 - Kept PR and Jira action titles readable on one line when the window toolbar is narrow.
 - Prevented simultaneous thread archives from racing on the main worktree, Local Sync files, or git metadata, with queued agent workflows now reporting the active thread and their live queue position.
-- Kept the prompt Table of Contents populated when returning to a cached agent tab, refreshed it periodically and after Escape steering, and made prompt jumps remain accurate after terminal history rolls over.
+- Kept the prompt Table of Contents populated without duplicating transient live renderings of cached prompts, refreshed it periodically and after Escape steering, and made prompt jumps remain accurate after terminal history rolls over.
 - Kept the permanent Terminal and Diff tabs in their trailing positions even when restored agent or content tabs appear first in persisted session order.
 - Fixed automatic AI naming for additional agent terminal tabs whose duplicate default or model/effort labels receive a numeric suffix.
 - Fixed renaming a terminal tab unnecessarily reloading its terminal view.
