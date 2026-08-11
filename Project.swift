@@ -174,6 +174,7 @@ let project = Project(
                 "Magent/Views/ThreadList/ThreadRowBadgeLayout.swift",
                 "Magent/Views/ThreadList/ThreadRowCapsuleStyle.swift",
                 "Magent/Views/ThreadList/ThreadRowContentOpacity.swift",
+                "Magent/Views/NonFlashingScrollView.swift",
                 "Magent/Views/Terminal/ThreadTopBarLayout.swift",
                 "Magent/Views/Terminal/ThreadCreationSourceSelection.swift",
                 "Magent/Views/Terminal/AgentLaunchPromptTextCommand.swift",

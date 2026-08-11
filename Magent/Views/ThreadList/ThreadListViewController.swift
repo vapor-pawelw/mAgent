@@ -934,7 +934,7 @@ final class ThreadListViewController: NSViewController {
         menu.delegate = self
         outlineView.menu = menu
 
-        scrollView = NonFlashingScrollView()
+        scrollView = SmoothDiscreteScrollView()
         scrollView.documentView = outlineView
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.hasVerticalScroller = false
