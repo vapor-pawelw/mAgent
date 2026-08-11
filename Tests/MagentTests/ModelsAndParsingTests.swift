@@ -83,6 +83,7 @@ struct AutomaticTabNamingTests {
         #expect(codex.contains("--ignore-user-config"))
         #expect(codex.contains("--ignore-rules"))
         #expect(codex.contains("--ephemeral"))
+        #expect(codex.contains("--model gpt-5.6-luna"))
         #expect(claude.contains("command claude -p"))
         #expect(claude.contains("--tools \"\""))
         #expect(claude.contains("--setting-sources \"\""))
