@@ -110,10 +110,10 @@ public enum CodexPaneActivity {
             return trimmed.count >= 20 && trimmed.allSatisfy { $0 == "─" }
         }
         let scopedStart = separatorIndex.map { lines.index(after: $0) } ?? lines.startIndex
-        let recentLines = lines[scopedStart...]
+        let recentLines = Array(lines[scopedStart...]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-            .suffix(maxLines)
+            .suffix(maxLines))
 
         // Codex keeps the composer below MCP startup progress, so the lower prompt
         // does not mean the session is idle while that interruptible row is visible.
@@ -125,8 +125,17 @@ public enum CodexPaneActivity {
             return true
         }
 
-        for line in recentLines.reversed() {
+        for index in recentLines.indices.reversed() {
+            let line = recentLines[index]
             if line.hasPrefix("\u{203A}") {
+                // Codex keeps its composer visible while working. Its box edge can
+                // separate the active status from the prompt, but real output must
+                // still terminate the lookback so stale Working rows do not latch.
+                for precedingLine in recentLines[..<index].reversed() {
+                    if isBusyStatusLine(precedingLine) { return true }
+                    if isComposerDecorationLine(precedingLine) { continue }
+                    return false
+                }
                 return false
             }
             if isBusyStatusLine(line) {
@@ -134,6 +143,12 @@ public enum CodexPaneActivity {
             }
         }
         return false
+    }
+
+    private static func isComposerDecorationLine(_ line: String) -> Bool {
+        !line.isEmpty && line.unicodeScalars.allSatisfy {
+            CharacterSet.whitespacesAndNewlines.contains($0) || (0x2500...0x257F).contains($0.value)
+        }
     }
 
     public static func isBusyStatusLine(_ line: String) -> Bool {

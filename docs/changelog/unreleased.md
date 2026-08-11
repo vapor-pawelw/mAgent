@@ -15,4 +15,5 @@
 
 #### Bug Fixes
 
+- Thread and tab busy indicators now remain visible when Codex keeps its composer open below an active Working status.
 - Agent completion and input-needed alerts now play their configured sound once instead of sometimes playing it twice when system banners are enabled.

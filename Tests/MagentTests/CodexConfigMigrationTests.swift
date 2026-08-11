@@ -145,6 +145,30 @@ struct CodexConfigMigrationTests {
         #expect(CodexPaneActivity.isBusy(in: pane))
     }
 
+    @Test("Codex remains busy when its composer stays below the Working row")
+    func workingStatusAboveComposerWins() {
+        let pane = """
+        • Ran build command
+        Working (35m 47s • esc to interrupt)
+        ╭──────────────────────────────╮
+        › Explain this codebase
+        """
+
+        #expect(CodexPaneActivity.isBusy(in: pane))
+    }
+
+    @Test("Completed output between Working and the composer remains idle")
+    func completedOutputAboveComposerWins() {
+        let pane = """
+        Working (35m 47s • esc to interrupt)
+        Finished successfully
+
+        › Explain this codebase
+        """
+
+        #expect(!CodexPaneActivity.isBusy(in: pane))
+    }
+
     @Test("Codex MCP startup remains busy while its composer is visible")
     func mcpStartupOverridesComposerPrompt() {
         let pane = """
