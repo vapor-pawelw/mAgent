@@ -1377,12 +1377,22 @@ final class SessionLifecycleService {
             allAgentSessions.formUnion(thread.agentTmuxSessions)
         }
         guard !allAgentSessions.isEmpty else {
+            if sessionTracker.replaceShellOnlyAgentSessions(with: []) {
+                await MainActor.run {
+                    NotificationCenter.default.post(name: .magentAgentShellStateChanged, object: nil)
+                }
+            }
             await publishBusySyncChangesIfNeeded()
             return
         }
 
         let paneStates = await tmux.activePaneStates(forSessions: allAgentSessions)
         guard !paneStates.isEmpty else {
+            if sessionTracker.replaceShellOnlyAgentSessions(with: []) {
+                await MainActor.run {
+                    NotificationCenter.default.post(name: .magentAgentShellStateChanged, object: nil)
+                }
+            }
             await publishBusySyncChangesIfNeeded()
             return
         }
@@ -1396,7 +1406,27 @@ final class SessionLifecycleService {
                 return paneState.pid
             }
         )
-        let childProcessesByPid = await tmux.childProcesses(forParents: unresolvedPanePids)
+        guard let childProcessesByPid = await tmux.childProcessSnapshot(forParents: unresolvedPanePids) else {
+            if sessionTracker.replaceShellOnlyAgentSessions(with: []) {
+                await MainActor.run {
+                    NotificationCenter.default.post(name: .magentAgentShellStateChanged, object: nil)
+                }
+            }
+            await publishBusySyncChangesIfNeeded()
+            return
+        }
+        let shellOnlySessions = Set(paneStates.compactMap { session, paneState in
+            let children = childProcessesByPid[paneState.pid] ?? []
+            return AgentSessionProcessState.isShellOnly(
+                paneCommand: paneState.command,
+                childProcesses: children
+            ) ? session : nil
+        })
+        if sessionTracker.replaceShellOnlyAgentSessions(with: shellOnlySessions) {
+            await MainActor.run {
+                NotificationCenter.default.post(name: .magentAgentShellStateChanged, object: nil)
+            }
+        }
 
         // Snapshot thread IDs and their sessions before iterating. The `store.threads`
         // array can shrink during `await` suspension points (e.g. archive), which
@@ -2232,6 +2262,11 @@ final class SessionLifecycleService {
         for (oldName, newName) in sessionRenameMap {
             if let cached = sessionTracker.lastRuntimeDetectedAgentBySession.removeValue(forKey: oldName) {
                 sessionTracker.lastRuntimeDetectedAgentBySession[newName] = cached
+            }
+            if sessionTracker.rekeyShellOnlyAgentSession(from: oldName, to: newName) {
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .magentAgentShellStateChanged, object: nil)
+                }
             }
         }
 

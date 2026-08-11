@@ -28,6 +28,17 @@ enum AsyncSessionStateReconciler {
     }
 }
 
+enum AgentSessionProcessState {
+    private static let shellCommands: Set<String> = ["sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh"]
+
+    static func isShellOnly(paneCommand: String, childProcesses: [(pid: pid_t, args: String)]) -> Bool {
+        let command = URL(fileURLWithPath: paneCommand).lastPathComponent
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+            .lowercased()
+        return shellCommands.contains(command) && childProcesses.isEmpty
+    }
+}
+
 /// Metadata cached after verifying a session belongs to its expected thread/path context.
 /// Avoids re-querying tmux on every `ensureSessionPrepared` call when nothing has changed.
 struct KnownGoodSessionContext {
@@ -53,6 +64,28 @@ final class SessionTracker {
     var knownGoodSessionContexts: [String: KnownGoodSessionContext] = [:]
     var rendererUnhealthySessions: Set<String> = []
     var replayCorruptedSessions: Set<String> = []
+    private let shellOnlyAgentSessionsLock = NSLock()
+    private var shellOnlyAgentSessions: Set<String> = []
+
+    func shellOnlyAgentSessionsSnapshot() -> Set<String> {
+        shellOnlyAgentSessionsLock.withLock { shellOnlyAgentSessions }
+    }
+
+    func replaceShellOnlyAgentSessions(with sessions: Set<String>) -> Bool {
+        shellOnlyAgentSessionsLock.withLock {
+            guard shellOnlyAgentSessions != sessions else { return false }
+            shellOnlyAgentSessions = sessions
+            return true
+        }
+    }
+
+    func rekeyShellOnlyAgentSession(from oldName: String, to newName: String) -> Bool {
+        shellOnlyAgentSessionsLock.withLock {
+            guard shellOnlyAgentSessions.remove(oldName) != nil else { return false }
+            shellOnlyAgentSessions.insert(newName)
+            return true
+        }
+    }
 
     /// Caches the last runtime-detected agent type per session. When `ps` child-process
     /// detection transiently fails (e.g. Claude reports its version as `pane_current_command`
@@ -92,6 +125,9 @@ final class SessionTracker {
             lastRuntimeDetectedAgentBySession.removeValue(forKey: name)
             rendererUnhealthySessions.remove(name)
             replayCorruptedSessions.remove(name)
+            _ = shellOnlyAgentSessionsLock.withLock {
+                shellOnlyAgentSessions.remove(name)
+            }
         }
     }
 

@@ -848,10 +848,18 @@ public final class TmuxService: Sendable {
 
     /// Returns child processes (pid + full args) for each specified parent PID, in one `ps` call.
     public func childProcesses(forParents parentPids: Set<pid_t>) async -> [pid_t: [(pid: pid_t, args: String)]] {
+        await childProcessSnapshot(forParents: parentPids) ?? [:]
+    }
+
+    /// Returns nil when the process snapshot itself could not be read, allowing
+    /// safety-sensitive callers to distinguish that from a successful empty result.
+    public func childProcessSnapshot(forParents parentPids: Set<pid_t>) async -> [pid_t: [(pid: pid_t, args: String)]]? {
         guard !parentPids.isEmpty else { return [:] }
         guard let output = try? await ShellExecutor.run("ps -o ppid=,pid=,args= -ax"),
-              !output.isEmpty else { return [:] }
-        var result: [pid_t: [(pid: pid_t, args: String)]] = [:]
+              !output.isEmpty else { return nil }
+        var result: [pid_t: [(pid: pid_t, args: String)]] = Dictionary(
+            uniqueKeysWithValues: parentPids.map { ($0, []) }
+        )
         for line in output.split(whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { continue }

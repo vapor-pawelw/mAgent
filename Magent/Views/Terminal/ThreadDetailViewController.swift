@@ -274,6 +274,9 @@ final class ThreadDetailViewController: NSViewController {
     var pendingPromptBannerTopConstraint: NSLayoutConstraint?
     var recoveryBanner: BannerView?
     var recoveryBannerTopConstraint: NSLayoutConstraint?
+    var agentShellBanner: BannerView?
+    var agentShellBannerSessionName: String?
+    var agentStartRequestedSessions: Set<String> = []
     private var pendingPromptRecoveryReminderState = PendingPromptRecoveryReminderState()
     var showsPendingPromptRecoveryReminder: Bool {
         pendingPromptRecoveryReminderState.isReminderVisible
@@ -448,6 +451,12 @@ final class ThreadDetailViewController: NSViewController {
         )
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(handleAgentShellStateChanged),
+            name: .magentAgentShellStateChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(handleAgentRateLimitNotification(_:)),
             name: .magentAgentRateLimitChanged,
             object: nil
@@ -576,6 +585,7 @@ final class ThreadDetailViewController: NSViewController {
         )
 
         refreshRecoveryBanner()
+        refreshAgentShellBanner()
 
         Task {
             await setupTabs()
@@ -1707,6 +1717,7 @@ final class ThreadDetailViewController: NSViewController {
             }
         }
         refreshTabTooltips()
+        refreshAgentShellBanner()
     }
 
     @objc private func handleAgentCompletionNotification(_ notification: Notification) {
@@ -1751,6 +1762,13 @@ final class ThreadDetailViewController: NSViewController {
         guard threadManager.initialPromptInjectionFailure(for: sessionName) != nil else { return }
         threadManager.clearInitialPromptInjectionFailure(for: sessionName)
         refreshInitialPromptFailureBanner()
+    }
+
+    @objc private func handleAgentShellStateChanged() {
+        agentStartRequestedSessions = agentStartRequestedSessions.filter {
+            threadManager.isAgentSessionAtShell($0)
+        }
+        refreshAgentShellBanner()
     }
 
     @objc private func handlePendingPromptInjectionNotification(_ notification: Notification) {
@@ -2102,9 +2120,70 @@ final class ThreadDetailViewController: NSViewController {
         guard let sessionName = currentSessionName(),
               let failure = threadManager.initialPromptInjectionFailure(for: sessionName) else {
             dismissInitialPromptFailureBanner()
+            refreshAgentShellBanner()
             return
         }
         showInitialPromptFailureBanner(sessionName: sessionName, failure: failure)
+    }
+
+    func refreshAgentShellBanner() {
+        guard initialPromptFailureBanner == nil,
+              pendingPromptBanner == nil,
+              recoveryBanner == nil,
+              let sessionName = currentSessionName(),
+              thread.agentTmuxSessions.contains(sessionName),
+              !agentStartRequestedSessions.contains(sessionName),
+              threadManager.isAgentSessionAtShell(sessionName) else {
+            dismissAgentShellBanner()
+            return
+        }
+        guard agentShellBannerSessionName != sessionName || agentShellBanner == nil else { return }
+
+        dismissAgentShellBanner()
+        let banner = BannerView(config: BannerConfig(
+            message: "The agent has exited and this tab is back at its shell.",
+            style: .info,
+            duration: nil,
+            isDismissible: true,
+            actions: [BannerAction(title: "Start Agent") { [weak self] in
+                guard let self else { return }
+                let injection = self.threadManager.effectiveInjection(for: self.thread.projectId)
+                self.agentStartRequestedSessions.insert(sessionName)
+                if self.threadManager.relaunchAgentInExistingSession(
+                    sessionName: sessionName,
+                    agentContext: injection.agentContext,
+                    agentType: self.thread.sessionAgentTypes[sessionName]
+                ) {
+                    self.dismissAgentShellBanner()
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(for: .seconds(15))
+                        guard let self else { return }
+                        self.agentStartRequestedSessions.remove(sessionName)
+                        self.refreshAgentShellBanner()
+                    }
+                } else {
+                    self.agentStartRequestedSessions.remove(sessionName)
+                }
+            }]
+        ))
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        terminalBannerOverlay.addSubview(banner)
+        NSLayoutConstraint.activate([
+            banner.topAnchor.constraint(equalTo: terminalBannerOverlay.topAnchor, constant: 12),
+            banner.centerXAnchor.constraint(equalTo: terminalBannerOverlay.centerXAnchor),
+            banner.leadingAnchor.constraint(greaterThanOrEqualTo: terminalBannerOverlay.leadingAnchor, constant: 20),
+            banner.trailingAnchor.constraint(lessThanOrEqualTo: terminalBannerOverlay.trailingAnchor, constant: -20),
+            banner.widthAnchor.constraint(lessThanOrEqualToConstant: 640),
+        ])
+        agentShellBanner = banner
+        agentShellBannerSessionName = sessionName
+        bringTerminalBannerOverlayToFront()
+    }
+
+    private func dismissAgentShellBanner() {
+        agentShellBanner?.removeFromSuperview()
+        agentShellBanner = nil
+        agentShellBannerSessionName = nil
     }
 
     private func copyPromptToPasteboard(_ prompt: String) {
@@ -2175,6 +2254,7 @@ final class ThreadDetailViewController: NSViewController {
         sessionName: String,
         failure: ThreadManager.InitialPromptInjectionFailureInfo
     ) {
+        dismissAgentShellBanner()
         if initialPromptFailureBannerSessionName == sessionName,
            initialPromptFailureBanner != nil {
             return
@@ -2234,6 +2314,7 @@ final class ThreadDetailViewController: NSViewController {
         guard let sessionName = currentSessionName(),
               let pending = threadManager.pendingPromptInjection(for: sessionName) else {
             dismissPendingPromptBanner()
+            refreshAgentShellBanner()
             return
         }
         showPendingPromptBanner(sessionName: sessionName, pending: pending)
@@ -2243,6 +2324,7 @@ final class ThreadDetailViewController: NSViewController {
         sessionName: String,
         pending: ThreadManager.InitialPromptInjectionFailureInfo
     ) {
+        dismissAgentShellBanner()
         if pendingPromptBannerSessionName == sessionName,
            pendingPromptBanner != nil {
             return
@@ -2330,6 +2412,7 @@ final class ThreadDetailViewController: NSViewController {
             pendingPromptRecoveryReminderState.setRecoverablePromptsAvailable(false)
             dismissRecoveryBanner()
             postPendingPromptRecoveryReminderChanged()
+            refreshAgentShellBanner()
             return
         }
 
@@ -2352,6 +2435,7 @@ final class ThreadDetailViewController: NSViewController {
         recovery: ThreadManager.PendingPromptRecoveryInfo,
         total: Int
     ) {
+        dismissAgentShellBanner()
         // Already showing — skip (actions will refresh on next cycle).
         guard recoveryBanner == nil else { return }
 

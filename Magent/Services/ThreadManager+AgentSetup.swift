@@ -248,6 +248,10 @@ extension ThreadManager {
         await agentSetupService.detectedAgentTypeInSession(sessionName)
     }
 
+    func isAgentSessionAtShell(_ sessionName: String) -> Bool {
+        sessionTracker.shellOnlyAgentSessionsSnapshot().contains(sessionName)
+    }
+
     func agentType(for thread: MagentThread, sessionName: String) -> AgentType? {
         agentSetupService.agentType(for: thread, sessionName: sessionName)
     }
