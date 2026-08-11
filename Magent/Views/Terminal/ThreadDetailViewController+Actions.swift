@@ -900,11 +900,21 @@ extension ThreadDetailViewController {
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
             guard let self, let result, let agentType = result.agentType else { return }
-            let switchToTab = PersistenceService.shared.loadSettings().switchToNewlyCreatedTab
+            let settings = PersistenceService.shared.loadSettings()
+            guard let destination = AgentContinuationDestinationResolver.resolve(
+                agentType: agentType,
+                selectedSurface: result.agentSurface,
+                chatsEnabled: settings.isChatsFeatureEnabled
+            ) else {
+                BannerManager.shared.show(message: "The selected agent surface is unavailable.", style: .warning)
+                return
+            }
+            let switchToTab = settings.switchToNewlyCreatedTab
             let extraContext = result.prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
             self.continueTabInAgent(
                 at: index,
                 targetAgent: agentType,
+                targetSurface: destination,
                 extraContext: extraContext?.isEmpty == false ? extraContext : nil,
                 customTitle: result.tabTitle,
                 modelId: result.modelId,
@@ -915,7 +925,7 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func addTab(
+    func addTab(
         using agentType: AgentType?,
         useAgentCommand: Bool,
         initialPrompt: String? = nil,
@@ -1145,6 +1155,7 @@ extension ThreadDetailViewController {
                 conversationSessionID: chat.conversationSessionID,
                 modelId: chat.modelId,
                 reasoningLevel: chat.reasoningLevel,
+                isPinned: chat.isPinned,
                 isTitleManuallySet: chat.isTitleManuallySet
             )
         }
@@ -1609,6 +1620,7 @@ extension ThreadDetailViewController {
     func continueTabInAgent(
         at index: Int,
         targetAgent: AgentType,
+        targetSurface: AgentSurface,
         extraContext: String? = nil,
         customTitle: String? = nil,
         modelId: String? = nil,
@@ -1658,17 +1670,39 @@ extension ThreadDetailViewController {
             let prompt = ContextExporter.transferPrompt(contextFilePath: contextPath, extraContext: extraContext)
 
             await MainActor.run {
-                self.addTab(
-                    using: targetAgent,
-                    useAgentCommand: true,
-                    initialPrompt: prompt,
-                    isForwardedContinuation: true,
-                    customTitle: customTitle,
-                    modelId: modelId,
-                    reasoningLevel: reasoningLevel,
-                    codexFastMode: codexFastMode,
-                    switchToTab: switchToTab
-                )
+                switch targetSurface {
+                case .terminal:
+                    self.addTab(
+                        using: targetAgent,
+                        useAgentCommand: true,
+                        initialPrompt: prompt,
+                        isForwardedContinuation: true,
+                        customTitle: customTitle,
+                        modelId: modelId,
+                        reasoningLevel: reasoningLevel,
+                        codexFastMode: codexFastMode,
+                        switchToTab: switchToTab
+                    )
+                case .chat:
+                    let previousSelectedIndex = self.currentTabIndex
+                    let trimmedTitle = customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.openChatTab(
+                        identifier: "chat:\(UUID().uuidString)",
+                        agentType: targetAgent,
+                        title: trimmedTitle?.isEmpty == false ? trimmedTitle! : TmuxSessionNaming.chatTabDisplayName(
+                            for: targetAgent,
+                            modelLabel: self.threadManager.resolvedModelLabel(for: targetAgent, modelId: modelId),
+                            reasoningLevel: reasoningLevel
+                        ),
+                        modelId: modelId,
+                        reasoningLevel: reasoningLevel,
+                        isTitleManuallySet: trimmedTitle?.isEmpty == false,
+                        initialPrompt: prompt
+                    )
+                    if !switchToTab, self.tabItems.count > 1 {
+                        self.selectTab(at: max(0, min(previousSelectedIndex, self.tabItems.count - 2)))
+                    }
+                }
             }
         }
     }

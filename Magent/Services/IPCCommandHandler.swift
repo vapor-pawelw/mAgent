@@ -49,55 +49,6 @@ private func parseIPCAgentSelection(
     ))
 }
 
-private actor IPCChatPromptCoordinator {
-    enum SubmissionAction {
-        case start(steerChannel: AgentChatSteerChannel?)
-        case steered
-        case busy
-    }
-
-    private enum InFlightRequest {
-        case codex(channel: AgentChatSteerChannel)
-        case nonSteerable
-    }
-
-    private var requestsByKey: [String: InFlightRequest] = [:]
-
-    func prepareSubmission(
-        key: String,
-        agentType: AgentType,
-        prompt: String,
-        messageID: UUID
-    ) -> SubmissionAction {
-        if let existing = requestsByKey[key] {
-            switch existing {
-            case .codex(let channel):
-                if prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    return .busy
-                }
-                return channel.submit(AgentChatSteerInput(id: messageID, text: prompt))
-                    ? .steered
-                    : .busy
-            case .nonSteerable:
-                return .busy
-            }
-        }
-
-        guard agentType == .codex else {
-            requestsByKey[key] = .nonSteerable
-            return .start(steerChannel: nil)
-        }
-
-        let channel = AgentChatSteerChannel()
-        requestsByKey[key] = .codex(channel: channel)
-        return .start(steerChannel: channel)
-    }
-
-    func finishRequest(key: String) {
-        requestsByKey.removeValue(forKey: key)
-    }
-}
-
 final class IPCCommandHandler {
 
     static let shared = IPCCommandHandler()
@@ -105,7 +56,7 @@ final class IPCCommandHandler {
     let persistence = PersistenceService.shared
     let threadManager = ThreadManager.shared
     let tmux = TmuxService.shared
-    private let chatPromptCoordinator = IPCChatPromptCoordinator()
+    private let chatPromptCoordinator = ChatPromptCoordinator.shared
 
     func handle(_ request: IPCRequest) async -> IPCResponse {
         switch request.command {
@@ -994,14 +945,17 @@ final class IPCCommandHandler {
             let conversationSessionID = chatTabs[chatIndex].conversationSessionID
             let modelId = chatTabs[chatIndex].modelId
             let reasoningLevel = chatTabs[chatIndex].reasoningLevel
-            let requestStateKey = chatRequestStateKey(threadID: thread.id, chatIdentifier: identifier)
+            let requestStateKey = ChatPromptCoordinator.key(threadID: thread.id, chatIdentifier: identifier)
             let submittedMessageID = UUID()
-            let submissionAction = await chatPromptCoordinator.prepareSubmission(
+            let submissionAction = chatPromptCoordinator.prepareSubmission(
                 key: requestStateKey,
+                client: .ipc,
                 agentType: agentType,
                 prompt: prompt,
-                messageID: submittedMessageID
+                messageID: submittedMessageID,
+                allowsSteering: agentType == .codex
             )
+            let coordinatedRequestID: UUID
 
             switch submissionAction {
             case .steered:
@@ -1024,13 +978,13 @@ final class IPCCommandHandler {
                     threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
                 }
                 return .success(id: request.id)
-            case .busy:
+            case .busy, .queueLocally:
                 return .failure(
                     "Chat request is already in progress for this tab. Wait for it to complete, or use a Codex chat tab for in-flight steering.",
                     id: request.id
                 )
-            case .start:
-                break
+            case .start(let requestID, _):
+                coordinatedRequestID = requestID
             }
 
             chatTabs[chatIndex].messages = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
@@ -1062,9 +1016,9 @@ final class IPCCommandHandler {
 
             let codexSteerChannel: AgentChatSteerChannel?
             switch submissionAction {
-            case .start(let steerChannel):
+            case .start(_, let steerChannel):
                 codexSteerChannel = steerChannel
-            case .steered, .busy:
+            case .steered, .queueLocally, .busy:
                 codexSteerChannel = nil
             }
 
@@ -1099,7 +1053,7 @@ final class IPCCommandHandler {
                 deferredResponses.append((deferredInput, deferredResponse))
                 finalConversationSessionID = deferredResponse.conversationSessionID ?? finalConversationSessionID
             }
-            await chatPromptCoordinator.finishRequest(key: requestStateKey)
+            chatPromptCoordinator.finishRequest(key: requestStateKey, requestID: coordinatedRequestID)
 
             guard let latestIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
                 return .success(id: request.id)
@@ -1145,10 +1099,6 @@ final class IPCCommandHandler {
         case .draft:
             return .failure("send-prompt is not supported for draft tabs", id: request.id)
         }
-    }
-
-    private func chatRequestStateKey(threadID: UUID, chatIdentifier: String) -> String {
-        "\(threadID.uuidString.lowercased())::\(chatIdentifier)"
     }
 
     private func startAgent(_ request: IPCRequest) async -> IPCResponse {

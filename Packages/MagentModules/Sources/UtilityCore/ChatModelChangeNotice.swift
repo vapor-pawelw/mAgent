@@ -48,3 +48,14 @@ public enum ChatModelChangeNotice {
         return trimmed
     }
 }
+
+public enum ChatModelSelectionSynchronization {
+    public static func shouldNotifyParent(
+        previousModelId: String?,
+        previousReasoningLevel: String?,
+        resolvedModelId: String?,
+        resolvedReasoningLevel: String?
+    ) -> Bool {
+        previousModelId != resolvedModelId || previousReasoningLevel != resolvedReasoningLevel
+    }
+}

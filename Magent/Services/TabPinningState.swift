@@ -1,6 +1,12 @@
 import Foundation
 
 enum TabPinningState {
+    enum RemovalSelectionTransition: Equatable {
+        case empty
+        case select(Int)
+        case preserve(Int)
+    }
+
     static func needsPlainPrimaryFallback(
         sessions: [String],
         agentSessions: Set<String>
@@ -71,5 +77,18 @@ enum TabPinningState {
         fixedCount: Int
     ) -> Bool {
         index >= fixedCount && index < pinnedBoundary
+    }
+
+    static func selectionAfterRemoval(
+        currentIndex: Int,
+        removedIndex: Int,
+        remainingCount: Int,
+        removedWasSelected: Bool
+    ) -> RemovalSelectionTransition {
+        guard remainingCount > 0 else { return .empty }
+        if removedWasSelected {
+            return .select(min(removedIndex, remainingCount - 1))
+        }
+        return .preserve(currentIndex > removedIndex ? currentIndex - 1 : currentIndex)
     }
 }

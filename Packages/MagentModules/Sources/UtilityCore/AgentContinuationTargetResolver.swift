@@ -29,3 +29,14 @@ public enum AgentContinuationTargetResolver {
         )
     }
 }
+
+public enum AgentContinuationDestinationResolver {
+    public static func resolve(
+        agentType: AgentType,
+        selectedSurface: AgentSurface?,
+        chatsEnabled: Bool
+    ) -> AgentSurface? {
+        let surface = selectedSurface ?? agentType.defaultSurface
+        return agentType.supportedSurfaces(chatsEnabled: chatsEnabled).contains(surface) ? surface : nil
+    }
+}

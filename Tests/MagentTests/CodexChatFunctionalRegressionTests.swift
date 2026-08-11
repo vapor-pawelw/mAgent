@@ -83,6 +83,22 @@ struct CodexChatFunctionalRegressionTests {
         #expect(transition.remainingPrompts == ["second queued"])
     }
 
+    @Test("A visible fallback model is synchronized into legacy nil tab state")
+    func synchronizesVisibleFallbackModel() {
+        #expect(ChatModelSelectionSynchronization.shouldNotifyParent(
+            previousModelId: nil,
+            previousReasoningLevel: nil,
+            resolvedModelId: "gpt-5.6",
+            resolvedReasoningLevel: "high"
+        ))
+        #expect(!ChatModelSelectionSynchronization.shouldNotifyParent(
+            previousModelId: "gpt-5.6",
+            previousReasoningLevel: "high",
+            resolvedModelId: "gpt-5.6",
+            resolvedReasoningLevel: "high"
+        ))
+    }
+
     @Test("Effort help reflects every level supported by the selected Codex model")
     func effortHelpIncludesLatestLevels() {
         let usage = AgentChatHelpCommandBuilder.effortUsage(

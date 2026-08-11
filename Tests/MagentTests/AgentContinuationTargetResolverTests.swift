@@ -24,4 +24,23 @@ struct AgentContinuationTargetResolverTests {
         #expect(targets.agents == [.claude, .custom])
         #expect(targets.defaultAgentType == .claude)
     }
+
+    @Test("Continue In preserves the selected terminal or chat surface")
+    func preservesSelectedSurface() {
+        #expect(AgentContinuationDestinationResolver.resolve(
+            agentType: .codex,
+            selectedSurface: .terminal,
+            chatsEnabled: true
+        ) == .terminal)
+        #expect(AgentContinuationDestinationResolver.resolve(
+            agentType: .codex,
+            selectedSurface: .chat,
+            chatsEnabled: true
+        ) == .chat)
+        #expect(AgentContinuationDestinationResolver.resolve(
+            agentType: .claude,
+            selectedSurface: .chat,
+            chatsEnabled: true
+        ) == nil)
+    }
 }

@@ -236,6 +236,7 @@ final class ThreadDetailViewController: NSViewController {
     var chatTabs: [ChatTabEntry] = []
     var chatRequestTasksByIdentifier: [String: Task<Void, Never>] = [:]
     var chatRequestTaskTokensByIdentifier: [String: UUID] = [:]
+    var chatCoordinatedRequestIDsByIdentifier: [String: UUID] = [:]
     var chatPendingAssistantMessageIDsByIdentifier: [String: UUID] = [:]
     var chatStreamingAssistantMessageIDsByIdentifier: [String: [String: UUID]] = [:]
     var chatStreamingAssistantMessageIndicesByIdentifier: [String: [String: Int]] = [:]

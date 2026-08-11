@@ -37,6 +37,7 @@
 
 #### Bug Fixes
 
+- Prevented overlapping GUI/CLI turns from corrupting one chat, honored the selected terminal/chat destination in `Continue in...`, preserved pinning and active selection when closing or restoring chat tabs, and kept legacy model pickers aligned with the model used for requests.
 - Kept Codex chat permissions in sync with Agent Settings when continuing an existing conversation, including Full Access and sandbox mode.
 - Prevented failed or approval-blocked Codex turns from replaying the same prompt, preserved steering messages that race with completion, and stopped queued prompts from starting after closing or clearing a chat.
 - Preserved model-change markers, local chat statuses, repeated-message identity, timestamps, attachments, and model metadata when restoring Codex transcripts.

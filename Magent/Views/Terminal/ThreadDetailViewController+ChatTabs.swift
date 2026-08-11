@@ -114,6 +114,7 @@ extension ThreadDetailViewController {
         conversationSessionID: String? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
+        isPinned: Bool = false,
         isTitleManuallySet: Bool = false,
         initialPrompt: String? = nil
     ) {
@@ -148,7 +149,7 @@ extension ThreadDetailViewController {
             conversationSessionID: conversationSessionID,
             modelId: modelId,
             reasoningLevel: reasoningLevel,
-            isPinned: false,
+            isPinned: isPinned,
             isTitleManuallySet: isTitleManuallySet,
             viewController: nil
         )
@@ -160,13 +161,26 @@ extension ThreadDetailViewController {
         attachDragGesture(to: item)
         applyChatTabIcon(to: item)
 
-        tabItems.append(item)
-        tabSlots.append(.chat(identifier: identifier))
+        let newIndex: Int
+        if isPinned {
+            newIndex = pinnedCount
+            tabItems.insert(item, at: newIndex)
+            tabSlots.insert(.chat(identifier: identifier), at: newIndex)
+            pinnedCount += 1
+            pinnedCount = TabPinningState.clampedPinnedBoundary(
+                pinnedCount,
+                fixedCount: Self.permanentTabCount,
+                totalCount: tabSlots.count
+            )
+        } else {
+            newIndex = tabItems.count
+            tabItems.append(item)
+            tabSlots.append(.chat(identifier: identifier))
+        }
 
         rebindAllTabActions()
         rebuildTabBar()
 
-        let newIndex = tabItems.count - 1
         selectTab(at: newIndex)
 
         if let prompt = initialPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty {
@@ -345,6 +359,8 @@ extension ThreadDetailViewController {
 
     func removeChatTab(identifier: String) {
         guard let slotIndex = tabSlots.firstIndex(of: .chat(identifier: identifier)) else { return }
+        let wasPinned = currentTabGroups().pinned.contains(slotIndex)
+        let wasSelected = currentTabIndex == slotIndex
         cancelInFlightChatRequest(
             identifier: identifier,
             queueBehavior: .discardQueuedPrompts
@@ -377,15 +393,33 @@ extension ThreadDetailViewController {
 
         tabItems.remove(at: slotIndex)
         tabSlots.remove(at: slotIndex)
-        rebindAllTabActions()
-        rebuildTabBar()
-
-        if tabItems.isEmpty {
-            showEmptyState()
-        } else {
-            let newIndex = min(currentTabIndex, tabItems.count - 1)
-            selectTab(at: newIndex)
+        if wasPinned {
+            pinnedCount -= 1
+            pinnedCount = TabPinningState.clampedPinnedBoundary(
+                pinnedCount,
+                fixedCount: Self.permanentTabCount,
+                totalCount: tabSlots.count
+            )
         }
+        rebindAllTabActions()
+
+        switch TabPinningState.selectionAfterRemoval(
+            currentIndex: currentTabIndex,
+            removedIndex: slotIndex,
+            remainingCount: tabItems.count,
+            removedWasSelected: wasSelected
+        ) {
+        case .empty:
+            showEmptyState()
+        case .select(let index):
+            selectTab(at: index)
+        case .preserve(let index):
+            currentTabIndex = index
+            for (itemIndex, item) in tabItems.enumerated() {
+                item.isSelected = itemIndex == index
+            }
+        }
+        rebuildTabBar()
     }
 
     // MARK: - Rename
@@ -494,11 +528,21 @@ extension ThreadDetailViewController {
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
             guard let self, let result, let agentType = result.agentType else { return }
+            let settings = PersistenceService.shared.loadSettings()
+            guard let destination = AgentContinuationDestinationResolver.resolve(
+                agentType: agentType,
+                selectedSurface: result.agentSurface,
+                chatsEnabled: settings.isChatsFeatureEnabled
+            ) else {
+                BannerManager.shared.show(message: "The selected agent surface is unavailable.", style: .warning)
+                return
+            }
             let switchToTab = PersistenceService.shared.loadSettings().switchToNewlyCreatedTab
             let extraContext = result.prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
             self.continueChatTabInAgent(
                 at: index,
                 targetAgent: agentType,
+                targetSurface: destination,
                 extraContext: extraContext?.isEmpty == false ? extraContext : nil,
                 customTitle: result.tabTitle,
                 modelId: result.modelId,
@@ -511,6 +555,7 @@ extension ThreadDetailViewController {
     func continueChatTabInAgent(
         at index: Int,
         targetAgent: AgentType,
+        targetSurface: AgentSurface,
         extraContext: String? = nil,
         customTitle: String? = nil,
         modelId: String? = nil,
@@ -546,17 +591,31 @@ extension ThreadDetailViewController {
             )
         let previousSelectedIndex = currentTabIndex
 
-        openChatTab(
-            identifier: "chat:\(UUID().uuidString)",
-            agentType: targetAgent,
-            title: title,
-            modelId: modelId,
-            reasoningLevel: reasoningLevel,
-            isTitleManuallySet: trimmedCustomTitle?.isEmpty == false,
-            initialPrompt: prompt
-        )
+        switch targetSurface {
+        case .terminal:
+            addTab(
+                using: targetAgent,
+                useAgentCommand: true,
+                initialPrompt: prompt,
+                isForwardedContinuation: true,
+                customTitle: trimmedCustomTitle,
+                modelId: modelId,
+                reasoningLevel: reasoningLevel,
+                switchToTab: switchToTab
+            )
+        case .chat:
+            openChatTab(
+                identifier: "chat:\(UUID().uuidString)",
+                agentType: targetAgent,
+                title: title,
+                modelId: modelId,
+                reasoningLevel: reasoningLevel,
+                isTitleManuallySet: trimmedCustomTitle?.isEmpty == false,
+                initialPrompt: prompt
+            )
+        }
 
-        if !switchToTab, tabItems.count > 1 {
+        if targetSurface == .chat, !switchToTab, tabItems.count > 1 {
             let restoredIndex = min(previousSelectedIndex, tabItems.count - 2)
             selectTab(at: max(0, restoredIndex))
         }
@@ -704,11 +763,29 @@ extension ThreadDetailViewController {
             chatIndex: entryIndex,
             prompt: trimmedText
         )
-        guard chatRequestTasksByIdentifier[identifier] == nil else {
-            if chatTabs[entryIndex].agentType == .codex,
-               normalizedAttachments.isEmpty,
-               !trimmedText.isEmpty,
-               let steerChannel = chatSteerChannelsByIdentifier[identifier] {
+        let submittedMessageID = UUID()
+        let requestStateKey = ChatPromptCoordinator.key(threadID: thread.id, chatIdentifier: identifier)
+        let submissionAction = ChatPromptCoordinator.shared.prepareSubmission(
+            key: requestStateKey,
+            client: .gui,
+            agentType: chatTabs[entryIndex].agentType,
+            prompt: trimmedText,
+            messageID: submittedMessageID,
+            allowsSteering: normalizedAttachments.isEmpty && !trimmedText.isEmpty
+        )
+
+        switch submissionAction {
+        case .busy:
+            chatTabs[entryIndex].draftInput = text
+            chatTabs[entryIndex].draftAttachments = normalizedAttachments
+            persistChatTabs()
+            refreshChatTabView(chatIndex: entryIndex)
+            BannerManager.shared.show(
+                message: "This chat is currently handling a prompt from the CLI.",
+                style: .warning
+            )
+            return
+        case .steered:
                 let metadata = chatMessageMetadata(for: entryIndex)
                 chatTabs[entryIndex].messages = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
                     into: chatTabs[entryIndex].messages,
@@ -717,29 +794,17 @@ extension ThreadDetailViewController {
                     nextReasoningLevel: metadata.reasoningLevel
                 )
                 let steeringMessage = PersistedChatMessage(
+                    id: submittedMessageID,
                     role: .user,
                     text: trimmedText,
                     modelId: metadata.modelId,
                     reasoningLevel: metadata.reasoningLevel
                 )
                 chatTabs[entryIndex].messages.append(steeringMessage)
-                let steerInput = AgentChatSteerInput(
-                    id: steeringMessage.id,
-                    text: trimmedText
-                )
-                if !steerChannel.submit(steerInput) {
-                    enqueueChatPrompt(
-                        identifier: identifier,
-                        messageID: steeringMessage.id,
-                        text: trimmedText,
-                        attachments: []
-                    )
-                }
                 persistChatTabs()
                 refreshChatTabView(chatIndex: entryIndex)
                 return
-            }
-
+        case .queueLocally:
             let metadata = chatMessageMetadata(for: entryIndex)
             chatTabs[entryIndex].messages = ChatModelChangeNotice.messagesByInjectingNoticeIfNeeded(
                 into: chatTabs[entryIndex].messages,
@@ -748,6 +813,7 @@ extension ThreadDetailViewController {
                 nextReasoningLevel: metadata.reasoningLevel
             )
             let queuedUserMessage = PersistedChatMessage(
+                id: submittedMessageID,
                 role: .user,
                 text: trimmedText,
                 attachments: normalizedAttachments,
@@ -764,14 +830,16 @@ extension ThreadDetailViewController {
             persistChatTabs()
             refreshChatTabView(chatIndex: entryIndex)
             return
+        case .start(let coordinatedRequestID, let steerChannel):
+            startChatPromptRequest(
+                identifier: identifier,
+                promptText: trimmedText,
+                attachments: normalizedAttachments,
+                chatIndex: entryIndex,
+                coordinatedRequestID: coordinatedRequestID,
+                coordinatedSteerChannel: steerChannel
+            )
         }
-
-        startChatPromptRequest(
-            identifier: identifier,
-            promptText: trimmedText,
-            attachments: normalizedAttachments,
-            chatIndex: entryIndex
-        )
     }
 
     private func triggerAutomaticChatTabRenameIfNeeded(identifier: String, chatIndex: Int, prompt: String) {
@@ -833,8 +901,39 @@ extension ThreadDetailViewController {
         promptText: String,
         attachments: [PersistedChatAttachment],
         chatIndex: Int,
-        existingQueuedUserMessageID: UUID? = nil
+        existingQueuedUserMessageID: UUID? = nil,
+        coordinatedRequestID: UUID? = nil,
+        coordinatedSteerChannel: AgentChatSteerChannel? = nil
     ) {
+        let requestStateKey = ChatPromptCoordinator.key(threadID: thread.id, chatIdentifier: identifier)
+        let coordination: (requestID: UUID, steerChannel: AgentChatSteerChannel?)
+        if let coordinatedRequestID {
+            coordination = (coordinatedRequestID, coordinatedSteerChannel)
+        } else {
+            let queuedMessageID = existingQueuedUserMessageID ?? UUID()
+            let action = ChatPromptCoordinator.shared.prepareSubmission(
+                key: requestStateKey,
+                client: .gui,
+                agentType: chatTabs[chatIndex].agentType,
+                prompt: promptText,
+                messageID: queuedMessageID,
+                allowsSteering: false
+            )
+            guard case .start(let requestID, let steerChannel) = action else {
+                if let existingQueuedUserMessageID {
+                    enqueueChatPrompt(
+                        identifier: identifier,
+                        messageID: existingQueuedUserMessageID,
+                        text: promptText,
+                        attachments: attachments
+                    )
+                }
+                return
+            }
+            coordination = (requestID, steerChannel)
+        }
+        chatCoordinatedRequestIDsByIdentifier[identifier] = coordination.requestID
+
         // Defensive cleanup: if a previous request died unexpectedly and left one or
         // more loading placeholders behind, remove them before starting a new turn.
         let normalizedMessages = ChatBusyStateRecovery.normalizedMessagesForNewRequest(
@@ -906,7 +1005,12 @@ extension ThreadDetailViewController {
         let selectedModelId = chatTabs[chatIndex].modelId
         let selectedReasoningLevel = chatTabs[chatIndex].reasoningLevel
         let taskToken = UUID()
-        let codexSteerChannel = makeCodexSteerChannelIfNeeded(identifier: identifier, agentType: agentType)
+        let codexSteerChannel = coordination.steerChannel
+        if let codexSteerChannel {
+            chatSteerChannelsByIdentifier[identifier] = codexSteerChannel
+        } else {
+            chatSteerChannelsByIdentifier.removeValue(forKey: identifier)
+        }
         chatRequestTaskTokensByIdentifier[identifier] = taskToken
 
         let task = Task { [weak self] in
@@ -957,6 +1061,11 @@ extension ThreadDetailViewController {
                 guard self.chatRequestTaskTokensByIdentifier[identifier] == taskToken else { return }
                 self.chatRequestTasksByIdentifier.removeValue(forKey: identifier)
                 self.chatRequestTaskTokensByIdentifier.removeValue(forKey: identifier)
+                ChatPromptCoordinator.shared.finishRequest(
+                    key: requestStateKey,
+                    requestID: coordination.requestID
+                )
+                self.chatCoordinatedRequestIDsByIdentifier.removeValue(forKey: identifier)
                 self.chatSteerChannelsByIdentifier.removeValue(forKey: identifier)
                 self.chatStreamingCheckpointTasksByIdentifier[identifier]?.cancel()
                 self.chatStreamingCheckpointTasksByIdentifier.removeValue(forKey: identifier)
@@ -1016,6 +1125,9 @@ extension ThreadDetailViewController {
         if chatRequestTaskTokensByIdentifier[identifier] == taskToken {
             chatRequestTasksByIdentifier[identifier] = task
         }
+        if let currentIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) {
+            refreshChatTabView(chatIndex: currentIndex)
+        }
         refreshTabStatusIndicators()
     }
 
@@ -1027,6 +1139,12 @@ extension ThreadDetailViewController {
         identifier: String,
         queueBehavior: ChatPromptQueueCancellationBehavior = .continueWithNextPrompt
     ) {
+        if let coordinatedRequestID = chatCoordinatedRequestIDsByIdentifier.removeValue(forKey: identifier) {
+            ChatPromptCoordinator.shared.finishRequest(
+                key: ChatPromptCoordinator.key(threadID: thread.id, chatIdentifier: identifier),
+                requestID: coordinatedRequestID
+            )
+        }
         let deferredSteerInputs = chatSteerChannelsByIdentifier
             .removeValue(forKey: identifier)?
             .closeAndDrain() ?? []
@@ -1259,19 +1377,6 @@ extension ThreadDetailViewController {
 
     private func normalizeFinalAssistantMessage(_ raw: String) -> String {
         raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func makeCodexSteerChannelIfNeeded(
-        identifier: String,
-        agentType: AgentType
-    ) -> AgentChatSteerChannel? {
-        guard agentType == .codex else {
-            chatSteerChannelsByIdentifier.removeValue(forKey: identifier)
-            return nil
-        }
-        let channel = AgentChatSteerChannel()
-        chatSteerChannelsByIdentifier[identifier] = channel
-        return channel
     }
 
     private func handleChatSlashCommandIfNeeded(identifier: String, chatIndex: Int, text: String) -> Bool {

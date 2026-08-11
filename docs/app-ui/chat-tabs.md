@@ -13,6 +13,7 @@
 - Codex chat tabs expose the `None` reasoning effort from the bottom-left picker and store/pass it as Codex `reasoningLevel: "none"`.
 - Codex chat tab titles mirror terminal tab naming from the selected model and reasoning effort, with ` (Chat)` appended. On the first submitted prompt, the regular automatic tab-naming setting can replace that default with a concise task name. Automatic updates preserve manually renamed chat tabs.
 - Long transcripts retain a bounded 160-message view window. Use Earlier/Newer to navigate older pages without keeping every AppKit message hierarchy alive.
+- Closing and restoring a chat tab preserves its pinned state, and closing a background chat does not move the active selection.
 - Tool activity should read like concise actions first: `Run command`, `Read file`, `Search`, or `Tool output`.
 - Patch edits should read as `Apply patch` / `Patch applied` and summarize changed files instead of rendering the raw patch inline. Expanded filenames are links that open the thread's existing Diff tab focused on that file.
 - Consecutive routine tool rows are compacted in the visible chat transcript into one collapsed assistant-side activity disclosure. Its header and expanded rows use tinted SF Symbols, while the saved transcript remains unmodified for export, restore, and agent handoff.
@@ -43,6 +44,8 @@
   Restored tool messages should carry both backward-compatible transcript text and `toolEvent`.
 - Transcript reconciliation matches repeated text by occurrence, not by a single text dictionary entry. Each legitimate repeated prompt/reply must retain its own UUID, timestamp, attachments, and model metadata.
 - Codex `/effort none` selects the `none` reasoning effort.
+- `ChatPromptCoordinator` is the shared GUI/IPC reservation boundary for chat turns. Steering is accepted only from the client that owns the active turn; the other client receives a busy result instead of launching a concurrent request against stale history.
+- A model/reasoning fallback selected while materializing a legacy chat tab is propagated back to persisted parent state before the next request.
 
 ## Gotchas
 
@@ -55,6 +58,7 @@
 - Do not surface successful exit-code metadata (`Exit code: 0`, `Process exited with code 0`) in titles or details; keep it as parsed metadata only.
 - Do not promote command output into completed tool titles or show transport controls such as `yield_time_ms` and `max_output_tokens`. Failures and running commands may still show concise state metadata and expand automatically.
 - `Continue in...` must offer every enabled terminal agent, including the chat's current provider, and initially select the project/global default agent.
+- `Continue in...` must route the exported context to the selected surface. Terminal targets use tmux prompt injection; supported chat targets use `openChatTab`.
 - Keep failed and running tools, errors, cancellations, and approval blockers outside compact Activity summaries so attention-required information remains immediately visible.
 - Do not let display compaction change persisted chat messages. The compact activity row is only a view-layer artifact.
 - Resolve all activity-summary icon insertion offsets against the immutable rendered text, then apply insertions from the end. Forward mutation invalidates later attributed-string ranges and can crash while restoring a chat tab.

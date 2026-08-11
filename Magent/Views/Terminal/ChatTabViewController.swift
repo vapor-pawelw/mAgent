@@ -2596,6 +2596,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private func syncModelReasoningSelection(using agentConfig: AgentModelConfig? = nil) {
         guard let agentConfig = agentConfig ?? AgentModelsService.shared.config(for: agentType) else { return }
         guard modelPicker.numberOfItems > 0 else { return }
+        let previousModelId = modelId
+        let previousReasoningLevel = reasoningLevel
 
         let preferredModelId = AgentModelsService.shared.validatedModelId(modelId, for: agentType)
             ?? AgentModelsService.shared.validatedModelId(AgentLastSelectionStore.lastModel(for: agentType), for: agentType)
@@ -2610,6 +2612,14 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
 
         repopulateReasoningPicker(agentConfig: agentConfig, preferredLevel: reasoningLevel)
         commitModelReasoningSelection(notify: false)
+        if ChatModelSelectionSynchronization.shouldNotifyParent(
+            previousModelId: previousModelId,
+            previousReasoningLevel: previousReasoningLevel,
+            resolvedModelId: modelId,
+            resolvedReasoningLevel: reasoningLevel
+        ) {
+            onModelReasoningChanged?(modelId, reasoningLevel)
+        }
     }
 
     private func repopulateReasoningPicker(agentConfig: AgentModelConfig, preferredLevel: String? = nil) {

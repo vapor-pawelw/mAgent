@@ -110,4 +110,20 @@ struct TabPinningStateTests {
             agentSessions: []
         ))
     }
+
+    @Test("Closing a background tab to the left preserves the selected content")
+    func backgroundRemovalAdjustsSelectionIndex() {
+        #expect(TabPinningState.selectionAfterRemoval(
+            currentIndex: 5,
+            removedIndex: 2,
+            remainingCount: 6,
+            removedWasSelected: false
+        ) == .preserve(4))
+        #expect(TabPinningState.selectionAfterRemoval(
+            currentIndex: 2,
+            removedIndex: 2,
+            remainingCount: 4,
+            removedWasSelected: true
+        ) == .select(2))
+    }
 }
