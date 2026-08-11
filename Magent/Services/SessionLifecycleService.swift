@@ -830,6 +830,12 @@ final class SessionLifecycleService {
         try? persistence.saveActiveThreads(store.threads)
     }
 
+    func updateTabDisplayOrder(for threadId: UUID, tabDisplayOrder: [String]) {
+        guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
+        store.threads[index].tabDisplayOrder = tabDisplayOrder
+        try? persistence.saveActiveThreads(store.threads)
+    }
+
     func updatePersistedWebTabs(for threadId: UUID, webTabs: [PersistedWebTab]) {
         guard let index = store.threads.firstIndex(where: { $0.id == threadId }) else { return }
         store.threads[index].persistedWebTabs = webTabs

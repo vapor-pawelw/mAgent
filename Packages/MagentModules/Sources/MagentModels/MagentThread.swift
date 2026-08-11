@@ -642,6 +642,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var persistedDraftTabs: [PersistedDraftTab]
     /// Persisted GUI chat tabs.
     public var persistedChatTabs: [PersistedChatTab]
+    /// Display order for all movable tabs, across terminal, web, draft, and chat types.
+    public var tabDisplayOrder: [String]
     /// Optional sign emoji displayed to the left of the thread icon (e.g. 🛑, ✅, ❓).
     public var signEmoji: String?
     /// Optional 1–5 priority. `nil` means no priority is set and nothing renders.
@@ -1022,6 +1024,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case persistedWebTabs
         case persistedDraftTabs
         case persistedChatTabs
+        case tabDisplayOrder
         case signEmoji
         case priority
         case syncWithJira
@@ -1082,6 +1085,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         persistedWebTabs: [PersistedWebTab] = [],
         persistedDraftTabs: [PersistedDraftTab] = [],
         persistedChatTabs: [PersistedChatTab] = [],
+        tabDisplayOrder: [String] = [],
         signEmoji: String? = nil,
         priority: Int? = nil,
         syncWithJira: Bool = false
@@ -1139,6 +1143,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.persistedWebTabs = persistedWebTabs
         self.persistedDraftTabs = persistedDraftTabs
         self.persistedChatTabs = persistedChatTabs
+        self.tabDisplayOrder = tabDisplayOrder
         self.signEmoji = signEmoji
         self.priority = priority.map { max(1, min(5, $0)) }
         self.syncWithJira = syncWithJira
@@ -1172,6 +1177,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         persistedWebTabs = completed.persistedWebTabs
         persistedDraftTabs = completed.persistedDraftTabs
         persistedChatTabs = completed.persistedChatTabs
+        tabDisplayOrder = completed.tabDisplayOrder
     }
 
     public func withProjectId(_ newProjectId: UUID) -> MagentThread {
@@ -1228,6 +1234,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             persistedWebTabs: persistedWebTabs,
             persistedDraftTabs: persistedDraftTabs,
             persistedChatTabs: persistedChatTabs,
+            tabDisplayOrder: tabDisplayOrder,
             signEmoji: signEmoji,
             priority: priority,
             syncWithJira: syncWithJira
@@ -1320,6 +1327,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         persistedWebTabs = try container.decodeIfPresent([PersistedWebTab].self, forKey: .persistedWebTabs) ?? []
         persistedDraftTabs = try container.decodeIfPresent([PersistedDraftTab].self, forKey: .persistedDraftTabs) ?? []
         persistedChatTabs = try container.decodeIfPresent([PersistedChatTab].self, forKey: .persistedChatTabs) ?? []
+        tabDisplayOrder = try container.decodeIfPresent([String].self, forKey: .tabDisplayOrder) ?? []
         signEmoji = try container.decodeIfPresent(String.self, forKey: .signEmoji)
         // Clamp any stray out-of-range values from older builds or manual edits.
         priority = try container.decodeIfPresent(Int.self, forKey: .priority).map { max(1, min(5, $0)) }
@@ -1436,6 +1444,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         }
         if !persistedChatTabs.isEmpty {
             try container.encode(persistedChatTabs, forKey: .persistedChatTabs)
+        }
+        if !tabDisplayOrder.isEmpty {
+            try container.encode(tabDisplayOrder, forKey: .tabDisplayOrder)
         }
         try container.encodeIfPresent(signEmoji, forKey: .signEmoji)
         try container.encodeIfPresent(priority, forKey: .priority)

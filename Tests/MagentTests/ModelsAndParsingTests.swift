@@ -1675,9 +1675,11 @@ struct ChatMessageDisplayPlannerTests {
 struct ChatTranscriptDisplayCompactorTests {
     @Test("Compacts consecutive tool rows using action summaries and SF symbol tokens")
     func compactsToolRunsUsingActionSummaries() {
+        let startedAt = Date(timeIntervalSince1970: 1_000)
         let call = PersistedChatMessage(
             role: .assistant,
             text: "",
+            createdAt: startedAt,
             toolEvent: PersistedChatToolEvent(
                 kind: .call,
                 name: "exec_command",
@@ -1687,6 +1689,7 @@ struct ChatTranscriptDisplayCompactorTests {
         let result = PersistedChatMessage(
             role: .assistant,
             text: "",
+            createdAt: startedAt.addingTimeInterval(65),
             toolEvent: PersistedChatToolEvent(
                 kind: .result,
                 name: "exec_command",
@@ -1698,6 +1701,7 @@ struct ChatTranscriptDisplayCompactorTests {
         let compacted = ChatTranscriptDisplayCompactor.compactedMessages([call, result])
 
         #expect(compacted.count == 1)
+        #expect(compacted[0].text.hasPrefix("Agent activity\n2 actions · 1m 5s\n"))
         #expect(compacted[0].text.contains("play.circle Run command: git status --short"))
         #expect(compacted[0].text.contains("checkmark.circle Command finished: git status --short"))
         #expect(!compacted[0].text.contains("Command finished: M file.swift"))
@@ -2772,6 +2776,16 @@ struct ThreadTabStructureFingerprintTests {
         #expect(ThreadTabStructureFingerprint(thread: base) != ThreadTabStructureFingerprint(thread: updated))
     }
 
+    @Test("Changes when cross-type tab display order changes")
+    func changesOnTabDisplayOrder() {
+        var base = makeThread()
+        base.tabDisplayOrder = ["terminal:1", "chat:1", "web:1"]
+        var updated = base
+        updated.tabDisplayOrder = ["terminal:1", "web:1", "chat:1"]
+
+        #expect(ThreadTabStructureFingerprint(thread: base) != ThreadTabStructureFingerprint(thread: updated))
+    }
+
     private func makeThread(
         tmuxSessions: [String] = [],
         pinnedSessions: [String] = [],
@@ -2790,6 +2804,65 @@ struct ThreadTabStructureFingerprintTests {
             persistedDraftTabs: draftTabs,
             persistedChatTabs: chatTabs
         )
+    }
+}
+
+@Suite("Tab display order restoration")
+struct TabDisplayOrderResolverTests {
+
+    @Test("Keeps chat position across thread rebuilds and metadata changes")
+    func keepsChatPositionAcrossRebuilds() {
+        let persistedOrder = ["terminal:agent", "chat:review", "web:ticket", "draft:follow-up"]
+        let rebuiltCategoryOrder = ["terminal:agent", "web:ticket", "draft:follow-up", "chat:review"]
+
+        let restored = TabDisplayOrderResolver.resolve(
+            currentIdentifiers: rebuiltCategoryOrder,
+            persistedOrder: persistedOrder
+        )
+
+        #expect(restored == persistedOrder)
+    }
+
+    @Test("Appends new tabs and drops stale or duplicate identifiers")
+    func reconcilesChangedTabSet() {
+        let restored = TabDisplayOrderResolver.resolve(
+            currentIdentifiers: ["terminal:agent", "chat:new", "web:ticket"],
+            persistedOrder: ["chat:closed", "web:ticket", "web:ticket", "terminal:agent"]
+        )
+
+        #expect(restored == ["web:ticket", "terminal:agent", "chat:new"])
+    }
+
+    @Test("Keeps same raw identifier distinct across tab types")
+    func keepsCrossTypeIdentifiersDistinct() {
+        let persistedOrder = ["chat:shared", "web:shared"]
+
+        let restored = TabDisplayOrderResolver.resolve(
+            currentIdentifiers: ["web:shared", "chat:shared"],
+            persistedOrder: persistedOrder
+        )
+
+        #expect(restored == persistedOrder)
+    }
+
+    @Test("Persists display order while older payloads default to no saved order")
+    func codableCompatibility() throws {
+        let original = MagentThread(
+            projectId: UUID(),
+            name: "thread",
+            worktreePath: "/tmp/thread",
+            branchName: "thread",
+            tabDisplayOrder: ["chat:review", "web:ticket"]
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(MagentThread.self, from: data)
+        #expect(decoded.tabDisplayOrder == original.tabDisplayOrder)
+
+        var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "tabDisplayOrder")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let legacyDecoded = try JSONDecoder().decode(MagentThread.self, from: legacyData)
+        #expect(legacyDecoded.tabDisplayOrder.isEmpty)
     }
 }
 

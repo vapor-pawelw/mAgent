@@ -1227,57 +1227,57 @@ final class IPCCommandHandler {
         case error(IPCResponse)
     }
 
-    private func orderedTerminalSessions(for thread: MagentThread) -> [String] {
-        let existing = thread.tmuxSessionNames
-        let pinned = thread.pinnedTmuxSessions.filter(existing.contains)
-        let unpinned = existing.filter { !pinned.contains($0) }
-        return pinned + unpinned
-    }
-
-    /// Builds tab ordering to match the GUI tab strip:
-    /// terminal (pinned + unpinned), then pinned web inserts into pinned region,
-    /// then unpinned web, then draft tabs, then chat tabs.
     private func resolveTabs(for thread: MagentThread) -> [ResolvedTab] {
+        let primarySession = TabPinningState.preferredPrimarySession(
+            sessions: thread.tmuxSessionNames,
+            agentSessions: Set(thread.agentTmuxSessions),
+            canonicalPrimarySession: thread.tmuxSessionNames.first
+        )
+        let terminalDisplay = TabPinningState.sessionDisplayOrder(
+            sessions: thread.tmuxSessionNames,
+            canonicalPrimarySession: primarySession
+        )
+        var kindByIdentifier: [String: ResolvedTabKind] = [:]
+        for (offset, sessionName) in terminalDisplay.movable.enumerated() {
+            kindByIdentifier["terminal:\(sessionName)"] = .terminal(
+                sessionName: sessionName,
+                terminalDisplayIndex: offset + 1
+            )
+        }
+        for tab in thread.persistedWebTabs {
+            kindByIdentifier["web:\(tab.identifier)"] = .web(identifier: tab.identifier)
+        }
+        for tab in thread.persistedDraftTabs {
+            kindByIdentifier["draft:\(tab.identifier)"] = .draft(identifier: tab.identifier)
+        }
+        for tab in thread.persistedChatTabs {
+            kindByIdentifier["chat:\(tab.identifier)"] = .chat(identifier: tab.identifier)
+        }
+
+        let pinnedTerminalSessions = Set(thread.pinnedTmuxSessions)
+        let pinnedIdentifiers = terminalDisplay.movable
+            .filter { pinnedTerminalSessions.contains($0) }
+            .map { "terminal:\($0)" }
+            + thread.persistedWebTabs.filter(\.isPinned).map { "web:\($0.identifier)" }
+            + thread.persistedDraftTabs.filter(\.isPinned).map { "draft:\($0.identifier)" }
+            + thread.persistedChatTabs.filter(\.isPinned).map { "chat:\($0.identifier)" }
+        let unpinnedIdentifiers = terminalDisplay.movable
+            .filter { !pinnedTerminalSessions.contains($0) }
+            .map { "terminal:\($0)" }
+            + thread.persistedWebTabs.filter { !$0.isPinned }.map { "web:\($0.identifier)" }
+            + thread.persistedDraftTabs.filter { !$0.isPinned }.map { "draft:\($0.identifier)" }
+            + thread.persistedChatTabs.filter { !$0.isPinned }.map { "chat:\($0.identifier)" }
+        let orderedIdentifiers = TabDisplayOrderResolver.resolve(
+            currentPinnedIdentifiers: pinnedIdentifiers,
+            currentUnpinnedIdentifiers: unpinnedIdentifiers,
+            persistedOrder: thread.tabDisplayOrder
+        )
+
         var slots: [ResolvedTabKind] = []
-        let orderedSessions = orderedTerminalSessions(for: thread)
-
-        for (terminalDisplayIndex, sessionName) in orderedSessions.enumerated() {
-            slots.append(.terminal(sessionName: sessionName, terminalDisplayIndex: terminalDisplayIndex))
+        if !primarySession.isEmpty {
+            slots.append(.terminal(sessionName: primarySession, terminalDisplayIndex: 0))
         }
-
-        var pinnedInsertIndex = thread.pinnedTmuxSessions.filter(orderedSessions.contains).count
-        for persisted in thread.persistedWebTabs {
-            let webKind: ResolvedTabKind = .web(identifier: persisted.identifier)
-            if persisted.isPinned {
-                let insertAt = min(pinnedInsertIndex, slots.count)
-                slots.insert(webKind, at: insertAt)
-                pinnedInsertIndex += 1
-            } else {
-                slots.append(webKind)
-            }
-        }
-
-        for persisted in thread.persistedDraftTabs {
-            let draftKind: ResolvedTabKind = .draft(identifier: persisted.identifier)
-            if persisted.isPinned {
-                let insertAt = min(pinnedInsertIndex, slots.count)
-                slots.insert(draftKind, at: insertAt)
-                pinnedInsertIndex += 1
-            } else {
-                slots.append(draftKind)
-            }
-        }
-        for persisted in thread.persistedChatTabs {
-            let chatKind: ResolvedTabKind = .chat(identifier: persisted.identifier)
-            if persisted.isPinned {
-                let insertAt = min(pinnedInsertIndex, slots.count)
-                slots.insert(chatKind, at: insertAt)
-                pinnedInsertIndex += 1
-            } else {
-                slots.append(chatKind)
-            }
-        }
-
+        slots.append(contentsOf: orderedIdentifiers.compactMap { kindByIdentifier[$0] })
         return slots.enumerated().map { ResolvedTab(index: $0.offset, kind: $0.element) }
     }
 

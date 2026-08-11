@@ -218,6 +218,51 @@ extension ThreadDetailViewController {
             return nil
         }
         threadManager.updatePersistedChatTabs(for: thread.id, chatTabs: thread.persistedChatTabs)
+
+        persistTabDisplayOrder()
+    }
+
+    func persistTabDisplayOrder() {
+        let displayOrder = tabSlots.dropFirst(Self.permanentTabCount).compactMap(\.displayOrderIdentifier)
+        guard displayOrder != thread.tabDisplayOrder else { return }
+        thread.tabDisplayOrder = displayOrder
+        threadManager.updateTabDisplayOrder(for: thread.id, tabDisplayOrder: displayOrder)
+    }
+
+    func restorePersistedTabDisplayOrder() {
+        guard !thread.tabDisplayOrder.isEmpty else { return }
+
+        let fixedCount = min(Self.permanentTabCount, tabSlots.count)
+        let pinnedEnd = min(max(pinnedCount, fixedCount), tabSlots.count)
+        let fixedSlots = Array(tabSlots.prefix(fixedCount))
+        let fixedItems = Array(tabItems.prefix(fixedCount))
+        let pinnedPairs = reorderedTabPairs(in: fixedCount..<pinnedEnd)
+        let unpinnedPairs = reorderedTabPairs(in: pinnedEnd..<tabSlots.count)
+        let orderedPairs = pinnedPairs + unpinnedPairs
+
+        tabSlots = fixedSlots + orderedPairs.map(\.slot)
+        tabItems = fixedItems + orderedPairs.map(\.item)
+    }
+
+    private func reorderedTabPairs(in range: Range<Int>) -> [(slot: TabSlot, item: TabItemView)] {
+        var remainingPairs = range.compactMap { index -> (slot: TabSlot, item: TabItemView)? in
+            guard tabSlots.indices.contains(index), tabItems.indices.contains(index) else { return nil }
+            return (tabSlots[index], tabItems[index])
+        }
+        let currentIdentifiers = remainingPairs.compactMap { $0.slot.displayOrderIdentifier }
+        let orderedIdentifiers = TabDisplayOrderResolver.resolve(
+            currentIdentifiers: currentIdentifiers,
+            persistedOrder: thread.tabDisplayOrder
+        )
+        var orderedPairs: [(slot: TabSlot, item: TabItemView)] = []
+        for identifier in orderedIdentifiers {
+            guard let index = remainingPairs.firstIndex(where: { $0.slot.displayOrderIdentifier == identifier }) else {
+                continue
+            }
+            orderedPairs.append(remainingPairs.remove(at: index))
+        }
+        orderedPairs.append(contentsOf: remainingPairs)
+        return orderedPairs
     }
 }
 

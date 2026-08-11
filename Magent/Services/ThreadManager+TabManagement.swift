@@ -351,6 +351,10 @@ extension ThreadManager {
         sessionLifecycleService.updatePinnedTabs(for: threadId, pinnedSessions: pinnedSessions)
     }
 
+    func updateTabDisplayOrder(for threadId: UUID, tabDisplayOrder: [String]) {
+        sessionLifecycleService.updateTabDisplayOrder(for: threadId, tabDisplayOrder: tabDisplayOrder)
+    }
+
     func updatePersistedWebTabs(for threadId: UUID, webTabs: [PersistedWebTab]) {
         sessionLifecycleService.updatePersistedWebTabs(for: threadId, webTabs: webTabs)
     }

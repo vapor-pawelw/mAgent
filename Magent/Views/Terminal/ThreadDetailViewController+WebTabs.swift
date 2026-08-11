@@ -410,6 +410,7 @@ extension ThreadDetailViewController {
             thread.persistedWebTabs[pIdx].customTitle = newName
             tabItems[displayIndex].titleLabel.stringValue = newName
         }
+        persistTabDisplayOrder()
         persistWebTabs()
     }
 

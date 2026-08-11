@@ -239,6 +239,7 @@ extension ThreadDetailViewController {
 
         let newName = textField.stringValue.trimmingCharacters(in: .whitespaces)
         guard !newName.isEmpty, newName != currentCustomName else { return }
+        persistTabDisplayOrder()
 
         Task {
             do {

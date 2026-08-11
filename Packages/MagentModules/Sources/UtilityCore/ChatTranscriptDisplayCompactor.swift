@@ -54,9 +54,13 @@ public enum ChatTranscriptDisplayCompactor {
     private static func summaryMessage(for run: [PersistedChatMessage]) -> PersistedChatMessage {
         let visibleSummaries = run.prefix(maximumVisibleItems).map(summaryLine(for:))
         let hiddenCount = max(0, run.count - visibleSummaries.count)
+        let duration = max(
+            0,
+            (run.last?.createdAt ?? Date()).timeIntervalSince(run.first?.createdAt ?? Date())
+        )
         var lines = [
-            "Activity",
-            "\(run.count) \(run.count == 1 ? "action" : "actions")",
+            "Agent activity",
+            "\(run.count) \(run.count == 1 ? "action" : "actions") · \(formattedDuration(duration))",
         ]
         lines.append(contentsOf: visibleSummaries.map { "\($0.symbol) \($0.text)" })
         if hiddenCount > 0 {
@@ -71,6 +75,16 @@ public enum ChatTranscriptDisplayCompactor {
             modelId: run.last?.modelId,
             reasoningLevel: run.last?.reasoningLevel
         )
+    }
+
+    private static func formattedDuration(_ duration: TimeInterval) -> String {
+        let seconds = max(0, Int(duration.rounded()))
+        let minutes = seconds / 60
+        let remainingSeconds = seconds % 60
+        if minutes > 0 {
+            return "\(minutes)m \(remainingSeconds)s"
+        }
+        return "\(seconds)s"
     }
 
     private static func summaryLine(for message: PersistedChatMessage) -> (symbol: String, text: String) {

@@ -1,6 +1,194 @@
 import Cocoa
 import MagentCore
 
+private final class ChatThemePreviewView: NSView {
+    private let userBubble = NSView()
+    private let userLabel = NSTextField(wrappingLabelWithString: "")
+    private let assistantLabel = NSTextField(wrappingLabelWithString: "")
+    private let statusBubble = NSView()
+    private let statusLabel = NSTextField(labelWithString: "")
+    private let contrastStack = NSStackView()
+    private var previewAppearance: ChatAppearance?
+    private var previewFontSize: CGFloat = NSFont.systemFontSize
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = 12
+        layer?.masksToBounds = true
+        layer?.borderWidth = 1
+
+        let content = NSStackView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 10
+        addSubview(content)
+
+        userBubble.translatesAutoresizingMaskIntoConstraints = false
+        userBubble.wantsLayer = true
+        userBubble.layer?.cornerRadius = 12
+        userBubble.layer?.masksToBounds = true
+        userBubble.addSubview(userLabel)
+        userLabel.translatesAutoresizingMaskIntoConstraints = false
+        userLabel.stringValue = String(localized: .SettingsStrings.settingsChatPreviewUserMessage)
+
+        let userRow = NSStackView()
+        userRow.orientation = .horizontal
+        userRow.alignment = .centerY
+        let userSpacer = NSView()
+        userSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        userSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        userRow.addArrangedSubview(userSpacer)
+        userRow.addArrangedSubview(userBubble)
+        content.addArrangedSubview(userRow)
+
+        assistantLabel.stringValue = String(localized: .SettingsStrings.settingsChatPreviewAssistantMessage)
+        content.addArrangedSubview(assistantLabel)
+
+        statusBubble.translatesAutoresizingMaskIntoConstraints = false
+        statusBubble.wantsLayer = true
+        statusBubble.layer?.cornerRadius = 9
+        statusBubble.layer?.masksToBounds = true
+        statusBubble.addSubview(statusLabel)
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.stringValue = String(localized: .ThreadStrings.chatComposerWorkingHint)
+        content.addArrangedSubview(statusBubble)
+
+        let separator = NSBox()
+        separator.boxType = .separator
+        content.addArrangedSubview(separator)
+
+        contrastStack.orientation = .vertical
+        contrastStack.alignment = .leading
+        contrastStack.spacing = 4
+        content.addArrangedSubview(contrastStack)
+
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
+
+            userRow.widthAnchor.constraint(equalTo: content.widthAnchor),
+            userBubble.widthAnchor.constraint(lessThanOrEqualTo: content.widthAnchor, multiplier: 0.72),
+            userLabel.topAnchor.constraint(equalTo: userBubble.topAnchor, constant: 8),
+            userLabel.leadingAnchor.constraint(equalTo: userBubble.leadingAnchor, constant: 10),
+            userLabel.trailingAnchor.constraint(equalTo: userBubble.trailingAnchor, constant: -10),
+            userLabel.bottomAnchor.constraint(equalTo: userBubble.bottomAnchor, constant: -8),
+
+            assistantLabel.widthAnchor.constraint(lessThanOrEqualTo: content.widthAnchor, multiplier: 0.82),
+
+            statusLabel.topAnchor.constraint(equalTo: statusBubble.topAnchor, constant: 6),
+            statusLabel.leadingAnchor.constraint(equalTo: statusBubble.leadingAnchor, constant: 9),
+            statusLabel.trailingAnchor.constraint(equalTo: statusBubble.trailingAnchor, constant: -9),
+            statusLabel.bottomAnchor.constraint(equalTo: statusBubble.bottomAnchor, constant: -6),
+
+            separator.widthAnchor.constraint(equalTo: content.widthAnchor),
+            contrastStack.widthAnchor.constraint(equalTo: content.widthAnchor),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: 360),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if let previewAppearance {
+            update(appearance: previewAppearance, fontSize: previewFontSize)
+        } else {
+            updateSurfaceAppearance()
+        }
+    }
+
+    func update(appearance: ChatAppearance, fontSize: CGFloat) {
+        previewAppearance = appearance
+        previewFontSize = fontSize
+        let font = NSFont.systemFont(ofSize: fontSize)
+        userLabel.font = font
+        userLabel.textColor = appearance.userTextColor
+        assistantLabel.font = font
+        assistantLabel.textColor = appearance.agentTextColor
+        statusLabel.font = .systemFont(ofSize: max(11, fontSize - 1), weight: .medium)
+        statusLabel.textColor = appearance.agentTextColor
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            userBubble.layer?.backgroundColor = appearance.userBubbleColor.cgColor
+            statusBubble.layer?.backgroundColor = appearance.agentBubbleColor.cgColor
+        }
+        updateSurfaceAppearance()
+        updateContrastLabels(appearance: appearance)
+    }
+
+    private func updateSurfaceAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+        }
+    }
+
+    private func updateContrastLabels(appearance: ChatAppearance) {
+        contrastStack.arrangedSubviews.forEach {
+            contrastStack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+        var backgroundColor = NSColor(resource: .appBackground)
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            backgroundColor = NSColor(resource: .appBackground)
+        }
+        let checks: [(name: String, foreground: NSColor, background: NSColor)] = [
+            (
+                String(localized: .SettingsStrings.settingsChatUserBubbleColor),
+                appearance.userTextColor,
+                appearance.userBubbleColor
+            ),
+            (
+                String(localized: .SettingsStrings.settingsChatAgentTextColor),
+                appearance.agentTextColor,
+                backgroundColor
+            ),
+            (
+                String(localized: .SettingsStrings.settingsChatAgentBubbleColor),
+                appearance.agentTextColor,
+                appearance.agentBubbleColor
+            ),
+        ]
+        for (name, foreground, background) in checks {
+            let ratio = Self.contrastRatio(foreground: foreground, background: background)
+            let accessible = ratio >= ChatColorContrastPolicy.minimumAccessibleRatio
+            let result = accessible
+                ? String(localized: .SettingsStrings.settingsChatContrastAccessible)
+                : String(localized: .SettingsStrings.settingsChatContrastLow)
+            let label = NSTextField(
+                labelWithString: "\(accessible ? "✓" : "⚠") \(name) · \(result) · \(String(format: "%.1f:1", ratio))"
+            )
+            label.font = .systemFont(ofSize: 10, weight: .medium)
+            label.textColor = accessible ? .systemGreen : .systemOrange
+            label.lineBreakMode = .byTruncatingTail
+            contrastStack.addArrangedSubview(label)
+        }
+    }
+
+    private static func contrastRatio(foreground: NSColor, background: NSColor) -> Double {
+        guard let foregroundRGB = foreground.usingColorSpace(.sRGB),
+              let backgroundRGB = background.usingColorSpace(.sRGB) else {
+            return 1
+        }
+        return ChatColorContrastPolicy.contrastRatio(
+            foregroundRed: Double(foregroundRGB.redComponent),
+            foregroundGreen: Double(foregroundRGB.greenComponent),
+            foregroundBlue: Double(foregroundRGB.blueComponent),
+            backgroundRed: Double(backgroundRGB.redComponent),
+            backgroundGreen: Double(backgroundRGB.greenComponent),
+            backgroundBlue: Double(backgroundRGB.blueComponent)
+        )
+    }
+}
+
 final class SettingsChatViewController: NSViewController {
 
     private let persistence = PersistenceService.shared
@@ -14,6 +202,7 @@ final class SettingsChatViewController: NSViewController {
     private let agentTextColorWell = NSColorWell()
     private let chatFontSizeSlider = NSSlider(value: AppSettings.defaultChatFontSize, minValue: AppSettings.minChatFontSize, maxValue: AppSettings.maxChatFontSize, target: nil, action: nil)
     private let chatFontSizeValueLabel = NSTextField(labelWithString: "")
+    private let themePreviewView = ChatThemePreviewView()
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
@@ -41,6 +230,11 @@ final class SettingsChatViewController: NSViewController {
             description: String(localized: .SettingsStrings.settingsChatColorsDescription)
         )
         stackView.addArrangedSubview(colorsCard)
+
+        let (previewCard, previewSection) = createSectionCard(
+            title: String(localized: .SettingsStrings.settingsChatPreviewTitle)
+        )
+        stackView.addArrangedSubview(previewCard)
 
         let (textSizeCard, textSizeSection) = createSectionCard(
             title: String(localized: .SettingsStrings.settingsChatTextSizeTitle),
@@ -93,6 +287,9 @@ final class SettingsChatViewController: NSViewController {
         resetDescription.textColor = NSColor(resource: .textSecondary)
         colorsSection.addArrangedSubview(resetDescription)
 
+        previewSection.addArrangedSubview(themePreviewView)
+        themePreviewView.widthAnchor.constraint(equalTo: previewSection.widthAnchor).isActive = true
+
         configureChatFontSizeSlider()
         let textSizeRow = labeledSliderRow(
             label: String(localized: .SettingsStrings.settingsChatTextSizeLabel),
@@ -121,6 +318,7 @@ final class SettingsChatViewController: NSViewController {
 
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
             colorsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            previewCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             textSizeCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             resetDescription.widthAnchor.constraint(equalTo: colorsSection.widthAnchor),
         ])
@@ -259,6 +457,7 @@ final class SettingsChatViewController: NSViewController {
         agentTextColorWell.color = appearance.agentTextColor
         chatFontSizeSlider.doubleValue = settings.chatFontSize
         chatFontSizeValueLabel.stringValue = formattedChatFontSizeLabel(settings.chatFontSize)
+        themePreviewView.update(appearance: appearance, fontSize: CGFloat(settings.chatFontSize))
     }
 
     private func formattedChatFontSizeLabel(_ size: Double) -> String {

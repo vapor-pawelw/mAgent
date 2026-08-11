@@ -207,7 +207,6 @@ final class ThreadDetailViewController: NSViewController {
             }
             return ThreadTabFocusResolver.focusTarget(for: contentKind)
         }
-
         func identity(permanentTerminalSessionName: String?) -> ThreadTabIdentity {
             switch self {
             case .terminal(let sessionName):
@@ -223,6 +222,16 @@ final class ThreadDetailViewController: NSViewController {
                 return .draft(identifier)
             case .chat(let identifier):
                 return .chat(identifier)
+            }
+        }
+
+        var displayOrderIdentifier: String? {
+            switch self {
+            case .terminal(let sessionName): "terminal:\(sessionName)"
+            case .web(let identifier): "web:\(identifier)"
+            case .draft(let identifier): "draft:\(identifier)"
+            case .chat(let identifier): "chat:\(identifier)"
+            case .diff: nil
             }
         }
     }
@@ -1104,6 +1113,7 @@ final class ThreadDetailViewController: NSViewController {
             // Restore persisted draft tabs (view controllers created lazily on selection).
             restoreDraftTabItems()
             restoreChatTabItems()
+            restorePersistedTabDisplayOrder()
 
             let validChatIdentifiers = Set(chatTabs.map(\.identifier))
             let staleRunningChatIdentifiers = chatRequestTasksByIdentifier.keys.filter { !validChatIdentifiers.contains($0) }

@@ -190,6 +190,7 @@ extension ThreadDetailViewController {
             tabItems.append(item)
             tabSlots.append(.chat(identifier: identifier))
         }
+        persistTabDisplayOrder()
 
         rebindAllTabActions()
         rebuildTabBar()
@@ -306,7 +307,9 @@ extension ThreadDetailViewController {
             draftAttachments: chatTabs[entryIndex].draftAttachments,
             modelId: chatTabs[entryIndex].modelId,
             reasoningLevel: chatTabs[entryIndex].reasoningLevel,
-            pendingQueuedUserMessageIDs: queuedPendingUserMessageIDs(for: identifier)
+            pendingQueuedUserMessageIDs: queuedPendingUserMessageIDs(for: identifier),
+            isRunning: isChatRequestRunning(identifier: identifier),
+            queuedPromptCount: chatQueuedPromptsByIdentifier[identifier]?.count ?? 0
         )
 
         if vc.view.superview == nil {
@@ -414,6 +417,7 @@ extension ThreadDetailViewController {
                 totalCount: tabSlots.count
             )
         }
+        persistTabDisplayOrder()
         rebindAllTabActions()
 
         switch TabPinningState.selectionAfterRemoval(
@@ -464,6 +468,7 @@ extension ThreadDetailViewController {
             chatTabs[chatIndex].title = newTitle
             tabItems[displayIndex].titleLabel.stringValue = newTitle
         }
+        persistTabDisplayOrder()
         persistChatTabs()
         refreshTabTooltips()
     }
@@ -758,7 +763,9 @@ extension ThreadDetailViewController {
             draftAttachments: entry.draftAttachments,
             modelId: entry.modelId,
             reasoningLevel: entry.reasoningLevel,
-            pendingQueuedUserMessageIDs: queuedPendingUserMessageIDs(for: entry.identifier)
+            pendingQueuedUserMessageIDs: queuedPendingUserMessageIDs(for: entry.identifier),
+            isRunning: isChatRequestRunning(identifier: entry.identifier),
+            queuedPromptCount: chatQueuedPromptsByIdentifier[entry.identifier]?.count ?? 0
         )
     }
 

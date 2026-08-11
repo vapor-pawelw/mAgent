@@ -216,7 +216,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agent bubble color"
+            "value": "Status background color"
           }
         }
       }
@@ -238,7 +238,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Customize chat bubble background and text colors for both sides. Defaults stay the same until you set custom colors."
+            "value": "Customize chat colors with a live preview. Assistant replies stay unboxed; their background color is used for status messages."
           }
         }
       }
@@ -338,6 +338,61 @@
           "stringUnit": {
             "state": "translated",
             "value": "User text color"
+          }
+        }
+      }
+    },
+    "settingsChatPreviewTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview"
+          }
+        }
+      }
+    },
+    "settingsChatPreviewUserMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can you review these changes?"
+          }
+        }
+      }
+    },
+    "settingsChatPreviewAssistantMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I found two improvements worth making."
+          }
+        }
+      }
+    },
+    "settingsChatContrastAccessible": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessible contrast"
+          }
+        }
+      }
+    },
+    "settingsChatContrastLow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low contrast"
           }
         }
       }

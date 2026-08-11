@@ -71,11 +71,27 @@ private final class SlashCommandAutocompleteCellView: NSTableCellView {
 }
 
 private final class ChatInputTextView: NSTextView {
+    var placeholderString: String? {
+        didSet { needsDisplay = true }
+    }
     var onControlC: (() -> Bool)?
     var onPasteImageFromClipboard: (() -> Bool)?
     var onAttachmentDropHoverChanged: ((Bool) -> Void)?
     var canAcceptAttachmentDrop: ((NSPasteboard) -> Bool)?
     var onAttachmentDrop: ((NSPasteboard) -> Bool)?
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard string.isEmpty,
+              let placeholderString,
+              !placeholderString.isEmpty else { return }
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize),
+            .foregroundColor: NSColor.placeholderTextColor,
+        ]
+        placeholderString.draw(at: textContainerOrigin, withAttributes: attributes)
+    }
 
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -148,6 +164,84 @@ private final class ChatInputTextView: NSTextView {
     override func concludeDragOperation(_ sender: NSDraggingInfo?) {
         onAttachmentDropHoverChanged?(false)
         super.concludeDragOperation(sender)
+    }
+}
+
+private final class ChatEmptyStateView: NSView {
+    var onSuggestionSelected: ((String) -> Void)?
+
+    private let suggestions: [String]
+
+    override init(frame frameRect: NSRect) {
+        suggestions = [
+            String(localized: .ThreadStrings.chatEmptySuggestionReview),
+            String(localized: .ThreadStrings.chatEmptySuggestionBug),
+            String(localized: .ThreadStrings.chatEmptySuggestionExplain),
+        ]
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 8
+        addSubview(stack)
+
+        let symbol = NSImageView()
+        symbol.translatesAutoresizingMaskIntoConstraints = false
+        symbol.image = NSImage(
+            systemSymbolName: "bubble.left.and.text.bubble.right",
+            accessibilityDescription: nil
+        )?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 26, weight: .regular))
+        symbol.contentTintColor = .secondaryLabelColor
+        stack.addArrangedSubview(symbol)
+        stack.setCustomSpacing(12, after: symbol)
+
+        let title = NSTextField(labelWithString: String(localized: .ThreadStrings.chatEmptyTitle))
+        title.font = .systemFont(ofSize: 17, weight: .semibold)
+        title.alignment = .center
+        stack.addArrangedSubview(title)
+
+        let subtitle = NSTextField(
+            wrappingLabelWithString: String(localized: .ThreadStrings.chatEmptySubtitle)
+        )
+        subtitle.font = .systemFont(ofSize: 12)
+        subtitle.textColor = .secondaryLabelColor
+        subtitle.alignment = .center
+        subtitle.maximumNumberOfLines = 2
+        stack.addArrangedSubview(subtitle)
+        stack.setCustomSpacing(14, after: subtitle)
+
+        for (index, suggestion) in suggestions.enumerated() {
+            let button = NSButton(title: suggestion, target: self, action: #selector(suggestionTapped(_:)))
+            button.tag = index
+            button.bezelStyle = .rounded
+            button.controlSize = .regular
+            button.image = NSImage(systemSymbolName: "arrow.up.left", accessibilityDescription: nil)
+            button.imagePosition = .imageLeading
+            button.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+            stack.addArrangedSubview(button)
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 240).isActive = true
+        }
+
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -20),
+            subtitle.widthAnchor.constraint(lessThanOrEqualToConstant: 360),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func suggestionTapped(_ sender: NSButton) {
+        guard suggestions.indices.contains(sender.tag) else { return }
+        onSuggestionSelected?(suggestions[sender.tag])
     }
 }
 
@@ -732,6 +826,163 @@ private final class ChatMessageTextView: NSTextView {
     }
 }
 
+private final class ChatCodeBlockView: NSView {
+    private let code: String
+    private let scrollView = NSScrollView()
+    private let codeTextView = NSTextView()
+    private let copyButton = NSButton()
+    private var copyResetWorkItem: DispatchWorkItem?
+
+    var preferredHeight: CGFloat {
+        let lineCount = max(1, code.components(separatedBy: .newlines).count)
+        let contentHeight = CGFloat(lineCount) * 17 + 18
+        return min(270, max(74, contentHeight + 32))
+    }
+
+    var preferredLineWidth: CGFloat {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+        ]
+        return code.components(separatedBy: .newlines)
+            .map { ceil(($0 as NSString).size(withAttributes: attributes).width) }
+            .max() ?? 0
+    }
+
+    init(language: String?, code: String, textColor: NSColor) {
+        self.code = code
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = 10
+        layer?.masksToBounds = true
+
+        let header = NSView()
+        header.translatesAutoresizingMaskIntoConstraints = false
+        header.wantsLayer = true
+        addSubview(header)
+
+        let languageLabel = NSTextField(
+            labelWithString: language?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                ? language!.uppercased()
+                : String(localized: .ThreadStrings.chatCodePlainText)
+        )
+        languageLabel.translatesAutoresizingMaskIntoConstraints = false
+        languageLabel.font = .monospacedSystemFont(ofSize: 10, weight: .semibold)
+        languageLabel.textColor = .secondaryLabelColor
+        header.addSubview(languageLabel)
+
+        copyButton.translatesAutoresizingMaskIntoConstraints = false
+        copyButton.title = String(localized: .ThreadStrings.chatCodeCopy)
+        copyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
+        copyButton.imagePosition = .imageLeading
+        copyButton.bezelStyle = .inline
+        copyButton.controlSize = .small
+        copyButton.font = .systemFont(ofSize: 10, weight: .medium)
+        copyButton.target = self
+        copyButton.action = #selector(copyCode)
+        copyButton.toolTip = String(localized: .ThreadStrings.chatCodeCopy)
+        header.addSubview(copyButton)
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasHorizontalScroller = true
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
+        scrollView.horizontalScrollElasticity = .allowed
+        addSubview(scrollView)
+
+        codeTextView.drawsBackground = false
+        codeTextView.isEditable = false
+        codeTextView.isSelectable = true
+        codeTextView.isRichText = false
+        codeTextView.importsGraphics = false
+        codeTextView.usesFindPanel = true
+        codeTextView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        codeTextView.textColor = textColor
+        codeTextView.textContainerInset = NSSize(width: 12, height: 8)
+        codeTextView.textContainer?.lineFragmentPadding = 0
+        codeTextView.isHorizontallyResizable = true
+        codeTextView.isVerticallyResizable = true
+        codeTextView.textContainer?.widthTracksTextView = false
+        codeTextView.textContainer?.containerSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        codeTextView.string = code
+        scrollView.documentView = codeTextView
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: topAnchor),
+            header.leadingAnchor.constraint(equalTo: leadingAnchor),
+            header.trailingAnchor.constraint(equalTo: trailingAnchor),
+            header.heightAnchor.constraint(equalToConstant: 32),
+
+            languageLabel.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 12),
+            languageLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            copyButton.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -8),
+            copyButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+
+            scrollView.topAnchor.constraint(equalTo: header.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            heightAnchor.constraint(equalToConstant: preferredHeight),
+        ])
+        updateAppearance()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        let contentWidth = max(scrollView.contentSize.width, preferredLineWidth + 24)
+        if let textContainer = codeTextView.textContainer,
+           let layoutManager = codeTextView.layoutManager {
+            layoutManager.ensureLayout(for: textContainer)
+            let measuredHeight = ceil(layoutManager.usedRect(for: textContainer).height)
+                + (codeTextView.textContainerInset.height * 2)
+            let contentHeight = max(scrollView.contentSize.height, measuredHeight)
+            codeTextView.frame = NSRect(origin: .zero, size: NSSize(width: contentWidth, height: contentHeight))
+            return
+        }
+        let contentHeight = max(scrollView.contentSize.height, preferredHeight - 32)
+        codeTextView.frame = NSRect(origin: .zero, size: NSSize(width: contentWidth, height: contentHeight))
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.10).cgColor
+            layer?.borderWidth = 1
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+        }
+    }
+
+    @objc private func copyCode() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(code, forType: .string)
+        copyResetWorkItem?.cancel()
+        copyButton.title = String(localized: .ThreadStrings.chatCodeCopied)
+        copyButton.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.copyButton.title = String(localized: .ThreadStrings.chatCodeCopy)
+            self?.copyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
+        }
+        copyResetWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
+    }
+}
+
 private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private let container = NSView()
     private let contentStack = NSStackView()
@@ -741,6 +992,10 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private let toolDisclosureButton = NSButton(title: "", target: nil, action: nil)
     private let loadingProgressIndicator = NSProgressIndicator()
     private let loadingStatusLabel = NSTextField(labelWithString: "")
+    private let messageActionsStack = NSStackView()
+    private let messageMetadataLabel = NSTextField(labelWithString: "")
+    private let copyMessageButton = NSButton()
+    private weak var activityTimelineRailView: NSView?
     private let createdAt: Date
     private let onOpenLink: ((String) -> Void)?
     private let onOpenAttachment: ((PersistedChatAttachment) -> Void)?
@@ -768,10 +1023,14 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     private var renderedBaseTextColor: NSColor = .labelColor
     private var renderedCodeColor: NSColor = .secondaryLabelColor
     private var renderedFontSize: CGFloat = NSFont.systemFontSize
+    private var renderedTextViews: [ChatMessageTextView] = []
+    private var renderedCodeBlockViews: [ChatCodeBlockView] = []
     private var pendingAuthoritativeMarkdownRestyle: DispatchWorkItem?
     private var streamingMarkdownTail: String
     private var streamingInsideCodeFence: Bool
     private let supportsStreamingUpdate: Bool
+    private var hoverTrackingArea: NSTrackingArea?
+    private var copyResetWorkItem: DispatchWorkItem?
 
     private enum AssistantDisplayState {
         case normal
@@ -926,24 +1185,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             contentStack.spacing = 8
             container.addSubview(contentStack)
 
-            messageTextView.drawsBackground = false
-            messageTextView.isEditable = false
-            messageTextView.isSelectable = true
-            messageTextView.isRichText = false
-            messageTextView.importsGraphics = false
-            messageTextView.usesFindPanel = false
-            messageTextView.textContainerInset = .zero
-            messageTextView.textContainer?.lineFragmentPadding = 0
-            messageTextView.isHorizontallyResizable = false
-            messageTextView.isVerticallyResizable = true
-            messageTextView.textContainer?.widthTracksTextView = false
-            messageTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-            messageTextView.delegate = self
-            messageTextView.toolTip = metadataTooltip
-            messageTextView.linkTextAttributes = [
-                .foregroundColor: NSColor.appPrimary,
-                .font: NSFont.systemFont(ofSize: fontSize, weight: .regular),
-            ]
             let queuedSuffix = Self.queuedSubmissionSuffix
             let renderedMessageText: String
             if let toolPresentation {
@@ -958,51 +1199,6 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 renderedMessageText = message.text
             }
             messageTextHidden = renderedMessageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (toolPresentation != nil && !toolExpanded)
-            let attributedMessage = NSMutableAttributedString(
-                attributedString: Self.styledMarkdownText(
-                    toolPresentation?.title == "Agent activity"
-                        ? ChatTranscriptDisplayCompactor.plainText(fromActivitySummary: renderedMessageText)
-                        : renderedMessageText,
-                    baseColor: baseTextColor,
-                    codeColor: codeColor,
-                    linkColor: NSColor.appPrimary,
-                    baseFontSize: fontSize
-                )
-            )
-            if let toolPresentation, toolPresentation.title == "Agent activity" {
-                Self.applyActivitySummaryStyle(
-                    to: attributedMessage,
-                    rawText: toolPresentation.body,
-                    baseColor: baseTextColor,
-                    baseFontSize: fontSize
-                )
-            } else if toolPresentation != nil {
-                Self.applyToolTranscriptStyle(to: attributedMessage, baseColor: baseTextColor, baseFontSize: fontSize)
-                Self.applyDiffLineHighlights(to: attributedMessage, baseFontSize: fontSize)
-            }
-            if toolPresentation == nil, ChatTranscriptDisplayCompactor.isActivitySummary(message) {
-                Self.applyActivitySummaryStyle(
-                    to: attributedMessage,
-                    rawText: message.text,
-                    baseColor: baseTextColor,
-                    baseFontSize: fontSize
-                )
-            }
-            if displayRole == .user, isQueuedSubmissionPending {
-                let suffixLength = (queuedSuffix as NSString).length
-                if attributedMessage.length >= suffixLength {
-                    let suffixRange = NSRange(location: attributedMessage.length - suffixLength, length: suffixLength)
-                    let queuedInfoFont = NSFont.monospacedSystemFont(ofSize: max(11, fontSize - 1), weight: .medium)
-                    attributedMessage.addAttributes(
-                        [
-                            .font: queuedInfoFont,
-                            .foregroundColor: baseTextColor.withAlphaComponent(0.9),
-                        ],
-                        range: suffixRange
-                    )
-                }
-            }
-            messageTextView.textStorage?.setAttributedString(attributedMessage)
 
             if let toolPresentation {
                 configureToolDisclosureButton(presentation: toolPresentation, fontSize: fontSize, textColor: baseTextColor)
@@ -1012,9 +1208,107 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 toolHeaderStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
             }
 
-            messageTextView.translatesAutoresizingMaskIntoConstraints = false
-            messageTextView.isHidden = messageTextHidden
-            contentStack.addArrangedSubview(messageTextView)
+            let markdownSource = toolPresentation?.title == "Agent activity"
+                ? ChatTranscriptDisplayCompactor.plainText(fromActivitySummary: renderedMessageText)
+                : renderedMessageText
+            let markdownBlocks = ChatMarkdownBlockParser.parse(markdownSource)
+            let canRenderCodeCards = toolPresentation == nil
+                && statusPresentation == nil
+                && !isQueuedSubmissionPending
+                && markdownBlocks.contains(where: { block in
+                    if case .codeBlock = block { return true }
+                    return false
+                })
+
+            if canRenderCodeCards {
+                var textBlocks: [ChatMarkdownBlock] = []
+                let flushTextBlocks = {
+                    guard !textBlocks.isEmpty else { return }
+                    let textView = self.renderedTextViews.isEmpty ? self.messageTextView : ChatMessageTextView()
+                    self.configureMessageTextView(
+                        textView,
+                        attributedText: Self.styledMarkdownBlocks(
+                            textBlocks,
+                            baseColor: baseTextColor,
+                            codeColor: codeColor,
+                            linkColor: NSColor.appPrimary,
+                            baseFontSize: fontSize
+                        ),
+                        metadataTooltip: metadataTooltip,
+                        fontSize: fontSize
+                    )
+                    self.renderedTextViews.append(textView)
+                    self.contentStack.addArrangedSubview(textView)
+                    textBlocks.removeAll(keepingCapacity: true)
+                }
+
+                for block in markdownBlocks {
+                    if case .codeBlock(let language, let code) = block {
+                        flushTextBlocks()
+                        let codeBlock = ChatCodeBlockView(language: language, code: code, textColor: codeColor)
+                        renderedCodeBlockViews.append(codeBlock)
+                        contentStack.addArrangedSubview(codeBlock)
+                    } else {
+                        textBlocks.append(block)
+                    }
+                }
+                flushTextBlocks()
+            } else {
+                let attributedMessage = NSMutableAttributedString(
+                    attributedString: Self.styledMarkdownBlocks(
+                        markdownBlocks,
+                        baseColor: baseTextColor,
+                        codeColor: codeColor,
+                        linkColor: NSColor.appPrimary,
+                        baseFontSize: fontSize
+                    )
+                )
+                if let toolPresentation, toolPresentation.title == "Agent activity" {
+                    Self.applyActivitySummaryStyle(
+                        to: attributedMessage,
+                        rawText: toolPresentation.body,
+                        baseColor: baseTextColor,
+                        baseFontSize: fontSize
+                    )
+                } else if toolPresentation != nil {
+                    Self.applyToolTranscriptStyle(to: attributedMessage, baseColor: baseTextColor, baseFontSize: fontSize)
+                    Self.applyDiffLineHighlights(to: attributedMessage, baseFontSize: fontSize)
+                }
+                if toolPresentation == nil, ChatTranscriptDisplayCompactor.isActivitySummary(message) {
+                    Self.applyActivitySummaryStyle(
+                        to: attributedMessage,
+                        rawText: message.text,
+                        baseColor: baseTextColor,
+                        baseFontSize: fontSize
+                    )
+                }
+                if displayRole == .user, isQueuedSubmissionPending {
+                    let suffixLength = (queuedSuffix as NSString).length
+                    if attributedMessage.length >= suffixLength {
+                        let suffixRange = NSRange(location: attributedMessage.length - suffixLength, length: suffixLength)
+                        let queuedInfoFont = NSFont.monospacedSystemFont(ofSize: max(11, fontSize - 1), weight: .medium)
+                        attributedMessage.addAttributes(
+                            [
+                                .font: queuedInfoFont,
+                                .foregroundColor: baseTextColor.withAlphaComponent(0.9),
+                            ],
+                            range: suffixRange
+                        )
+                    }
+                }
+                configureMessageTextView(
+                    messageTextView,
+                    attributedText: attributedMessage,
+                    metadataTooltip: metadataTooltip,
+                    fontSize: fontSize
+                )
+                if isActivitySummary {
+                    applyActivityTimelineRail(to: messageTextView)
+                }
+                messageTextView.isHidden = messageTextHidden
+                renderedTextViews = [messageTextView]
+                contentStack.addArrangedSubview(messageTextView)
+            }
 
             if !message.attachments.isEmpty {
                 let attachmentScrollView = Self.makeAttachmentStrip(
@@ -1057,27 +1351,31 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
         addSubview(bubbleRow)
 
-        let contextMenu = NSMenu()
-        let copyItem = NSMenuItem(
-            title: String(localized: .ThreadStrings.chatMessageCopy),
-            action: #selector(copyMessage),
-            keyEquivalent: ""
-        )
-        copyItem.target = self
-        contextMenu.addItem(copyItem)
-        if onRenameTabFromMessage != nil,
-           ChatMessageContextActions.availableActions(messageText: message.text).contains(.renameTabFromMessage) {
-            let renameItem = NSMenuItem(
-                title: String(localized: .ThreadStrings.chatMessageRenameTab),
-                action: #selector(renameTabFromMessage),
-                keyEquivalent: ""
+        let showsHoverActions = !isLoadingIndicatorBubble
+            && (!message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !message.attachments.isEmpty)
+        if showsHoverActions {
+            configureHoverActions(
+                metadataText: Self.compactMetadataText(
+                    createdAt: message.createdAt,
+                    modelLabel: Self.resolvedModelLabel(for: message.modelId, agentType: agentType),
+                    reasoningLevel: message.reasoningLevel
+                )
             )
-            renameItem.target = self
-            contextMenu.addItem(renameItem)
+            addSubview(messageActionsStack)
+            switch displayRole {
+            case .user:
+                messageActionsStack.trailingAnchor.constraint(equalTo: container.trailingAnchor).isActive = true
+            case .assistant:
+                messageActionsStack.leadingAnchor.constraint(equalTo: container.leadingAnchor).isActive = true
+            case .system:
+                messageActionsStack.centerXAnchor.constraint(equalTo: container.centerXAnchor).isActive = true
+            }
+            NSLayoutConstraint.activate([
+                messageActionsStack.topAnchor.constraint(equalTo: bubbleRow.bottomAnchor, constant: 2),
+                messageActionsStack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
+                messageActionsStack.heightAnchor.constraint(equalToConstant: 20),
+            ])
         }
-        menu = contextMenu
-        container.menu = contextMenu
-        messageTextView.menu = contextMenu
 
         NSLayoutConstraint.activate([
             container.widthAnchor.constraint(lessThanOrEqualToConstant: maxBubbleWidth),
@@ -1085,7 +1383,10 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
             bubbleRow.topAnchor.constraint(equalTo: topAnchor),
             bubbleRow.leadingAnchor.constraint(equalTo: leadingAnchor),
             bubbleRow.trailingAnchor.constraint(equalTo: trailingAnchor),
-            bubbleRow.bottomAnchor.constraint(equalTo: bottomAnchor),
+            bubbleRow.bottomAnchor.constraint(
+                equalTo: bottomAnchor,
+                constant: showsHoverActions ? -22 : 0
+            ),
         ])
 
         if !isLoadingIndicatorBubble {
@@ -1101,8 +1402,13 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
                 contentStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -horizontalInset),
                 contentStack.topAnchor.constraint(equalTo: container.topAnchor, constant: verticalInset),
                 contentStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -verticalInset),
-                messageTextView.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             ])
+            for textView in renderedTextViews {
+                textView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+            }
+            for codeBlockView in renderedCodeBlockViews {
+                codeBlockView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+            }
         }
     }
 
@@ -1119,6 +1425,54 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         }
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateHoverActionsAppearance()
+        if let activityTimelineRailView {
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                activityTimelineRailView.layer?.backgroundColor = NSColor.appPrimary
+                    .withAlphaComponent(0.38)
+                    .cgColor
+            }
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard messageActionsStack.superview != nil else { return }
+        messageActionsStack.isHidden = false
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            messageActionsStack.animator().alphaValue = 1
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard messageActionsStack.superview != nil else { return }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.12
+            messageActionsStack.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.messageActionsStack.isHidden = true
+            }
+        })
+    }
+
     func scheduleMeasuredLayoutRefresh() {
         guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
         DispatchQueue.main.async { [weak self] in
@@ -1133,14 +1487,147 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         superview?.needsLayout = true
     }
 
+    private func configureMessageTextView(
+        _ textView: ChatMessageTextView,
+        attributedText: NSAttributedString,
+        metadataTooltip: String,
+        fontSize: CGFloat
+    ) {
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        textView.drawsBackground = false
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.usesFindPanel = false
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.delegate = self
+        textView.toolTip = metadataTooltip
+        textView.linkTextAttributes = [
+            .foregroundColor: NSColor.appPrimary,
+            .font: NSFont.systemFont(ofSize: fontSize, weight: .regular),
+        ]
+        textView.textStorage?.setAttributedString(attributedText)
+    }
+
+    private func configureHoverActions(metadataText: String) {
+        messageActionsStack.translatesAutoresizingMaskIntoConstraints = false
+        messageActionsStack.orientation = .horizontal
+        messageActionsStack.alignment = .centerY
+        messageActionsStack.spacing = 4
+        messageActionsStack.edgeInsets = NSEdgeInsets(top: 1, left: 7, bottom: 1, right: 4)
+        messageActionsStack.wantsLayer = true
+        messageActionsStack.layer?.cornerRadius = 10
+        messageActionsStack.alphaValue = 0
+        messageActionsStack.isHidden = true
+        updateHoverActionsAppearance()
+
+        messageMetadataLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        messageMetadataLabel.textColor = .secondaryLabelColor
+        messageMetadataLabel.lineBreakMode = .byTruncatingTail
+        messageMetadataLabel.stringValue = metadataText
+        messageMetadataLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        messageActionsStack.addArrangedSubview(messageMetadataLabel)
+
+        copyMessageButton.title = String(localized: .ThreadStrings.chatMessageCopy)
+        copyMessageButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
+        copyMessageButton.imagePosition = .imageOnly
+        copyMessageButton.isBordered = false
+        copyMessageButton.controlSize = .mini
+        copyMessageButton.target = self
+        copyMessageButton.action = #selector(copyMessage)
+        copyMessageButton.toolTip = String(localized: .ThreadStrings.chatMessageCopy)
+        messageActionsStack.addArrangedSubview(copyMessageButton)
+
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel(String(localized: .ThreadStrings.chatMessageActions))
+        setAccessibilityCustomActions([
+            NSAccessibilityCustomAction(
+                name: String(localized: .ThreadStrings.chatMessageCopy),
+                target: self,
+                selector: #selector(accessibilityCopyMessage(_:))
+            ),
+        ])
+
+        let contextMenu = NSMenu()
+        let copyItem = NSMenuItem(
+            title: String(localized: .ThreadStrings.chatMessageCopy),
+            action: #selector(copyMessage),
+            keyEquivalent: ""
+        )
+        copyItem.target = self
+        contextMenu.addItem(copyItem)
+        let contextActions = ChatMessageContextActions.availableActions(messageText: renderedMessage.text)
+        if onRenameTabFromMessage != nil, contextActions.contains(.renameTabFromMessage) {
+            let renameItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.chatMessageRenameTab),
+                action: #selector(renameTabFromMessage),
+                keyEquivalent: ""
+            )
+            renameItem.target = self
+            contextMenu.addItem(renameItem)
+        }
+        menu = contextMenu
+    }
+
+    private func updateHoverActionsAppearance() {
+        guard messageActionsStack.wantsLayer else { return }
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            messageActionsStack.layer?.backgroundColor = NSColor(resource: .appBackground)
+                .withAlphaComponent(0.94)
+                .cgColor
+            messageActionsStack.layer?.borderWidth = 0
+            messageActionsStack.layer?.borderColor = nil
+        }
+    }
+
+    private func applyActivityTimelineRail(to textView: ChatMessageTextView) {
+        textView.textContainerInset = NSSize(width: 16, height: 1)
+        let rail = NSView()
+        rail.translatesAutoresizingMaskIntoConstraints = false
+        rail.wantsLayer = true
+        rail.layer?.cornerRadius = 1
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            rail.layer?.backgroundColor = NSColor.appPrimary.withAlphaComponent(0.38).cgColor
+        }
+        activityTimelineRailView = rail
+        textView.addSubview(rail)
+        NSLayoutConstraint.activate([
+            rail.leadingAnchor.constraint(equalTo: textView.leadingAnchor, constant: 3),
+            rail.topAnchor.constraint(equalTo: textView.topAnchor, constant: 3),
+            rail.bottomAnchor.constraint(equalTo: textView.bottomAnchor, constant: -3),
+            rail.widthAnchor.constraint(equalToConstant: 2),
+        ])
+    }
+
     @objc private func copyMessage() {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(renderedMessage.text, forType: .string)
+        copyResetWorkItem?.cancel()
+        copyMessageButton.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+        copyMessageButton.toolTip = String(localized: .ThreadStrings.chatMessageCopied)
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.copyMessageButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
+            self?.copyMessageButton.toolTip = String(localized: .ThreadStrings.chatMessageCopy)
+        }
+        copyResetWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
     }
 
     @objc private func renameTabFromMessage() {
         onRenameTabFromMessage?(renderedMessage.text)
+    }
+
+    @objc private func accessibilityCopyMessage(_ action: NSAccessibilityCustomAction) -> Bool {
+        copyMessage()
+        return true
     }
 
     func updateMessageInPlace(_ message: PersistedChatMessage) -> Bool {
@@ -1151,6 +1638,8 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
               message.attachments.isEmpty,
               !isLoadingIndicatorBubble,
               !rendersAsSeparator,
+              renderedCodeBlockViews.isEmpty,
+              !Self.containsCodeBlock(message.text),
               case .message = ChatMessageDisplayPlanner.plan(for: renderedMessage).kind,
               case .message = ChatMessageDisplayPlanner.plan(for: message).kind else {
             return false
@@ -1180,7 +1669,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
               message.role == .assistant,
               message.attachments.isEmpty,
               !isLoadingIndicatorBubble,
-              !rendersAsSeparator else {
+              !rendersAsSeparator,
+              renderedCodeBlockViews.isEmpty,
+              !(update.isFinal && Self.containsCodeBlock(message.text)) else {
             return false
         }
 
@@ -1251,6 +1742,13 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         (text.components(separatedBy: "```").count - 1) % 2 == 1
     }
 
+    private static func containsCodeBlock(_ text: String) -> Bool {
+        ChatMarkdownBlockParser.parse(text).contains { block in
+            if case .codeBlock = block { return true }
+            return false
+        }
+    }
+
     private func applyStreamingTextMutation(_ mutation: ChatStreamingTextMutation, finalText: String) {
         guard let textStorage = messageTextView.textStorage else { return }
         switch mutation {
@@ -1302,7 +1800,9 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
 
     func clearSelection() {
         guard !isLoadingIndicatorBubble, !rendersAsSeparator else { return }
-        messageTextView.setSelectedRange(NSRange(location: 0, length: 0))
+        for textView in renderedTextViews {
+            textView.setSelectedRange(NSRange(location: 0, length: 0))
+        }
     }
 
     func refreshRelativeTimestamp(now: Date = Date()) {
@@ -1389,18 +1889,26 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
     }
 
     private func updateBubbleLayout() {
-        guard let textContainer = messageTextView.textContainer,
-              let layoutManager = messageTextView.layoutManager,
-              let bubbleWidthConstraint else { return }
+        guard let bubbleWidthConstraint else { return }
 
         let availableBubbleWidth = min(maxBubbleWidth, max(minBubbleWidth, bounds.width))
         let maxTextWidth = max(1, availableBubbleWidth - bubbleHorizontalPadding)
-        if abs(textContainer.containerSize.width - maxTextWidth) > 0.5 {
-            textContainer.containerSize = NSSize(width: maxTextWidth, height: CGFloat.greatestFiniteMagnitude)
+        var measuredLineWidth: CGFloat = 0
+        for textView in renderedTextViews {
+            guard let textContainer = textView.textContainer,
+                  let layoutManager = textView.layoutManager else { continue }
+            if abs(textContainer.containerSize.width - maxTextWidth) > 0.5 {
+                textContainer.containerSize = NSSize(width: maxTextWidth, height: CGFloat.greatestFiniteMagnitude)
+            }
+            layoutManager.ensureLayout(for: textContainer)
+            measuredLineWidth = max(
+                measuredLineWidth,
+                Self.maxLineWidth(in: layoutManager, textContainer: textContainer)
+            )
         }
-        layoutManager.ensureLayout(for: textContainer)
-
-        let measuredLineWidth = max(0, Self.maxLineWidth(in: layoutManager, textContainer: textContainer))
+        if let preferredCodeWidth = renderedCodeBlockViews.map(\.preferredLineWidth).max() {
+            measuredLineWidth = max(measuredLineWidth, min(maxTextWidth, preferredCodeWidth))
+        }
         let measuredToolHeaderWidth = toolPresentation == nil ? 0 : ceil(toolDisclosureButton.intrinsicContentSize.width)
         let targetBubbleWidth = CGFloat(ChatToolDisclosureLayoutPolicy.targetWidth(
             isToolDisclosure: toolPresentation != nil,
@@ -1415,18 +1923,27 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         }
 
         let targetTextWidth = max(1, targetBubbleWidth - bubbleHorizontalPadding)
-        if abs(textContainer.containerSize.width - targetTextWidth) > 0.5 {
-            textContainer.containerSize = NSSize(width: targetTextWidth, height: CGFloat.greatestFiniteMagnitude)
-            layoutManager.ensureLayout(for: textContainer)
+        var textHeight: CGFloat = 0
+        for textView in renderedTextViews where !textView.isHidden {
+            guard let textContainer = textView.textContainer,
+                  let layoutManager = textView.layoutManager else { continue }
+            if abs(textContainer.containerSize.width - targetTextWidth) > 0.5 {
+                textContainer.containerSize = NSSize(width: targetTextWidth, height: CGFloat.greatestFiniteMagnitude)
+                layoutManager.ensureLayout(for: textContainer)
+            }
+            textHeight += ceil(layoutManager.usedRect(for: textContainer).height)
         }
 
-        let textHeight = messageTextHidden ? 0 : ceil(layoutManager.usedRect(for: textContainer).height)
         let toolHeaderHeight = toolPresentation == nil ? 0 : ceil(toolDisclosureButton.intrinsicContentSize.height)
-        let visibleBlocks = [toolHeaderHeight, textHeight, messageAttachmentStripHeight].filter { $0 > 0 }
-        let contentSpacing = CGFloat(max(0, visibleBlocks.count - 1)) * contentStack.spacing
+        let codeHeight = renderedCodeBlockViews.reduce(CGFloat.zero) { $0 + $1.preferredHeight }
+        let visibleBlockCount = (toolHeaderHeight > 0 ? 1 : 0)
+            + renderedTextViews.filter { !$0.isHidden }.count
+            + renderedCodeBlockViews.count
+            + (messageAttachmentStripHeight > 0 ? 1 : 0)
+        let contentSpacing = CGFloat(max(0, visibleBlockCount - 1)) * contentStack.spacing
         bubbleHeightConstraint?.constant = max(
             20,
-            toolHeaderHeight + textHeight + messageAttachmentStripHeight + contentSpacing + bubbleVerticalPadding
+            toolHeaderHeight + textHeight + codeHeight + messageAttachmentStripHeight + contentSpacing + bubbleVerticalPadding
         )
     }
 
@@ -1632,10 +2149,25 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         linkColor: NSColor,
         baseFontSize: CGFloat
     ) -> NSAttributedString {
+        styledMarkdownBlocks(
+            ChatMarkdownBlockParser.parse(source),
+            baseColor: baseColor,
+            codeColor: codeColor,
+            linkColor: linkColor,
+            baseFontSize: baseFontSize
+        )
+    }
+
+    private static func styledMarkdownBlocks(
+        _ blocks: [ChatMarkdownBlock],
+        baseColor: NSColor,
+        codeColor: NSColor,
+        linkColor: NSColor,
+        baseFontSize: CGFloat
+    ) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let baseFont = NSFont.systemFont(ofSize: baseFontSize)
         let codeFont = NSFont.monospacedSystemFont(ofSize: max(11, baseFontSize - 1), weight: .regular)
-        let blocks = ChatMarkdownBlockParser.parse(source)
 
         for (index, block) in blocks.enumerated() {
             let blockStart = result.length
@@ -1911,6 +2443,20 @@ private final class ChatMessageBubbleView: NSView, NSTextViewDelegate {
         return nil
     }
 
+    private static func compactMetadataText(
+        createdAt: Date,
+        modelLabel: String?,
+        reasoningLevel: String?
+    ) -> String {
+        let time = DateFormatter.localizedString(from: createdAt, dateStyle: .none, timeStyle: .short)
+        return [time, hoverMetadataText(modelLabel: modelLabel, reasoningLevel: reasoningLevel)]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " · ")
+    }
+
     private static func resolvedModelLabel(for modelId: String?, agentType: AgentType) -> String? {
         guard let modelId, !modelId.isEmpty else { return nil }
         guard let config = AgentModelsService.shared.config(for: agentType) else { return modelId }
@@ -1997,6 +2543,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private let inputTextView = ChatInputTextView()
     private let attachButton = NSButton()
     private let sendButton = NSButton()
+    private let stopButton = NSButton()
+    private let composerStatusLabel = NSTextField(labelWithString: "")
     private let scrollToBottomButton = NSButton()
     private let rootDropView = ChatSurfaceDropView()
     private let composerContainerView = NSView()
@@ -2010,6 +2558,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private let reasoningPicker = NSPopUpButton()
     private let modelReasoningRow = NSStackView()
     private let transcriptNavigationRow = NSStackView()
+    private let emptyStateView = ChatEmptyStateView()
     private let olderMessagesButton = NSButton()
     private let newerMessagesButton = NSButton()
     private var relativeTimestampTimer: Timer?
@@ -2018,6 +2567,8 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private var inputHeightConstraint: NSLayoutConstraint?
     private var attachmentsHeightConstraint: NSLayoutConstraint?
     private var slashAutocompleteHeightConstraint: NSLayoutConstraint?
+    private var messagesRailWidthConstraint: NSLayoutConstraint?
+    private var composerRailWidthConstraint: NSLayoutConstraint?
     private var filteredSlashCommands: [SlashCommandAutocompleteItem] = []
     private var chatAppearance: ChatAppearance
     private var chatFontSize: CGFloat
@@ -2031,6 +2582,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private var postMessageLayoutUpdateScheduled = false
     private var pendingPostMessageScrollToBottom = false
     private var followsLatestOutput = true
+    private var unseenMessageCount = 0
+    private var isRunning = false
+    private var queuedPromptCount = 0
     private var isAdjustingScrollPosition = false
     private weak var mediaPreviewOverlayView: ChatImagePreviewOverlayView?
     private let initialDraftInput: String
@@ -2092,6 +2646,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         configureModelReasoningPickers()
         reloadMessages(forceFullReload: true)
         updateComposerHeight()
+        updateComposerPresentation()
         updateScrollToBottomButtonVisibility()
         updateSlashAutocompleteAppearance()
         updateScrollToBottomButtonAppearance()
@@ -2110,8 +2665,15 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         draftAttachments: [PersistedChatAttachment]? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
-        pendingQueuedUserMessageIDs: Set<UUID>? = nil
+        pendingQueuedUserMessageIDs: Set<UUID>? = nil,
+        isRunning: Bool? = nil,
+        queuedPromptCount: Int? = nil
     ) {
+        let existingMessageIDs = Set(self.messages.map(\.id))
+        let newlyAddedMessageCount = messages.lazy.filter { !existingMessageIDs.contains($0.id) }.count
+        if newlyAddedMessageCount > 0, !isNearBottomForAutoScroll() {
+            unseenMessageCount += newlyAddedMessageCount
+        }
         let previousAgentType = self.agentType
         self.agentType = agentType
         self.messages = messages
@@ -2119,6 +2681,12 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         self.reasoningLevel = reasoningLevel
         if let pendingQueuedUserMessageIDs {
             self.pendingQueuedUserMessageIDs = pendingQueuedUserMessageIDs
+        }
+        if let isRunning {
+            self.isRunning = isRunning
+        }
+        if let queuedPromptCount {
+            self.queuedPromptCount = max(0, queuedPromptCount)
         }
         if let draftAttachments {
             self.draftAttachments = draftAttachments
@@ -2135,6 +2703,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         }
         reloadMessages(forceFullReload: previousAgentType != agentType)
         updateSlashAutocompleteForCurrentInput()
+        updateComposerPresentation()
     }
 
     @discardableResult
@@ -2174,6 +2743,16 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         view.window?.makeFirstResponder(inputTextView)
     }
 
+    private func applyEmptyStateSuggestion(_ suggestion: String) {
+        inputTextView.string = suggestion
+        inputTextView.needsDisplay = true
+        inputTextView.setSelectedRange(NSRange(location: (suggestion as NSString).length, length: 0))
+        onDraftChanged?(suggestion)
+        updateComposerHeight()
+        updateComposerPresentation()
+        focusComposer()
+    }
+
     private func configureSurfaceDropTarget() {
         rootDropView.canAcceptDrop = { [weak self] pasteboard in
             self?.canReadAttachments(from: pasteboard) ?? false
@@ -2187,6 +2766,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         let rootStack = NSStackView()
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         rootStack.orientation = .vertical
+        rootStack.alignment = .centerX
         rootStack.spacing = 10
         view.addSubview(rootStack)
 
@@ -2200,6 +2780,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         let messagesContainer = NSView()
         messagesContainer.translatesAutoresizingMaskIntoConstraints = false
         rootStack.addArrangedSubview(messagesContainer)
+        messagesContainer.widthAnchor.constraint(equalTo: rootStack.widthAnchor).isActive = true
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.drawsBackground = false
@@ -2219,6 +2800,10 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         doc.addSubview(messagesStack)
         scrollView.documentView = doc
         messagesContainer.addSubview(scrollView)
+        messagesContainer.addSubview(emptyStateView)
+        emptyStateView.onSuggestionSelected = { [weak self] suggestion in
+            self?.applyEmptyStateSuggestion(suggestion)
+        }
 
         transcriptNavigationRow.translatesAutoresizingMaskIntoConstraints = false
         transcriptNavigationRow.orientation = .horizontal
@@ -2249,12 +2834,23 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             doc.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
 
             messagesStack.topAnchor.constraint(equalTo: doc.topAnchor),
-            messagesStack.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
-            messagesStack.trailingAnchor.constraint(equalTo: doc.trailingAnchor),
+            messagesStack.centerXAnchor.constraint(equalTo: doc.centerXAnchor),
+            messagesStack.widthAnchor.constraint(
+                lessThanOrEqualToConstant: CGFloat(ChatContentLayoutPolicy.maximumRailWidth)
+            ),
+            messagesStack.widthAnchor.constraint(lessThanOrEqualTo: doc.widthAnchor),
             messagesStack.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
             transcriptNavigationRow.topAnchor.constraint(equalTo: messagesContainer.topAnchor, constant: 8),
             transcriptNavigationRow.centerXAnchor.constraint(equalTo: messagesContainer.centerXAnchor),
+            emptyStateView.centerXAnchor.constraint(equalTo: messagesContainer.centerXAnchor),
+            emptyStateView.centerYAnchor.constraint(equalTo: messagesContainer.centerYAnchor),
+            emptyStateView.leadingAnchor.constraint(greaterThanOrEqualTo: messagesContainer.leadingAnchor, constant: 20),
+            emptyStateView.trailingAnchor.constraint(lessThanOrEqualTo: messagesContainer.trailingAnchor, constant: -20),
         ])
+        let messagesRailWidthConstraint = messagesStack.widthAnchor.constraint(equalToConstant: 0)
+        messagesRailWidthConstraint.priority = NSLayoutConstraint.Priority(rawValue: 751)
+        messagesRailWidthConstraint.isActive = true
+        self.messagesRailWidthConstraint = messagesRailWidthConstraint
 
         let composerContainer = composerContainerView
         composerContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -2263,6 +2859,16 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         composerContainer.layer?.borderWidth = 1
         composerContainer.layer?.masksToBounds = true
         rootStack.addArrangedSubview(composerContainer)
+        let composerRailWidthConstraint = composerContainer.widthAnchor.constraint(equalToConstant: 0)
+        composerRailWidthConstraint.priority = NSLayoutConstraint.Priority(rawValue: 751)
+        NSLayoutConstraint.activate([
+            composerContainer.widthAnchor.constraint(
+                lessThanOrEqualToConstant: CGFloat(ChatContentLayoutPolicy.maximumRailWidth)
+            ),
+            composerContainer.widthAnchor.constraint(lessThanOrEqualTo: rootStack.widthAnchor),
+            composerRailWidthConstraint,
+        ])
+        self.composerRailWidthConstraint = composerRailWidthConstraint
 
         let composerContentStack = NSStackView()
         composerContentStack.translatesAutoresizingMaskIntoConstraints = false
@@ -2324,6 +2930,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         inputTextView.isEditable = true
         inputTextView.isSelectable = true
         inputTextView.font = .systemFont(ofSize: chatFontSize)
+        inputTextView.placeholderString = String(localized: .ThreadStrings.chatComposerPlaceholder)
         inputTextView.isAutomaticDashSubstitutionEnabled = false
         inputTextView.isAutomaticQuoteSubstitutionEnabled = false
         inputTextView.isAutomaticTextReplacementEnabled = false
@@ -2381,7 +2988,23 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         sendButton.contentTintColor = .appPrimary
         sendButton.target = self
         sendButton.action = #selector(sendTapped)
-        sendButton.toolTip = "Return sends. Shift+Return inserts newline. Esc or Ctrl+C cancels running request."
+
+        stopButton.translatesAutoresizingMaskIntoConstraints = false
+        stopButton.title = ""
+        stopButton.image = NSImage(systemSymbolName: "stop.circle.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 18, weight: .semibold))
+        stopButton.imagePosition = .imageOnly
+        stopButton.isBordered = false
+        stopButton.contentTintColor = .systemRed
+        stopButton.target = self
+        stopButton.action = #selector(stopTapped)
+        stopButton.toolTip = String(localized: .ThreadStrings.chatComposerStop)
+
+        composerStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+        composerStatusLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        composerStatusLabel.textColor = .secondaryLabelColor
+        composerStatusLabel.lineBreakMode = .byTruncatingTail
+        composerStatusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         NSLayoutConstraint.activate([
             {
@@ -2393,16 +3016,18 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             attachButton.heightAnchor.constraint(equalToConstant: 30),
             sendButton.widthAnchor.constraint(equalToConstant: 34),
             sendButton.heightAnchor.constraint(equalToConstant: 34),
+            stopButton.widthAnchor.constraint(equalToConstant: 28),
+            stopButton.heightAnchor.constraint(equalToConstant: 28),
         ])
         updateComposerAppearance()
         reloadAttachmentChips()
 
         scrollToBottomButton.translatesAutoresizingMaskIntoConstraints = false
-        scrollToBottomButton.title = ""
+        scrollToBottomButton.title = String(localized: .ThreadStrings.chatScrollToLatest)
         let scrollIconConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
         scrollToBottomButton.image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Scroll to bottom")?
             .withSymbolConfiguration(scrollIconConfig)
-        scrollToBottomButton.imagePosition = .imageOnly
+        scrollToBottomButton.imagePosition = .imageLeading
         scrollToBottomButton.isBordered = false
         scrollToBottomButton.toolTip = "Scroll to bottom"
         scrollToBottomButton.target = self
@@ -2410,9 +3035,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         view.addSubview(scrollToBottomButton)
 
         NSLayoutConstraint.activate([
-            scrollToBottomButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            scrollToBottomButton.centerXAnchor.constraint(equalTo: composerContainer.centerXAnchor),
             scrollToBottomButton.bottomAnchor.constraint(equalTo: composerContainer.topAnchor, constant: -10),
-            scrollToBottomButton.widthAnchor.constraint(equalToConstant: 30),
+            scrollToBottomButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 30),
             scrollToBottomButton.heightAnchor.constraint(equalToConstant: 30),
         ])
 
@@ -2441,12 +3066,16 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
 
         modelPicker.translatesAutoresizingMaskIntoConstraints = false
         modelPicker.controlSize = .small
+        modelPicker.bezelStyle = .inline
+        modelPicker.font = .systemFont(ofSize: 11, weight: .medium)
         modelPicker.target = self
         modelPicker.action = #selector(modelPickerChanged)
         modelPicker.toolTip = String(localized: .ThreadStrings.chatSlashCommandModelDescription)
 
         reasoningPicker.translatesAutoresizingMaskIntoConstraints = false
         reasoningPicker.controlSize = .small
+        reasoningPicker.bezelStyle = .inline
+        reasoningPicker.font = .systemFont(ofSize: 11, weight: .medium)
         reasoningPicker.target = self
         reasoningPicker.action = #selector(reasoningPickerChanged)
         reasoningPicker.toolTip = String(localized: .ThreadStrings.chatSlashCommandEffortDescription)
@@ -2459,12 +3088,14 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         modelReasoningRow.addArrangedSubview(attachButton)
         modelReasoningRow.addArrangedSubview(modelPicker)
         modelReasoningRow.addArrangedSubview(reasoningPicker)
+        modelReasoningRow.addArrangedSubview(composerStatusLabel)
         modelReasoningRow.addArrangedSubview(spacer)
+        modelReasoningRow.addArrangedSubview(stopButton)
         modelReasoningRow.addArrangedSubview(sendButton)
 
-        let preferredModelWidth = modelPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 180)
+        let preferredModelWidth = modelPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 120)
         preferredModelWidth.priority = .defaultHigh
-        let preferredReasoningWidth = reasoningPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 116)
+        let preferredReasoningWidth = reasoningPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 88)
         preferredReasoningWidth.priority = .defaultHigh
         NSLayoutConstraint.activate([
             modelReasoningRow.widthAnchor.constraint(equalTo: parentStack.widthAnchor),
@@ -2864,6 +3495,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
             endingAt: transcriptPageEnd
         )
         let sourceMessages = Array(messages[renderWindow.range])
+        emptyStateView.isHidden = !messages.isEmpty
         olderMessagesButton.isHidden = !renderWindow.hasOlderMessages
         newerMessagesButton.isHidden = !renderWindow.hasNewerMessages
         transcriptNavigationRow.isHidden = !renderWindow.hasOlderMessages && !renderWindow.hasNewerMessages
@@ -3026,12 +3658,62 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         }
         hideSlashAutocomplete()
         inputTextView.string = ""
+        inputTextView.needsDisplay = true
         onDraftChanged?("")
         draftAttachments = []
         onDraftAttachmentsChanged?([])
         reloadAttachmentChips()
         updateComposerHeight()
+        updateComposerPresentation()
         onSubmit?(text, attachments)
+    }
+
+    @objc private func stopTapped() {
+        guard isRunning || isCommandRunning?() == true else { return }
+        onCancelRunningCommand?()
+        updateComposerPresentation()
+    }
+
+    private func updateComposerPresentation() {
+        let hasText = !inputTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let presentation = ChatComposerPresentation(
+            hasDraftText: hasText,
+            attachmentCount: draftAttachments.count,
+            isRunning: isRunning,
+            queuedPromptCount: queuedPromptCount
+        )
+        let sendIconConfig = NSImage.SymbolConfiguration(pointSize: 22, weight: .semibold)
+        switch presentation.primaryAction {
+        case .disabled:
+            sendButton.isEnabled = false
+            sendButton.toolTip = String(localized: .ThreadStrings.chatComposerSend)
+        case .send:
+            sendButton.isEnabled = true
+            sendButton.toolTip = String(localized: .ThreadStrings.chatComposerSend)
+        case .steer:
+            sendButton.isEnabled = true
+            sendButton.toolTip = String(localized: .ThreadStrings.chatComposerSteer)
+        }
+        sendButton.image = NSImage(
+            systemSymbolName: presentation.primaryAction == .steer
+                ? "arrow.turn.up.right"
+                : "arrow.up.circle.fill",
+            accessibilityDescription: sendButton.toolTip
+        )?.withSymbolConfiguration(sendIconConfig)
+        sendButton.contentTintColor = sendButton.isEnabled ? .appPrimary : .tertiaryLabelColor
+
+        stopButton.isHidden = !presentation.isRunning
+        composerStatusLabel.isHidden = !presentation.isRunning && presentation.queuedPromptCount == 0
+        var statusComponents: [String] = []
+        if presentation.isRunning {
+            statusComponents.append(String(localized: .ThreadStrings.chatComposerWorkingHint))
+        }
+        if presentation.queuedPromptCount > 0 {
+            statusComponents.append(
+                String(localized: .ThreadStrings.chatComposerQueuedCount(presentation.queuedPromptCount))
+            )
+        }
+        composerStatusLabel.stringValue = statusComponents.joined(separator: " · ")
     }
 
     @objc private func attachFilesTapped() {
@@ -3054,6 +3736,7 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     }
 
     @objc private func scrollToBottomTapped() {
+        unseenMessageCount = 0
         followsLatestOutput = true
         scrollToBottom(animated: true)
     }
@@ -3061,6 +3744,9 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     @objc private func scrollBoundsChanged() {
         if !isAdjustingScrollPosition {
             followsLatestOutput = distanceFromBottom(for: scrollView.contentView) < 24
+            if followsLatestOutput {
+                unseenMessageCount = 0
+            }
         }
         updateScrollToBottomButtonVisibility()
     }
@@ -3099,6 +3785,10 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
     private func updateScrollToBottomButtonVisibility() {
         let clip = scrollView.contentView
         scrollToBottomButton.isHidden = distanceFromBottom(for: clip) < 24
+        scrollToBottomButton.title = unseenMessageCount > 0
+            ? String(localized: .ThreadStrings.chatScrollNewMessages(unseenMessageCount))
+            : String(localized: .ThreadStrings.chatScrollToLatest)
+        scrollToBottomButton.invalidateIntrinsicContentSize()
     }
 
     private func bottomContentOffsetY(for clip: NSClipView) -> CGFloat {
@@ -3615,6 +4305,11 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         }
     }
 
+    override func viewWillLayout() {
+        super.viewWillLayout()
+        updateContentRailWidths()
+    }
+
     override func viewDidLayout() {
         super.viewDidLayout()
         syncInputTextViewFrameToScrollView()
@@ -3622,11 +4317,23 @@ final class ChatTabViewController: NSViewController, NSTextViewDelegate, NSTable
         updateScrollToBottomButtonAppearance()
     }
 
+    private func updateContentRailWidths() {
+        let railWidth = CGFloat(ChatContentLayoutPolicy.railWidth(for: Double(view.bounds.width)))
+        if abs((messagesRailWidthConstraint?.constant ?? 0) - railWidth) > 0.5 {
+            messagesRailWidthConstraint?.constant = railWidth
+        }
+        if abs((composerRailWidthConstraint?.constant ?? 0) - railWidth) > 0.5 {
+            composerRailWidthConstraint?.constant = railWidth
+        }
+    }
+
     func textDidChange(_ notification: Notification) {
         guard notification.object as? NSTextView === inputTextView else { return }
+        inputTextView.needsDisplay = true
         onDraftChanged?(inputTextView.string)
         updateComposerHeight()
         updateSlashAutocompleteForCurrentInput()
+        updateComposerPresentation()
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {

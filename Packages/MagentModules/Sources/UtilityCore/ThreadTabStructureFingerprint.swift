@@ -22,6 +22,7 @@ public struct ThreadTabStructureFingerprint: Equatable, Sendable {
     public let webTabs: [PersistedTab]
     public let draftTabs: [PersistedTab]
     public let chatTabs: [PersistedTab]
+    public let tabDisplayOrder: [String]
 
     public init(thread: MagentThread) {
         self.terminalSessionNames = thread.tmuxSessionNames
@@ -35,6 +36,7 @@ public struct ThreadTabStructureFingerprint: Equatable, Sendable {
         self.chatTabs = thread.persistedChatTabs.map { persisted in
             PersistedTab(identifier: persisted.identifier, isPinned: persisted.isPinned)
         }
+        self.tabDisplayOrder = thread.tabDisplayOrder
     }
 
     /// Returns whether a fingerprint change is the identity re-key performed by
@@ -71,5 +73,26 @@ public struct ThreadTabStructureFingerprint: Equatable, Sendable {
         guard !renameMap.isEmpty else { return false }
         let remappedPins = previous.pinnedTmuxSessions.map { renameMap[$0] ?? $0 }
         return remappedPins == updated.pinnedTmuxSessions
+    }
+}
+
+public enum TabDisplayOrderResolver {
+    /// Restores known identifiers in their saved order, then appends tabs created
+    /// after that order was recorded. Stale and duplicate identifiers are ignored.
+    public static func resolve(currentIdentifiers: [String], persistedOrder: [String]) -> [String] {
+        let currentSet = Set(currentIdentifiers)
+        var seen = Set<String>()
+        var resolved = persistedOrder.filter { currentSet.contains($0) && seen.insert($0).inserted }
+        resolved.append(contentsOf: currentIdentifiers.filter { seen.insert($0).inserted })
+        return resolved
+    }
+
+    public static func resolve(
+        currentPinnedIdentifiers: [String],
+        currentUnpinnedIdentifiers: [String],
+        persistedOrder: [String]
+    ) -> [String] {
+        resolve(currentIdentifiers: currentPinnedIdentifiers, persistedOrder: persistedOrder)
+            + resolve(currentIdentifiers: currentUnpinnedIdentifiers, persistedOrder: persistedOrder)
     }
 }

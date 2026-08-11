@@ -83,6 +83,31 @@ struct CodexChatFunctionalRegressionTests {
         #expect(transition.remainingPrompts == ["second queued"])
     }
 
+    @Test("Renaming a terminal session preserves its cross-type display position")
+    func renameRekeysDisplayOrder() {
+        let renamed = TabDisplayOrderSessionRenamer.rekeyingTerminalSession(
+            in: ["chat:review", "terminal:old", "web:ticket"],
+            from: "old",
+            to: "new"
+        )
+
+        #expect(renamed == ["chat:review", "terminal:new", "web:ticket"])
+    }
+
+    @Test("Persisted cross-type order is shared by pinned and unpinned tab consumers")
+    func resolvesUnifiedDisplayOrder() {
+        let resolved = TabDisplayOrderResolver.resolve(
+            currentPinnedIdentifiers: ["terminal:pinned", "chat:pinned"],
+            currentUnpinnedIdentifiers: ["terminal:work", "web:ticket", "chat:review"],
+            persistedOrder: ["chat:review", "terminal:pinned", "chat:pinned", "web:ticket", "terminal:work"]
+        )
+
+        #expect(resolved == [
+            "terminal:pinned", "chat:pinned",
+            "chat:review", "web:ticket", "terminal:work",
+        ])
+    }
+
     @Test("A visible fallback model is synchronized into legacy nil tab state")
     func synchronizesVisibleFallbackModel() {
         #expect(ChatModelSelectionSynchronization.shouldNotifyParent(

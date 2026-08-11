@@ -1342,6 +1342,11 @@ final class RenameService {
 
         // Update all references
         store.threads[index].tmuxSessionNames[sessionIndex] = resolvedSessionName
+        store.threads[index].tabDisplayOrder = TabDisplayOrderSessionRenamer.rekeyingTerminalSession(
+            in: currentThread.tabDisplayOrder,
+            from: sessionName,
+            to: resolvedSessionName
+        )
         if currentThread.agentTmuxSessions.contains(sessionName) {
             store.threads[index].agentTmuxSessions = currentThread.agentTmuxSessions.map {
                 $0 == sessionName ? resolvedSessionName : $0
