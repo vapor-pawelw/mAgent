@@ -93,6 +93,11 @@ In that recent window, any of the following marks Codex busy:
 - `Working (... background terminal running ...)`
 - `background terminal running`
 
+Codex can leave its composer visible below an active `Working` row, sometimes separated
+by a box-drawing edge. A prompt therefore does not indicate idle when only composer
+decoration separates it from an active busy status. Real output between an older
+`Working` row and the composer still wins and keeps the session idle.
+
 Busy polling prefers a fresh pane capture (`capturePane`) for Codex checks and falls back to cached capture only when the fresh read fails, reducing visible busy/idle lag from cache TTL.
 
 ### Tall pane trailing-blank fix
