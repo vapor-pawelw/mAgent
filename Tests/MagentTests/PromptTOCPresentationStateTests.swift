@@ -266,6 +266,81 @@ struct PromptTOCPresentationStateTests {
         #expect(merged.map(\.isAvailableInTerminalHistory) == [false, true, true, true])
     }
 
+    @Test("A duplicate live rendering does not outnumber persisted prompt occurrences")
+    func duplicateLiveRenderingUsesPersistedOccurrenceCount() {
+        let sentAt = Date(timeIntervalSince1970: 100)
+        let merged = PromptTOCCacheMerger.merge(
+            cachedPrompts: ["Only submitted once"],
+            liveEntries: [
+                PromptTOCEntry(
+                    lineIndex: 80,
+                    displayText: "Only submitted once",
+                    fullText: "Only submitted once"
+                ),
+                PromptTOCEntry(
+                    lineIndex: 120,
+                    displayText: "Only submitted once",
+                    fullText: "Only submitted once"
+                ),
+            ],
+            timings: [
+                SubmittedPromptTiming(text: "Only submitted once", sentAt: sentAt),
+            ]
+        )
+
+        #expect(merged.count == 1)
+        #expect(merged.first?.lineIndex == 120)
+    }
+
+    @Test("Live repeats are preserved when no prompt history has been cached")
+    func liveRepeatsRemainAuthoritativeWithoutCache() {
+        let merged = PromptTOCCacheMerger.merge(
+            cachedPrompts: [],
+            liveEntries: [
+                PromptTOCEntry(
+                    lineIndex: 80,
+                    displayText: "continue",
+                    fullText: "continue"
+                ),
+                PromptTOCEntry(
+                    lineIndex: 120,
+                    displayText: "continue",
+                    fullText: "continue"
+                ),
+            ],
+            timings: [
+                SubmittedPromptTiming(text: "continue", sentAt: Date(timeIntervalSince1970: 100)),
+            ]
+        )
+
+        #expect(merged.map(\.lineIndex) == [80, 120])
+    }
+
+    @Test("Persisted repeated submissions retain both live renderings")
+    func repeatedSubmissionsUsePersistedOccurrenceCount() {
+        let merged = PromptTOCCacheMerger.merge(
+            cachedPrompts: ["continue"],
+            liveEntries: [
+                PromptTOCEntry(
+                    lineIndex: 80,
+                    displayText: "continue",
+                    fullText: "continue"
+                ),
+                PromptTOCEntry(
+                    lineIndex: 120,
+                    displayText: "continue",
+                    fullText: "continue"
+                ),
+            ],
+            timings: [
+                SubmittedPromptTiming(text: "continue", sentAt: Date(timeIntervalSince1970: 100)),
+                SubmittedPromptTiming(text: "continue", sentAt: Date(timeIntervalSince1970: 200)),
+            ]
+        )
+
+        #expect(merged.map(\.lineIndex) == [80, 120])
+    }
+
     @Test("Non-contiguous live prompts regain navigation coordinates")
     func nonContiguousLivePromptsRegainCoordinates() {
         let merged = PromptTOCCacheMerger.merge(
@@ -344,6 +419,22 @@ struct PromptTOCPresentationStateTests {
         #expect(resolved[0].timing?.completedAt == completedAt)
         #expect(resolved[1].timing == nil)
         #expect(resolved[2].timing?.sentAt == secondSentAt)
+    }
+
+    @Test("Cached timing remains the primary footer after terminal history eviction")
+    func cachedTimingOutlivesTerminalHistory() {
+        #expect(
+            PromptTOCRowFooterState.resolve(
+                isAvailableInTerminalHistory: false,
+                hasTiming: true
+            ) == .timing
+        )
+        #expect(
+            PromptTOCRowFooterState.resolve(
+                isAvailableInTerminalHistory: false,
+                hasTiming: false
+            ) == .outsideTerminalHistory
+        )
     }
 
     @Test("A newly observed repeated prompt receives timing on its newest TOC occurrence")

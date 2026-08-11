@@ -31,7 +31,11 @@ struct PromptTOCEntry: Sendable {
 }
 
 enum PromptTOCCacheMerger {
-    static func merge(cachedPrompts: [String], liveEntries: [PromptTOCEntry]) -> [PromptTOCEntry] {
+    static func merge(
+        cachedPrompts: [String],
+        liveEntries: [PromptTOCEntry],
+        timings: [SubmittedPromptTiming] = []
+    ) -> [PromptTOCEntry] {
         guard !cachedPrompts.isEmpty else { return liveEntries }
         guard !liveEntries.isEmpty else {
             return cachedPrompts.map { cachedEntry(text: $0) }
@@ -82,17 +86,67 @@ enum PromptTOCCacheMerger {
         }
         merged.append(contentsOf: cachedPrompts[cachedIndex...].map { cachedEntry(text: $0) })
         merged.append(contentsOf: liveEntries[liveIndex...])
-        return merged
+        return removingExcessKnownOccurrences(
+            from: merged,
+            cachedPrompts: cachedPrompts,
+            timings: timings
+        )
     }
 
     private static func cachedEntry(text: String) -> PromptTOCEntry {
         PromptTOCEntry(lineIndex: -1, displayText: text, fullText: text)
     }
 
+    private static func removingExcessKnownOccurrences(
+        from entries: [PromptTOCEntry],
+        cachedPrompts: [String],
+        timings: [SubmittedPromptTiming]
+    ) -> [PromptTOCEntry] {
+        let cachedCounts = Dictionary(grouping: cachedPrompts.map(normalized(_:)), by: { $0 })
+            .mapValues(\.count)
+        let timingCounts = Dictionary(grouping: timings.map { normalized($0.text) }, by: { $0 })
+            .mapValues(\.count)
+        // Cache alone cannot distinguish a transient duplicate from a newly submitted repeat.
+        // A timing count makes the persisted occurrence limit trustworthy.
+        let knownCounts = timingCounts.reduce(into: [String: Int]()) { result, timingCount in
+            result[timingCount.key] = max(
+                timingCount.value,
+                cachedCounts[timingCount.key] ?? 0
+            )
+        }
+
+        var retainedCounts: [String: Int] = [:]
+        // Keep the newest live coordinates when the terminal temporarily renders one turn twice.
+        return Array(entries.reversed().filter { entry in
+            let text = normalized(entry.fullText)
+            guard let knownCount = knownCounts[text] else { return true }
+            let retainedCount = retainedCounts[text, default: 0]
+            guard retainedCount < knownCount else { return false }
+            retainedCounts[text] = retainedCount + 1
+            return true
+        }.reversed())
+    }
+
     private static func normalized(_ text: String) -> String {
         text
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+enum PromptTOCRowFooterState: Equatable {
+    case hidden
+    case timing
+    case outsideTerminalHistory
+
+    static func resolve(
+        isAvailableInTerminalHistory: Bool,
+        hasTiming: Bool
+    ) -> PromptTOCRowFooterState {
+        if hasTiming {
+            return .timing
+        }
+        return isAvailableInTerminalHistory ? .hidden : .outsideTerminalHistory
     }
 }
 

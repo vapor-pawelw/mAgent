@@ -277,12 +277,14 @@ extension ThreadDetailViewController {
         }
 
         let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let timings = currentThread.submittedPromptTimingsBySession[sessionName] ?? []
         let mergedEntries = PromptTOCCacheMerger.merge(
             cachedPrompts: currentThread.submittedPromptsBySession[sessionName] ?? [],
-            liveEntries: capturedEntries
+            liveEntries: capturedEntries,
+            timings: timings
         )
         let entries = PromptTOCTimingResolver.attaching(
-            currentThread.submittedPromptTimingsBySession[sessionName] ?? [],
+            timings,
             to: mergedEntries
         )
         threadManager.replaceSubmittedPromptHistory(
@@ -1609,6 +1611,10 @@ private final class PromptTOCEntryRowView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 6
         let unavailableText = String(localized: .ThreadStrings.promptTOCOutsideTerminalHistory)
+        let footerState = PromptTOCRowFooterState.resolve(
+            isAvailableInTerminalHistory: isAvailableInTerminalHistory,
+            hasTiming: timingPresentation != nil
+        )
         toolTip = if isAvailableInTerminalHistory {
             timingPresentation?.toolTip
         } else if let timingToolTip = timingPresentation?.toolTip {
@@ -1648,11 +1654,16 @@ private final class PromptTOCEntryRowView: NSView {
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         timingView.translatesAutoresizingMaskIntoConstraints = false
-        timingView.isHidden = timingPresentation == nil && isAvailableInTerminalHistory
+        timingView.isHidden = footerState == .hidden
 
-        startLabel.stringValue = isAvailableInTerminalHistory
-            ? timingPresentation?.startText ?? ""
-            : unavailableText
+        startLabel.stringValue = switch footerState {
+        case .timing:
+            timingPresentation?.startText ?? ""
+        case .outsideTerminalHistory:
+            unavailableText
+        case .hidden:
+            ""
+        }
         startLabel.translatesAutoresizingMaskIntoConstraints = false
         startLabel.textColor = .secondaryLabelColor
         startLabel.lineBreakMode = .byTruncatingTail
