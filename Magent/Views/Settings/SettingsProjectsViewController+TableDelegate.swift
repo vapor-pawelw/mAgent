@@ -91,6 +91,11 @@ extension SettingsProjectsViewController: NSTableViewDataSource {
 }
 
 extension SettingsProjectsViewController: NSTableViewDelegate {
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        guard tableView === projectTableView else { return nil }
+        return PrimarySelectionTableRowView()
+    }
+
     @objc func projectSectionTableDoubleClicked(_ sender: NSTableView) {
         let row = sender.clickedRow
         guard row >= 0, row < projectSortedSections.count, projectSectionNameWasDoubleClicked(in: sender, row: row) else { return }

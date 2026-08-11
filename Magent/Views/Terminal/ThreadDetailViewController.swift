@@ -826,6 +826,8 @@ final class ThreadDetailViewController: NSViewController {
         tabScrollRightButton.toolTip = "Scroll tabs right"
         tabScrollRightButton.isHidden = true
 
+        refreshPrimaryToolbarTint()
+
         prJiraSeparator.translatesAutoresizingMaskIntoConstraints = false
         prJiraSeparator.isHidden = true
         prJiraSeparator.setContentHuggingPriority(.required, for: .horizontal)
@@ -1996,6 +1998,7 @@ final class ThreadDetailViewController: NSViewController {
 
     @objc private func handleSettingsChanged(_ notification: Notification) {
         let settings = PersistenceService.shared.loadSettings()
+        refreshPrimaryToolbarTint()
         tabItems.forEach { $0.refreshPrimaryColor() }
         draftTabs.forEach { $0.viewController?.refreshPrimaryColor() }
         promptTOCView?.refreshPrimaryColor()
@@ -2020,6 +2023,17 @@ final class ThreadDetailViewController: NSViewController {
         refreshOverlayVisibilitySettings()
         updateTerminalScrollControlsState()
         refreshHeaderInfoStrip()
+    }
+
+    private func refreshPrimaryToolbarTint() {
+        AppTheme.tintToolbarButtons([
+            addTabButton,
+            continueInButton,
+            tabScrollLeftButton,
+            tabScrollRightButton,
+            exportContextButton,
+            resyncLocalPathsButton,
+        ])
     }
 
     private func reloadTerminalViewsForUpdatedTerminalPreferences() {

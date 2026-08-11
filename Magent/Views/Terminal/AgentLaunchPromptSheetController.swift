@@ -634,6 +634,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(settingsDidChange),
+            name: .magentSettingsDidChange,
+            object: nil
+        )
         AgentModelsService.shared.refreshIfThrottled()
         buildPickerItems()
         setupUI()
@@ -659,6 +665,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     func present(for parentWindow: NSWindow, completion: @escaping (AgentLaunchSheetResult?) -> Void) {
@@ -1147,6 +1157,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         acceptButton.target = self
         acceptButton.action = #selector(acceptTapped)
         acceptButton.keyEquivalent = "\r"
+        refreshPrimaryColor()
         buttonRow.addArrangedSubview(acceptButton)
         stack.addArrangedSubview(buttonRow)
 
@@ -1644,12 +1655,27 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         if let sourceRange = title.range(of: sourceName, options: .backwards) {
             attributedTitle.addAttribute(
                 .foregroundColor,
-                value: NSColor.controlAccentColor,
+                value: NSColor.appPrimary,
                 range: NSRange(sourceRange, in: title)
             )
         }
         sheetTitleLabel?.attributedStringValue = attributedTitle
         window?.title = title
+    }
+
+    @objc private func settingsDidChange() {
+        refreshPrimaryColor()
+        updateSourcePresentation()
+    }
+
+    private func refreshPrimaryColor() {
+        AppTheme.stylePrimaryAction(acceptButton)
+        AppTheme.tintToolbarButtons([
+            draftCheckbox,
+            rememberCheckbox,
+            switchToNewThreadCheckbox,
+            switchToNewTabCheckbox,
+        ])
     }
 
     private func selectedProjectIdForSourceOptions() -> UUID {

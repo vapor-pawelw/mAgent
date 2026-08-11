@@ -73,6 +73,7 @@ let project = Project(
                 "Magent/Services/WhatsNewService.swift",
                 "Magent/Utilities/AgentMenuBuilder.swift",
                 "Magent/Utilities/AppTheme.swift",
+                "Magent/Utilities/PrimaryTintStyler.swift",
                 "Magent/Utilities/ChatAppearance.swift",
                 "Magent/Utilities/ColorDot.swift",
                 "Magent/Utilities/OpenActionIcons.swift",
@@ -182,6 +183,7 @@ let project = Project(
                 "Magent/Views/StatusBadgeView.swift",
                 "Magent/Views/Settings/ProjectRemovalButtonFactory.swift",
                 "Magent/Views/Settings/ProjectSettingsSelectionResolver.swift",
+                "Magent/Utilities/PrimaryTintStyler.swift",
                 "Tests/MagentTests/**",
             ],
             dependencies: [

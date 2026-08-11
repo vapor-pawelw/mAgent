@@ -197,6 +197,7 @@ final class SettingsSplitViewController: NSSplitViewController {
         detailSplitItem.canCollapse = false
         detailSplitItem.minimumThickness = 500
         addSplitViewItem(detailSplitItem)
+        refreshPrimaryColor()
 
         splitView.dividerStyle = .thin
 
@@ -266,11 +267,16 @@ final class SettingsSplitViewController: NSSplitViewController {
 
     @objc private func settingsDidChange() {
         let settings = PersistenceService.shared.loadSettings()
+        refreshPrimaryColor()
         if !currentCategory.isVisible(for: settings) {
             currentCategory = .general
             showCategoryContent(.general)
         }
         sidebarVC.reloadCategories(selecting: currentCategory, settings: settings)
+    }
+
+    private func refreshPrimaryColor() {
+        AppTheme.tintSettingsControls(in: view)
     }
 }
 
@@ -331,6 +337,7 @@ final class SettingsSidebarViewController: NSViewController {
         let doneButton = NSButton(title: String(localized: .CommonStrings.commonDone), target: self, action: #selector(doneTapped))
         doneButton.bezelStyle = .rounded
         doneButton.keyEquivalent = "\r"
+        AppTheme.stylePrimaryAction(doneButton)
         doneButton.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(doneButton)
 
@@ -370,6 +377,10 @@ extension SettingsSidebarViewController: NSTableViewDataSource {
 }
 
 extension SettingsSidebarViewController: NSTableViewDelegate {
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        PrimarySelectionTableRowView()
+    }
+
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let category = SettingsCategory.visibleCategories[row]
         let identifier = NSUserInterfaceItemIdentifier("SidebarCell")

@@ -450,6 +450,7 @@ extension SettingsProjectsViewController {
         documentView.addSubview(stack)
 
         detailScrollView.documentView = documentView
+        AppTheme.tintSettingsControls(in: documentView)
 
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: documentView.topAnchor),
