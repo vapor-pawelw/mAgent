@@ -2028,11 +2028,14 @@ final class ThreadDetailViewController: NSViewController {
     private func refreshPrimaryToolbarTint() {
         AppTheme.tintToolbarButtons([
             addTabButton,
+            reviewButton,
             continueInButton,
             tabScrollLeftButton,
             tabScrollRightButton,
             exportContextButton,
             resyncLocalPathsButton,
+            popOutThreadButton,
+            togglePromptTOCButton,
         ])
     }
 
@@ -2108,6 +2111,7 @@ final class ThreadDetailViewController: NSViewController {
             )
             addTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Tab")
             updatePromptTOCToggleButtonState(canShow: promptTOCCanShowForCurrentTab)
+            refreshPrimaryToolbarTint()
 
             for button in topBarButtons {
                 button.appearance = view.effectiveAppearance

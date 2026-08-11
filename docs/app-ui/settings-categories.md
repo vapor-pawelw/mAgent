@@ -58,7 +58,7 @@
 - Both section editors use `NSColorPanel.shared`, so they must set the active `sectionId` and temporarily detach target/action before assigning `panel.color`, then restore the callback after the programmatic update.
 - App appearance is applied centrally from `AppDelegate`: `NSApp.appearance` controls the AppKit chrome, and Ghostty receives the matching light/dark preference through `GhosttyAppManager`.
 - `AppTheme` owns the resolved runtime primary color. Apply a new settings snapshot before broadcasting `magentSettingsDidChange`, so view refresh observers never read the previous cached color.
-- `PrimaryTintStyler` applies the resolved primary color to standard Settings selection controls, non-destructive rounded actions, launch-sheet primary actions, and the explicitly opted-in tab toolbar buttons. Keep destructive and semantic status actions out of this shared tint pass.
+- `PrimaryTintStyler` applies the resolved primary color to standard Settings selection controls, `PrimaryTintSlider` tracks, non-destructive rounded actions, launch-sheet primary actions, and the explicitly opted-in tab toolbar buttons. It uses primary-colored SF Symbol palettes for toolbar icons. Keep destructive, branded-app, and semantic status actions out of this shared tint pass.
 - Keep semantic status colors such as errors, warnings, Jira states, priorities, and pop-out purple independent from the customizable primary color.
 
 ## Appearance Mode Switch Gotchas

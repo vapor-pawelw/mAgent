@@ -200,7 +200,7 @@ final class SettingsChatViewController: NSViewController {
     private let userTextColorWell = NSColorWell()
     private let agentBubbleColorWell = NSColorWell()
     private let agentTextColorWell = NSColorWell()
-    private let chatFontSizeSlider = NSSlider(value: AppSettings.defaultChatFontSize, minValue: AppSettings.minChatFontSize, maxValue: AppSettings.maxChatFontSize, target: nil, action: nil)
+    private let chatFontSizeSlider = PrimaryTintSlider(value: AppSettings.defaultChatFontSize, minValue: AppSettings.minChatFontSize, maxValue: AppSettings.maxChatFontSize, target: nil, action: nil)
     private let chatFontSizeValueLabel = NSTextField(labelWithString: "")
     private let themePreviewView = ChatThemePreviewView()
 

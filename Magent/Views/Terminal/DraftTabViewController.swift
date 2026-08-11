@@ -86,8 +86,7 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
     }
 
     func refreshPrimaryColor() {
-        proceedButton.contentTintColor = .appPrimary
-        (proceedButton.cell as? NSButtonCell)?.backgroundColor = .appPrimary
+        AppTheme.stylePrimaryAction(proceedButton)
     }
 
     override func viewDidLayout() {
@@ -243,8 +242,7 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
 
         proceedButton.title = "Start Agent"
         proceedButton.bezelStyle = .rounded
-        proceedButton.contentTintColor = .appPrimary
-        (proceedButton.cell as? NSButtonCell)?.backgroundColor = .appPrimary
+        AppTheme.stylePrimaryAction(proceedButton)
         proceedButton.keyEquivalent = "\r"
         proceedButton.target = self
         proceedButton.action = #selector(proceedTapped)

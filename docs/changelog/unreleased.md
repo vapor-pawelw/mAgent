@@ -4,7 +4,7 @@
 
 #### Features
 
-- Customize Magent's primary color from Appearance settings across thread and tab creation actions, tab toolbar controls, Settings selections and buttons, app highlights, and default user chat bubbles.
+- Customize Magent's primary color from Appearance settings across thread and tab creation actions, tab toolbar controls, Settings selections, buttons, and sliders, app highlights, and default user chat bubbles.
 
 ### Settings
 

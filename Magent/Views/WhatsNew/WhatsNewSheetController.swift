@@ -113,6 +113,7 @@ final class WhatsNewSheetController: NSWindowController {
         let gotItButton = NSButton(title: "Got it", target: self, action: #selector(gotItTapped))
         gotItButton.bezelStyle = .rounded
         gotItButton.keyEquivalent = "\r"
+        AppTheme.stylePrimaryAction(gotItButton)
         gotItButton.translatesAutoresizingMaskIntoConstraints = false
 
         contentView.addSubview(titleLabel)

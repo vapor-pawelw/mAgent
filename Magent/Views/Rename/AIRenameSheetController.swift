@@ -207,7 +207,7 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
         renameButton.keyEquivalent = "\r"
         renameButton.bezelStyle = .rounded
         renameButton.controlSize = .large
-        (renameButton.cell as? NSButtonCell)?.backgroundColor = .appPrimary
+        AppTheme.stylePrimaryAction(renameButton)
         buttonRow.addArrangedSubview(renameButton)
 
         stack.addArrangedSubview(buttonRow)

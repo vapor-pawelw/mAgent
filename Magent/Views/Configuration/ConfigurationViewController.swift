@@ -40,6 +40,7 @@ final class ConfigurationViewController: NSViewController {
         nextButton.action = #selector(nextStep)
         nextButton.bezelStyle = .rounded
         nextButton.keyEquivalent = "\r"
+        AppTheme.stylePrimaryAction(nextButton)
 
         setupUI()
         dependencyCheckView.onRecheck = { [weak self] in self?.checkDependencies() }

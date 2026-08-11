@@ -14,7 +14,9 @@ struct AppThemeTests {
         PrimaryTintStyler.stylePrimaryAction(primaryButton, color: primaryColor)
 
         #expect(try rgb(toolbarButton.contentTintColor) == rgb(primaryColor))
+        #expect(toolbarButton.symbolConfiguration != nil)
         #expect(try rgb((primaryButton.cell as? NSButtonCell)?.backgroundColor) == rgb(primaryColor))
+        #expect(try rgb(primaryButton.bezelColor) == rgb(primaryColor))
     }
 
     @MainActor
@@ -35,7 +37,22 @@ struct AppThemeTests {
 
         #expect(try rgb(checkbox.contentTintColor) == rgb(primaryColor))
         #expect(try rgb(action.contentTintColor) == rgb(primaryColor))
+        #expect(try rgb(action.bezelColor) == rgb(primaryColor))
         #expect(try rgb(destructive.contentTintColor) == rgb(.systemRed))
+    }
+
+    @MainActor
+    @Test("Primary slider uses the configured tint without changing its value range")
+    func primarySliderUsesConfiguredTint() throws {
+        let primaryColor = NSColor(srgbRed: 0.36, green: 0.25, blue: 0.82, alpha: 1)
+        let slider = PrimaryTintSlider(value: 17, minValue: 10, maxValue: 24, target: nil, action: nil)
+
+        slider.primaryTintColor = primaryColor
+
+        #expect(try rgb(slider.primaryTintColor) == rgb(primaryColor))
+        #expect(slider.minValue == 10)
+        #expect(slider.maxValue == 24)
+        #expect(slider.doubleValue == 17)
     }
 
     @MainActor
