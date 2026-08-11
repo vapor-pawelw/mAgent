@@ -58,7 +58,7 @@
 #### Bug Fixes
 
 - Made Escape cancel new thread and new tab prompt sheets while the prompt editor is focused.
-- Kept the full prompt count visible in the Table of Contents header instead of occasionally collapsing it to an ellipsis.
+- Softened the Table of Contents header and resize divider, added breathing room above the first prompt, and kept the known prompt count visible during refreshes.
 - Prevented stale AI rename error banners after deleting, archiving, or otherwise removing a thread while its rename was still running.
 - Kept PR and Jira action titles readable on one line when the window toolbar is narrow.
 - Prevented simultaneous thread archives from racing on the main worktree, Local Sync files, or git metadata, with queued agent workflows now reporting the active thread and their live queue position.

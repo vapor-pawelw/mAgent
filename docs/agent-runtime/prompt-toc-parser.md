@@ -19,12 +19,14 @@ This document covers Prompt TOC parsing and jump behavior.
 - The TOC rests as a compact 185×36pt floating capsule showing a "Table of Contents" title and a badge with the prompt count.
 - Hovering expands the capsule to the full panel (default 320×250pt, user-resizable) with animation; mouse exit collapses it back.
 - The pin button appears in the top-right only while the floating TOC is expanded. Pinning moves the TOC into a full-height trailing split and reserves its width so terminal and chat content cannot render underneath it. Unpinning immediately restores the content area's full width and explicitly resynchronizes the active Ghostty surface after Auto Layout completes.
-- The pinned TOC stays expanded and always shows its unpin button. Its rectangular header and full-height divider meet the panel edges without inset rounding. The divider matches the subtle top-bar separators and shows the standard horizontal resize cursor across a forgiving 8pt hit target; drag it to resize the split. The chosen width and pin state persist across launches.
+- The pinned TOC stays expanded and always shows its unpin button. Its rectangular header and full-height divider meet the panel edges without inset rounding. The header and divider share the subtle neutral fill used by idle thread capsules, while the divider keeps the standard horizontal resize cursor across a forgiving 8pt hit target; drag it to resize the split. The chosen width and pin state persist across launches.
 - Both floating and pinned prompt lists show the newest prompt first and the oldest last. The newest row is selected by default, and each newly submitted prompt takes that visual selection without navigating the terminal; clicking it still jumps to the prompt. Initial loads stay at the top, while periodic reloads anchor older reading positions below any newly inserted rows unless the user is already near the newest edge.
+- The prompt list starts below the header with a small top inset so the newest row does not touch the header band.
 - Each prompt row shows its ordinal in a small borderless, high-contrast badge instead of prefixing the prompt text. Floating rows keep compact 11pt, three-line previews; pinned rows use 12pt text and allow up to five lines.
 - Timing footers use secondary-label color and a font two points smaller than the prompt preview. Relative start time stays on the leading edge, while completed duration uses the trailing edge and is omitted when both labels cannot fit.
 - The toolbar toggle button and in-panel × close button are removed — TOC is always-on; users disable it in Settings.
 - No agent name appears in the header; only the title and count badge.
+- Refreshing keeps the last known prompt count in the badge; the spinner communicates loading without replacing the count with an ellipsis.
 
 ### Animation sequence
 
