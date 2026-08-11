@@ -4,6 +4,17 @@ import Testing
 
 @Suite("Prompt TOC presentation")
 struct PromptTOCPresentationStateTests {
+    @Test("Prompt menu offers distinct thread and tab rename actions")
+    func promptMenuRenameActions() {
+        #expect(
+            PromptTOCContextMenuAction.actions == [
+                .copyPrompt,
+                .renameThread,
+                .renameTab,
+            ]
+        )
+    }
+
     @Test("Floating TOC reveals pin control and full content only while hovered")
     func floatingPresentationFollowsHover() {
         var state = PromptTOCPresentationState(isPinned: false, isHovered: false)

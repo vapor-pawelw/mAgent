@@ -36,7 +36,9 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
     private let config: AIRenameSheetConfig
     private let promptTextView = NSTextView()
     private var promptScrollView: NSScrollView!
-    private let placeholderLabel = NSTextField(labelWithString: "Describe the task for AI rename...")
+    private let placeholderLabel = NSTextField(
+        labelWithString: String(localized: .ThreadStrings.renameThreadPromptPlaceholder)
+    )
     private let promptPicker = NSPopUpButton()
     private let iconCheckbox = NSButton(checkboxWithTitle: "Icon", target: nil, action: nil)
     private let descriptionCheckbox = NSButton(checkboxWithTitle: "Description", target: nil, action: nil)
@@ -57,7 +59,7 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
             backing: .buffered,
             defer: false
         )
-        window.title = "AI Rename"
+        window.title = String(localized: .ThreadStrings.renameThreadWithPromptTitle)
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
@@ -127,7 +129,9 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
         contentView.addSubview(stack)
 
         // 1. Title label
-        let titleLabel = NSTextField(labelWithString: "AI Rename")
+        let titleLabel = NSTextField(
+            labelWithString: String(localized: .ThreadStrings.renameThreadWithPromptTitle)
+        )
         titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
         stack.addArrangedSubview(titleLabel)
 

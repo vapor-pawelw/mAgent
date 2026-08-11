@@ -12,6 +12,38 @@
         }
       }
     },
+    "promptTOCCopyPrompt": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Copy prompt" } } }
+    },
+    "promptTOCRenameTab": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Rename tab" } } }
+    },
+    "promptTOCRenameTabFailed": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Could not generate a tab name from this prompt." } } }
+    },
+    "promptTOCRenameTabInProgress": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "This tab is already being renamed." } } }
+    },
+    "promptTOCRenameThread": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Rename thread…" } } }
+    },
+    "promptTOCRenameThreadFailed": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Rename failed: %@" } } }
+    },
+    "renameThreadPromptPlaceholder": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Describe the thread to rename it from this prompt…" } } }
+    },
+    "renameThreadWithPromptTitle": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Rename Thread with Prompt" } } }
+    },
     "promptTOCTimingJustNow": {
       "extractionState": "manual",
       "localizations": {

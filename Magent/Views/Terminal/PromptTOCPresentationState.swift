@@ -1,6 +1,14 @@
 import AppKit
 import MagentCore
 
+enum PromptTOCContextMenuAction: Equatable {
+    case copyPrompt
+    case renameThread
+    case renameTab
+
+    static let actions: [Self] = [.copyPrompt, .renameThread, .renameTab]
+}
+
 struct PromptTOCEntry: Sendable {
     let lineIndex: Int
     let displayText: String

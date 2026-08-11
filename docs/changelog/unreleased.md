@@ -43,6 +43,7 @@
 
 #### Improvements
 
+- Prompt context menus now distinguish thread and tab renaming, with clearer prompt-based thread rename wording and one-click tab naming.
 - Show a truncated initial prompt as a new thread's description immediately, use `Thread #N` when no prompt is provided, and still allow AI naming to replace either provisional title later.
 - Hide icon controls and skip work-type classification during AI rename when automatic thread icons are disabled.
 - Kept Terminal and Diff tabs visible beside thread actions while user-created tabs use the flexible, scrollable space to their left.
