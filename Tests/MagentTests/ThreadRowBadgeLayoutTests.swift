@@ -1,4 +1,5 @@
 import AppKit
+import MagentCore
 import Testing
 
 @Suite
@@ -68,8 +69,20 @@ struct ThreadRowBadgeLayoutTests {
     func trailingStatusOrderPreservesStateIndicatorOrder() {
         #expect(ThreadRowBadgeLayout.TrailingStatusItem.allCases == [
             .rateLimit, .jiraSync, .keepAlive, .hidden,
-            .activityDuration, .stoppedSessions, .favorite, .pinned,
+            .activityDuration, .stoppedSessions, .favorite, .pinned, .diffLineStats,
         ])
+    }
+
+    @Test("Diff line totals aggregate the same file entries used by the Diff tab")
+    func diffLineTotals() {
+        let stats = DiffLineStats(entries: [
+            FileDiffEntry(relativePath: "A.swift", additions: 14, deletions: 2, workingStatus: .unstaged),
+            FileDiffEntry(relativePath: "B.swift", additions: 0, deletions: 20, workingStatus: .committed),
+        ])
+
+        #expect(stats == DiffLineStats(additions: 14, deletions: 22))
+        #expect(stats.hasLineChanges)
+        #expect(!DiffLineStats(additions: 0, deletions: 0).hasLineChanges)
     }
 
     @Test("Stopped sessions use the unfilled red xmark indicator")

@@ -128,9 +128,58 @@ struct GitServiceUntrackedDirectoryTests {
 
         let workingTreeOnly = await GitService.shared.workingTreeDiffStats(worktreePath: root.path)
         let diffTabStats = await GitService.shared.threadDiffTabStats(worktreePath: root.path, baseBranch: "main")
+        let cleanProbe = try #require(await GitService.shared.diffRefreshProbe(
+            worktreePath: root.path,
+            baseBranch: "main"
+        ))
 
         #expect(workingTreeOnly.isEmpty)
         #expect(diffTabStats.map(\.relativePath) == ["tracked.txt"])
+        #expect(!cleanProbe.isDirty)
+
+        try "one\ntwo\nthree\n".write(
+            to: root.appendingPathComponent("tracked.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let dirtyDiffTabStats = await GitService.shared.threadDiffTabStats(
+            worktreePath: root.path,
+            baseBranch: "main"
+        )
+        let dirtyProbe = try #require(await GitService.shared.diffRefreshProbe(
+            worktreePath: root.path,
+            baseBranch: "main"
+        ))
+
+        #expect(DiffLineStats(entries: dirtyDiffTabStats) == .init(additions: 2, deletions: 0))
+        #expect(dirtyProbe.isDirty)
+        #expect(dirtyProbe.referenceFingerprint == cleanProbe.referenceFingerprint)
+
+        let mergeBase = try #require(await GitService.shared.mergeBase(
+            worktreePath: root.path,
+            baseBranch: "main"
+        ))
+        let firstLineStats = try #require(await GitService.shared.diffLineStats(
+            worktreePath: root.path,
+            diffReference: mergeBase
+        ))
+        try "one\ntwo\nthree\nfour\n".write(
+            to: root.appendingPathComponent("tracked.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let unchangedPathProbe = try #require(await GitService.shared.diffRefreshProbe(
+            worktreePath: root.path,
+            baseBranch: "main"
+        ))
+        let secondLineStats = try #require(await GitService.shared.diffLineStats(
+            worktreePath: root.path,
+            diffReference: mergeBase
+        ))
+
+        #expect(unchangedPathProbe.referenceFingerprint == dirtyProbe.referenceFingerprint)
+        #expect(firstLineStats == .init(additions: 2, deletions: 0))
+        #expect(secondLineStats == .init(additions: 3, deletions: 0))
     }
 
     @Test

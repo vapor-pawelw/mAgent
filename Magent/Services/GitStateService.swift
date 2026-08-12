@@ -22,6 +22,29 @@ final class GitStateService {
     /// Cleared when the user acknowledges the banner or the original branch reappears.
     var baseBranchResets: [UUID: ThreadManager.BaseBranchReset] = [:]
 
+    /// Transient line totals shown in sidebar rows, refreshed with the rest of Git state.
+    private(set) var diffLineStatsByThreadId: [UUID: DiffLineStats] = [:]
+    private var diffReferenceFingerprintByThreadId: [UUID: String] = [:]
+    private var diffReferenceByThreadId: [UUID: String] = [:]
+
+    private static let maximumConcurrentGitRefreshes = 4
+
+    private struct GitRefreshInput: Sendable {
+        let threadId: UUID
+        let worktreePath: String
+        let baseBranch: String?
+        let cachedReferenceFingerprint: String?
+        let cachedDiffReference: String?
+    }
+
+    private struct GitRefreshResult: Sendable {
+        let threadId: UUID
+        let isDirty: Bool
+        let lineStats: DiffLineStats?
+        let referenceFingerprint: String?
+        let diffReference: String?
+    }
+
     // MARK: - Callbacks
 
     /// Called whenever thread state has changed and the caller should propagate to delegate/UI.
@@ -92,30 +115,72 @@ final class GitStateService {
         let snapshot = store.threads.filter { !$0.isArchived }
         // Run all git-status checks concurrently — sequential per-thread awaits add up fast
         // with many threads. GitService is Sendable so safe to call from child tasks.
-        var dirtyById: [UUID: Bool] = [:]
-        await withTaskGroup(of: (UUID, Bool).self) { group in
-            for thread in snapshot {
-                let path = thread.worktreePath
-                let id = thread.id
-                group.addTask {
-                    let dirty = await self.git.isDirty(worktreePath: path)
-                    return (id, dirty)
-                }
+        let refreshInputs = snapshot.map { thread in
+            GitRefreshInput(
+                threadId: thread.id,
+                worktreePath: thread.worktreePath,
+                baseBranch: thread.isMain ? nil : resolveBaseBranch(for: thread),
+                cachedReferenceFingerprint: diffReferenceFingerprintByThreadId[thread.id],
+                cachedDiffReference: diffReferenceByThreadId[thread.id]
+            )
+        }
+        var results: [GitRefreshResult] = []
+        await withTaskGroup(of: GitRefreshResult?.self) { group in
+            var nextInputIndex = 0
+            let initialCount = min(Self.maximumConcurrentGitRefreshes, refreshInputs.count)
+            for _ in 0..<initialCount {
+                let input = refreshInputs[nextInputIndex]
+                nextInputIndex += 1
+                group.addTask { await self.refreshGitState(input) }
             }
-            for await (id, dirty) in group {
-                dirtyById[id] = dirty
+            while let result = await group.next() {
+                if let result {
+                    results.append(result)
+                }
+                if nextInputIndex < refreshInputs.count {
+                    let input = refreshInputs[nextInputIndex]
+                    nextInputIndex += 1
+                    group.addTask { await self.refreshGitState(input) }
+                }
             }
         }
         var changed = false
         var persistedChanged = false
-        for (id, dirty) in dirtyById {
-            guard let i = store.threads.firstIndex(where: { $0.id == id }) else { continue }
-            if store.threads[i].isDirty != dirty {
-                store.threads[i].isDirty = dirty
+        let activeIds = Set(snapshot.map(\.id))
+        if diffLineStatsByThreadId.keys.contains(where: { !activeIds.contains($0) }) {
+            diffLineStatsByThreadId = diffLineStatsByThreadId.filter { activeIds.contains($0.key) }
+            changed = true
+        }
+        diffReferenceFingerprintByThreadId = diffReferenceFingerprintByThreadId.filter {
+            activeIds.contains($0.key)
+        }
+        diffReferenceByThreadId = diffReferenceByThreadId.filter {
+            activeIds.contains($0.key)
+        }
+        for result in results {
+            guard let i = store.threads.firstIndex(where: { $0.id == result.threadId }) else { continue }
+            if store.threads[i].isDirty != result.isDirty {
+                store.threads[i].isDirty = result.isDirty
                 changed = true
             }
+            if let lineStats = result.lineStats,
+               updateDiffLineStats(lineStats, for: result.threadId, notify: false) {
+                changed = true
+            }
+            if let diffReference = result.diffReference {
+                diffReferenceByThreadId[result.threadId] = diffReference
+                if let referenceFingerprint = result.referenceFingerprint {
+                    diffReferenceFingerprintByThreadId[result.threadId] = referenceFingerprint
+                }
+            } else {
+                diffReferenceByThreadId.removeValue(forKey: result.threadId)
+                diffReferenceFingerprintByThreadId.removeValue(forKey: result.threadId)
+                if diffLineStatsByThreadId.removeValue(forKey: result.threadId) != nil {
+                    changed = true
+                }
+            }
             // Set hasEverDoneWork the first time the worktree becomes dirty.
-            if dirty && !store.threads[i].isMain && !store.threads[i].hasEverDoneWork {
+            if result.isDirty && !store.threads[i].isMain && !store.threads[i].hasEverDoneWork {
                 store.threads[i].hasEverDoneWork = true
                 persistedChanged = true
                 changed = true
@@ -129,25 +194,107 @@ final class GitStateService {
         }
     }
 
+    private func refreshGitState(_ input: GitRefreshInput) async -> GitRefreshResult? {
+        guard let probe = await git.diffRefreshProbe(
+            worktreePath: input.worktreePath,
+            baseBranch: input.baseBranch
+        ) else {
+            return nil
+        }
+
+        let diffReference: String?
+        if let baseBranch = input.baseBranch {
+            if probe.referenceFingerprint == input.cachedReferenceFingerprint,
+               let cachedDiffReference = input.cachedDiffReference {
+                diffReference = cachedDiffReference
+            } else {
+                diffReference = await git.mergeBase(
+                    worktreePath: input.worktreePath,
+                    baseBranch: baseBranch
+                )
+            }
+        } else {
+            diffReference = "HEAD"
+        }
+
+        let lineStats: DiffLineStats?
+        if let diffReference {
+            lineStats = await git.diffLineStats(
+                worktreePath: input.worktreePath,
+                diffReference: diffReference
+            )
+        } else {
+            lineStats = nil
+        }
+        return GitRefreshResult(
+            threadId: input.threadId,
+            isDirty: probe.isDirty,
+            lineStats: lineStats,
+            referenceFingerprint: probe.referenceFingerprint,
+            diffReference: diffReference
+        )
+    }
+
     /// Refreshes the dirty state for a single thread. Returns true if the value changed.
     @discardableResult
     func refreshDirtyState(for threadId: UUID) async -> Bool {
         guard let idx = store.threads.firstIndex(where: { $0.id == threadId }),
               !store.threads[idx].isArchived else { return false }
         let thread = store.threads[idx]
-        let dirty = await git.isDirty(worktreePath: thread.worktreePath)
+        let baseBranch = thread.isMain ? nil : resolveBaseBranch(for: thread)
+        guard let probe = await git.diffRefreshProbe(
+            worktreePath: thread.worktreePath,
+            baseBranch: baseBranch
+        ) else { return false }
+        let dirty = probe.isDirty
+        let diffReference: String? = if let baseBranch {
+            await git.mergeBase(worktreePath: thread.worktreePath, baseBranch: baseBranch)
+        } else {
+            "HEAD"
+        }
+        let lineStats: DiffLineStats? = if let diffReference {
+            await git.diffLineStats(worktreePath: thread.worktreePath, diffReference: diffReference)
+        } else {
+            nil
+        }
         guard let i = store.threads.firstIndex(where: { $0.id == threadId }) else { return false }
         var changed = false
         if store.threads[i].isDirty != dirty {
             store.threads[i].isDirty = dirty
             changed = true
         }
+        if let lineStats,
+           updateDiffLineStats(lineStats, for: threadId, notify: false) {
+            changed = true
+        } else if diffReference == nil {
+            let removedLineStats = diffLineStatsByThreadId.removeValue(forKey: threadId) != nil
+            diffReferenceByThreadId.removeValue(forKey: threadId)
+            diffReferenceFingerprintByThreadId.removeValue(forKey: threadId)
+            changed = changed || removedLineStats
+        }
         if dirty && !store.threads[i].isMain && !store.threads[i].hasEverDoneWork {
             store.threads[i].hasEverDoneWork = true
             persistence.debouncedSaveActiveThreads(store.threads)
             changed = true
         }
+        if changed {
+            onThreadsChanged?()
+        }
         return changed
+    }
+
+    @discardableResult
+    func updateDiffLineStats(
+        _ stats: DiffLineStats,
+        for threadId: UUID,
+        notify: Bool = true
+    ) -> Bool {
+        guard diffLineStatsByThreadId[threadId] != stats else { return false }
+        diffLineStatsByThreadId[threadId] = stats
+        if notify {
+            onThreadsChanged?()
+        }
+        return true
     }
 
     // MARK: - Delivered State
@@ -591,7 +738,9 @@ final class GitStateService {
     func refreshDiffStats(for threadId: UUID) async -> [FileDiffEntry] {
         guard let thread = store.threads.first(where: { $0.id == threadId }) else { return [] }
         let baseBranch = thread.isMain ? nil : resolveBaseBranch(for: thread)
-        return await git.threadDiffTabStats(worktreePath: thread.worktreePath, baseBranch: baseBranch)
+        let entries = await git.threadDiffTabStats(worktreePath: thread.worktreePath, baseBranch: baseBranch)
+        updateDiffLineStats(DiffLineStats(entries: entries), for: threadId)
+        return entries
     }
 
     // MARK: - Manual Base Branch Override

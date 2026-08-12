@@ -946,6 +946,55 @@ public final class GitService: Sendable {
             && !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Cheap state probe for cached Diff-tab line totals.
+    /// Dirty state remains available even when HEAD or the base ref cannot be resolved.
+    public func diffRefreshProbe(
+        worktreePath: String,
+        baseBranch: String?
+    ) async -> GitDiffRefreshProbe? {
+        async let statusTask = ShellExecutor.execute(
+            "git status --porcelain",
+            workingDirectory: worktreePath
+        )
+        let refs = ["HEAD", baseBranch]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .map(shellQuote)
+            .joined(separator: " ")
+        async let refsTask = ShellExecutor.execute(
+            "git rev-parse \(refs)",
+            workingDirectory: worktreePath
+        )
+        let (statusResult, refsResult) = await (statusTask, refsTask)
+        guard statusResult.exitCode == 0 else { return nil }
+        return GitDiffRefreshProbe(
+            referenceFingerprint: refsResult.exitCode == 0 ? refsResult.stdout : nil,
+            isDirty: !statusResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        )
+    }
+
+    /// Lightweight line totals for a known Diff-tab reference.
+    /// Untracked files intentionally contribute zero lines, matching Diff-tab stats.
+    public func diffLineStats(
+        worktreePath: String,
+        diffReference: String
+    ) async -> DiffLineStats? {
+        let result = await ShellExecutor.execute(
+            "git -c core.quotePath=false diff --numstat \(shellQuote(diffReference))",
+            workingDirectory: worktreePath
+        )
+        guard result.exitCode == 0 else { return nil }
+        var additions = 0
+        var deletions = 0
+        for line in result.stdout.components(separatedBy: "\n") where !line.isEmpty {
+            let parts = line.split(separator: "\t", maxSplits: 2)
+            guard parts.count >= 2 else { continue }
+            additions += Int(parts[0]) ?? 0
+            deletions += Int(parts[1]) ?? 0
+        }
+        return DiffLineStats(additions: additions, deletions: deletions)
+    }
+
     public func worktreeHasChanges(worktreePath: String) async throws -> Bool {
         let output = try await ShellExecutor.run(
             "git status --porcelain",
@@ -1148,43 +1197,43 @@ public final class GitService: Sendable {
 
     /// Returns per-file diff stats comparing the worktree to its base branch.
     public func diffStats(worktreePath: String, baseBranch: String) async -> [FileDiffEntry] {
-        guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return [] }
+        await diffSnapshot(worktreePath: worktreePath, baseBranch: baseBranch).entries
+    }
 
-        // Get numstat for all changes from merge-base to working tree (includes uncommitted)
-        let numstatResult = await ShellExecutor.execute(
-            "git -c core.quotePath=false diff --numstat \(shellQuote(mergeBase))",
+    private struct DiffSnapshot {
+        let entries: [FileDiffEntry]
+    }
+
+    private func diffSnapshot(worktreePath: String, diffReference: String) async -> DiffSnapshot {
+        async let numstatTask = ShellExecutor.execute(
+            "git -c core.quotePath=false diff --numstat \(shellQuote(diffReference))",
             workingDirectory: worktreePath
         )
-
-        let statusResult = await ShellExecutor.execute(
+        async let statusTask = ShellExecutor.execute(
             "git -c core.quotePath=false status --porcelain",
             workingDirectory: worktreePath
         )
+        let (numstatResult, statusResult) = await (numstatTask, statusTask)
 
-        guard numstatResult.exitCode == 0 || statusResult.exitCode == 0 else { return [] }
+        guard numstatResult.exitCode == 0 || statusResult.exitCode == 0 else {
+            return DiffSnapshot(entries: [])
+        }
         let rawStatusMap = statusResult.exitCode == 0 ? parseStatusMap(statusResult.stdout) : [:]
         let statusMap = await statusMapExpandingUntrackedDirectories(rawStatusMap, worktreePath: worktreePath)
         let numstatOutput = numstatResult.exitCode == 0 ? numstatResult.stdout : ""
-        return parseDiffEntries(numstatOutput: numstatOutput, statusMap: statusMap)
+        return DiffSnapshot(entries: parseDiffEntries(numstatOutput: numstatOutput, statusMap: statusMap))
+    }
+
+    private func diffSnapshot(worktreePath: String, baseBranch: String) async -> DiffSnapshot {
+        guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else {
+            return DiffSnapshot(entries: [])
+        }
+        return await diffSnapshot(worktreePath: worktreePath, diffReference: mergeBase)
     }
 
     /// Returns per-file diff stats for working tree changes only, relative to `HEAD`.
     public func workingTreeDiffStats(worktreePath: String) async -> [FileDiffEntry] {
-        let numstatResult = await ShellExecutor.execute(
-            "git -c core.quotePath=false diff --numstat HEAD",
-            workingDirectory: worktreePath
-        )
-
-        let statusResult = await ShellExecutor.execute(
-            "git -c core.quotePath=false status --porcelain",
-            workingDirectory: worktreePath
-        )
-
-        guard numstatResult.exitCode == 0 || statusResult.exitCode == 0 else { return [] }
-        let rawStatusMap = statusResult.exitCode == 0 ? parseStatusMap(statusResult.stdout) : [:]
-        let statusMap = await statusMapExpandingUntrackedDirectories(rawStatusMap, worktreePath: worktreePath)
-        let numstatOutput = numstatResult.exitCode == 0 ? numstatResult.stdout : ""
-        return parseDiffEntries(numstatOutput: numstatOutput, statusMap: statusMap)
+        await diffSnapshot(worktreePath: worktreePath, diffReference: "HEAD").entries
     }
 
     /// Returns the stats shown by the fixed Diff tab.
@@ -1193,9 +1242,9 @@ public final class GitService: Sendable {
     /// tree changes relative to `HEAD`.
     public func threadDiffTabStats(worktreePath: String, baseBranch: String?) async -> [FileDiffEntry] {
         if let baseBranch, !baseBranch.isEmpty {
-            return await diffStats(worktreePath: worktreePath, baseBranch: baseBranch)
+            return await diffSnapshot(worktreePath: worktreePath, baseBranch: baseBranch).entries
         }
-        return await workingTreeDiffStats(worktreePath: worktreePath)
+        return await diffSnapshot(worktreePath: worktreePath, diffReference: "HEAD").entries
     }
 
     /// Lists non-ignored untracked files below a worktree-relative directory path.

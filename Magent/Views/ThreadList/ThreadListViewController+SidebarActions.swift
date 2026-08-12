@@ -1816,6 +1816,7 @@ extension ThreadListViewController {
             let upstreamStatus: BranchUpstreamStatus
             let diffFingerprint: String
             let diffTabFileCount: Int
+            let diffLineStats: DiffLineStats
 
             if current.isMain {
                 baseBranch = nil
@@ -1837,6 +1838,7 @@ extension ThreadListViewController {
                 upstreamStatus = await upstreamTask
                 diffFingerprint = await fingerprintTask
                 diffTabFileCount = entries.count
+                diffLineStats = DiffLineStats(entries: entries)
             } else {
                 let resolvedBaseBranch = self.threadManager.resolveBaseBranch(for: current)
                 baseBranch = resolvedBaseBranch
@@ -1864,6 +1866,7 @@ extension ThreadListViewController {
                 diffFingerprint = await fingerprintTask
                 let diffTabEntries = await diffTabEntriesTask
                 diffTabFileCount = diffTabEntries.count
+                diffLineStats = DiffLineStats(entries: diffTabEntries)
             }
 
             await MainActor.run {
@@ -1874,6 +1877,7 @@ extension ThreadListViewController {
                     for: current.id,
                     fingerprint: diffTabFileCount > 0 ? diffFingerprint : nil
                 )
+                self.threadManager.updateCachedDiffLineStats(diffLineStats, for: current.id)
                 NotificationCenter.default.post(
                     name: .magentDiffFileCountChanged,
                     object: nil,
