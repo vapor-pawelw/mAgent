@@ -2045,7 +2045,7 @@ public nonisolated enum AgentChatRuntime {
         parseJSONObject(Substring(line))
     }
 
-    private nonisolated static func codexInputItems(
+    nonisolated static func codexInputItems(
         prompt: String,
         attachments: [AgentChatAttachment]
     ) -> [[String: Any]] {
@@ -2060,7 +2060,7 @@ public nonisolated enum AgentChatRuntime {
 
         for attachment in attachments where attachment.kind == .image {
             items.append([
-                "type": "local_image",
+                "type": "localImage",
                 "path": attachment.path,
             ])
         }

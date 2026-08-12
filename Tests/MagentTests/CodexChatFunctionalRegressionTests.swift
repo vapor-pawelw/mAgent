@@ -5,6 +5,18 @@ import Testing
 
 @Suite("Codex chat functional regressions")
 struct CodexChatFunctionalRegressionTests {
+    @Test("Local image attachments use the Codex app-server input schema")
+    func localImageAttachmentsUseAppServerSchema() throws {
+        let items = AgentChatRuntime.codexInputItems(
+            prompt: "Describe this image",
+            attachments: [AgentChatAttachment(path: "/tmp/screenshot.png", kind: .image)]
+        )
+
+        let imageItem = try #require(items.last)
+        #expect(imageItem["type"] as? String == "localImage")
+        #expect(imageItem["path"] as? String == "/tmp/screenshot.png")
+    }
+
     @Test(
         "Fallback only replays prompts that did not start",
         arguments: [
