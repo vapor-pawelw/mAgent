@@ -93,6 +93,7 @@
 
 #### Bug Fixes
 
+- Kept Agent Chat requests running when switching between threads or tabs instead of reporting `Request cancelled`.
 - Fixed image attachments in Codex chat tabs being rejected before the agent could inspect them.
 - Show live parallel-agent progress and tool activity in Codex chat tabs instead of leaving the conversation on `Working` until the delegated task finishes.
 - Replaced the misleading long-running `Starting Codex` chat status as soon as Codex begins working.

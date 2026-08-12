@@ -1139,6 +1139,7 @@ extension ThreadDetailViewController {
                     isActiveTab: isActiveChatTab
                 )
                 self.dispatchQueuedChatPromptIfNeeded(identifier: identifier)
+                self.onChatRequestActivityChanged?(self.hasActiveChatWork)
             }
         }
         // A very fast failure can complete before this assignment line executes.
@@ -1146,6 +1147,7 @@ extension ThreadDetailViewController {
         // a finished task as "running".
         if chatRequestTaskTokensByIdentifier[identifier] == taskToken {
             chatRequestTasksByIdentifier[identifier] = task
+            onChatRequestActivityChanged?(true)
         }
         if let currentIndex = chatTabs.firstIndex(where: { $0.identifier == identifier }) {
             refreshChatTabView(chatIndex: currentIndex)
@@ -1155,6 +1157,13 @@ extension ThreadDetailViewController {
 
     func isChatRequestRunning(identifier: String) -> Bool {
         chatRequestTasksByIdentifier[identifier] != nil
+    }
+
+    var hasActiveChatWork: Bool {
+        !chatRequestTasksByIdentifier.isEmpty
+            || chatQueuedPromptsByIdentifier.values.contains { !$0.isEmpty }
+            || !chatSteerChannelsByIdentifier.isEmpty
+            || !chatCoordinatedRequestIDsByIdentifier.isEmpty
     }
 
     func cancelInFlightChatRequest(
@@ -1216,6 +1225,17 @@ extension ThreadDetailViewController {
         refreshTabStatusIndicators()
         if let nextPrompt = queueTransition.nextPrompt {
             startQueuedChatPrompt(identifier: identifier, prompt: nextPrompt)
+        }
+        onChatRequestActivityChanged?(hasActiveChatWork)
+    }
+
+    func cancelAllChatRequestsDestructively() {
+        let identifiers = Set(chatRequestTasksByIdentifier.keys)
+            .union(chatQueuedPromptsByIdentifier.keys)
+            .union(chatSteerChannelsByIdentifier.keys)
+            .union(chatCoordinatedRequestIDsByIdentifier.keys)
+        for identifier in identifiers {
+            cancelInFlightChatRequest(identifier: identifier, queueBehavior: .discardQueuedPrompts)
         }
     }
 

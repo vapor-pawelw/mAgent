@@ -1,4 +1,5 @@
 import AppKit
+import MagentCore
 import Testing
 
 private final class RecordingTitlebarWindow: NSWindow {
@@ -16,6 +17,46 @@ private final class RecordingTitlebarWindow: NSWindow {
 
 @Suite("Split view sidebar sizing")
 struct SplitViewControllerTests {
+    @Test("Retention store restores the same controller while chat work is active")
+    func retentionStoreRestoresActiveChatController() {
+        final class DetailController {}
+        let threadID = UUID()
+        let controller = DetailController()
+        var store = ChatNavigationRetentionStore<DetailController>()
+
+        store.update(controller, for: threadID, hasActiveWork: true)
+        let restored = store.take(for: threadID)
+
+        #expect(restored === controller)
+    }
+
+    @Test("Retention store releases a controller after background chat work completes")
+    func retentionStoreReleasesCompletedChatController() {
+        final class DetailController {}
+        let threadID = UUID()
+        let controller = DetailController()
+        var store = ChatNavigationRetentionStore<DetailController>()
+
+        store.update(controller, for: threadID, hasActiveWork: true)
+        store.update(controller, for: threadID, hasActiveWork: false)
+
+        #expect(store.take(for: threadID) == nil)
+    }
+
+    @Test("Retention store can retain a controller again when queued chat work starts")
+    func retentionStoreRetainsControllerAgainForQueuedWork() {
+        final class DetailController {}
+        let threadID = UUID()
+        var store = ChatNavigationRetentionStore<DetailController>()
+
+        let controller = DetailController()
+        store.update(controller, for: threadID, hasActiveWork: true)
+        store.update(controller, for: threadID, hasActiveWork: false)
+        store.update(controller, for: threadID, hasActiveWork: true)
+
+        #expect(store.take(for: threadID) === controller)
+    }
+
     @Test("Sidebar split view lays out sidebar beside content")
     func sidebarUsesVerticalDivider() {
         #expect(SidebarTrackingSplitView().isVertical)

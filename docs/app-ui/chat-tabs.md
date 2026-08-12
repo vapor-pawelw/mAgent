@@ -22,6 +22,7 @@
 - Long transcripts retain a bounded 160-message view window. Use Earlier/Newer to navigate older pages without keeping every AppKit message hierarchy alive.
 - Chat tabs keep their chosen position relative to terminal, web, and draft tabs when switching threads or renaming a tab.
 - Closing and restoring a chat tab preserves its pinned state, and closing a background chat does not move the active selection.
+- Active chat requests continue when switching to another thread or tab; returning to the thread restores the same live chat state instead of cancelling the turn.
 - Tool activity should read like concise actions first: `Run command`, `Read file`, `Search`, or `Tool output`.
 - Patch edits should read as `Apply patch` / `Patch applied` and summarize changed files instead of rendering the raw patch inline. Expanded filenames are links that open the thread's existing Diff tab focused on that file.
 - Consecutive routine tool rows are compacted in the visible chat transcript into one collapsed assistant-side activity disclosure. Its header and expanded rows use tinted SF Symbols, while the saved transcript remains unmodified for export, restore, and agent handoff.
@@ -87,4 +88,5 @@
 - Keep Codex app-server request variants distinct from transcript field names: requests use `localImage`, while restored Codex JSONL can still expose `local_images`.
 - `AgentChatSteerChannel` owns unacknowledged steering inputs until app-server acknowledges them. Rejected, completion-raced, or fallback-time inputs are returned as deferred work and queued as the next turn. Closing a chat or `/clear` uses destructive cancellation and discards both queued and unacknowledged inputs before cancelling the active task.
 - Tab-structure restoration must retain in-flight `ChatTabEntry` instances. Replacing them from a lagging persistence snapshot can cancel a request the user did not stop and leave a newly materialized view showing stale elapsed work.
+- Main-window thread navigation retains a `ThreadDetailViewController` only while it owns an active chat request. Reuse that controller when returning to the thread, and release it after the last background request finishes; closing, deleting, or archiving remains destructive.
 - A terminal-session rename must re-key its `terminal:<session>` entry in `tabDisplayOrder` together with the other session-keyed state, or restoration treats the renamed tab as new and appends it.

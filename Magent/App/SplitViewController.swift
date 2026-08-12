@@ -92,6 +92,7 @@ final class SplitViewController: NSSplitViewController {
     private let emptyStateVC = EmptyStateViewController()
     private let contentContainerVC = SplitContentContainerViewController()
     private var currentDetailVC: ThreadDetailViewController?
+    private var retainedChatDetailControllers = ChatNavigationRetentionStore<ThreadDetailViewController>()
     private var settingsWindowController: NSWindowController?
     private var sidebarItem: NSSplitViewItem?
     private var didApplyInitialSidebarWidth = false
@@ -703,10 +704,27 @@ final class SplitViewController: NSSplitViewController {
             "threadId": thread.id,
             "thread": thread.name,
         ])
-        currentDetailVC?.cacheTerminalViewsForReuse()
-        let detailVC = ThreadDetailViewController(thread: thread)
-        detailVC.loadViewIfNeeded()
+        if let currentDetailVC {
+            let hasActiveChatWork = currentDetailVC.hasActiveChatWork
+            if !hasActiveChatWork {
+                currentDetailVC.cacheTerminalViewsForReuse()
+            }
+            retainedChatDetailControllers.update(
+                currentDetailVC,
+                for: currentDetailVC.thread.id,
+                hasActiveWork: hasActiveChatWork
+            )
+        }
+        let detailVC: ThreadDetailViewController
+        if let retained = retainedChatDetailControllers.take(for: thread.id) {
+            retained.thread = thread
+            detailVC = retained
+        } else {
+            detailVC = ThreadDetailViewController(thread: thread)
+        }
         currentDetailVC = detailVC
+        configureChatRequestRetention(for: detailVC)
+        detailVC.loadViewIfNeeded()
         refreshCurrentThreadToolbarStrip(with: thread)
         refreshCurrentThreadToolbarActions()
 
@@ -719,6 +737,20 @@ final class SplitViewController: NSSplitViewController {
                 message: "This ticket is no longer assigned to you",
                 style: .info,
                 duration: 5.0
+            )
+        }
+    }
+
+    private func configureChatRequestRetention(for detailVC: ThreadDetailViewController) {
+        detailVC.onChatRequestActivityChanged = { [weak self, weak detailVC] hasActiveWork in
+            guard let self, let detailVC, self.currentDetailVC !== detailVC else { return }
+            if !hasActiveWork {
+                detailVC.cacheTerminalViewsForReuse()
+            }
+            self.retainedChatDetailControllers.update(
+                detailVC,
+                for: detailVC.thread.id,
+                hasActiveWork: hasActiveWork
             )
         }
     }
@@ -1167,9 +1199,19 @@ final class SplitViewController: NSSplitViewController {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func showEmptyState(skipTerminalCache: Bool = false) {
-        if !skipTerminalCache {
-            currentDetailVC?.cacheTerminalViewsForReuse()
+    private func showEmptyState(
+        skipTerminalCache: Bool = false,
+        preserveActiveChatWork: Bool = true
+    ) {
+        if let currentDetailVC {
+            if !skipTerminalCache && !currentDetailVC.hasActiveChatWork {
+                currentDetailVC.cacheTerminalViewsForReuse()
+            }
+            retainedChatDetailControllers.update(
+                currentDetailVC,
+                for: currentDetailVC.thread.id,
+                hasActiveWork: preserveActiveChatWork && currentDetailVC.hasActiveChatWork
+            )
         }
         currentDetailVC = nil
         ThreadManager.shared.setActiveThread(nil)
@@ -1440,15 +1482,27 @@ extension SplitViewController: ThreadListDelegate {
     }
 
     func threadList(_ controller: ThreadListViewController, didArchiveThread thread: MagentThread) {
+        cancelRetainedChatWork(for: thread.id)
         if currentDetailVC?.thread.id == thread.id {
-            showEmptyState(skipTerminalCache: true)
+            currentDetailVC?.onChatRequestActivityChanged = nil
+            currentDetailVC?.cancelAllChatRequestsDestructively()
+            showEmptyState(skipTerminalCache: true, preserveActiveChatWork: false)
         }
     }
 
     func threadList(_ controller: ThreadListViewController, didDeleteThread thread: MagentThread) {
+        cancelRetainedChatWork(for: thread.id)
         if currentDetailVC?.thread.id == thread.id {
-            showEmptyState(skipTerminalCache: true)
+            currentDetailVC?.onChatRequestActivityChanged = nil
+            currentDetailVC?.cancelAllChatRequestsDestructively()
+            showEmptyState(skipTerminalCache: true, preserveActiveChatWork: false)
         }
+    }
+
+    private func cancelRetainedChatWork(for threadID: UUID) {
+        guard let detailVC = retainedChatDetailControllers.take(for: threadID) else { return }
+        detailVC.onChatRequestActivityChanged = nil
+        detailVC.cancelAllChatRequestsDestructively()
     }
 
     func threadListDidRequestSettings(_ controller: ThreadListViewController) {

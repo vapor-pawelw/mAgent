@@ -258,6 +258,7 @@ final class ThreadDetailViewController: NSViewController {
     var chatSteerChannelsByIdentifier: [String: AgentChatSteerChannel] = [:]
     var chatQueuedPromptsByIdentifier: [String: [(messageID: UUID, text: String, attachments: [PersistedChatAttachment])]] = [:]
     var chatAutoRenameTasksByIdentifier: [String: Task<Void, Never>] = [:]
+    var onChatRequestActivityChanged: ((Bool) -> Void)?
     var activeDraftTabId: String?
     var activeWebTabId: String?
     var activeChatTabId: String?
