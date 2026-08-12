@@ -84,8 +84,13 @@ let package = Package(
         ),
         .target(
             name: "GhosttyBridge",
-            dependencies: ["GhosttyKit"],
+            dependencies: ["GhosttyKit", "GhosttyShims"],
             path: "Sources/GhosttyBridge"
+        ),
+        .target(
+            name: "GhosttyShims",
+            path: "Sources/GhosttyShims",
+            publicHeadersPath: "include"
         ),
     ]
 )
