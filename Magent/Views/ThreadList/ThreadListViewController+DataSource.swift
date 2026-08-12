@@ -251,72 +251,89 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
-        // Section reordering
-        if let sectionId = draggedSectionId(from: info) {
-            // Redirect drop-on-section → drop-before-that-section in its project
-            if let targetSection = item as? SidebarSection {
-                if let project = parentProject(of: targetSection),
-                   let sectionChildIdx = project.children.firstIndex(where: { ($0 as? SidebarSection)?.sectionId == targetSection.sectionId }) {
-                    outlineView.setDropItem(project, dropChildIndex: sectionChildIdx)
+        var feedbackItem = item
+        var feedbackIndex = index
+        let operation: NSDragOperation = {
+            // Section reordering
+            if let sectionId = draggedSectionId(from: info) {
+                // Redirect drop-on-section → drop-before-that-section in its project
+                if let targetSection = item as? SidebarSection {
+                    if let project = parentProject(of: targetSection),
+                       let sectionChildIdx = project.children.firstIndex(where: { ($0 as? SidebarSection)?.sectionId == targetSection.sectionId }) {
+                        outlineView.setDropItem(project, dropChildIndex: sectionChildIdx)
+                        feedbackItem = project
+                        feedbackIndex = sectionChildIdx
+                    }
+                    return .move
                 }
-                return .move
-            }
-            guard let project = item as? SidebarProject,
-                  index != NSOutlineViewDropOnItemIndex,
-                  project.children.contains(where: { ($0 as? SidebarSection)?.sectionId == sectionId }) else {
-                return []
-            }
-            let firstSectionIdx = project.children.firstIndex(where: { $0 is SidebarSection }) ?? project.children.count
-            let sectionCount = project.children.filter { $0 is SidebarSection }.count
-            guard index >= firstSectionIdx && index <= firstSectionIdx + sectionCount else { return [] }
-            return .move
-        }
-
-        guard let thread = draggedThread(from: info) else {
-            return []
-        }
-
-        if let toggle = item as? SidebarHiddenThreadsToggle,
-           let section = parentSection(of: toggle),
-           section.projectId == thread.projectId,
-           let toggleIndex = section.hiddenThreadsToggleIndex {
-            outlineView.setDropItem(section, dropChildIndex: toggleIndex)
-            let counts = threadGroupCounts(in: section)
-            let threadIndex = adjustedDropIndex(toggleIndex, in: section)
-            return validDropIndex(threadIndex, for: thread.sidebarListState, in: counts) ? .move : []
-        }
-
-        if let project = item as? SidebarProject {
-            let settings = persistence.loadSettings()
-            if settings.shouldUseThreadSections(for: project.projectId) {
-                guard thread.projectId == project.projectId,
-                      let emptySection = SidebarThreadDropTarget.emptySection(
-                          in: project,
-                          atProjectChildIndex: index
-                      ) else {
+                guard let project = item as? SidebarProject,
+                      index != NSOutlineViewDropOnItemIndex,
+                      project.children.contains(where: { ($0 as? SidebarSection)?.sectionId == sectionId }) else {
                     return []
                 }
-                outlineView.setDropItem(emptySection, dropChildIndex: NSOutlineViewDropOnItemIndex)
+                let firstSectionIdx = project.children.firstIndex(where: { $0 is SidebarSection }) ?? project.children.count
+                let sectionCount = project.children.filter { $0 is SidebarSection }.count
+                guard index >= firstSectionIdx && index <= firstSectionIdx + sectionCount else { return [] }
                 return .move
             }
-            return validateFlatProjectDrop(for: thread, in: project, childIndex: index)
-        }
 
-        guard let section = item as? SidebarSection,
-              section.projectId == thread.projectId else { return [] }
+            guard let thread = draggedThread(from: info) else {
+                return []
+            }
 
-        // Drop "on" section header → cross-section move (always allowed)
-        if index == NSOutlineViewDropOnItemIndex {
+            if let toggle = item as? SidebarHiddenThreadsToggle,
+               let section = parentSection(of: toggle),
+               section.projectId == thread.projectId,
+               let toggleIndex = section.hiddenThreadsToggleIndex {
+                outlineView.setDropItem(section, dropChildIndex: toggleIndex)
+                feedbackItem = section
+                feedbackIndex = toggleIndex
+                let counts = threadGroupCounts(in: section)
+                let threadIndex = adjustedDropIndex(toggleIndex, in: section)
+                return validDropIndex(threadIndex, for: thread.sidebarListState, in: counts) ? .move : []
+            }
+
+            if let project = item as? SidebarProject {
+                let settings = persistence.loadSettings()
+                if settings.shouldUseThreadSections(for: project.projectId) {
+                    guard thread.projectId == project.projectId,
+                          let emptySection = SidebarThreadDropTarget.emptySection(
+                              in: project,
+                              atProjectChildIndex: index
+                          ) else {
+                        return []
+                    }
+                    outlineView.setDropItem(emptySection, dropChildIndex: NSOutlineViewDropOnItemIndex)
+                    feedbackItem = emptySection
+                    feedbackIndex = NSOutlineViewDropOnItemIndex
+                    return .move
+                }
+                return validateFlatProjectDrop(for: thread, in: project, childIndex: index)
+            }
+
+            guard let section = item as? SidebarSection,
+                  section.projectId == thread.projectId else { return [] }
+
+            // Drop "on" section header → cross-section move (always allowed)
+            if index == NSOutlineViewDropOnItemIndex {
+                return .move
+            }
+
+            // Drop at specific index → reorder within section while preserving the
+            // pinned / visible / hidden group boundaries. Adjust for inserted separators.
+            let counts = threadGroupCounts(in: section)
+            let threadIndex = adjustedDropIndex(index, in: section)
+            guard validDropIndex(threadIndex, for: thread.sidebarListState, in: counts) else { return [] }
+
             return .move
-        }
+        }()
 
-        // Drop at specific index → reorder within section while preserving the
-        // pinned / visible / hidden group boundaries. Adjust for inserted separators.
-        let counts = threadGroupCounts(in: section)
-        let threadIndex = adjustedDropIndex(index, in: section)
-        guard validDropIndex(threadIndex, for: thread.sidebarListState, in: counts) else { return [] }
-
-        return .move
+        (outlineView as? SidebarOutlineView)?.updatePrimaryDropFeedback(
+            operation: operation,
+            item: feedbackItem,
+            childIndex: feedbackIndex
+        )
+        return operation
     }
 
     func outlineView(

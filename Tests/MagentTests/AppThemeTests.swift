@@ -56,6 +56,17 @@ struct AppThemeTests {
     }
 
     @MainActor
+    @Test("Sidebar thread drops replace the system feedback with the configured primary color")
+    func sidebarDropFeedbackUsesConfiguredPrimaryColor() {
+        let visibleRect = NSRect(x: 20, y: 0, width: 100, height: 20)
+        #expect(SidebarDropFeedbackStyle.systemFeedbackStyle == .none)
+        #expect(
+            SidebarDropFeedbackStyle.insertionRect(y: 10, visibleRect: visibleRect)
+                == NSRect(x: 28, y: 8.5, width: 84, height: 3)
+        )
+    }
+
+    @MainActor
     private func rgb(_ color: NSColor?) throws -> [CGFloat] {
         let converted = try #require(color?.usingColorSpace(.sRGB))
         return [converted.redComponent, converted.greenComponent, converted.blueComponent]

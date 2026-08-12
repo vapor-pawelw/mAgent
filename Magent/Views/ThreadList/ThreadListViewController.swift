@@ -14,6 +14,17 @@ final class SidebarOutlineView: NSOutlineView {
     var suppressSelectionAutoScroll = false
     var onUserNavigationInteraction: (() -> Void)?
     private(set) var isDragInteractionActive = false
+    private var primaryDropFeedback: SidebarDropFeedback?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        draggingDestinationFeedbackStyle = SidebarDropFeedbackStyle.systemFeedbackStyle
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        draggingDestinationFeedbackStyle = SidebarDropFeedbackStyle.systemFeedbackStyle
+    }
 
     func noteLocalDragWillBegin() {
         isDragInteractionActive = true
@@ -28,6 +39,7 @@ final class SidebarOutlineView: NSOutlineView {
     }
 
     func clearDragInteraction(reason: String) {
+        clearPrimaryDropFeedback()
         guard isDragInteractionActive else { return }
         isDragInteractionActive = false
         DevSessionLog.log(.sidebar, "drag-state changed", fields: [
@@ -128,6 +140,65 @@ final class SidebarOutlineView: NSOutlineView {
     override func concludeDragOperation(_ sender: NSDraggingInfo?) {
         super.concludeDragOperation(sender)
         clearDragInteraction(reason: "conclude-drag-operation")
+    }
+
+    func updatePrimaryDropFeedback(
+        operation: NSDragOperation,
+        item: Any?,
+        childIndex: Int
+    ) {
+        guard !operation.isEmpty else {
+            clearPrimaryDropFeedback()
+            return
+        }
+
+        if childIndex == NSOutlineViewDropOnItemIndex {
+            let row = row(forItem: item)
+            primaryDropFeedback = row >= 0 ? .onRow(rect(ofRow: row)) : nil
+        } else {
+            primaryDropFeedback = insertionFeedback(parent: item, childIndex: childIndex)
+        }
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let primaryDropFeedback else { return }
+        SidebarDropFeedbackStyle.draw(
+            primaryDropFeedback,
+            in: visibleRect,
+            color: .appPrimary,
+            appearance: effectiveAppearance
+        )
+    }
+
+    private func insertionFeedback(parent: Any?, childIndex: Int) -> SidebarDropFeedback? {
+        guard childIndex >= 0 else { return nil }
+        let childCount = dataSource?.outlineView?(self, numberOfChildrenOfItem: parent) ?? 0
+
+        if childIndex < childCount,
+           let child = dataSource?.outlineView?(self, child: childIndex, ofItem: parent) {
+            let childRow = row(forItem: child)
+            guard childRow >= 0 else { return nil }
+            return .insertionY(rect(ofRow: childRow).minY)
+        }
+
+        if childCount > 0,
+           let lastChild = dataSource?.outlineView?(self, child: childCount - 1, ofItem: parent) {
+            let lastRow = row(forItem: lastChild)
+            guard lastRow >= 0 else { return nil }
+            return .insertionY(rect(ofRow: lastRow).maxY)
+        }
+
+        let parentRow = row(forItem: parent)
+        guard parentRow >= 0 else { return nil }
+        return .insertionY(rect(ofRow: parentRow).maxY)
+    }
+
+    private func clearPrimaryDropFeedback() {
+        guard primaryDropFeedback != nil else { return }
+        primaryDropFeedback = nil
+        needsDisplay = true
     }
 
 }
