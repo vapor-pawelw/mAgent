@@ -170,3 +170,256 @@ struct CodexAppProjectStateReconcilerTests {
         #expect(importedPaths == ["/repos/existing"])
     }
 }
+
+@Suite("Magent project repository deduplication")
+struct MagentProjectDeduplicatorTests {
+    @Test("Projects for the same Git repository collapse without losing project configuration")
+    func collapsesRepositoryAliases() throws {
+        let canonicalID = UUID()
+        let duplicateID = UUID()
+        let unrelatedID = UUID()
+        let canonical = Project(
+            id: canonicalID,
+            name: "Canonical",
+            repoPath: "/repos/repo-link",
+            worktreesBasePath: "/custom/worktrees",
+            localFileSyncEntries: [LocalFileSyncEntry(path: ".env")]
+        )
+        let duplicate = Project(
+            id: duplicateID,
+            name: "Duplicate",
+            repoPath: "/repos/repo-worktree",
+            worktreesBasePath: "/other/worktrees",
+            isPinned: true,
+            localFileSyncEntries: [LocalFileSyncEntry(path: "Config/local.json")]
+        )
+        let unrelated = Project(
+            id: unrelatedID,
+            name: "Unrelated",
+            repoPath: "/repos/unrelated",
+            worktreesBasePath: "/repos/unrelated-worktrees"
+        )
+
+        let plan = MagentProjectDeduplicator.plan(
+            projects: [canonical, duplicate, unrelated],
+            resolutions: [
+                MagentProjectRepositoryResolution(
+                    projectID: canonicalID,
+                    repositoryIdentity: "/repos/repo/.git",
+                    canonicalProjectPath: "/repos/repo"
+                ),
+                MagentProjectRepositoryResolution(
+                    projectID: duplicateID,
+                    repositoryIdentity: "/repos/repo/.git",
+                    canonicalProjectPath: "/repos/repo"
+                ),
+            ]
+        )
+
+        #expect(plan.projects.map(\.id) == [canonicalID, unrelatedID])
+        #expect(plan.projectIDReplacements == [duplicateID: canonicalID])
+        let merged = try #require(plan.projects.first)
+        #expect(merged.repoPath == "/repos/repo")
+        #expect(merged.worktreesBasePath == "/custom/worktrees")
+        #expect(merged.isPinned)
+        #expect(Set(merged.localFileSyncEntries.map(\.path)) == [".env", "Config/local.json"])
+    }
+
+    @Test("Different subprojects in one repository remain separate")
+    func preservesDistinctSubprojects() {
+        let frontendID = UUID()
+        let backendID = UUID()
+        let frontend = Project(
+            id: frontendID,
+            name: "Frontend",
+            repoPath: "/repos/monorepo/frontend",
+            worktreesBasePath: "/worktrees/frontend"
+        )
+        let backend = Project(
+            id: backendID,
+            name: "Backend",
+            repoPath: "/repos/monorepo/backend",
+            worktreesBasePath: "/worktrees/backend"
+        )
+
+        let plan = MagentProjectDeduplicator.plan(
+            projects: [frontend, backend],
+            resolutions: [
+                MagentProjectRepositoryResolution(
+                    projectID: frontendID,
+                    repositoryIdentity: "/repos/monorepo/.git\u{0}frontend",
+                    canonicalProjectPath: "/repos/monorepo/frontend"
+                ),
+                MagentProjectRepositoryResolution(
+                    projectID: backendID,
+                    repositoryIdentity: "/repos/monorepo/.git\u{0}backend",
+                    canonicalProjectPath: "/repos/monorepo/backend"
+                ),
+            ]
+        )
+
+        #expect(plan.projects.map(\.id) == [frontendID, backendID])
+        #expect(plan.projectIDReplacements.isEmpty)
+    }
+
+    @Test("A lone linked-worktree project keeps its configured checkout")
+    func preservesIntentionalLinkedWorktreeProjectPath() throws {
+        let projectID = UUID()
+        let project = Project(
+            id: projectID,
+            name: "Feature checkout",
+            repoPath: "/worktrees/feature",
+            worktreesBasePath: "/worktrees"
+        )
+
+        let plan = MagentProjectDeduplicator.plan(
+            projects: [project],
+            resolutions: [
+                MagentProjectRepositoryResolution(
+                    projectID: projectID,
+                    repositoryIdentity: "/repos/repo/.git",
+                    canonicalProjectPath: "/repos/repo"
+                ),
+            ]
+        )
+
+        #expect(try #require(plan.projects.first).repoPath == project.repoPath)
+        #expect(plan.canonicalProjectPathsByProjectID[projectID] == project.repoPath)
+    }
+
+    @Test("Retargeting a thread preserves all persisted state")
+    func retargetingPreservesAllPersistedState() throws {
+        let originalProjectID = UUID()
+        let replacementProjectID = UUID()
+        var thread = MagentThread(
+            projectId: originalProjectID,
+            name: "Thread",
+            worktreePath: "/repos/repo-worktrees/thread",
+            branchName: "feature/thread",
+            tmuxSessionNames: ["session"],
+            agentTmuxSessions: ["session"],
+            customTabNames: ["session": "My model"],
+            manuallyRenamedTabs: ["session"]
+        )
+        thread.busySessions = ["session"]
+        let originalData = try JSONEncoder().encode(thread)
+
+        let retargeted = thread.withProjectId(replacementProjectID)
+        let retargetedData = try JSONEncoder().encode(retargeted)
+        var originalJSON = try #require(JSONSerialization.jsonObject(with: originalData) as? [String: Any])
+        var retargetedJSON = try #require(JSONSerialization.jsonObject(with: retargetedData) as? [String: Any])
+        originalJSON.removeValue(forKey: "projectId")
+        retargetedJSON.removeValue(forKey: "projectId")
+
+        #expect(retargeted.projectId == replacementProjectID)
+        #expect(NSDictionary(dictionary: originalJSON).isEqual(to: retargetedJSON))
+        #expect(retargeted.busySessions == ["session"])
+    }
+
+    @Test("A migrated main thread follows the surviving project's canonical path")
+    func migratesMainThreadPath() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("magent-project-thread-migration-\(UUID().uuidString)")
+        let canonicalPath = root.appendingPathComponent("repo")
+        let aliasPath = root.appendingPathComponent("repo-alias")
+        try FileManager.default.createDirectory(at: canonicalPath, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: aliasPath, withDestinationURL: canonicalPath)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let canonicalID = UUID()
+        let duplicateID = UUID()
+        let canonical = Project(
+            id: canonicalID,
+            name: "Canonical",
+            repoPath: canonicalPath.path,
+            worktreesBasePath: "/worktrees/repo"
+        )
+        let duplicate = Project(
+            id: duplicateID,
+            name: "Alias",
+            repoPath: aliasPath.path,
+            worktreesBasePath: "/worktrees/alias"
+        )
+        let plan = MagentProjectDeduplicator.plan(
+            projects: [canonical, duplicate],
+            resolutions: [
+                MagentProjectRepositoryResolution(
+                    projectID: canonicalID,
+                    repositoryIdentity: "/repos/repo/.git",
+                    canonicalProjectPath: canonicalPath.path
+                ),
+                MagentProjectRepositoryResolution(
+                    projectID: duplicateID,
+                    repositoryIdentity: "/repos/repo/.git",
+                    canonicalProjectPath: canonicalPath.path
+                ),
+            ]
+        )
+        let thread = MagentThread(
+            projectId: duplicateID,
+            name: "main",
+            worktreePath: duplicate.repoPath,
+            branchName: "main",
+            isMain: true
+        )
+
+        let migrated = MagentProjectThreadMigrator.migrate(
+            thread,
+            projectsByID: [canonicalID: canonical, duplicateID: duplicate],
+            plan: plan
+        )
+
+        #expect(migrated.projectId == canonicalID)
+        #expect(migrated.worktreePath == canonical.repoPath)
+        #expect(migrated.isMain)
+    }
+
+    @Test("A second bare-backed checkout becomes a regular thread instead of a second main")
+    func demotesDistinctBareBackedMainThread() {
+        let canonicalID = UUID()
+        let duplicateID = UUID()
+        let canonical = Project(
+            id: canonicalID,
+            name: "First",
+            repoPath: "/worktrees/first",
+            worktreesBasePath: "/worktrees"
+        )
+        let duplicate = Project(
+            id: duplicateID,
+            name: "Second",
+            repoPath: "/worktrees/second",
+            worktreesBasePath: "/worktrees"
+        )
+        let plan = MagentProjectDeduplicator.plan(
+            projects: [canonical, duplicate],
+            resolutions: [
+                MagentProjectRepositoryResolution(
+                    projectID: canonicalID,
+                    repositoryIdentity: "/repos/bare.git",
+                    canonicalProjectPath: canonical.repoPath
+                ),
+                MagentProjectRepositoryResolution(
+                    projectID: duplicateID,
+                    repositoryIdentity: "/repos/bare.git",
+                    canonicalProjectPath: duplicate.repoPath
+                ),
+            ]
+        )
+        let thread = MagentThread(
+            projectId: duplicateID,
+            name: "main",
+            worktreePath: duplicate.repoPath,
+            branchName: "feature/second",
+            isMain: true
+        )
+
+        let migrated = MagentProjectThreadMigrator.migrate(
+            thread,
+            projectsByID: [canonicalID: canonical, duplicateID: duplicate],
+            plan: plan
+        )
+
+        #expect(migrated.projectId == canonicalID)
+        #expect(migrated.worktreePath == duplicate.repoPath)
+        #expect(!migrated.isMain)
+    }
+}

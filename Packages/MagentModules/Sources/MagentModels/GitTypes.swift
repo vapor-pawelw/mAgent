@@ -12,6 +12,36 @@ public nonisolated struct WorktreeInfo: Sendable {
     }
 }
 
+public nonisolated struct GitRepositoryIdentity: Sendable, Equatable {
+    public let commonDirectoryPath: String
+    public let primaryWorktreePath: String
+    public let worktreeRootPath: String
+    public let relativeProjectPath: String
+
+    public init(
+        commonDirectoryPath: String,
+        primaryWorktreePath: String,
+        worktreeRootPath: String,
+        relativeProjectPath: String
+    ) {
+        self.commonDirectoryPath = commonDirectoryPath
+        self.primaryWorktreePath = primaryWorktreePath
+        self.worktreeRootPath = worktreeRootPath
+        self.relativeProjectPath = relativeProjectPath
+    }
+
+    public var projectIdentity: String {
+        "\(commonDirectoryPath)\u{0}\(relativeProjectPath)"
+    }
+
+    public var canonicalProjectPath: String {
+        guard !relativeProjectPath.isEmpty else { return primaryWorktreePath }
+        return URL(fileURLWithPath: primaryWorktreePath)
+            .appendingPathComponent(relativeProjectPath)
+            .standardizedFileURL.path
+    }
+}
+
 public enum GitError: LocalizedError {
     case commandFailed(String)
 

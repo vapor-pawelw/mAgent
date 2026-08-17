@@ -20,7 +20,7 @@
 
 #### Features
 
-- Automatically keep Git projects aligned between Magent and Codex App, and group Codex sessions from every worktree under their main repository instead of General.
+- Automatically keep Git projects aligned between Magent and Codex App, grouping worktrees and symlinked paths under one main repository instead of General without creating duplicate projects.
 
 #### Improvements
 

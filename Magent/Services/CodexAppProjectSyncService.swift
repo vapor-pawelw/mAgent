@@ -17,6 +17,153 @@ struct CodexAppProjectStateFingerprint: Equatable {
     let modifiedAt: TimeInterval
 }
 
+struct MagentProjectRepositoryResolution: Equatable {
+    let projectID: UUID
+    let repositoryIdentity: String
+    let canonicalProjectPath: String
+}
+
+struct MagentProjectDeduplicationPlan {
+    let projects: [Project]
+    let projectIDReplacements: [UUID: UUID]
+    let canonicalProjectPathsByProjectID: [UUID: String]
+}
+
+enum MagentProjectDeduplicator {
+    static func plan(
+        projects: [Project],
+        resolutions: [MagentProjectRepositoryResolution]
+    ) -> MagentProjectDeduplicationPlan {
+        let resolutionByProjectID = Dictionary(
+            resolutions.map { ($0.projectID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let projectCountByIdentity = Dictionary(grouping: resolutions, by: \.repositoryIdentity)
+            .mapValues(\.count)
+        var canonicalProjectIDByIdentity: [String: UUID] = [:]
+        var replacements: [UUID: UUID] = [:]
+        var canonicalPaths: [UUID: String] = [:]
+        var deduplicatedProjects: [Project] = []
+
+        for project in projects {
+            guard let resolution = resolutionByProjectID[project.id] else {
+                deduplicatedProjects.append(project)
+                continue
+            }
+
+            if let canonicalProjectID = canonicalProjectIDByIdentity[resolution.repositoryIdentity] {
+                replacements[project.id] = canonicalProjectID
+                if let canonicalProject = deduplicatedProjects.first(where: { $0.id == canonicalProjectID }) {
+                    canonicalPaths[project.id] = canonicalProject.repoPath
+                }
+                if let canonicalIndex = deduplicatedProjects.firstIndex(where: { $0.id == canonicalProjectID }) {
+                    deduplicatedProjects[canonicalIndex] = merge(
+                        duplicate: project,
+                        into: deduplicatedProjects[canonicalIndex]
+                    )
+                }
+                continue
+            }
+
+            canonicalProjectIDByIdentity[resolution.repositoryIdentity] = project.id
+            let shouldCanonicalizePath = (projectCountByIdentity[resolution.repositoryIdentity] ?? 0) > 1
+                || normalizedPath(project.repoPath) == normalizedPath(resolution.canonicalProjectPath)
+            let selectedProjectPath = shouldCanonicalizePath
+                ? resolution.canonicalProjectPath
+                : project.repoPath
+            canonicalPaths[project.id] = selectedProjectPath
+            var canonicalProject = project
+            canonicalProject.repoPath = selectedProjectPath
+            deduplicatedProjects.append(canonicalProject)
+        }
+
+        return MagentProjectDeduplicationPlan(
+            projects: deduplicatedProjects,
+            projectIDReplacements: replacements,
+            canonicalProjectPathsByProjectID: canonicalPaths
+        )
+    }
+
+    private static func merge(duplicate: Project, into canonical: Project) -> Project {
+        var merged = canonical
+        merged.defaultBranch = merged.defaultBranch ?? duplicate.defaultBranch
+        merged.agentType = merged.agentType ?? duplicate.agentType
+        merged.terminalInjectionCommand = preferred(merged.terminalInjectionCommand, duplicate.terminalInjectionCommand)
+        merged.preAgentInjectionCommand = preferred(merged.preAgentInjectionCommand, duplicate.preAgentInjectionCommand)
+        merged.agentContextInjection = preferred(merged.agentContextInjection, duplicate.agentContextInjection)
+        merged.autoRenameSlugPrompt = preferred(merged.autoRenameSlugPrompt, duplicate.autoRenameSlugPrompt)
+        merged.isPinned = merged.isPinned || duplicate.isPinned
+        merged.isHidden = merged.isHidden && duplicate.isHidden
+        merged.useThreadSectionsOverride = merged.useThreadSectionsOverride ?? duplicate.useThreadSectionsOverride
+        merged.defaultSectionId = merged.defaultSectionId ?? duplicate.defaultSectionId
+        merged.threadSections = mergedSections(merged.threadSections, duplicate.threadSections)
+        merged.jiraProjectKey = preferred(merged.jiraProjectKey, duplicate.jiraProjectKey)
+        merged.jiraBoardId = merged.jiraBoardId ?? duplicate.jiraBoardId
+        merged.jiraBoardName = preferred(merged.jiraBoardName, duplicate.jiraBoardName)
+        merged.jiraSyncEnabled = merged.jiraSyncEnabled || duplicate.jiraSyncEnabled
+        merged.jiraSiteURL = preferred(merged.jiraSiteURL, duplicate.jiraSiteURL)
+        merged.jiraExcludedTicketKeys.formUnion(duplicate.jiraExcludedTicketKeys)
+        merged.jiraAssigneeAccountId = preferred(merged.jiraAssigneeAccountId, duplicate.jiraAssigneeAccountId)
+        merged.jiraAcknowledgedStatuses = merged.jiraAcknowledgedStatuses ?? duplicate.jiraAcknowledgedStatuses
+
+        var knownEntries = Set(merged.localFileSyncEntries)
+        for entry in duplicate.localFileSyncEntries where knownEntries.insert(entry).inserted {
+            merged.localFileSyncEntries.append(entry)
+        }
+        return merged
+    }
+
+    private static func preferred(_ primary: String?, _ secondary: String?) -> String? {
+        guard let primary, !primary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return secondary
+        }
+        return primary
+    }
+
+    private static func mergedSections(
+        _ primary: [ThreadSection]?,
+        _ secondary: [ThreadSection]?
+    ) -> [ThreadSection]? {
+        guard primary != nil || secondary != nil else { return nil }
+        var result = primary ?? []
+        var knownIDs = Set(result.map(\.id))
+        for section in secondary ?? [] where knownIDs.insert(section.id).inserted {
+            result.append(section)
+        }
+        return result
+    }
+
+    private static func normalizedPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+    }
+}
+
+enum MagentProjectThreadMigrator {
+    static func migrate(
+        _ thread: MagentThread,
+        projectsByID: [UUID: Project],
+        plan: MagentProjectDeduplicationPlan
+    ) -> MagentThread {
+        let originalProjectID = thread.projectId
+        var migrated = plan.projectIDReplacements[originalProjectID]
+            .map { thread.withProjectId($0) } ?? thread
+        if let oldProjectPath = projectsByID[originalProjectID]?.repoPath,
+           let canonicalProjectPath = plan.canonicalProjectPathsByProjectID[originalProjectID],
+           normalizedPath(thread.worktreePath) == normalizedPath(oldProjectPath) {
+            if normalizedPath(oldProjectPath) != normalizedPath(canonicalProjectPath) {
+                migrated.isMain = false
+            } else {
+                migrated.worktreePath = canonicalProjectPath
+            }
+        }
+        return migrated
+    }
+
+    private static func normalizedPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+    }
+}
+
 enum CodexAppProjectStateReconciler {
     private static let savedRootsKey = "electron-saved-workspace-roots"
     private static let projectOrderKey = "project-order"

@@ -250,6 +250,84 @@ public final class GitService: Sendable {
         return worktrees
     }
 
+    public func repositoryIdentity(at path: String) async throws -> GitRepositoryIdentity {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+
+        let resolvedPath = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+        let worktreeRootOutput = try await ShellExecutor.run(
+            "git rev-parse --show-toplevel",
+            workingDirectory: resolvedPath
+        )
+        let worktreeRootPath = URL(
+            fileURLWithPath: worktreeRootOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        ).resolvingSymlinksInPath().standardizedFileURL.path
+
+        let commonDirectoryOutput: String
+        do {
+            commonDirectoryOutput = try await ShellExecutor.run(
+                "git rev-parse --path-format=absolute --git-common-dir",
+                workingDirectory: resolvedPath
+            )
+        } catch {
+            commonDirectoryOutput = try await ShellExecutor.run(
+                "git rev-parse --git-common-dir",
+                workingDirectory: resolvedPath
+            )
+        }
+        let rawCommonDirectoryPath = commonDirectoryOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let commonDirectoryURL = rawCommonDirectoryPath.hasPrefix("/")
+            ? URL(fileURLWithPath: rawCommonDirectoryPath)
+            : URL(
+                fileURLWithPath: rawCommonDirectoryPath,
+                relativeTo: URL(fileURLWithPath: worktreeRootPath, isDirectory: true)
+            )
+        let commonDirectoryPath = commonDirectoryURL.resolvingSymlinksInPath().standardizedFileURL.path
+        guard FileManager.default.fileExists(atPath: commonDirectoryPath) else {
+            throw GitError.commandFailed("Git common directory does not exist")
+        }
+
+        let worktrees = try await listWorktrees(repoPath: resolvedPath)
+        let primaryWorktreePath: String
+        if worktrees.first?.isBareStem == true {
+            primaryWorktreePath = worktreeRootPath
+        } else if let mainWorktreePath = worktrees.first(where: { !$0.isBareStem })?.path {
+            primaryWorktreePath = mainWorktreePath
+        } else {
+            throw GitError.commandFailed("Repository has no usable worktree")
+        }
+        let relativeProjectPath: String
+        if resolvedPath == worktreeRootPath {
+            relativeProjectPath = ""
+        } else {
+            let worktreePrefix = worktreeRootPath == "/" ? "/" : worktreeRootPath + "/"
+            guard resolvedPath.hasPrefix(worktreePrefix) else {
+                throw GitError.commandFailed("Project path is outside its Git worktree root")
+            }
+            relativeProjectPath = String(resolvedPath.dropFirst(worktreePrefix.count))
+        }
+        let resolvedPrimaryWorktreePath = URL(fileURLWithPath: primaryWorktreePath)
+            .resolvingSymlinksInPath().standardizedFileURL.path
+        let canonicalProjectPath = URL(fileURLWithPath: resolvedPrimaryWorktreePath)
+            .appendingPathComponent(relativeProjectPath)
+            .standardizedFileURL.path
+        var canonicalPathIsDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: canonicalProjectPath,
+            isDirectory: &canonicalPathIsDirectory
+        ), canonicalPathIsDirectory.boolValue else {
+            throw GitError.commandFailed("Canonical project path does not exist")
+        }
+        return GitRepositoryIdentity(
+            commonDirectoryPath: commonDirectoryPath,
+            primaryWorktreePath: resolvedPrimaryWorktreePath,
+            worktreeRootPath: worktreeRootPath,
+            relativeProjectPath: relativeProjectPath
+        )
+    }
+
     public func moveWorktree(repoPath: String, oldPath: String, newPath: String) async throws {
         _ = try await ShellExecutor.run(
             "git worktree move \(shellQuote(oldPath)) \(shellQuote(newPath))",
