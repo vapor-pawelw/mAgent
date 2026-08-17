@@ -1,13 +1,24 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "promptTOCOutsideTerminalHistory": {
+    "promptTOCScrollFailed": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Outside terminal history"
+            "value": "Couldn’t scroll to this prompt."
+          }
+        }
+      }
+    },
+    "promptTOCScrollUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This prompt is no longer in terminal history, so it can’t be scrolled to."
           }
         }
       }

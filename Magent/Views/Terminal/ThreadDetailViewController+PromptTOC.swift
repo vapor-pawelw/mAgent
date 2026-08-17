@@ -1,10 +1,6 @@
 import Cocoa
 import MagentCore
 
-private enum PromptTOCNavigationError: Error {
-    case promptUnavailable
-}
-
 private struct PromptPaneCandidate {
     let startLineIndex: Int
     let endLineIndex: Int
@@ -967,6 +963,17 @@ extension ThreadDetailViewController {
     }
 
     private func handlePromptTOCSelection(entryIndex: Int) {
+        guard let selectionAction = PromptTOCSelectionAction.resolve(
+            entryIndex: entryIndex,
+            entries: promptTOCEntries
+        ) else { return }
+        guard selectionAction == .navigate else {
+            BannerManager.shared.show(
+                message: String(localized: .ThreadStrings.promptTOCScrollUnavailable),
+                style: .info
+            )
+            return
+        }
         guard let target = PromptTOCNavigationTarget(
             entryIndex: entryIndex,
             entries: promptTOCEntries
@@ -985,23 +992,44 @@ extension ThreadDetailViewController {
             }
             guard let self else { return }
             do {
-                guard let refreshedEntries = await self.capturePromptEntries(
+                let refreshedEntries = await self.capturePromptEntries(
                     sessionName: sessionName,
                     agentType: agentType,
                     retryEmptyEntries: true
-                ),
-                !Task.isCancelled,
-                self.promptTOCNavigationGeneration == navigationGeneration,
-                self.currentSessionName() == sessionName,
-                let entry = target.resolve(in: refreshedEntries) else {
-                    throw PromptTOCNavigationError.promptUnavailable
+                )
+                let outcome = PromptTOCRefreshedNavigationOutcome.resolve(
+                    isCurrentRequest: !Task.isCancelled
+                        && self.promptTOCNavigationGeneration == navigationGeneration
+                        && self.currentSessionName() == sessionName,
+                    capturedEntries: refreshedEntries,
+                    target: target
+                )
+                switch outcome {
+                case .superseded:
+                    return
+                case .captureFailed:
+                    BannerManager.shared.show(
+                        message: String(localized: .ThreadStrings.promptTOCScrollFailed),
+                        style: .error
+                    )
+                    return
+                case .unavailable:
+                    BannerManager.shared.show(
+                        message: String(localized: .ThreadStrings.promptTOCScrollUnavailable),
+                        style: .info
+                    )
+                    return
+                case .scrollToLine(let lineIndex):
+                    try await TmuxService.shared.scrollHistoryLineToTop(
+                        sessionName: sessionName,
+                        lineIndex: lineIndex
+                    )
+                    self.scheduleScrollFABVisibilityRefresh()
                 }
-                try await TmuxService.shared.scrollHistoryLineToTop(sessionName: sessionName, lineIndex: entry.lineIndex)
-                self.scheduleScrollFABVisibilityRefresh()
             } catch {
                 guard !Task.isCancelled else { return }
                 BannerManager.shared.show(
-                    message: "Could not jump to prompt in \(self.thread.displayName(for: sessionName, at: self.currentTabIndex)).",
+                    message: String(localized: .ThreadStrings.promptTOCScrollFailed),
                     style: .error
                 )
             }
@@ -1610,18 +1638,8 @@ private final class PromptTOCEntryRowView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.cornerRadius = 6
-        let unavailableText = String(localized: .ThreadStrings.promptTOCOutsideTerminalHistory)
-        let footerState = PromptTOCRowFooterState.resolve(
-            isAvailableInTerminalHistory: isAvailableInTerminalHistory,
-            hasTiming: timingPresentation != nil
-        )
-        toolTip = if isAvailableInTerminalHistory {
-            timingPresentation?.toolTip
-        } else if let timingToolTip = timingPresentation?.toolTip {
-            "\(unavailableText)\n\(timingToolTip)"
-        } else {
-            unavailableText
-        }
+        let footerState = PromptTOCRowFooterState.resolve(hasTiming: timingPresentation != nil)
+        toolTip = timingPresentation?.toolTip
 
         ordinalBadgeView.translatesAutoresizingMaskIntoConstraints = false
         ordinalBadgeView.wantsLayer = true
@@ -1659,8 +1677,6 @@ private final class PromptTOCEntryRowView: NSView {
         startLabel.stringValue = switch footerState {
         case .timing:
             timingPresentation?.startText ?? ""
-        case .outsideTerminalHistory:
-            unavailableText
         case .hidden:
             ""
         }
@@ -1700,6 +1716,9 @@ private final class PromptTOCEntryRowView: NSView {
         textStack.spacing = 3
         textStack.addArrangedSubview(label)
         textStack.addArrangedSubview(timingView)
+        textStack.alphaValue = PromptTOCRowAvailabilityStyle.textAlpha(
+            isAvailableInTerminalHistory: isAvailableInTerminalHistory
+        )
 
         addSubview(ordinalBadgeView)
         addSubview(textStack)
@@ -1931,10 +1950,8 @@ final class PromptTableOfContentsView: NSView {
             )
             row.setAlternateBackgroundVisible(!displayIndex.isMultiple(of: 2))
 
-            if entry.isAvailableInTerminalHistory {
-                let tap = NSClickGestureRecognizer(target: self, action: #selector(handleEntryRowTap(_:)))
-                row.addGestureRecognizer(tap)
-            }
+            let tap = NSClickGestureRecognizer(target: self, action: #selector(handleEntryRowTap(_:)))
+            row.addGestureRecognizer(tap)
             row.onRightClick = { [weak self] index, event in
                 self?.showRenameContextMenu(for: index, event: event)
             }

@@ -248,6 +248,45 @@ struct PromptTOCPresentationStateTests {
         #expect(newerTarget?.resolve(in: refreshed)?.lineIndex == 225)
     }
 
+    @Test("Refreshed navigation distinguishes supersession, capture failure, eviction, and success")
+    func refreshedNavigationOutcomes() throws {
+        let target = try #require(PromptTOCNavigationTarget(
+            entryIndex: 0,
+            entries: [PromptTOCEntry(lineIndex: 100, displayText: "Prompt", fullText: "Prompt")]
+        ))
+
+        #expect(
+            PromptTOCRefreshedNavigationOutcome.resolve(
+                isCurrentRequest: false,
+                capturedEntries: nil,
+                target: target
+            ) == .superseded
+        )
+        #expect(
+            PromptTOCRefreshedNavigationOutcome.resolve(
+                isCurrentRequest: true,
+                capturedEntries: nil,
+                target: target
+            ) == .captureFailed
+        )
+        #expect(
+            PromptTOCRefreshedNavigationOutcome.resolve(
+                isCurrentRequest: true,
+                capturedEntries: [],
+                target: target
+            ) == .unavailable
+        )
+        #expect(
+            PromptTOCRefreshedNavigationOutcome.resolve(
+                isCurrentRequest: true,
+                capturedEntries: [
+                    PromptTOCEntry(lineIndex: 42, displayText: "Prompt", fullText: "Prompt"),
+                ],
+                target: target
+            ) == .scrollToLine(42)
+        )
+    }
+
     @Test("Known prompt history makes an empty pane capture transient")
     func emptyCaptureRetryPolicy() {
         #expect(PromptTOCRefreshPolicy.shouldRetryEmptyEntries(knownPromptCount: 1))
@@ -439,20 +478,38 @@ struct PromptTOCPresentationStateTests {
         #expect(resolved[2].timing?.sentAt == secondSentAt)
     }
 
-    @Test("Cached timing remains the primary footer after terminal history eviction")
-    func cachedTimingOutlivesTerminalHistory() {
+    @Test("Terminal history availability never replaces prompt timing with a status footer")
+    func terminalHistoryAvailabilityDoesNotReplaceTiming() {
         #expect(
-            PromptTOCRowFooterState.resolve(
-                isAvailableInTerminalHistory: false,
-                hasTiming: true
-            ) == .timing
+            PromptTOCRowFooterState.resolve(hasTiming: true) == .timing
         )
         #expect(
-            PromptTOCRowFooterState.resolve(
-                isAvailableInTerminalHistory: false,
-                hasTiming: false
-            ) == .outsideTerminalHistory
+            PromptTOCRowFooterState.resolve(hasTiming: false) == .hidden
         )
+    }
+
+    @Test("Prompts outside terminal history are subtly dimmed")
+    func unavailablePromptAppearance() {
+        #expect(PromptTOCRowAvailabilityStyle.textAlpha(isAvailableInTerminalHistory: true) == 1)
+        #expect(PromptTOCRowAvailabilityStyle.textAlpha(isAvailableInTerminalHistory: false) == 0.55)
+    }
+
+    @Test("Selecting a cached prompt explains why navigation is unavailable")
+    func cachedPromptSelectionAction() {
+        let entries = [
+            PromptTOCEntry(lineIndex: -1, displayText: "Cached", fullText: "Cached"),
+            PromptTOCEntry(lineIndex: 42, displayText: "Live", fullText: "Live"),
+        ]
+
+        #expect(
+            PromptTOCSelectionAction.resolve(entryIndex: 0, entries: entries)
+                == .showUnavailableMessage
+        )
+        #expect(
+            PromptTOCSelectionAction.resolve(entryIndex: 1, entries: entries)
+                == .navigate
+        )
+        #expect(PromptTOCSelectionAction.resolve(entryIndex: 2, entries: entries) == nil)
     }
 
     @Test("A newly observed repeated prompt receives timing on its newest TOC occurrence")

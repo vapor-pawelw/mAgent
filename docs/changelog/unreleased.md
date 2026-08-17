@@ -41,7 +41,7 @@
 - Unified new and forked thread creation with a context-aware visual source picker for starting from the main worktree, another thread, or any branch.
 - Added `magent-cli finish-thread` to safely merge, optionally push, and archive any managed thread across registered repositories while leaving repository-specific preparation to caller-owned workflows.
 - Pin the prompt Table of Contents beside terminal and chat content, browse newest-first high-contrast numbered rows with roomier pinned previews, then resize or detach the split while terminal content immediately reclaims the available width.
-- Prompt Table of Contents rows now keep showing their cached relative start time and worked duration after terminal history rolls over, with exact timing and navigation availability on hover.
+- Prompt Table of Contents rows keep their cached timing after terminal history rolls over, subtly dim unavailable entries, and explain only when clicked that they can no longer be scrolled to.
 
 #### Improvements
 

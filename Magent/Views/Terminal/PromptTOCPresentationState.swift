@@ -137,16 +137,27 @@ enum PromptTOCCacheMerger {
 enum PromptTOCRowFooterState: Equatable {
     case hidden
     case timing
-    case outsideTerminalHistory
 
-    static func resolve(
-        isAvailableInTerminalHistory: Bool,
-        hasTiming: Bool
-    ) -> PromptTOCRowFooterState {
-        if hasTiming {
-            return .timing
-        }
-        return isAvailableInTerminalHistory ? .hidden : .outsideTerminalHistory
+    static func resolve(hasTiming: Bool) -> PromptTOCRowFooterState {
+        hasTiming ? .timing : .hidden
+    }
+}
+
+enum PromptTOCRowAvailabilityStyle {
+    static func textAlpha(isAvailableInTerminalHistory: Bool) -> CGFloat {
+        isAvailableInTerminalHistory ? 1 : 0.55
+    }
+}
+
+enum PromptTOCSelectionAction: Equatable {
+    case navigate
+    case showUnavailableMessage
+
+    static func resolve(entryIndex: Int, entries: [PromptTOCEntry]) -> Self? {
+        guard entries.indices.contains(entryIndex) else { return nil }
+        return entries[entryIndex].isAvailableInTerminalHistory
+            ? .navigate
+            : .showUnavailableMessage
     }
 }
 
@@ -251,6 +262,24 @@ struct PromptTOCNavigationTarget: Equatable {
             .filter { $0.fullText == fullText }
             .dropFirst(matchingOccurrenceFromNewest)
             .first
+    }
+}
+
+enum PromptTOCRefreshedNavigationOutcome: Equatable {
+    case superseded
+    case captureFailed
+    case unavailable
+    case scrollToLine(Int)
+
+    static func resolve(
+        isCurrentRequest: Bool,
+        capturedEntries: [PromptTOCEntry]?,
+        target: PromptTOCNavigationTarget
+    ) -> Self {
+        guard isCurrentRequest else { return .superseded }
+        guard let capturedEntries else { return .captureFailed }
+        guard let entry = target.resolve(in: capturedEntries) else { return .unavailable }
+        return .scrollToLine(entry.lineIndex)
     }
 }
 
