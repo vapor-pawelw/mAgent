@@ -237,6 +237,7 @@ final class SettingsProjectsViewController: NSViewController {
         mutate(&settings)
         do {
             try persistence.saveSettings(settings)
+            NotificationCenter.default.post(name: .magentCodexProjectSyncNeeded, object: nil)
             return true
         } catch {
             return false

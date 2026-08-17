@@ -20,6 +20,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     private var ipcInjectionCheckbox: NSButton!
     private var rememberLastTypeCheckbox: NSButton!
     private var rateLimitDetectionCheckbox: NSButton!
+    private var syncCodexAppProjectsCheckbox: NSButton!
     private var fdaStatusLabel: NSTextField!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
@@ -100,6 +101,27 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
             defaultAgentPopup.widthAnchor.constraint(equalTo: defaultAgentSection.widthAnchor),
         ])
         refreshDefaultAgentSection()
+
+        let (codexAppCard, codexAppSection) = createSectionCard(
+            title: String(localized: .SettingsStrings.settingsAgentsCodexAppProjectsTitle),
+            description: String(localized: .SettingsStrings.settingsAgentsCodexAppProjectsDescription)
+        )
+        stackView.addArrangedSubview(codexAppCard)
+
+        syncCodexAppProjectsCheckbox = NSButton(
+            checkboxWithTitle: String(localized: .SettingsStrings.settingsAgentsCodexAppProjectsToggle),
+            target: self,
+            action: #selector(syncCodexAppProjectsToggled)
+        )
+        syncCodexAppProjectsCheckbox.state = settings.syncCodexAppProjects ? .on : .off
+        codexAppSection.addArrangedSubview(syncCodexAppProjectsCheckbox)
+
+        let codexAppSyncDetails = NSTextField(
+            wrappingLabelWithString: String(localized: .SettingsStrings.settingsAgentsCodexAppProjectsDetails)
+        )
+        codexAppSyncDetails.font = .systemFont(ofSize: 11)
+        codexAppSyncDetails.textColor = NSColor(resource: .textSecondary)
+        codexAppSection.addArrangedSubview(codexAppSyncDetails)
 
         // Remember last type selection
         rememberLastTypeCheckbox = NSButton(
@@ -272,6 +294,8 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
 
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
             selectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            codexAppCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            codexAppSyncDetails.widthAnchor.constraint(equalTo: codexAppSection.widthAnchor),
             permissionsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             behaviorCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             fdaCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
@@ -423,6 +447,14 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
 
         refreshDefaultAgentSection()
         customAgentCard.isHidden = !active.contains(.custom)
+        NotificationCenter.default.post(name: .magentCodexProjectSyncNeeded, object: nil)
+    }
+
+    @objc private func syncCodexAppProjectsToggled() {
+        persistSettings { settings in
+            settings.syncCodexAppProjects = syncCodexAppProjectsCheckbox.state == .on
+        }
+        NotificationCenter.default.post(name: .magentCodexProjectSyncNeeded, object: nil)
     }
 
     @objc private func openFullDiskAccessSettings() {

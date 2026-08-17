@@ -75,6 +75,10 @@ extension SettingsProjectsViewController {
 
         guard mutateSettings({ settings in
             settings.projects.removeAll { $0.id == project.id }
+            let normalizedPath = URL(fileURLWithPath: project.repoPath).standardizedFileURL.path
+            if !settings.codexAppProjectImportExclusions.contains(normalizedPath) {
+                settings.codexAppProjectImportExclusions.append(normalizedPath)
+            }
         }) else { return }
         currentProjectID = nil
         if settings.projects.isEmpty {

@@ -1074,6 +1074,28 @@ struct AppSettingsStatusBarThreadStatusTests {
     }
 }
 
+@Suite("AppSettings Codex App project synchronization")
+struct AppSettingsCodexAppProjectSyncTests {
+    @Test("Project synchronization defaults on for existing settings")
+    func defaultsOnWhenMissing() throws {
+        let settings = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"projects":[]}"#.utf8))
+
+        #expect(settings.syncCodexAppProjects)
+    }
+
+    @Test("Project synchronization preference round-trips")
+    func roundTripsDisabledPreference() throws {
+        let data = try JSONEncoder().encode(AppSettings(
+            syncCodexAppProjects: false,
+            codexAppProjectImportExclusions: ["/repos/removed"]
+        ))
+        let settings = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(!settings.syncCodexAppProjects)
+        #expect(settings.codexAppProjectImportExclusions == ["/repos/removed"])
+    }
+}
+
 // MARK: - AppSettings thread row width
 
 @Suite("AppSettings thread row width")

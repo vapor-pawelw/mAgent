@@ -56,6 +56,50 @@
         }
       }
     },
+    "settingsAgentsCodexAppProjectsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keeps Git repositories and Codex sessions organized consistently between Magent and Codex App."
+          }
+        }
+      }
+    },
+    "settingsAgentsCodexAppProjectsDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magent adds missing repositories in both apps and assigns Codex sessions from every worktree to the main repository project. Projects are never removed automatically. Claude sessions are unaffected."
+          }
+        }
+      }
+    },
+    "settingsAgentsCodexAppProjectsTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex App Projects"
+          }
+        }
+      }
+    },
+    "settingsAgentsCodexAppProjectsToggle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatically synchronize projects with Codex App"
+          }
+        }
+      }
+    },
     "settingsAgentsCustomAgentCommandDescription": {
       "extractionState": "manual",
       "localizations": {
