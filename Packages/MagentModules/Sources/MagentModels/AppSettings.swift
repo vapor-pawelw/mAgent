@@ -177,6 +177,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var autoCheckForUpdates: Bool
     public var skippedUpdateVersion: String?
     public var skippedCodexUpdateVersion: String?
+    public var syncCodexAppProjects: Bool
+    public var codexAppProjectImportExclusions: [String]
     public var lastShownChangelogVersion: String?
     public var lastSeenWhatsNewVersion: String?
     public var syncLocalPathsOnArchive: Bool
@@ -252,6 +254,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoCheckForUpdates: Bool = true,
         skippedUpdateVersion: String? = nil,
         skippedCodexUpdateVersion: String? = nil,
+        syncCodexAppProjects: Bool = true,
+        codexAppProjectImportExclusions: [String] = [],
         lastShownChangelogVersion: String? = nil,
         lastSeenWhatsNewVersion: String? = nil,
         syncLocalPathsOnArchive: Bool = true,
@@ -326,6 +330,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.autoCheckForUpdates = autoCheckForUpdates
         self.skippedUpdateVersion = skippedUpdateVersion
         self.skippedCodexUpdateVersion = skippedCodexUpdateVersion
+        self.syncCodexAppProjects = syncCodexAppProjects
+        self.codexAppProjectImportExclusions = codexAppProjectImportExclusions
         self.lastShownChangelogVersion = lastShownChangelogVersion
         self.lastSeenWhatsNewVersion = lastSeenWhatsNewVersion
         self.syncLocalPathsOnArchive = syncLocalPathsOnArchive
@@ -417,6 +423,11 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoCheckForUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckForUpdates) ?? true
         skippedUpdateVersion = try container.decodeIfPresent(String.self, forKey: .skippedUpdateVersion)
         skippedCodexUpdateVersion = try container.decodeIfPresent(String.self, forKey: .skippedCodexUpdateVersion)
+        syncCodexAppProjects = try container.decodeIfPresent(Bool.self, forKey: .syncCodexAppProjects) ?? true
+        codexAppProjectImportExclusions = try container.decodeIfPresent(
+            [String].self,
+            forKey: .codexAppProjectImportExclusions
+        ) ?? []
         lastShownChangelogVersion = try container.decodeIfPresent(String.self, forKey: .lastShownChangelogVersion)
         lastSeenWhatsNewVersion = try container.decodeIfPresent(String.self, forKey: .lastSeenWhatsNewVersion)
         syncLocalPathsOnArchive = try container.decodeIfPresent(Bool.self, forKey: .syncLocalPathsOnArchive) ?? true
@@ -503,6 +514,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoCheckForUpdates, forKey: .autoCheckForUpdates)
         try container.encodeIfPresent(skippedUpdateVersion, forKey: .skippedUpdateVersion)
         try container.encodeIfPresent(skippedCodexUpdateVersion, forKey: .skippedCodexUpdateVersion)
+        try container.encode(syncCodexAppProjects, forKey: .syncCodexAppProjects)
+        try container.encode(codexAppProjectImportExclusions, forKey: .codexAppProjectImportExclusions)
         try container.encodeIfPresent(lastShownChangelogVersion, forKey: .lastShownChangelogVersion)
         try container.encodeIfPresent(lastSeenWhatsNewVersion, forKey: .lastSeenWhatsNewVersion)
         try container.encode(syncLocalPathsOnArchive, forKey: .syncLocalPathsOnArchive)
@@ -761,6 +774,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case autoCheckForUpdates
         case skippedUpdateVersion
         case skippedCodexUpdateVersion
+        case syncCodexAppProjects
+        case codexAppProjectImportExclusions
         case lastShownChangelogVersion
         case lastSeenWhatsNewVersion
         case syncLocalPathsOnArchive

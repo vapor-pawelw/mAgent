@@ -11,6 +11,7 @@ protocol ThreadManagerDelegate: AnyObject {
     func threadManager(_ manager: ThreadManager, didUpdateThreads threads: [MagentThread])
 }
 
+@MainActor
 final class ThreadManager {
     static let maxFavoriteThreadCount = 10
 
@@ -991,8 +992,20 @@ final class ThreadManager {
         await MainActor.run {
             updateDockBadge()
             delegate?.threadManager(self, didUpdateThreads: threads)
+            NotificationCenter.default.post(name: .magentCodexProjectSyncNeeded, object: nil)
             NotificationCenter.default.post(name: .magentStatusSyncCompleted, object: nil)
         }
+    }
+
+    func applyProjectMigrationThreads(_ migratedThreads: [MagentThread]) {
+        let migratedThreadIDs = Set(migratedThreads.map(\.id))
+        let removedThreads = threads.filter { !migratedThreadIDs.contains($0.id) }
+        threads = migratedThreads
+        for removedThread in removedThreads {
+            delegate?.threadManager(self, didDeleteThread: removedThread)
+        }
+        delegate?.threadManager(self, didUpdateThreads: migratedThreads)
+        NotificationCenter.default.post(name: .magentThreadsDidChange, object: nil)
     }
 
     /// Applies completion events collected during app downtime.

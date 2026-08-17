@@ -360,7 +360,7 @@ final class AppCoordinator {
         return nil
     }
 
-    private func consolidateDuplicateThreads(_ threads: [MagentThread]) -> [MagentThread] {
+    func consolidateDuplicateThreads(_ threads: [MagentThread]) -> [MagentThread] {
         var consolidated: [MagentThread] = []
         var activeThreadIndexByKey: [String: Int] = [:]
 
@@ -383,17 +383,22 @@ final class AppCoordinator {
     }
 
     private func normalizedThreadWorktreePath(_ thread: MagentThread) -> String {
-        URL(fileURLWithPath: thread.worktreePath).standardizedFileURL.path
+        URL(fileURLWithPath: thread.worktreePath).resolvingSymlinksInPath().standardizedFileURL.path
     }
 
     private func mergeThreads(_ canonical: MagentThread, duplicate: MagentThread) -> MagentThread {
         var merged = canonical
+        let duplicateOnlySessions = Set(duplicate.tmuxSessionNames)
+            .subtracting(canonical.tmuxSessionNames)
 
         merged.name = preferredThreadName(primary: canonical.name, secondary: duplicate.name)
         merged.worktreePath = preferredNonEmpty(primary: canonical.worktreePath, secondary: duplicate.worktreePath)
         merged.branchName = preferredNonEmpty(primary: canonical.branchName, secondary: duplicate.branchName)
         merged.tmuxSessionNames = appendUnique(canonical.tmuxSessionNames, duplicate.tmuxSessionNames)
         merged.agentTmuxSessions = appendUnique(canonical.agentTmuxSessions, duplicate.agentTmuxSessions)
+        merged.sessionCreatedAts = mergeDictionaries(canonical.sessionCreatedAts, duplicate.sessionCreatedAts)
+        merged.freshAgentSessions.formUnion(duplicate.freshAgentSessions.intersection(duplicateOnlySessions))
+        merged.forwardedTmuxSessions.formUnion(duplicate.forwardedTmuxSessions.intersection(duplicateOnlySessions))
         merged.pinnedTmuxSessions = appendUnique(canonical.pinnedTmuxSessions, duplicate.pinnedTmuxSessions)
         merged.protectedTmuxSessions.formUnion(duplicate.protectedTmuxSessions)
         merged.isKeepAlive = canonical.isKeepAlive || duplicate.isKeepAlive
@@ -405,7 +410,9 @@ final class AppCoordinator {
         merged.favoritedAt = [canonical.favoritedAt, duplicate.favoritedAt].compactMap { $0 }.max()
         merged.isSidebarHidden = canonical.isSidebarHidden && duplicate.isSidebarHidden
         merged.lastAgentCompletionAt = [canonical.lastAgentCompletionAt, duplicate.lastAgentCompletionAt].compactMap { $0 }.max()
-        merged.unreadCompletionSessions.formUnion(duplicate.unreadCompletionSessions)
+        merged.unreadCompletionSessions.formUnion(
+            duplicate.unreadCompletionSessions.intersection(duplicateOnlySessions)
+        )
         merged.didAutoRenameFromFirstPrompt = canonical.didAutoRenameFromFirstPrompt || duplicate.didAutoRenameFromFirstPrompt
         merged.baseBranch = preferredOptional(primary: canonical.baseBranch, secondary: duplicate.baseBranch)
         merged.displayOrder = min(canonical.displayOrder, duplicate.displayOrder)
@@ -442,6 +449,12 @@ final class AppCoordinator {
             canonical.customTabNames,
             duplicate.customTabNames
         )
+        merged.manuallyRenamedTabs.formUnion(
+            duplicate.manuallyRenamedTabs.intersection(duplicateOnlySessions)
+        )
+        for (baseName, counter) in duplicate.tabNameSuffixCounters {
+            merged.tabNameSuffixCounters[baseName] = max(merged.tabNameSuffixCounters[baseName] ?? 0, counter)
+        }
         merged.persistedWebTabs = mergeWebTabs(
             canonical: canonical.persistedWebTabs,
             duplicate: duplicate.persistedWebTabs
@@ -450,6 +463,28 @@ final class AppCoordinator {
             canonical: canonical.persistedDraftTabs,
             duplicate: duplicate.persistedDraftTabs
         )
+        merged.persistedChatTabs = mergeChatTabs(
+            canonical: canonical.persistedChatTabs,
+            duplicate: duplicate.persistedChatTabs
+        )
+        merged.tabDisplayOrder = appendUnique(canonical.tabDisplayOrder, duplicate.tabDisplayOrder)
+        merged.busySessions.formUnion(duplicate.busySessions.intersection(duplicateOnlySessions))
+        merged.magentBusySessions.formUnion(duplicate.magentBusySessions.intersection(duplicateOnlySessions))
+        merged.waitingForInputSessions.formUnion(
+            duplicate.waitingForInputSessions.intersection(duplicateOnlySessions)
+        )
+        merged.hasUnsubmittedInputSessions.formUnion(
+            duplicate.hasUnsubmittedInputSessions.intersection(duplicateOnlySessions)
+        )
+        for (session, limit) in duplicate.rateLimitedSessions
+            where duplicateOnlySessions.contains(session) && merged.rateLimitedSessions[session] == nil {
+            merged.rateLimitedSessions[session] = limit
+        }
+        merged.unreadRateLimitSessions.formUnion(
+            duplicate.unreadRateLimitSessions.intersection(duplicateOnlySessions)
+        )
+        merged.deadSessions.formUnion(duplicate.deadSessions.intersection(duplicateOnlySessions))
+        merged.cachedDeadSessions.formUnion(duplicate.cachedDeadSessions.intersection(duplicateOnlySessions))
 
         if canonical.isThreadIconManuallySet {
             merged.threadIcon = canonical.threadIcon
@@ -578,6 +613,18 @@ final class AppCoordinator {
         return merged
     }
 
+    private func mergeChatTabs(
+        canonical: [PersistedChatTab],
+        duplicate: [PersistedChatTab]
+    ) -> [PersistedChatTab] {
+        var seen = Set<String>()
+        var merged: [PersistedChatTab] = []
+        for tab in canonical + duplicate where seen.insert(tab.identifier).inserted {
+            merged.append(tab)
+        }
+        return merged
+    }
+
     private func resolvedLastSelectedTabIdentifier(
         canonical: MagentThread,
         duplicate: MagentThread,
@@ -613,6 +660,25 @@ final class AppCoordinator {
             validAgentSessions.contains($0.key)
         }
         thread.customTabNames = thread.customTabNames.filter { validTerminalSessions.contains($0.key) }
+        thread.manuallyRenamedTabs.formIntersection(validTerminalSessions)
+        thread.freshAgentSessions.formIntersection(validAgentSessions)
+        thread.forwardedTmuxSessions.formIntersection(validTerminalSessions)
+        thread.sessionCreatedAts = thread.sessionCreatedAts.filter { validAgentSessions.contains($0.key) }
+        thread.unreadRateLimitSessions.formIntersection(validAgentSessions)
+        thread.rateLimitedSessions = thread.rateLimitedSessions.filter { validAgentSessions.contains($0.key) }
+        thread.busySessions.formIntersection(validAgentSessions)
+        thread.magentBusySessions.formIntersection(
+            validTerminalSessions.union([MagentThread.threadSetupSentinel])
+        )
+        thread.waitingForInputSessions.formIntersection(validAgentSessions)
+        thread.hasUnsubmittedInputSessions.formIntersection(validTerminalSessions)
+        thread.deadSessions.formIntersection(validTerminalSessions)
+        thread.cachedDeadSessions.formIntersection(validTerminalSessions)
+        let validTabIdentifiers = validTerminalSessions
+            .union(thread.persistedWebTabs.map(\.identifier))
+            .union(thread.persistedDraftTabs.map(\.identifier))
+            .union(thread.persistedChatTabs.map(\.identifier))
+        thread.tabDisplayOrder = thread.tabDisplayOrder.filter { validTabIdentifiers.contains($0) }
     }
 
     private func deduplicateMergedTerminalTabTitles(_ thread: inout MagentThread) {

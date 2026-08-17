@@ -204,6 +204,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         ThreadManager.shared.ensureManagedZdotdir()
         coordinator = AppCoordinator()
         coordinator?.start()
+        if let coordinator {
+            CodexAppProjectSyncCoordinator.shared.start(appCoordinator: coordinator)
+        }
         showCurrentVersionChangelogIfNeeded()
 
         let parentForWhatsNew = coordinator?.mainSplitViewController()?.view.window

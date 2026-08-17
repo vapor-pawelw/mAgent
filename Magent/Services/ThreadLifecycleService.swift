@@ -990,6 +990,11 @@ final class ThreadLifecycleService {
 
         await applySessionEnvironmentVariables?(tmuxSessionName, sessionEnvironment)
 
+        guard persistence.loadSettings().projects.contains(where: { $0.id == project.id }) else {
+            try? await tmux.killSession(name: tmuxSessionName)
+            throw ThreadManagerError.projectNotFound
+        }
+
         let thread = MagentThread(
             id: threadID,
             projectId: project.id,

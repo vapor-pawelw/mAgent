@@ -1523,7 +1523,10 @@ extension ThreadListViewController {
         try persistence.saveSettings(settings)
         reloadData()
 
-        Task { try? await ThreadManager.shared.createMainThread(project: project) }
+        Task {
+            _ = try? await ThreadManager.shared.createMainThread(project: project)
+            NotificationCenter.default.post(name: .magentCodexProjectSyncNeeded, object: nil)
+        }
     }
 
     private nonisolated func runGit(arguments: [String]) async throws {

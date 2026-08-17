@@ -1353,6 +1353,9 @@ final class AgentSetupService {
             $0.sessionConversationIDs[sessionName] = conversationID
         }
         try? persistence.saveActiveThreads(store.threads)
+        if agentType == .codex {
+            NotificationCenter.default.post(name: .magentCodexProjectSyncNeeded, object: nil)
+        }
     }
 
     private func latestClaudeConversationID(

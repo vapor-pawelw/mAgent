@@ -556,7 +556,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     private static let jiraTicketKeyRegex = try! NSRegularExpression(pattern: #"[A-Za-z]+-\d+"#)
 
     public let id: UUID
-    public let projectId: UUID
+    public private(set) var projectId: UUID
     public var name: String
     public var worktreePath: String
     public var branchName: String
@@ -1181,85 +1181,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     }
 
     public func withProjectId(_ newProjectId: UUID) -> MagentThread {
-        var copy = MagentThread(
-            id: id,
-            projectId: newProjectId,
-            name: name,
-            worktreePath: worktreePath,
-            branchName: branchName,
-            tmuxSessionNames: tmuxSessionNames,
-            agentTmuxSessions: agentTmuxSessions,
-            sessionConversationIDs: sessionConversationIDs,
-            sessionAgentTypes: sessionAgentTypes,
-            sessionCreatedAts: sessionCreatedAts,
-            freshAgentSessions: freshAgentSessions,
-            forwardedTmuxSessions: forwardedTmuxSessions,
-            pinnedTmuxSessions: pinnedTmuxSessions,
-            protectedTmuxSessions: protectedTmuxSessions,
-            isKeepAlive: isKeepAlive,
-            didOfferKeepAlivePromotion: didOfferKeepAlivePromotion,
-            createdAt: createdAt,
-            isArchived: isArchived,
-            archivedAt: archivedAt,
-            sectionId: sectionId,
-            isMain: isMain,
-            lastSelectedTabIdentifier: lastSelectedTabIdentifier,
-            agentHasRun: agentHasRun,
-            isPinned: isPinned,
-            isFavorite: isFavorite,
-            favoritedAt: favoritedAt,
-            favoriteAlias: favoriteAlias,
-            isSidebarHidden: isSidebarHidden,
-            lastAgentCompletionAt: lastAgentCompletionAt,
-            unreadCompletionSessions: unreadCompletionSessions,
-            currentDiffFingerprint: currentDiffFingerprint,
-            lastSeenDiffFingerprint: lastSeenDiffFingerprint,
-            diffReviewedFileSignatures: diffReviewedFileSignatures,
-            diffCollapsedFileStates: diffCollapsedFileStates,
-            didAutoRenameFromFirstPrompt: didAutoRenameFromFirstPrompt,
-            customTabNames: customTabNames,
-            tabNameSuffixCounters: tabNameSuffixCounters,
-            baseBranch: baseBranch,
-            displayOrder: displayOrder,
-            jiraTicketKey: jiraTicketKey,
-            taskDescription: taskDescription,
-            taskDescriptionIsProvisional: taskDescriptionIsProvisional,
-            threadDisplayNumber: threadDisplayNumber,
-            threadIcon: threadIcon,
-            isThreadIconManuallySet: isThreadIconManuallySet,
-            submittedPromptsBySession: submittedPromptsBySession,
-            submittedPromptTimingsBySession: submittedPromptTimingsBySession,
-            localFileSyncEntriesSnapshot: localFileSyncEntriesSnapshot,
-            hasEverDoneWork: hasEverDoneWork,
-            persistedWebTabs: persistedWebTabs,
-            persistedDraftTabs: persistedDraftTabs,
-            persistedChatTabs: persistedChatTabs,
-            tabDisplayOrder: tabDisplayOrder,
-            signEmoji: signEmoji,
-            priority: priority,
-            syncWithJira: syncWithJira
-        )
-        copy.busySessions = busySessions
-        copy.magentBusySessions = magentBusySessions
-        copy.waitingForInputSessions = waitingForInputSessions
-        copy.hasUnsubmittedInputSessions = hasUnsubmittedInputSessions
-        copy.busyStateSince = busyStateSince
-        copy._debouncedBusyState = _debouncedBusyState
-        copy._rawStateChangeTime = _rawStateChangeTime
-        copy.isDirty = isDirty
-        copy.isFullyDelivered = isFullyDelivered
-        copy.jiraUnassigned = jiraUnassigned
-        copy.actualBranch = actualBranch
-        copy.expectedBranch = expectedBranch
-        copy.hasBranchMismatch = hasBranchMismatch
-        copy.rateLimitedSessions = rateLimitedSessions
-        copy.pullRequestInfo = pullRequestInfo
-        copy.pullRequestInfoBranch = pullRequestInfoBranch
-        copy.pullRequestLookupStatus = pullRequestLookupStatus
-        copy.isArchiving = isArchiving
-        copy.verifiedJiraTicket = verifiedJiraTicket
-        copy.deadSessions = deadSessions
-        copy.cachedDeadSessions = cachedDeadSessions
+        var copy = self
+        copy.projectId = newProjectId
         return copy
     }
 

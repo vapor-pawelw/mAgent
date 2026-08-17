@@ -18,6 +18,10 @@
 
 ### Agents
 
+#### Features
+
+- Automatically keep Git projects aligned between Magent and Codex App, grouping worktrees and symlinked paths under one main repository instead of General without creating duplicate projects.
+
 #### Improvements
 
 - Added Fable as the top Claude model and default review model.
