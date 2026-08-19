@@ -92,7 +92,6 @@ private final class DiffLineStatsBadgeView: NSView {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
-        layer?.masksToBounds = true
 
         for label in [additionsLabel, deletionsLabel] {
             label.translatesAutoresizingMaskIntoConstraints = false
@@ -112,8 +111,8 @@ private final class DiffLineStatsBadgeView: NSView {
         addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
@@ -123,10 +122,6 @@ private final class DiffLineStatsBadgeView: NSView {
 
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
-            layer?.borderColor = NSColor.clear.cgColor
-            layer?.borderWidth = 0
-            layer?.cornerRadius = 3
             additionsLabel.textColor = NSColor(red: 0.35, green: 0.65, blue: 0.35, alpha: 1)
             deletionsLabel.textColor = NSColor(red: 0.78, green: 0.3, blue: 0.3, alpha: 1)
         }
