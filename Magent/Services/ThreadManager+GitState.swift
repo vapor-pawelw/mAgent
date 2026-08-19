@@ -76,6 +76,14 @@ extension ThreadManager {
         await gitStateService.refreshDiffStats(for: threadId)
     }
 
+    func cachedDiffLineStats(for threadId: UUID) -> DiffLineStats? {
+        gitStateService.diffLineStatsByThreadId[threadId]
+    }
+
+    func updateCachedDiffLineStats(_ stats: DiffLineStats, for threadId: UUID) {
+        gitStateService.updateDiffLineStats(stats, for: threadId)
+    }
+
     func setBaseBranch(_ baseBranch: String, for threadId: UUID) {
         gitStateService.setBaseBranch(baseBranch, for: threadId)
     }

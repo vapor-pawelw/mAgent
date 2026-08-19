@@ -178,6 +178,7 @@ enum ThreadRowBadgeLayout {
         case stoppedSessions
         case favorite
         case pinned
+        case diffLineStats
     }
 
     static func showsKeepAliveBadge(isKeepAlive: Bool) -> Bool {

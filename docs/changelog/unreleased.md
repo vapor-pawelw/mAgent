@@ -125,6 +125,7 @@
 
 #### Features
 
+- Show cached added and deleted line totals at the right edge of each thread's status row, kept current by background Git refreshes.
 - Made traditional mouse-wheel scrolling feel fluid while preserving native trackpad behavior and Reduce Motion preferences.
 - Added a disabled-by-default Threads setting for showing worktree folder names on the second line of sidebar rows.
 - Added collapsed-by-default hidden-thread groups that can be expanded independently in each sidebar section or project.

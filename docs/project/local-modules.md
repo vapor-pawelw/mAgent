@@ -46,7 +46,7 @@ Those generated APIs are tied to the app target/resources. Moving AppKit views/c
 - Keep `MagentCore` as a facade target. It is intentionally thin and should mainly re-export lower-level internal targets so the app does not need a long import list.
 - When creating a new internal package target, declare its dependencies explicitly in `Packages/MagentModules/Package.swift`. Xcode's dependency scanner will warn if a target relies on a transitive import by accident.
 - Most package types needed `public` visibility once they crossed target boundaries. If a refactor starts failing with "initializer is inaccessible due to internal protection level", check model/value type initializers first.
-- `GhosttyBridge/ImGuiShims.c` is now part of the package target. If Ghostty bridge sources move again, keep that C shim with the bridge target or the link can fail.
+- `GhosttyShims/ImGuiShims.c` is compiled by the internal `GhosttyShims` C target and linked into `GhosttyBridge`. Keep the shim dependency when moving bridge sources; SwiftPM rejects targets that mix C and Swift sources.
 - After changing package target membership or moving Swift files between targets, run:
 
 ```bash

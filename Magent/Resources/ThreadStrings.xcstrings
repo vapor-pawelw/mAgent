@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "threadDiffLineStatsTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Line changes: +%1$lld −%2$lld"
+          }
+        }
+      }
+    },
     "promptTOCScrollFailed": {
       "extractionState": "manual",
       "localizations": {

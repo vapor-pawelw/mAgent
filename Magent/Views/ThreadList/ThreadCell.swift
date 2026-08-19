@@ -82,6 +82,69 @@ private final class PriorityIndicatorView: RightClickMenuView {
 
 }
 
+private final class DiffLineStatsBadgeView: NSView {
+    private let additionsLabel = NSTextField(labelWithString: "")
+    private let deletionsLabel = NSTextField(labelWithString: "")
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+
+        for label in [additionsLabel, deletionsLabel] {
+            label.translatesAutoresizingMaskIntoConstraints = false
+            label.font = .monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+            label.lineBreakMode = .byClipping
+            label.maximumNumberOfLines = 1
+            label.setContentHuggingPriority(.required, for: .horizontal)
+            label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        }
+
+        let stack = NSStackView(views: [additionsLabel, deletionsLabel])
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        stack.detachesHiddenViews = true
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            additionsLabel.textColor = NSColor(red: 0.35, green: 0.65, blue: 0.35, alpha: 1)
+            deletionsLabel.textColor = NSColor(red: 0.78, green: 0.3, blue: 0.3, alpha: 1)
+        }
+    }
+
+    func configure(_ stats: DiffLineStats?) {
+        guard let stats, stats.hasLineChanges else {
+            isHidden = true
+            toolTip = nil
+            return
+        }
+        additionsLabel.stringValue = "+\(stats.additions)"
+        deletionsLabel.stringValue = "−\(stats.deletions)"
+        additionsLabel.isHidden = stats.additions == 0
+        deletionsLabel.isHidden = stats.deletions == 0
+        toolTip = String(
+            localized: .ThreadStrings.threadDiffLineStatsTooltip(stats.additions, stats.deletions)
+        )
+        isHidden = false
+        needsDisplay = true
+    }
+}
+
 /// A flat status item used in the capsule's status row.
 /// Hosts either a text label or an icon image view (or both).
 private final class TopBorderBadge: RightClickMenuView {
@@ -296,6 +359,7 @@ final class ThreadCell: NSTableCellView {
     private var hiddenBadge: TopBorderBadge?
     private var stoppedSessionsBadge: TopBorderBadge?
     private var jiraSyncBadge: TopBorderBadge?
+    private var diffLineStatsBadge: DiffLineStatsBadgeView?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
     private var isConfiguredThreadHidden = false
@@ -688,6 +752,7 @@ final class ThreadCell: NSTableCellView {
     func configure(
         with thread: MagentThread,
         sectionColor: NSColor?,
+        diffLineStats: DiffLineStats? = nil,
         leadingOffset: CGFloat = 0,
         maxDescriptionLines: Int = 2,
         showThreadIcon: Bool = true,
@@ -932,6 +997,7 @@ final class ThreadCell: NSTableCellView {
             isBusy: thread.activityDurationState == .busy
         )
         configurePriority(thread.priority)
+        configureDiffLineStats(diffLineStats)
         updateTrailingStatusOrder()
         updateTopBorderBadgeColors()
         configureInteractiveBadgeMenus()
@@ -957,7 +1023,8 @@ final class ThreadCell: NSTableCellView {
         leadingOffset: CGFloat = 0,
         showThreadIcon: Bool = true,
         signEmoji: String? = nil,
-        hasAllSessionsDead: Bool = false
+        hasAllSessionsDead: Bool = false,
+        diffLineStats: DiffLineStats? = nil
     ) {
         isConfiguredAsMain = true
         isConfiguredThreadHidden = false
@@ -1049,6 +1116,7 @@ final class ThreadCell: NSTableCellView {
         configureDuration(since: showDuration ? busyStateSince : nil, isBusy: isBusy)
         // The main worktree row doesn't carry a priority.
         configurePriority(nil)
+        configureDiffLineStats(diffLineStats)
         updateTrailingStatusOrder()
         updateTopBorderBadgeColors()
 
@@ -1549,6 +1617,7 @@ final class ThreadCell: NSTableCellView {
             case .pinned: [pinnedBadge].compactMap { $0 }
             case .favorite: [favoriteBadge].compactMap { $0 }
             case .activityDuration: [durationBadge].compactMap { $0 }
+            case .diffLineStats: [diffLineStatsBadge].compactMap { $0 }
             }
         }
         let statusItems = leadingItems + trailingItems
@@ -1565,6 +1634,16 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
+    private func configureDiffLineStats(_ stats: DiffLineStats?) {
+        if diffLineStatsBadge == nil {
+            ensureBottomRightBadgeStack()
+            let badge = DiffLineStatsBadgeView()
+            badge.isHidden = true
+            diffLineStatsBadge = badge
+        }
+        diffLineStatsBadge?.configure(stats)
+    }
+
     private func updateTopBorderBadgeColors() {
         durationBadge?.updateColors(appearance: effectiveAppearance)
         updateDurationBadgeColors()
@@ -1576,6 +1655,7 @@ final class ThreadCell: NSTableCellView {
         hiddenBadge?.updateColors(appearance: effectiveAppearance)
         stoppedSessionsBadge?.updateColors(appearance: effectiveAppearance)
         jiraSyncBadge?.updateColors(appearance: effectiveAppearance)
+        diffLineStatsBadge?.needsDisplay = true
         let descriptionColor = textField?.textColor ?? .labelColor
         favoriteBadge?.iconView.contentTintColor = descriptionColor
         pinnedBadge?.iconView.contentTintColor = descriptionColor

@@ -1315,7 +1315,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     leadingOffset: 0,
                     showThreadIcon: currentSettings.showThreadIcons,
                     signEmoji: thread.signEmoji,
-                    hasAllSessionsDead: thread.hasAllSessionsDead
+                    hasAllSessionsDead: thread.hasAllSessionsDead,
+                    diffLineStats: threadManager.cachedDiffLineStats(for: thread.id)
                 )
                 return cell
             }
@@ -1345,6 +1346,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.configure(
                 with: thread,
                 sectionColor: sectionColor,
+                diffLineStats: threadManager.cachedDiffLineStats(for: thread.id),
                 leadingOffset: threadLeadingOffset(for: thread, in: outlineView),
                 maxDescriptionLines: settings.sidebarDescriptionLineLimit,
                 showThreadIcon: settings.showThreadIcons,
@@ -1716,13 +1718,15 @@ extension ThreadListViewController: ThreadManagerDelegate {
                         leadingOffset: 0,
                         showThreadIcon: settings.showThreadIcons,
                         signEmoji: updated.signEmoji,
-                        hasAllSessionsDead: updated.hasAllSessionsDead
+                        hasAllSessionsDead: updated.hasAllSessionsDead,
+                        diffLineStats: threadManager.cachedDiffLineStats(for: updated.id)
                     )
                 } else {
                     let sectionColor = sidebarSectionColor(for: updated, settings: settings)
                     cell.configure(
                         with: updated,
                         sectionColor: sectionColor,
+                        diffLineStats: threadManager.cachedDiffLineStats(for: updated.id),
                         leadingOffset: threadLeadingOffset(for: updated, in: outlineView),
                         maxDescriptionLines: settings.sidebarDescriptionLineLimit,
                         showThreadIcon: settings.showThreadIcons,

@@ -346,6 +346,35 @@ public nonisolated struct FileDiffEntry: Sendable {
     }
 }
 
+public nonisolated struct DiffLineStats: Equatable, Sendable {
+    public let additions: Int
+    public let deletions: Int
+
+    public init(additions: Int, deletions: Int) {
+        self.additions = additions
+        self.deletions = deletions
+    }
+
+    public init(entries: [FileDiffEntry]) {
+        additions = entries.reduce(0) { $0 + $1.additions }
+        deletions = entries.reduce(0) { $0 + $1.deletions }
+    }
+
+    public var hasLineChanges: Bool {
+        additions > 0 || deletions > 0
+    }
+}
+
+public nonisolated struct GitDiffRefreshProbe: Sendable {
+    public let referenceFingerprint: String?
+    public let isDirty: Bool
+
+    public init(referenceFingerprint: String?, isDirty: Bool) {
+        self.referenceFingerprint = referenceFingerprint
+        self.isDirty = isDirty
+    }
+}
+
 public nonisolated struct BranchCommit: Sendable {
     public let shortHash: String
     public let subject: String
